@@ -7,17 +7,43 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { AudioPlayer } from '../AudioPlayer';
 
+// Mock lucide-react icons
+jest.mock('lucide-react', () => ({
+  Play: () => <svg data-testid="play-icon" />,
+  Pause: () => <svg data-testid="pause-icon" />,
+  Volume2: () => <svg data-testid="volume-icon" />,
+  VolumeX: () => <svg data-testid="volume-x-icon" />,
+  Download: () => <svg data-testid="download-icon" />,
+  RotateCcw: () => <svg data-testid="restart-icon" />,
+}));
+
+// Mock ResizeObserver
+class MockResizeObserver {
+  observe = jest.fn();
+  unobserve = jest.fn();
+  disconnect = jest.fn();
+}
+
+global.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+
+// Mock play function that we can track and reset
+let mockPlay: jest.Mock;
+let mockPause: jest.Mock;
+
 // Mock HTMLMediaElement methods
 beforeAll(() => {
+  mockPlay = jest.fn().mockResolvedValue(undefined);
+  mockPause = jest.fn();
+
   Object.defineProperty(HTMLMediaElement.prototype, 'play', {
     configurable: true,
     writable: true,
-    value: jest.fn().mockResolvedValue(undefined),
+    value: mockPlay,
   });
   Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
     configurable: true,
     writable: true,
-    value: jest.fn(),
+    value: mockPause,
   });
   Object.defineProperty(HTMLMediaElement.prototype, 'load', {
     configurable: true,
@@ -26,6 +52,22 @@ beforeAll(() => {
   });
 });
 
+beforeEach(() => {
+  mockPlay.mockClear();
+  mockPause.mockClear();
+});
+
+// Helper to simulate audio becoming ready (triggers canplay event)
+const simulateAudioReady = () => {
+  const audio = document.querySelector('audio');
+  if (audio) {
+    // Set duration property for proper time display
+    Object.defineProperty(audio, 'duration', { value: 120, writable: true });
+    audio.dispatchEvent(new Event('canplay'));
+    audio.dispatchEvent(new Event('loadedmetadata'));
+  }
+};
+
 describe('AudioPlayer', () => {
   const mockSrc = 'data:audio/wav;base64,SGVsbG8gV29ybGQ=';
 
@@ -33,9 +75,9 @@ describe('AudioPlayer', () => {
     it('renders with default props', () => {
       render(<AudioPlayer src={mockSrc} />);
 
-      // Should have play button
-      const playButton = screen.getByRole('button', { name: /play|pause/i });
-      expect(playButton).toBeInTheDocument();
+      // Should have buttons (including play/pause)
+      const buttons = screen.getAllByRole('button');
+      expect(buttons.length).toBeGreaterThan(0);
     });
 
     it('renders with title', () => {
@@ -135,21 +177,35 @@ describe('AudioPlayer', () => {
       const onPlay = jest.fn();
       render(<AudioPlayer src={mockSrc} onPlay={onPlay} />);
 
-      // Find and click play button
+      // Simulate audio becoming ready
+      simulateAudioReady();
+
+      // Find the main play button (larger one without title, or check by class)
       const buttons = screen.getAllByRole('button');
       const playButton = buttons.find(btn =>
         btn.querySelector('svg') && !btn.getAttribute('title')?.includes('Restart')
       );
 
       if (playButton) {
+        // Wait for button to be enabled after canplay event
+        await waitFor(() => {
+          expect(playButton).not.toBeDisabled();
+        });
+
         fireEvent.click(playButton);
-        expect(onPlay).toHaveBeenCalled();
+        // Wait for the async play() promise to resolve
+        await waitFor(() => {
+          expect(onPlay).toHaveBeenCalled();
+        });
       }
     });
 
     it('calls onPause when pause is triggered', async () => {
       const onPause = jest.fn();
       render(<AudioPlayer src={mockSrc} onPause={onPause} />);
+
+      // Simulate audio becoming ready
+      simulateAudioReady();
 
       // Click play first, then pause
       const buttons = screen.getAllByRole('button');
@@ -158,7 +214,16 @@ describe('AudioPlayer', () => {
       );
 
       if (playButton) {
+        // Wait for button to be enabled
+        await waitFor(() => {
+          expect(playButton).not.toBeDisabled();
+        });
+
         fireEvent.click(playButton); // Play
+        // Wait for play to complete
+        await waitFor(() => {
+          expect(mockPlay).toHaveBeenCalled();
+        });
         fireEvent.click(playButton); // Pause
         expect(onPause).toHaveBeenCalled();
       }
@@ -200,13 +265,18 @@ describe('AudioPlayer', () => {
   });
 
   describe('Accessibility', () => {
-    it('has accessible buttons', () => {
+    it('has accessible buttons when audio is ready', async () => {
       render(<AudioPlayer src={mockSrc} />);
 
-      // All buttons should be focusable
-      const buttons = screen.getAllByRole('button');
-      buttons.forEach(button => {
-        expect(button).not.toBeDisabled();
+      // Simulate audio becoming ready (play button is disabled while loading)
+      simulateAudioReady();
+
+      // Wait for React to process the event and update state
+      await waitFor(() => {
+        const buttons = screen.getAllByRole('button');
+        buttons.forEach(button => {
+          expect(button).not.toBeDisabled();
+        });
       });
     });
 

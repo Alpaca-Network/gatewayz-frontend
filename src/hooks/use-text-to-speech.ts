@@ -15,6 +15,7 @@
 import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { API_BASE_URL } from "@/lib/config";
 
 export interface TTSOptions {
   /** TTS model to use */
@@ -93,8 +94,7 @@ export function useTextToSpeech(): UseTextToSpeechReturn {
       const mergedOptions = { ...DEFAULT_OPTIONS, ...options };
 
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "";
-        const response = await fetch(`${backendUrl}/v1/tools/execute`, {
+        const response = await fetch(`${API_BASE_URL}/v1/tools/execute`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

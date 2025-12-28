@@ -65,21 +65,24 @@ export function AudioPlayer({
   const [error, setError] = useState<string | null>(null);
 
   // Handle play/pause
-  const togglePlay = useCallback(() => {
+  const togglePlay = useCallback(async () => {
     const audio = audioRef.current;
     if (!audio) return;
 
     if (isPlaying) {
       audio.pause();
+      setIsPlaying(false);
       onPause?.();
     } else {
-      audio.play().catch((err) => {
+      try {
+        await audio.play();
+        setIsPlaying(true);
+        onPlay?.();
+      } catch (err) {
         console.error("Failed to play audio:", err);
         setError("Failed to play audio");
-      });
-      onPlay?.();
+      }
     }
-    setIsPlaying(!isPlaying);
   }, [isPlaying, onPlay, onPause]);
 
   // Handle seeking
@@ -122,14 +125,19 @@ export function AudioPlayer({
   }, [playbackRate]);
 
   // Restart from beginning
-  const restart = useCallback(() => {
+  const restart = useCallback(async () => {
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = 0;
     setCurrentTime(0);
     if (!isPlaying) {
-      audio.play().catch(console.error);
-      setIsPlaying(true);
+      try {
+        await audio.play();
+        setIsPlaying(true);
+      } catch (err) {
+        console.error("Failed to play audio:", err);
+        setError("Failed to play audio");
+      }
     }
   }, [isPlaying]);
 
@@ -142,6 +150,15 @@ export function AudioPlayer({
     link.click();
     document.body.removeChild(link);
   }, [src, title]);
+
+  // Reset state when src changes
+  useEffect(() => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsLoading(true);
+    setError(null);
+  }, [src]);
 
   // Audio event handlers
   useEffect(() => {
@@ -168,11 +185,16 @@ export function AudioPlayer({
       setIsLoading(false);
     };
 
-    const handleCanPlay = () => {
+    const handleCanPlay = async () => {
       setIsLoading(false);
       if (autoPlay) {
-        audio.play().catch(console.error);
-        setIsPlaying(true);
+        try {
+          await audio.play();
+          setIsPlaying(true);
+        } catch (err) {
+          console.error("Failed to auto-play audio:", err);
+          setError("Failed to play audio");
+        }
       }
     };
 
@@ -189,7 +211,7 @@ export function AudioPlayer({
       audio.removeEventListener("error", handleError);
       audio.removeEventListener("canplay", handleCanPlay);
     };
-  }, [autoPlay, onEnded]);
+  }, [autoPlay, onEnded, src]);
 
   if (error) {
     return (
