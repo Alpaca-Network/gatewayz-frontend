@@ -797,19 +797,36 @@ export function ChatInput() {
                 </DropdownMenu>
 
                 {/* Microphone button for speech-to-text */}
-                <Button
-                    size="icon"
-                    variant={isRecording ? "destructive" : "ghost"}
-                    onClick={toggleRecording}
-                    title={isRecording ? "Stop recording" : "Start voice input"}
-                    className={cn(isRecording && "animate-pulse")}
-                >
-                    {isRecording ? (
-                        <Square className="h-4 w-4" />
-                    ) : (
+                {isRecording ? (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-destructive text-destructive-foreground rounded-full">
+                        <div className="audio-waveform">
+                            <span className="audio-waveform-bar" />
+                            <span className="audio-waveform-bar" />
+                            <span className="audio-waveform-bar" />
+                            <span className="audio-waveform-bar" />
+                            <span className="audio-waveform-bar" />
+                        </div>
+                        <span className="text-xs font-medium">Listening...</span>
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={toggleRecording}
+                            title="Stop recording"
+                            className="h-6 w-6 hover:bg-destructive-foreground/20"
+                        >
+                            <Square className="h-3 w-3" />
+                        </Button>
+                    </div>
+                ) : (
+                    <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={toggleRecording}
+                        title="Start voice input"
+                    >
                         <Mic className="h-5 w-5 text-muted-foreground" />
-                    )}
-                </Button>
+                    </Button>
+                )}
             </div>
 
             <Input
