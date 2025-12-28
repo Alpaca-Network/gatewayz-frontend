@@ -166,6 +166,8 @@ export function ChatInput() {
   const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
+  const [interimTranscript, setInterimTranscript] = useState<string>('');
+  const [transcriptBeforeRecording, setTranscriptBeforeRecording] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -526,6 +528,8 @@ export function ChatInput() {
 
   // Ref to track current recognition instance for race condition prevention
   const currentRecognitionRef = useRef<SpeechRecognition | null>(null);
+  // Ref to track last processed result index to prevent duplicates
+  const lastProcessedIndexRef = useRef<number>(-1);
 
   // Speech Recognition for transcription
   const startRecording = useCallback(() => {
@@ -550,6 +554,12 @@ export function ChatInput() {
     isRecordingRef.current = true;
     setIsRecording(true);
 
+    // Reset tracking state for new recording session
+    lastProcessedIndexRef.current = -1;
+    setInterimTranscript('');
+    // Save the current input value before recording starts
+    setTranscriptBeforeRecording(useChatUIStore.getState().inputValue);
+
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -568,23 +578,34 @@ export function ChatInput() {
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = '';
-      let interimTranscript = '';
+      // Build complete transcript from all results, only processing new finals
+      let newFinalTranscript = '';
+      let currentInterim = '';
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript;
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        const transcript = result[0].transcript;
+
+        if (result.isFinal) {
+          // Only add to newFinalTranscript if this is a newly finalized result
+          if (i > lastProcessedIndexRef.current) {
+            newFinalTranscript += transcript;
+            lastProcessedIndexRef.current = i;
+          }
         } else {
-          interimTranscript += transcript;
+          // Interim results - these are still being processed
+          currentInterim += transcript;
         }
       }
 
-      if (finalTranscript) {
-        // Append final transcript to input
+      // Update interim transcript display
+      setInterimTranscript(currentInterim);
+
+      // Only update input if we have new final transcript
+      if (newFinalTranscript) {
         const currentValue = useChatUIStore.getState().inputValue;
         const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
-        setInputValue(currentValue + separator + finalTranscript);
+        setInputValue(currentValue + separator + newFinalTranscript);
       }
     };
 
@@ -654,6 +675,8 @@ export function ChatInput() {
       setSpeechRecognition(null);
       isRecordingRef.current = false;
       setIsRecording(false);
+      setInterimTranscript('');
+      lastProcessedIndexRef.current = -1;
     }
   }, [speechRecognition]);
 
@@ -679,6 +702,66 @@ export function ChatInput() {
   }, [speechRecognition]);
 
   return (
+    <>
+      {/* Recording Overlay - Full screen modal when recording */}
+      {isRecording && (
+        <div className="recording-overlay">
+          <div className="recording-overlay-content">
+            {/* Animated waveform */}
+            <div className="recording-waveform">
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+            </div>
+
+            {/* Transcription text display */}
+            <div className="recording-transcript-container">
+              {/* Show what was already in the input before recording */}
+              {transcriptBeforeRecording && (
+                <span className="recording-transcript-existing">
+                  {transcriptBeforeRecording}{' '}
+                </span>
+              )}
+              {/* Show newly captured text (already added to input) */}
+              {inputValue.slice(transcriptBeforeRecording.length).trim() && (
+                <span className="recording-transcript-final">
+                  {inputValue.slice(transcriptBeforeRecording.length).trim()}{' '}
+                </span>
+              )}
+              {/* Show interim (in-progress) text */}
+              {interimTranscript && (
+                <span className="recording-transcript-interim">
+                  {interimTranscript}
+                </span>
+              )}
+              {/* Show placeholder if nothing captured yet */}
+              {!inputValue.slice(transcriptBeforeRecording.length).trim() && !interimTranscript && (
+                <span className="recording-transcript-placeholder">
+                  Listening...
+                </span>
+              )}
+            </div>
+
+            {/* Stop button */}
+            <Button
+              size="lg"
+              variant="destructive"
+              onClick={toggleRecording}
+              className="recording-stop-button"
+            >
+              <Square className="h-5 w-5 mr-2" />
+              Stop Recording
+            </Button>
+          </div>
+        </div>
+      )}
+
     <div className="w-full p-4 border-t bg-background">
       <div className="max-w-4xl mx-auto">
         {/* Guest Daily Limit Warning */}
@@ -797,36 +880,19 @@ export function ChatInput() {
                 </DropdownMenu>
 
                 {/* Microphone button for speech-to-text */}
-                {isRecording ? (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-destructive text-destructive-foreground rounded-full">
-                        <div className="audio-waveform">
-                            <span className="audio-waveform-bar" />
-                            <span className="audio-waveform-bar" />
-                            <span className="audio-waveform-bar" />
-                            <span className="audio-waveform-bar" />
-                            <span className="audio-waveform-bar" />
-                        </div>
-                        <span className="text-xs font-medium">Listening...</span>
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={toggleRecording}
-                            title="Stop recording"
-                            className="h-6 w-6 hover:bg-destructive-foreground/20"
-                        >
-                            <Square className="h-3 w-3" />
-                        </Button>
-                    </div>
-                ) : (
-                    <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={toggleRecording}
-                        title="Start voice input"
-                    >
+                <Button
+                    size="icon"
+                    variant={isRecording ? "destructive" : "ghost"}
+                    onClick={toggleRecording}
+                    title={isRecording ? "Stop recording" : "Start voice input"}
+                    className={cn(isRecording && "animate-pulse")}
+                >
+                    {isRecording ? (
+                        <Square className="h-4 w-4" />
+                    ) : (
                         <Mic className="h-5 w-5 text-muted-foreground" />
-                    </Button>
-                )}
+                    )}
+                </Button>
             </div>
 
             <Input
@@ -884,5 +950,6 @@ export function ChatInput() {
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -1158,7 +1158,7 @@ describe('ChatInput speech recognition', () => {
     expect(micButtons.length).toBeGreaterThan(0);
   });
 
-  it('should show waveform animation and "Listening..." text when recording', async () => {
+  it('should show recording overlay with waveform and "Listening..." text when recording', async () => {
     render(<ChatInput />);
 
     // Start recording
@@ -1174,13 +1174,130 @@ describe('ChatInput speech recognition', () => {
     }
 
     await waitFor(() => {
-      // Should show "Listening..." text
+      // Should show "Listening..." placeholder text in the overlay
       expect(screen.getByText('Listening...')).toBeInTheDocument();
     });
 
-    // Should show waveform animation (5 bars)
-    const waveformBars = document.querySelectorAll('.audio-waveform-bar');
-    expect(waveformBars.length).toBe(5);
+    // Should show the recording overlay
+    const overlay = document.querySelector('.recording-overlay');
+    expect(overlay).toBeInTheDocument();
+
+    // Should show waveform animation (9 bars in the overlay)
+    const waveformBars = document.querySelectorAll('.recording-waveform-bar');
+    expect(waveformBars.length).toBe(9);
+
+    // Should show stop recording button in the overlay
+    expect(screen.getByText('Stop Recording')).toBeInTheDocument();
+  });
+
+  it('should display interim transcript while recording', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    // Simulate interim results
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult({
+        resultIndex: 0,
+        results: {
+          length: 1,
+          item: (index: number) => ({
+            isFinal: false,
+            0: { transcript: 'hello world', confidence: 0.9 },
+          }),
+          0: {
+            isFinal: false,
+            0: { transcript: 'hello world', confidence: 0.9 },
+          },
+        },
+      });
+    }
+
+    await waitFor(() => {
+      // Interim transcript should be visible in the overlay
+      expect(screen.getByText('hello world')).toBeInTheDocument();
+    });
+
+    // Interim text should have the interim styling class
+    const interimElement = document.querySelector('.recording-transcript-interim');
+    expect(interimElement).toBeInTheDocument();
+    expect(interimElement?.textContent).toContain('hello world');
+  });
+
+  it('should show "Listening..." placeholder with pre-existing text when no new text captured', async () => {
+    // Set up pre-existing text in the input
+    mockStoreState.inputValue = 'Hello, ';
+
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      // Overlay should be visible
+      expect(document.querySelector('.recording-overlay')).toBeInTheDocument();
+    });
+
+    // Should show "Listening..." placeholder even with pre-existing text
+    await waitFor(() => {
+      expect(screen.getByText('Listening...')).toBeInTheDocument();
+    });
+
+    // The pre-existing text should be displayed separately
+    const existingTextElement = document.querySelector('.recording-transcript-existing');
+    expect(existingTextElement).toBeInTheDocument();
+    expect(existingTextElement?.textContent).toContain('Hello,');
+  });
+
+  it('should close overlay when stop recording button is clicked', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      expect(document.querySelector('.recording-overlay')).toBeInTheDocument();
+    });
+
+    // Click stop recording button in the overlay
+    const stopButton = screen.getByText('Stop Recording');
+    fireEvent.click(stopButton);
+
+    await waitFor(() => {
+      // Overlay should be closed
+      expect(document.querySelector('.recording-overlay')).not.toBeInTheDocument();
+    });
+
+    // Recognition should have been stopped
+    expect(mockRecognition.stop).toHaveBeenCalled();
   });
 });
 
