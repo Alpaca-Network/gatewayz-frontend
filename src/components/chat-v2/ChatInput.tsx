@@ -741,7 +741,7 @@ export function ChatInput() {
                 </span>
               )}
               {/* Show placeholder if nothing captured yet */}
-              {!inputValue && !interimTranscript && (
+              {!inputValue.slice(transcriptBeforeRecording.length).trim() && !interimTranscript && (
                 <span className="recording-transcript-placeholder">
                   Listening...
                 </span>

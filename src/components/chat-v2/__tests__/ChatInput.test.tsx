@@ -1234,6 +1234,40 @@ describe('ChatInput speech recognition', () => {
     expect(interimElement?.textContent).toContain('hello world');
   });
 
+  it('should show "Listening..." placeholder with pre-existing text when no new text captured', async () => {
+    // Set up pre-existing text in the input
+    mockStoreState.inputValue = 'Hello, ';
+
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      // Overlay should be visible
+      expect(document.querySelector('.recording-overlay')).toBeInTheDocument();
+    });
+
+    // Should show "Listening..." placeholder even with pre-existing text
+    await waitFor(() => {
+      expect(screen.getByText('Listening...')).toBeInTheDocument();
+    });
+
+    // The pre-existing text should be displayed separately
+    const existingTextElement = document.querySelector('.recording-transcript-existing');
+    expect(existingTextElement).toBeInTheDocument();
+    expect(existingTextElement?.textContent).toContain('Hello,');
+  });
+
   it('should close overlay when stop recording button is clicked', async () => {
     render(<ChatInput />);
 
