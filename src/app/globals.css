@@ -305,4 +305,141 @@ body {
       opacity: 1;
     }
   }
+
+  /* Recording Overlay - Full screen modal for voice transcription */
+  .recording-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    animation: overlay-fade-in 0.2s ease-out;
+  }
+
+  @keyframes overlay-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .recording-overlay-content {
+    @apply flex flex-col items-center justify-center gap-8 p-8 max-w-2xl w-full mx-4;
+    animation: content-scale-in 0.3s ease-out;
+  }
+
+  @keyframes content-scale-in {
+    from {
+      transform: scale(0.9);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  /* Large waveform visualization */
+  .recording-waveform {
+    @apply flex items-center justify-center gap-1;
+    height: 80px;
+  }
+
+  .recording-waveform-bar {
+    @apply w-1 bg-white rounded-full;
+    animation: large-waveform-bounce 1.2s ease-in-out infinite;
+  }
+
+  .recording-waveform-bar:nth-child(1) {
+    animation-delay: 0s;
+    height: 20px;
+  }
+
+  .recording-waveform-bar:nth-child(2) {
+    animation-delay: 0.1s;
+    height: 35px;
+  }
+
+  .recording-waveform-bar:nth-child(3) {
+    animation-delay: 0.2s;
+    height: 50px;
+  }
+
+  .recording-waveform-bar:nth-child(4) {
+    animation-delay: 0.3s;
+    height: 65px;
+  }
+
+  .recording-waveform-bar:nth-child(5) {
+    animation-delay: 0.4s;
+    height: 80px;
+  }
+
+  .recording-waveform-bar:nth-child(6) {
+    animation-delay: 0.5s;
+    height: 65px;
+  }
+
+  .recording-waveform-bar:nth-child(7) {
+    animation-delay: 0.6s;
+    height: 50px;
+  }
+
+  .recording-waveform-bar:nth-child(8) {
+    animation-delay: 0.7s;
+    height: 35px;
+  }
+
+  .recording-waveform-bar:nth-child(9) {
+    animation-delay: 0.8s;
+    height: 20px;
+  }
+
+  @keyframes large-waveform-bounce {
+    0%, 100% {
+      transform: scaleY(0.3);
+      opacity: 0.5;
+    }
+    50% {
+      transform: scaleY(1);
+      opacity: 1;
+    }
+  }
+
+  /* Transcript display */
+  .recording-transcript-container {
+    @apply text-center px-4 py-6 min-h-[100px] max-h-[200px] overflow-y-auto w-full;
+    @apply text-xl leading-relaxed;
+  }
+
+  .recording-transcript-existing {
+    @apply text-gray-400;
+  }
+
+  .recording-transcript-final {
+    @apply text-white font-medium;
+  }
+
+  .recording-transcript-interim {
+    @apply text-gray-300 italic;
+    animation: interim-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes interim-pulse {
+    0%, 100% {
+      opacity: 0.7;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  .recording-transcript-placeholder {
+    @apply text-gray-500 italic;
+  }
+
+  .recording-stop-button {
+    @apply px-8 py-3 text-lg font-medium;
+    @apply shadow-lg hover:shadow-xl transition-shadow;
+  }
 }
