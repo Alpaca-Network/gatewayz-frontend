@@ -40,7 +40,7 @@ jest.mock('@/lib/utils', () => ({
   cn: (...args: any[]) => args.filter(Boolean).join(' '),
 }));
 
-// Mock lucide-react icons
+// Mock lucide-react icons (including icons used by sub-components)
 jest.mock('lucide-react', () => ({
   Menu: () => <span data-testid="menu-icon">Menu</span>,
   Pencil: () => <span data-testid="pencil-icon">Pencil</span>,
@@ -53,6 +53,28 @@ jest.mock('lucide-react', () => ({
   Code2: () => <span data-testid="code-icon">Code</span>,
   Lightbulb: () => <span data-testid="lightbulb-icon">Lightbulb</span>,
   MoreHorizontal: () => <span data-testid="more-icon">More</span>,
+  // Icons used by ConnectionStatus
+  WifiOff: () => <span data-testid="wifi-off-icon">WifiOff</span>,
+  Wifi: () => <span data-testid="wifi-icon">Wifi</span>,
+  RefreshCw: () => <span data-testid="refresh-icon">RefreshCw</span>,
+  AlertCircle: () => <span data-testid="alert-circle-icon">AlertCircle</span>,
+  // Icons used by GuestChatCounter
+  MessageSquare: () => <span data-testid="message-square-icon">MessageSquare</span>,
+}));
+
+// Mock ConnectionStatus to avoid its dependencies
+jest.mock('../ConnectionStatus', () => ({
+  ConnectionStatus: () => <div data-testid="connection-status">ConnectionStatus</div>,
+}));
+
+// Mock GuestChatCounter to avoid its dependencies
+jest.mock('@/components/chat/guest-chat-counter', () => ({
+  GuestChatCounter: () => <div data-testid="guest-chat-counter">GuestChatCounter</div>,
+}));
+
+// Mock use-network-status hook
+jest.mock('@/hooks/use-network-status', () => ({
+  useNetworkStatus: () => ({ isOnline: true, isChecking: false }),
 }));
 
 // Mock the stores and hooks
