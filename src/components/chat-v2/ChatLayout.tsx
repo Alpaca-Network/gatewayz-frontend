@@ -77,33 +77,33 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect:
     // Note: We no longer show a loading spinner here because ChatLayout immediately
     // switches to MessageList with optimistic UI when a prompt is clicked.
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
-             <h1 className="text-2xl sm:text-4xl font-bold mb-6 text-center">What can I help with?</h1>
+        <div className="flex-1 flex flex-col items-center justify-start sm:justify-center p-4 pt-6 sm:pt-4 overflow-y-auto">
+             <h1 className="text-2xl sm:text-4xl font-bold mb-4 sm:mb-6 text-center">What can I help with?</h1>
 
              {/* Prompt chips like ChatGPT */}
-             <div className="flex flex-wrap justify-center gap-2 mb-8 max-w-2xl">
+             <div className="flex flex-wrap justify-center gap-2 mb-6 sm:mb-8 max-w-2xl">
                  {PROMPT_CHIPS.map((chip) => (
                      <button
                         key={chip.label}
                         onClick={() => onPromptChipSelect?.(chip.prompt)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
+                        className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
                      >
                          <chip.icon className="h-4 w-4" />
                          {chip.label}
                      </button>
                  ))}
                  <button
-                    className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
+                    className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
                  >
                      More
                  </button>
              </div>
 
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl w-full">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-4xl w-full">
                  {prompts.map((p) => (
                      <Card
                         key={p.title}
-                        className="p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
+                        className="p-3 sm:p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
                         onClick={() => onPromptSelect(p.title)}
                      >
                          <p className="font-medium text-sm">{p.title}</p>
@@ -111,7 +111,7 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect:
                      </Card>
                  ))}
              </div>
-             <a href="/releases" className="mt-8 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+             <a href="/releases" className="mt-6 sm:mt-8 mb-4 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
                  What's new
              </a>
         </div>
