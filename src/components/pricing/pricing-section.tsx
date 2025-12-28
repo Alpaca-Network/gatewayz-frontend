@@ -30,7 +30,7 @@ const pricingTiers: PricingTier[] = [
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      '$10 free credits monthly',
+      '$3 free credits monthly',
       'Access to 5+ models',
       'Community support',
       'Basic analytics',
@@ -46,7 +46,7 @@ const pricingTiers: PricingTier[] = [
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      '50% discount on first $10 credits',
+      '50% discount on first $3 credits',
       'Access to 10,000+ models',
       'Smart cost optimization',
       'Advanced analytics',

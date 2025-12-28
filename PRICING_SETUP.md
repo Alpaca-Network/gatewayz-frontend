@@ -6,8 +6,8 @@ This guide explains how to set up the Stripe subscription pricing for the Gatewa
 
 The pricing page has been added to `/settings/credits` and displays four tiers:
 
-1. **Starter** ($0/month) - Free tier with $10 monthly credits
-2. **Pro** ($10/month) - 50% discount on first $10 credits, access to 10,000+ models
+1. **Starter** ($0/month) - Free tier with $3 monthly credits
+2. **Pro** ($10/month) - 50% discount on first $3 credits, access to 10,000+ models
 3. **Max** ($75/month) - 50% discount on $150 credits, 10x more usage
 4. **Enterprise** (Custom) - Contact sales for enterprise solutions
 

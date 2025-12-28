@@ -15,7 +15,7 @@ export function CTASection() {
             </div>
             <h2 className="text-2xl md:text-3xl font-bold text-foreground">Get Started with Free Credits</h2>
             <p className="text-base text-foreground max-w-xl mx-auto leading-relaxed">
-              Join our beta program and get <strong className="text-primary">$10 in free credits</strong> to explore 10,000+ AI models. No credit card required.
+              Join our beta program and get <strong className="text-primary">$3 in free credits</strong> to explore 10,000+ AI models. No credit card required.
             </p>
 
             <div className="max-w-md mx-auto pt-1">

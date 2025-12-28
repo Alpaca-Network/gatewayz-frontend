@@ -269,7 +269,7 @@ console.log(completion.choices[0].message.content);`
 
             {/* Bonus note */}
             <p className="text-sm text-muted-foreground mt-4 text-center">
-              💰 <strong>Add $10 → get +$10 bonus</strong> on your first top-up
+              💰 <strong>Add $3 → get +$3 bonus</strong> on your first top-up
             </p>
           </div>
         </div>
@@ -441,7 +441,7 @@ console.log(completion.choices[0].message.content);`
               Want to try other models? We support 1000+ models from OpenAI, Anthropic, Google, Meta, and more using the <code className="bg-muted px-2 py-1 rounded">researcher/model</code> format.
             </p>
             <p className="text-sm text-muted-foreground mb-4">
-              💰 <strong>Add $10 in credits and get a bonus $10 on your first top-up</strong>
+              💰 <strong>Add $3 in credits and get a bonus $3 on your first top-up</strong>
             </p>
             <Link href="/models">
               <Button variant="outline" className="w-full sm:w-auto">
