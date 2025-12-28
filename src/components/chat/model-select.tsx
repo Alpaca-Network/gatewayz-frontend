@@ -830,12 +830,14 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-          const openrouterRes = await fetch(`/api/models?gateway=openrouter`, { signal: controller.signal });
+          // FIX: Use gateway=all instead of openrouter to fetch all models in a single request
+          // This eliminates N+1 API calls and improves performance
+          const allGatewaysRes = await fetch(`/api/models?gateway=all`, { signal: controller.signal });
           clearTimeout(timeoutId);
-          const openrouterData = await openrouterRes.json();
+          const allGatewaysData = await allGatewaysRes.json();
 
           // Cache prefetched models for instant access
-          const allModels = [...(openrouterData.data || [])];
+          const allModels = [...(allGatewaysData.data || [])];
           const uniqueModelsMap = new Map();
           allModels.forEach((model: any) => {
             if (!uniqueModelsMap.has(model.id)) {

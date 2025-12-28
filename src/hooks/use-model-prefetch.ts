@@ -60,79 +60,62 @@ export function useModelPrefetch() {
           ]);
         };
 
-        // Prefetch from faster gateways first (progressive enhancement)
-        // Prioritize gateways known for fast response times
-        const fastGateways = [
-          'groq',
-          'cerebras',
-          'openrouter',
-          'together',
-          'fireworks',
-          'xai'
-        ];
+        // FIX: Use single API call with gateway=all instead of N+1 individual gateway calls
+        // This eliminates 6 parallel API calls and improves performance significantly
+        const response = await fetchWithTimeout(`/api/models?gateway=all`);
+        if (!response) {
+          console.log(`[Prefetch] Failed to fetch models`);
+          return null;
+        }
 
-          const fastFetches = fastGateways.map(gateway =>
-            fetchWithTimeout(`/api/models?gateway=${gateway}`).catch(() => null)
-          );
+        const payload = await safeParseJson<{ data?: any[] }>(
+          response,
+          `[Prefetch] gateway=all`
+        );
 
-          const results = await Promise.allSettled(fastFetches);
-          const allData: any[] = [];
+        if (payload?.data) {
+          const allData = payload.data;
 
-          for (let i = 0; i < results.length; i++) {
-            const result = results[i];
-            const gatewayLabel = fastGateways[i];
+          // Check if we found the model
+          const foundModel = allData.find((m: any) => {
+            if (m.id === modelId) return true;
+            const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
+            return modelNamePart === modelId || m.id.split('/').pop() === modelId;
+          });
 
-            if (result.status === 'fulfilled' && result.value) {
-              const payload = await safeParseJson<{ data?: any[] }>(
-                result.value,
-                `[Prefetch] ${gatewayLabel}`
-              );
-
-              if (payload?.data) {
-                allData.push(...payload.data);
-
-                // Check if we found the model - if yes, we can stop early
-                const foundModel = payload.data.find((m: any) => {
-                  if (m.id === modelId) return true;
-                  const modelNamePart = m.id.includes(':') ? m.id.split(':')[1] : m.id;
-                  return modelNamePart === modelId || m.id.split('/').pop() === modelId;
-                });
-
-                if (foundModel) {
-                  console.log(`[Prefetch] Found model ${modelId} early, caching...`);
-                  // Cache partial results
-                  try {
-                    const existing = localStorage.getItem(CACHE_KEY);
-                    let existingData = [];
-                    if (existing) {
-                      const { data: cachedData, timestamp } = JSON.parse(existing);
-                      if (Date.now() - timestamp < CACHE_DURATION) {
-                        existingData = cachedData;
-                      }
-                    }
-
-                    // Merge with existing cache
-                    const uniqueModelsMap = new Map();
-                    [...existingData, ...allData].forEach((model: any) => {
-                      if (!uniqueModelsMap.has(model.id)) {
-                        uniqueModelsMap.set(model.id, model);
-                      }
-                    });
-                    const mergedData = Array.from(uniqueModelsMap.values());
-
-                    localStorage.setItem(CACHE_KEY, JSON.stringify({
-                      data: mergedData,
-                      timestamp: Date.now()
-                    }));
-                  } catch (e) {
-                    console.log('[Prefetch] Cache update skipped');
-                  }
-
-                  return foundModel;
+          if (foundModel) {
+            console.log(`[Prefetch] Found model ${modelId}, caching...`);
+            // Cache results
+            try {
+              const existing = localStorage.getItem(CACHE_KEY);
+              let existingData: any[] = [];
+              if (existing) {
+                const { data: cachedData, timestamp } = JSON.parse(existing);
+                if (Date.now() - timestamp < CACHE_DURATION) {
+                  existingData = cachedData;
                 }
               }
+
+              // Merge with existing cache
+              const uniqueModelsMap = new Map();
+              [...existingData, ...allData].forEach((model: any) => {
+                if (!uniqueModelsMap.has(model.id)) {
+                  uniqueModelsMap.set(model.id, model);
+                }
+              });
+              const mergedData = Array.from(uniqueModelsMap.values());
+
+              localStorage.setItem(CACHE_KEY, JSON.stringify({
+                data: mergedData,
+                timestamp: Date.now()
+              }));
+            } catch (e) {
+              console.log('[Prefetch] Cache update skipped');
             }
+
+            return foundModel;
           }
+        }
 
         console.log(`[Prefetch] Model ${modelId} not found in fast gateways`);
         return null;
