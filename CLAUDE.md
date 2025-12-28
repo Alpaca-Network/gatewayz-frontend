@@ -26,7 +26,7 @@ Users authenticate on **gatewayz.ai** (main domain) and are automatically redire
 ├── app/                           # Next.js 15 App Router pages
 │   ├── layout.tsx                 # Root layout with theme & auth providers
 │   ├── global-error.tsx           # Global error boundary
-│   ├── api/                       # API routes for backend integration (25 directories)
+│   ├── api/                       # API routes for backend integration (23 directories)
 │   │   ├── analytics/             # Analytics event endpoints
 │   │   ├── audit/                 # Audit logging
 │   │   ├── auth/                  # Authentication endpoints
@@ -107,8 +107,8 @@ Users authenticate on **gatewayz.ai** (main domain) and are automatically redire
 │   ├── test-tier-display/         # Tier display testing
 │   ├── v1/                        # API v1 routes
 │   └── web-vitals/                # Web Vitals dashboard
-├── components/                    # Reusable React components (183 files)
-│   ├── ui/                        # Radix UI primitives (53 components)
+├── components/                    # Reusable React components (187 files)
+│   ├── ui/                        # Radix UI primitives (54 components)
 │   ├── ai-sdk-elements/           # AI SDK UI elements
 │   ├── analytics/                 # Analytics components
 │   ├── auth/                      # Auth-related components
