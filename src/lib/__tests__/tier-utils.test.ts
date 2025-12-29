@@ -7,6 +7,11 @@ import {
   formatTierInfo,
   canAccessModel,
   formatSubscriptionStatus,
+  isOnTrial,
+  isTrialExpired,
+  getTrialExpirationDate,
+  getTrialDaysRemaining,
+  isTrialExpiringSoon,
 } from '../tier-utils';
 import type { UserData, UserTier, SubscriptionStatus } from '../api';
 
@@ -486,12 +491,274 @@ describe('tier-utils', () => {
       expect(formatSubscriptionStatus('inactive')).toBe('Inactive');
     });
 
+    it('should format trial status', () => {
+      expect(formatSubscriptionStatus('trial')).toBe('Trial');
+    });
+
+    it('should format expired status', () => {
+      expect(formatSubscriptionStatus('expired')).toBe('Expired');
+    });
+
     it('should handle undefined status', () => {
       expect(formatSubscriptionStatus(undefined)).toBe('No subscription');
     });
 
     it('should handle unknown status gracefully', () => {
       expect(formatSubscriptionStatus('unknown' as SubscriptionStatus)).toBe('Unknown');
+    });
+  });
+
+  describe('isOnTrial', () => {
+    it('should return false when userData is null', () => {
+      expect(isOnTrial(null)).toBe(false);
+    });
+
+    it('should return true when subscription status is trial', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        subscription_status: 'trial',
+      };
+
+      expect(isOnTrial(userData)).toBe(true);
+    });
+
+    it('should return false when subscription status is active', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        subscription_status: 'active',
+      };
+
+      expect(isOnTrial(userData)).toBe(false);
+    });
+
+    it('should return false when subscription status is undefined', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+      };
+
+      expect(isOnTrial(userData)).toBe(false);
+    });
+  });
+
+  describe('isTrialExpired', () => {
+    it('should return false when userData is null', () => {
+      expect(isTrialExpired(null)).toBe(false);
+    });
+
+    it('should return true when subscription status is expired', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 0,
+        subscription_status: 'expired',
+      };
+
+      expect(isTrialExpired(userData)).toBe(true);
+    });
+
+    it('should return false when subscription status is trial', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        subscription_status: 'trial',
+      };
+
+      expect(isTrialExpired(userData)).toBe(false);
+    });
+  });
+
+  describe('getTrialExpirationDate', () => {
+    it('should return null when userData is null', () => {
+      expect(getTrialExpirationDate(null)).toBeNull();
+    });
+
+    it('should return null when trial_expires_at is undefined', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        subscription_status: 'trial',
+      };
+
+      expect(getTrialExpirationDate(userData)).toBeNull();
+    });
+
+    it('should convert ISO string to Date object', () => {
+      const isoDate = '2025-01-15T00:00:00.000Z';
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        subscription_status: 'trial',
+        trial_expires_at: isoDate,
+      };
+
+      const result = getTrialExpirationDate(userData);
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.toISOString()).toBe(isoDate);
+    });
+  });
+
+  describe('getTrialDaysRemaining', () => {
+    it('should return null when userData is null', () => {
+      expect(getTrialDaysRemaining(null)).toBeNull();
+    });
+
+    it('should return null when trial_expires_at is undefined', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        subscription_status: 'trial',
+      };
+
+      expect(getTrialDaysRemaining(userData)).toBeNull();
+    });
+
+    it('should return 0 when trial has expired', () => {
+      const pastDate = new Date(Date.now() - 86400 * 1000).toISOString(); // 1 day ago
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 0,
+        subscription_status: 'expired',
+        trial_expires_at: pastDate,
+      };
+
+      expect(getTrialDaysRemaining(userData)).toBe(0);
+    });
+
+    it('should return correct number of days remaining', () => {
+      const futureDate = new Date(Date.now() + 3 * 86400 * 1000).toISOString(); // 3 days from now
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        subscription_status: 'trial',
+        trial_expires_at: futureDate,
+      };
+
+      const result = getTrialDaysRemaining(userData);
+      expect(result).toBe(3);
+    });
+  });
+
+  describe('isTrialExpiringSoon', () => {
+    it('should return false when userData is null', () => {
+      expect(isTrialExpiringSoon(null)).toBe(false);
+    });
+
+    it('should return false when trial_expires_at is undefined', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        subscription_status: 'trial',
+      };
+
+      expect(isTrialExpiringSoon(userData)).toBe(false);
+    });
+
+    it('should return true when trial expires in 1 day', () => {
+      const oneDayFromNow = new Date(Date.now() + 86400 * 1000).toISOString();
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        subscription_status: 'trial',
+        trial_expires_at: oneDayFromNow,
+      };
+
+      expect(isTrialExpiringSoon(userData)).toBe(true);
+    });
+
+    it('should return false when trial expires in 3 days', () => {
+      const threeDaysFromNow = new Date(Date.now() + 3 * 86400 * 1000).toISOString();
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        subscription_status: 'trial',
+        trial_expires_at: threeDaysFromNow,
+      };
+
+      expect(isTrialExpiringSoon(userData)).toBe(false);
+    });
+
+    it('should return false when trial has already expired', () => {
+      const pastDate = new Date(Date.now() - 86400 * 1000).toISOString();
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 0,
+        subscription_status: 'expired',
+        trial_expires_at: pastDate,
+      };
+
+      expect(isTrialExpiringSoon(userData)).toBe(false);
     });
   });
 
@@ -575,6 +842,75 @@ describe('tier-utils', () => {
       expect(hasActiveSubscription(cancelledUser)).toBe(false);
       expect(canAccessModel('pro', getUserTier(cancelledUser))).toBe(false);
       expect(canAccessModel('max', getUserTier(cancelledUser))).toBe(false);
+    });
+
+    it('should correctly handle trial user workflow', () => {
+      const threeDaysFromNow = new Date(Date.now() + 3 * 86400 * 1000).toISOString();
+      const trialUser: UserData = {
+        user_id: 111,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-111',
+        display_name: 'Trial User',
+        email: 'trial@example.com',
+        credits: 5,
+        tier: 'basic',
+        subscription_status: 'trial',
+        trial_expires_at: threeDaysFromNow,
+      };
+
+      expect(getUserTier(trialUser)).toBe('basic');
+      expect(hasActiveSubscription(trialUser)).toBe(false);
+      expect(isOnTrial(trialUser)).toBe(true);
+      expect(isTrialExpired(trialUser)).toBe(false);
+      expect(getTrialDaysRemaining(trialUser)).toBe(3);
+      expect(isTrialExpiringSoon(trialUser)).toBe(false);
+      expect(formatSubscriptionStatus(trialUser.subscription_status)).toBe('Trial');
+    });
+
+    it('should correctly handle expired trial user workflow', () => {
+      const pastDate = new Date(Date.now() - 86400 * 1000).toISOString();
+      const expiredTrialUser: UserData = {
+        user_id: 222,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-222',
+        display_name: 'Expired Trial User',
+        email: 'expired@example.com',
+        credits: 0,
+        tier: 'basic',
+        subscription_status: 'expired',
+        trial_expires_at: pastDate,
+      };
+
+      expect(getUserTier(expiredTrialUser)).toBe('basic');
+      expect(hasActiveSubscription(expiredTrialUser)).toBe(false);
+      expect(isOnTrial(expiredTrialUser)).toBe(false);
+      expect(isTrialExpired(expiredTrialUser)).toBe(true);
+      expect(getTrialDaysRemaining(expiredTrialUser)).toBe(0);
+      expect(isTrialExpiringSoon(expiredTrialUser)).toBe(false);
+      expect(formatSubscriptionStatus(expiredTrialUser.subscription_status)).toBe('Expired');
+    });
+
+    it('should correctly handle trial expiring soon workflow', () => {
+      const oneDayFromNow = new Date(Date.now() + 86400 * 1000).toISOString();
+      const expiringSoonUser: UserData = {
+        user_id: 333,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-333',
+        display_name: 'Expiring Soon User',
+        email: 'expiring@example.com',
+        credits: 2,
+        tier: 'basic',
+        subscription_status: 'trial',
+        trial_expires_at: oneDayFromNow,
+      };
+
+      expect(isOnTrial(expiringSoonUser)).toBe(true);
+      expect(isTrialExpired(expiringSoonUser)).toBe(false);
+      expect(getTrialDaysRemaining(expiringSoonUser)).toBe(1);
+      expect(isTrialExpiringSoon(expiringSoonUser)).toBe(true);
     });
   });
 });
