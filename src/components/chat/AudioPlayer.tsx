@@ -134,12 +134,14 @@ export function AudioPlayer({
       try {
         await audio.play();
         setIsPlaying(true);
+        onPlay?.();
       } catch (err) {
         console.error("Failed to play audio:", err);
+        setIsPlaying(false);
         setError("Failed to play audio");
       }
     }
-  }, [isPlaying]);
+  }, [isPlaying, onPlay]);
 
   // Download audio
   const downloadAudio = useCallback(() => {
@@ -191,8 +193,10 @@ export function AudioPlayer({
         try {
           await audio.play();
           setIsPlaying(true);
+          onPlay?.();
         } catch (err) {
           console.error("Failed to auto-play audio:", err);
+          setIsPlaying(false);
           setError("Failed to play audio");
         }
       }
@@ -211,7 +215,7 @@ export function AudioPlayer({
       audio.removeEventListener("error", handleError);
       audio.removeEventListener("canplay", handleCanPlay);
     };
-  }, [autoPlay, onEnded, src]);
+  }, [autoPlay, onEnded, onPlay, src]);
 
   if (error) {
     return (

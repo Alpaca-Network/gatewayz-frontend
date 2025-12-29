@@ -238,9 +238,82 @@ describe('AudioPlayer', () => {
 
   describe('Error handling', () => {
     it('displays error when audio fails to load', async () => {
-      // This test would require triggering the audio error event
-      // which is complex with jsdom. Skipping for now.
-      expect(true).toBe(true);
+      render(<AudioPlayer src={mockSrc} />);
+
+      // Trigger error event
+      const audio = document.querySelector('audio');
+      if (audio) {
+        audio.dispatchEvent(new Event('error'));
+      }
+
+      // Should show error message
+      await waitFor(() => {
+        expect(screen.getByText(/failed to load audio/i)).toBeInTheDocument();
+      });
+    });
+
+    it('handles play failure gracefully', async () => {
+      // Mock play to reject
+      mockPlay.mockRejectedValueOnce(new Error('Autoplay blocked'));
+
+      const onPlay = jest.fn();
+      render(<AudioPlayer src={mockSrc} onPlay={onPlay} />);
+
+      // Simulate audio becoming ready
+      simulateAudioReady();
+
+      const playButton = screen.getByTestId('audio-play-pause-button');
+
+      await waitFor(() => {
+        expect(playButton).not.toBeDisabled();
+      });
+
+      fireEvent.click(playButton);
+
+      // Should show error and NOT call onPlay
+      await waitFor(() => {
+        expect(screen.getByText(/failed to play audio/i)).toBeInTheDocument();
+      });
+      expect(onPlay).not.toHaveBeenCalled();
+    });
+
+    it('handles autoplay failure in handleCanPlay', async () => {
+      // Mock play to reject for autoplay
+      mockPlay.mockRejectedValueOnce(new Error('Autoplay blocked'));
+
+      const onPlay = jest.fn();
+      render(<AudioPlayer src={mockSrc} autoPlay onPlay={onPlay} />);
+
+      // Trigger canplay event (which triggers autoplay)
+      const audio = document.querySelector('audio');
+      if (audio) {
+        Object.defineProperty(audio, 'duration', { value: 120, writable: true });
+        audio.dispatchEvent(new Event('canplay'));
+      }
+
+      // Should show error and NOT call onPlay
+      await waitFor(() => {
+        expect(screen.getByText(/failed to play audio/i)).toBeInTheDocument();
+      });
+      expect(onPlay).not.toHaveBeenCalled();
+    });
+
+    it('handles restart play failure', async () => {
+      render(<AudioPlayer src={mockSrc} />);
+
+      // Simulate audio becoming ready
+      simulateAudioReady();
+
+      // Mock play to reject for restart
+      mockPlay.mockRejectedValueOnce(new Error('Play blocked'));
+
+      const restartButton = screen.getByTestId('audio-restart-button');
+      fireEvent.click(restartButton);
+
+      // Should show error
+      await waitFor(() => {
+        expect(screen.getByText(/failed to play audio/i)).toBeInTheDocument();
+      });
     });
   });
 
@@ -251,6 +324,37 @@ describe('AudioPlayer', () => {
       // Initial time should show 0:00
       const timeDisplays = screen.getAllByText(/0:00/);
       expect(timeDisplays.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Source changes', () => {
+    it('resets state when src changes', async () => {
+      const { rerender } = render(<AudioPlayer src={mockSrc} />);
+
+      // Simulate audio becoming ready
+      simulateAudioReady();
+
+      await waitFor(() => {
+        const playButton = screen.getByTestId('audio-play-pause-button');
+        expect(playButton).not.toBeDisabled();
+      });
+
+      // Play the audio
+      const playButton = screen.getByTestId('audio-play-pause-button');
+      fireEvent.click(playButton);
+      await waitFor(() => {
+        expect(mockPlay).toHaveBeenCalled();
+      });
+
+      // Change src
+      const newSrc = 'data:audio/wav;base64,TmV3QXVkaW8=';
+      rerender(<AudioPlayer src={newSrc} />);
+
+      // State should be reset - isLoading should be true again (button disabled)
+      await waitFor(() => {
+        const button = screen.getByTestId('audio-play-pause-button');
+        expect(button).toBeDisabled();
+      });
     });
   });
 
