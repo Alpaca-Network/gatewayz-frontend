@@ -219,8 +219,8 @@ export default function ClaudeCodePage() {
                 {selectedOS === 'linux' && 'Terminal'}
               </span>
             </div>
-            <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 rounded-lg p-4 font-mono text-sm flex items-center justify-between gap-4 shadow-lg">
-              <code className="flex-1 overflow-x-auto text-green-400">{installCommands[selectedOS]}</code>
+            <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 dark:border-slate-800 rounded-lg p-4 font-mono text-sm flex items-center justify-between gap-4 shadow-lg">
+              <code className="flex-1 overflow-x-auto text-green-300 dark:text-green-400">{installCommands[selectedOS]}</code>
               <CopyButton text={installCommands[selectedOS]} id={`install-${selectedOS}`} />
             </div>
           </div>
@@ -255,8 +255,8 @@ export default function ClaudeCodePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 rounded-lg p-4 font-mono text-sm flex items-center justify-between gap-4 shadow-lg">
-              <code className="flex-1 overflow-x-auto text-green-400">{apiKey}</code>
+            <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 dark:border-slate-800 rounded-lg p-4 font-mono text-sm flex items-center justify-between gap-4 shadow-lg">
+              <code className="flex-1 overflow-x-auto text-green-300 dark:text-green-400">{apiKey}</code>
               <CopyButton text={apiKey} id="api-key" />
             </div>
           </CardContent>
@@ -298,20 +298,20 @@ export default function ClaudeCodePage() {
           <p className="text-muted-foreground">
             After setup completes, start Claude Code:
           </p>
-          <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 rounded-lg p-4 font-mono text-sm flex items-center justify-between shadow-lg">
-            <code className="text-green-400">ccr code</code>
+          <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 dark:border-slate-800 rounded-lg p-4 font-mono text-sm flex items-center justify-between shadow-lg">
+            <code className="text-green-300 dark:text-green-400">ccr code</code>
             <CopyButton text="ccr code" id="start-command" />
           </div>
 
           <div className="space-y-2">
             <p className="text-sm font-medium">Switch models on-the-fly:</p>
-            <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 rounded-lg p-4 font-mono text-xs space-y-2 shadow-lg">
+            <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 dark:border-slate-800 rounded-lg p-4 font-mono text-xs space-y-2 shadow-lg">
               <div className="flex items-center justify-between">
-                <code className="text-green-400">/model gatewayz,openai/gpt-5</code>
+                <code className="text-green-300 dark:text-green-400">/model gatewayz,openai/gpt-5</code>
                 <CopyButton text="/model gatewayz,openai/gpt-5" id="model-gpt5" />
               </div>
               <div className="flex items-center justify-between">
-                <code className="text-green-400">/model gatewayz,x-ai/grok-code-fast-1</code>
+                <code className="text-green-300 dark:text-green-400">/model gatewayz,x-ai/grok-code-fast-1</code>
                 <CopyButton text="/model gatewayz,x-ai/grok-code-fast-1" id="model-grok" />
               </div>
             </div>

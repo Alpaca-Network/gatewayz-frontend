@@ -17,11 +17,15 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams;
         const gateway = searchParams.get('gateway');
         const limit = searchParams.get('limit');
+        const search = searchParams.get('search');
 
         // Add request parameters as span attributes
         span.setAttribute('gateway', gateway || 'none');
         if (limit) {
           span.setAttribute('limit', parseInt(limit));
+        }
+        if (search) {
+          span.setAttribute('search_query', search);
         }
 
         if (!gateway) {
@@ -32,7 +36,11 @@ export async function GET(request: NextRequest) {
           );
         }
 
-        const result = await getModelsForGateway(gateway, limit ? parseInt(limit) : undefined);
+        const result = await getModelsForGateway(
+          gateway,
+          limit ? parseInt(limit) : undefined,
+          search || undefined
+        );
 
         // Extract the models array from the result
         const models = result.data || [];

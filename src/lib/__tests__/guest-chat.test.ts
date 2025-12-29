@@ -90,37 +90,37 @@ describe('Guest Chat Utilities', () => {
     describe('hasReachedGuestLimit', () => {
       it('should return false when under limit', () => {
         const today = getTodayDateString();
-        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 5, date: today }));
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 2, date: today }));
         expect(hasReachedGuestLimit()).toBe(false);
       });
 
       it('should return true when at limit', () => {
         const today = getTodayDateString();
-        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 10, date: today }));
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 3, date: today }));
         expect(hasReachedGuestLimit()).toBe(true);
       });
 
       it('should return true when over limit', () => {
         const today = getTodayDateString();
-        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 15, date: today }));
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 5, date: today }));
         expect(hasReachedGuestLimit()).toBe(true);
       });
     });
 
     describe('getRemainingGuestMessages', () => {
       it('should return full limit when no messages sent', () => {
-        expect(getRemainingGuestMessages()).toBe(10);
+        expect(getRemainingGuestMessages()).toBe(3);
       });
 
       it('should return remaining count', () => {
         const today = getTodayDateString();
-        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 7, date: today }));
-        expect(getRemainingGuestMessages()).toBe(3);
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 2, date: today }));
+        expect(getRemainingGuestMessages()).toBe(1);
       });
 
       it('should return 0 when at or over limit', () => {
         const today = getTodayDateString();
-        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 12, date: today }));
+        localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify({ count: 5, date: today }));
         expect(getRemainingGuestMessages()).toBe(0);
       });
     });
@@ -145,8 +145,8 @@ describe('Guest Chat Utilities', () => {
     });
 
     describe('getGuestMessageLimit', () => {
-      it('should return 10', () => {
-        expect(getGuestMessageLimit()).toBe(10);
+      it('should return 3', () => {
+        expect(getGuestMessageLimit()).toBe(3);
       });
     });
   });

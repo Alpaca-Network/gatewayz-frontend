@@ -28,6 +28,7 @@ export interface ChatMessage {
   image?: string;
   video?: string;
   audio?: string;
+  document?: string;
   isStreaming?: boolean;
 }
 

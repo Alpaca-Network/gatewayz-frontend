@@ -27,6 +27,7 @@ import {
 } from "@/integrations/privy/auth-session-transfer";
 import { getReferralCode, clearReferralCode } from "@/lib/referral";
 import { resetGuestMessageCount } from "@/lib/guest-chat";
+import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -51,6 +52,8 @@ const AUTH_SLOW_THRESHOLD_MS = 5000; // Show "slow" message after 5 seconds
 const AUTH_VERY_SLOW_THRESHOLD_MS = 15000; // Show "very slow" message after 15 seconds
 
 // Auth state machine for clear state transitions
+// Note: same-state transitions (e.g., authenticated -> authenticated) are handled
+// as no-ops in setAuthStatus before reaching the state machine validation
 const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
   idle: ["unauthenticated", "authenticating", "authenticated"],
   unauthenticated: ["authenticating", "authenticated"],
@@ -222,6 +225,11 @@ export function GatewayzAuthProvider({
   // Helper function to validate and set auth status with state machine
   const setAuthStatus = useCallback((newStatus: AuthStatus, reason?: string) => {
     setStatus((currentStatus) => {
+      // Skip if already in the same state (no-op transition)
+      if (currentStatus === newStatus) {
+        return currentStatus;
+      }
+
       const allowedTransitions = AUTH_STATE_TRANSITIONS[currentStatus];
 
       if (!allowedTransitions.includes(newStatus)) {
@@ -246,18 +254,37 @@ export function GatewayzAuthProvider({
     }
   }, []);
 
+  // Clear stored credentials
+  const clearStoredCredentials = useCallback((resetRetryCounter = true) => {
+    removeApiKey();
+    setApiKey(null);
+    setUserData(null);
+    lastSyncedPrivyIdRef.current = null;
+    upgradeAttemptedRef.current = false;
+    // Only reset retry counter if explicitly requested (default true)
+    // This prevents infinite retry loops when max retries are reached
+    if (resetRetryCounter) {
+      authRetryCountRef.current = 0;
+    }
+    clearAuthTimeout();
+  }, [clearAuthTimeout]);
+
   // Set authenticating timeout guard with automatic retry
   const setAuthTimeout = useCallback(() => {
     clearAuthTimeout();
     authTimeoutRef.current = setTimeout(() => {
       console.error(`[Auth] Authentication timeout - stuck in authenticating state for ${AUTHENTICATING_TIMEOUT_MS / 1000}s`);
 
+      // Always clear sync state to prevent being stuck
+      syncInFlightRef.current = false;
+      syncPromiseRef.current = null;
+
       // Check if we can retry
       if (authRetryCountRef.current < MAX_AUTH_RETRIES) {
         console.log(`[Auth] Auto-retrying authentication (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
         setError("Authentication is taking longer than expected - retrying...");
 
-        Sentry.captureMessage("Authentication timeout - auto-retrying", {
+        rateLimitedCaptureMessage("Authentication timeout - auto-retrying", {
           level: 'warning',
           tags: {
             auth_error: 'authenticating_timeout_retry',
@@ -268,20 +295,21 @@ export function GatewayzAuthProvider({
           },
         });
 
-        // Reset sync state to allow retry
-        syncInFlightRef.current = false;
-        syncPromiseRef.current = null;
-
         // Dispatch refresh event to trigger retry
+        // Note: syncWithBackend will increment authRetryCountRef when it handles this event
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
         }
       } else {
-        // Max retries reached
-        setAuthStatus("error", "timeout");
-        setError("Authentication timeout - please check your connection and try again");
+        // Max retries reached - transition to unauthenticated instead of error
+        // This allows the user to manually retry login
+        setAuthStatus("unauthenticated", "timeout - max retries");
+        setError("Authentication timeout - please try signing in again");
 
-        Sentry.captureMessage("Authentication timeout - max retries exceeded", {
+        // Clear any stuck credentials but keep retry counter to prevent infinite loop
+        clearStoredCredentials(false);
+
+        rateLimitedCaptureMessage("Authentication timeout - stuck in authenticating state", {
           level: 'error',
           tags: {
             auth_error: 'authenticating_timeout',
@@ -293,7 +321,7 @@ export function GatewayzAuthProvider({
         });
       }
     }, AUTHENTICATING_TIMEOUT_MS);
-  }, [clearAuthTimeout, setAuthStatus]);
+  }, [clearAuthTimeout, setAuthStatus, clearStoredCredentials]);
 
   const updateStateFromStorage = useCallback(() => {
     const key = getApiKey();
@@ -305,27 +333,32 @@ export function GatewayzAuthProvider({
     }
   }, [setAuthStatus]);
 
-  const clearStoredCredentials = useCallback(() => {
-    removeApiKey();
-    setApiKey(null);
-    setUserData(null);
-    lastSyncedPrivyIdRef.current = null;
-    upgradeAttemptedRef.current = false;
-    authRetryCountRef.current = 0;
-    clearAuthTimeout();
-  }, [clearAuthTimeout]);
-
   const upgradeApiKeyIfNeeded = useCallback(
     async (authData: AuthResponse) => {
       const currentKey = getApiKey();
+
+      console.log("[Auth] upgradeApiKeyIfNeeded called", {
+        has_current_key: !!currentKey,
+        is_temp_key: currentKey?.startsWith(TEMP_API_KEY_PREFIX),
+        current_key_prefix: currentKey ? currentKey.substring(0, 15) + "..." : "none",
+      });
+
       if (!currentKey || !currentKey.startsWith(TEMP_API_KEY_PREFIX)) {
+        console.log("[Auth] No upgrade needed - not a temp key");
         return;
       }
 
       try {
         const credits = Math.floor(authData.credits ?? 0);
+        console.log("[Auth] Checking upgrade eligibility:", {
+          credits,
+          is_new_user: authData.is_new_user,
+          eligible: credits > 10 && !authData.is_new_user,
+        });
+
         // Skip upgrade if insufficient credits or new user
         if (credits <= 10 || authData.is_new_user) {
+          console.log("[Auth] Skipping upgrade - insufficient credits or new user");
           return;
         }
 
@@ -349,6 +382,8 @@ export function GatewayzAuthProvider({
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
+            console.log("[Auth] Fetching upgraded API keys from /api/user/api-keys");
+
             const response = await fetch("/api/user/api-keys", {
               method: "GET",
               headers: {
@@ -359,6 +394,11 @@ export function GatewayzAuthProvider({
             });
 
             clearTimeout(timeoutId);
+
+            console.log("[Auth] API keys fetch response:", {
+              status: response.status,
+              ok: response.ok,
+            });
 
             if (!response.ok) {
               console.error("[Auth] Unable to fetch upgraded API keys:", response.status);
@@ -383,6 +423,16 @@ export function GatewayzAuthProvider({
             const data = await response.json();
             const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
               Array.isArray(data?.keys) ? data.keys : [];
+
+            console.log("[Auth] Received API keys response:", {
+              total_keys: keys.length,
+              keys_summary: keys.map(k => ({
+                is_temp: k.api_key?.startsWith(TEMP_API_KEY_PREFIX),
+                is_primary: k.is_primary,
+                environment: k.environment_tag,
+                prefix: k.api_key ? k.api_key.substring(0, 15) + "..." : "none",
+              })),
+            });
 
         // Find preferred key with better short-circuit logic
         let preferredKey: { api_key?: string; is_primary?: boolean; environment_tag?: string } | undefined;
@@ -423,11 +473,17 @@ export function GatewayzAuthProvider({
           return;
         }
 
-        if (preferredKey.api_key === currentKey) {
-          return;
-        }
+        // Note: This condition is always false because:
+        // - currentKey starts with TEMP_API_KEY_PREFIX (checked at line 345)
+        // - preferredKey.api_key does NOT start with TEMP_API_KEY_PREFIX (selected at lines 440-442)
+        // Therefore, they can never be equal. Removed dead code.
 
-        console.log("[Auth] Upgrading stored API key to live key");
+        console.log("[Auth] Upgrading stored API key to live key:", {
+          from_prefix: currentKey.substring(0, 15) + "...",
+          to_prefix: preferredKey.api_key.substring(0, 15) + "...",
+          is_primary: preferredKey.is_primary,
+          environment: preferredKey.environment_tag,
+        });
         saveApiKey(preferredKey.api_key);
 
         const storedUser = getUserData();
@@ -679,7 +735,7 @@ export function GatewayzAuthProvider({
       if (isNewUser) {
         return {
           ...authRequestBody,
-          trial_credits: 10,
+          trial_credits: 3,
         };
       }
 
@@ -689,7 +745,7 @@ export function GatewayzAuthProvider({
   );
 
   const syncWithBackend = useCallback(
-    async (options?: { force?: boolean }) => {
+    async (options?: { force?: boolean; resetRetryCount?: boolean }) => {
       if (!privyReady) {
         return;
       }
@@ -733,8 +789,9 @@ export function GatewayzAuthProvider({
         return syncPromiseRef.current;
       }
 
-      // Reset retry count on forced refresh
-      if (options?.force) {
+      // Reset retry count on user-initiated actions (login/logout)
+      // But NOT on automatic retries to prevent infinite loops
+      if (options?.force && options?.resetRetryCount !== false) {
         authRetryCountRef.current = 0;
       }
 
@@ -746,6 +803,13 @@ export function GatewayzAuthProvider({
 
         if (wasInFlight && !options?.force) {
           console.log("[Auth] Sync already in flight (race detected), skipping");
+          return;
+        }
+
+        // Check if max retries exceeded before incrementing
+        if (authRetryCountRef.current >= MAX_AUTH_RETRIES && !options?.resetRetryCount) {
+          console.log(`[Auth] Max retries (${MAX_AUTH_RETRIES}) exceeded, aborting sync`);
+          syncInFlightRef.current = false;
           return;
         }
 
@@ -934,13 +998,18 @@ export function GatewayzAuthProvider({
             return;
           }
 
-          clearStoredCredentials();
-          setAuthStatus("error", `backend status ${response.status}`);
-
-          // Provide user-friendly error messages based on status code
+          // CRITICAL: Check if we should retry BEFORE clearing credentials
+          // clearStoredCredentials() resets authRetryCountRef.current to 0 by default
+          // which would cause infinite retry loops
+          let shouldRetry = false;
           let userMessage: string;
-          if (is5xxError) {
+
+          if (response.status === 504) {
+            userMessage = "Gateway timeout - our servers are taking too long to respond. Retrying...";
+            shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
+          } else if (is5xxError) {
             userMessage = "Our servers are experiencing issues. Please try again in a moment.";
+            shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
           } else if (response.status === 401 || response.status === 403) {
             userMessage = "Authentication failed. Please try logging in again.";
           } else if (response.status === 429) {
@@ -948,6 +1017,11 @@ export function GatewayzAuthProvider({
           } else {
             userMessage = `Authentication failed (${response.status}). Please try again.`;
           }
+
+          // Clear credentials after determining shouldRetry
+          // For retryable errors, preserve retry counter; otherwise reset it
+          clearStoredCredentials(!shouldRetry);
+          setAuthStatus("error", `backend status ${response.status}`);
 
           const authError: AuthError = { status: response.status, message: rawResponseText };
           setError(userMessage);
@@ -959,16 +1033,36 @@ export function GatewayzAuthProvider({
               tags: {
                 auth_error: 'backend_auth_failed',
                 http_status: response.status,
+                is_gateway_timeout: response.status === 504 ? 'true' : 'false',
               },
               extra: {
                 response_status: response.status,
                 response_text: rawResponseText.substring(0, 500),
                 auth_method: (authBody as { auth_method?: string }).auth_method,
                 retry_attempt: authRetryCountRef.current,
+                will_retry: shouldRetry,
               },
               level: is5xxError ? 'error' : 'warning',
             }
           );
+
+          // Auto-retry for 504 Gateway Timeout and 5xx errors
+          if (shouldRetry) {
+            console.log(`[Auth] Retrying authentication after ${response.status} error (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
+
+            // NOTE: Do NOT increment authRetryCountRef here!
+            // syncWithBackend will increment it when handling the AUTH_REFRESH_EVENT
+            // Incrementing twice would cause retries to exhaust prematurely
+
+            // Wait 2 seconds before retrying to give backend time to recover
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Dispatch refresh event to trigger retry
+            // syncWithBackend will increment authRetryCountRef.current
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+            }
+          }
 
           onAuthError?.(authError);
           return;
@@ -1051,6 +1145,30 @@ export function GatewayzAuthProvider({
         // Check if we got a temporary API key
         if (authData.api_key?.startsWith(TEMP_API_KEY_PREFIX)) {
           console.warn("[Auth] Received temporary API key, will need to upgrade");
+          console.warn("[Auth] Temp key details:", {
+            user_id: authData.user_id,
+            credits: authData.credits,
+            is_new_user: authData.is_new_user,
+            tier: authData.tier,
+            key_prefix: authData.api_key.substring(0, 15) + "...",
+            had_existing_live_key: !!existingLiveKey,
+          });
+
+          // Log to Sentry for tracking temp key issuance
+          Sentry.captureMessage("Temporary API key received during authentication", {
+            level: 'warning',
+            tags: {
+              auth_issue: 'temp_key_received',
+            },
+            extra: {
+              user_id: authData.user_id,
+              credits: authData.credits,
+              is_new_user: authData.is_new_user,
+              tier: authData.tier,
+              had_existing_live_key: !!existingLiveKey,
+              key_prefix: authData.api_key.substring(0, 15),
+            },
+          });
 
           // CRITICAL FIX: If we had a live key before and backend returned a temp key,
           // restore the live key instead of using the temp key
@@ -1060,6 +1178,12 @@ export function GatewayzAuthProvider({
           }
         } else {
           console.log("[Auth] Received permanent API key");
+          console.log("[Auth] Permanent key details:", {
+            user_id: authData.user_id,
+            credits: authData.credits,
+            tier: authData.tier,
+            key_prefix: authData.api_key.substring(0, 15) + "...",
+          });
         }
 
         // Clear timeout guard and reset retry count on success
@@ -1083,7 +1207,7 @@ export function GatewayzAuthProvider({
             setStatus("error");
             setError("Authentication request timed out. Please try again.");
 
-            Sentry.captureMessage("Authentication sync aborted by client timeout", {
+            rateLimitedCaptureMessage("Authentication sync aborted by client timeout", {
               level: "warning",
               tags: {
                 auth_error: "frontend_timeout",
@@ -1307,6 +1431,15 @@ export function GatewayzAuthProvider({
 
     // If Privy user is authenticated, always sync with backend
     if (authenticated && user) {
+      // Reset retry counter on new login (when user changes)
+      // This allows users to retry after hitting max retries
+      const currentUserId = lastSyncedPrivyIdRef.current;
+      const newUserId = user.id;
+      if (currentUserId !== newUserId) {
+        console.log("[Auth] New Privy user detected, resetting retry counter");
+        authRetryCountRef.current = 0;
+      }
+
       syncWithBackend();
       return;
     }
@@ -1334,7 +1467,8 @@ export function GatewayzAuthProvider({
   useEffect(() => {
     const handler = () => {
       console.log("[Auth] Received refresh event");
-      syncWithBackend({ force: true }).catch((err) => {
+      // Use force but don't reset retry counter to prevent infinite loops
+      syncWithBackend({ force: true, resetRetryCount: false }).catch((err) => {
         console.error("[Auth] Error refreshing auth:", err);
       });
     };

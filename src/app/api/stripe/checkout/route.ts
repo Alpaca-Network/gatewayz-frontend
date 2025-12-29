@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { amount, userEmail, userId, apiKey } = await req.json();
+    const { amount, creditValue, userEmail, userId, apiKey } = await req.json();
 
     const normalizedEmail = typeof userEmail === 'string' && userEmail.includes('@') && !userEmail.startsWith('did:privy:')
       ? userEmail
@@ -24,6 +24,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // creditValue is the actual credits to add (may be higher than amount if discounted)
+    const creditsToAdd = creditValue || amount;
+
     // Call backend to create checkout session
     // Backend will create payment record and properly format metadata
     const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://api.gatewayz.ai';
@@ -32,12 +35,18 @@ export async function POST(req: NextRequest) {
     // The VERCEL_URL changes with each deployment, so we use a fixed URL
     const frontendUrl = 'https://beta.gatewayz.ai';
 
+    // Description shows the credit value they receive (may differ from payment amount for discounted packages)
+    const description = creditsToAdd !== amount
+      ? `$${creditsToAdd} credits (discounted price: $${amount}) for Gatewayz AI platform`
+      : `$${amount} credits for Gatewayz AI platform`;
+
     const requestBody = {
-      amount: amount * 100, // Convert dollars to cents
+      amount: amount * 100, // Convert dollars to cents (payment amount)
+      credit_value: creditsToAdd, // Credits to add to account (in dollars)
       currency: 'usd',
-      description: `${amount} credits for Gatewayz AI platform`,
+      description,
       customer_email: normalizedEmail,
-      success_url: `${frontendUrl}/settings/credits?session_id={{CHECKOUT_SESSION_ID}}`,
+      success_url: `${frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}&tier=credits`,
       cancel_url: `${frontendUrl}/settings/credits`,
     };
 

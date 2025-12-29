@@ -56,7 +56,7 @@ const nextConfig: NextConfig = {
   experimental: {
     // Enable server-side chunking
     serverActions: {
-      bodySizeLimit: '2mb',
+      bodySizeLimit: '10mb',
     },
     // Fix for layout router mounting errors in Next.js 15
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
@@ -68,6 +68,42 @@ const nextConfig: NextConfig = {
         source: '/deck',
         destination: 'https://www.canva.com/design/DAG2Dc4lQvI/P2ws7cdUnYAjdFxXpsKvUw/view?utm_content=DAG2Dc4lQvI&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h20484be5f9',
         permanent: false,
+      },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        // Apply security headers to all routes
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            // Allow microphone for speech recognition on /chat, block geolocation and camera
+            // microphone=(self) allows same-origin access needed for Web Speech API
+            key: 'Permissions-Policy',
+            value: 'geolocation=(), camera=(), microphone=(self)',
+          },
+        ],
       },
     ];
   },
@@ -103,16 +139,25 @@ const nextConfig: NextConfig = {
       );
     }
 
-    // Ignore warnings about require.extensions and module casing
+    // Ignore warnings about require.extensions, module casing, and sourcemaps
     config.ignoreWarnings = [
       /require\.extensions is not supported by webpack/,
       /There are multiple modules with names that only differ in casing/,
+      /could not determine a source map reference/,
+      /Could not auto-detect referenced sourcemap/,
     ];
 
     // Fix module casing issues on Windows
     config.snapshot = {
       ...config.snapshot,
       managedPaths: [],
+    };
+
+    // Suppress webpack "big strings" cache serialization warnings in build output
+    // These warnings are informational and don't affect functionality
+    config.infrastructureLogging = {
+      ...config.infrastructureLogging,
+      level: 'error',
     };
 
     return config;
@@ -152,8 +197,8 @@ const sentryWebpackPluginOptions = {
   org: "alpaca-network",
   project: "javascript-nextjs",
 
-  // Only print logs for uploading source maps in CI
-  silent: !process.env.CI,
+  // Suppress all Sentry plugin logs during build (reduces noise in Vercel logs)
+  silent: true,
 
   // For all available options, see:
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/
@@ -178,6 +223,14 @@ const sentryWebpackPluginOptions = {
   // https://docs.sentry.io/product/crons/
   // https://vercel.com/docs/cron-jobs
   automaticVercelMonitors: true,
+
+  // Suppress source map upload warnings for client bundles where source maps are intentionally hidden
+  sourcemaps: {
+    // Don't fail the build if source maps can't be uploaded
+    ignore: ['node_modules/**'],
+    // Delete source maps after upload to clean up build artifacts
+    filesToDeleteAfterUpload: ['**/*.js.map'],
+  },
 
   // Release tracking
   // Automatically associates source maps with the release they were built for
