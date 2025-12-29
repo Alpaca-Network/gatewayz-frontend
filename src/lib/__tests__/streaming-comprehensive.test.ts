@@ -774,7 +774,7 @@ describe('Streaming - Comprehensive Tests', () => {
         collectChunks(
           streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
         )
-      ).rejects.toThrow(/Access forbidden.*API key may be invalid/);
+      ).rejects.toThrow(/session has expired.*log out and log back in/i);
     });
 
     test('should handle 404 model not found', async () => {
@@ -850,6 +850,118 @@ describe('Streaming - Comprehensive Tests', () => {
           streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
         )
       ).rejects.toThrow(/Stream interrupted/);
+    });
+
+    test('should handle SSE rate limit errors with type field', async () => {
+      const mockChunks = [
+        'data: {"error":{"type":"rate_limit_error","message":"Rate limit exceeded"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(createSuccessResponse(mockChunks));
+
+      await expect(
+        collectChunks(
+          streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
+        )
+      ).rejects.toThrow(/Rate limit exceeded.*temporarily unavailable/);
+    });
+
+    test('should handle SSE rate limit errors with code 429', async () => {
+      const mockChunks = [
+        'data: {"error":{"code":"429","detail":"Too many requests"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(createSuccessResponse(mockChunks));
+
+      await expect(
+        collectChunks(
+          streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
+        )
+      ).rejects.toThrow(/Rate limit exceeded.*temporarily unavailable/);
+    });
+
+    test('should handle SSE rate limit errors with status 429', async () => {
+      const mockChunks = [
+        'data: {"error":{"status":429}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(createSuccessResponse(mockChunks));
+
+      await expect(
+        collectChunks(
+          streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
+        )
+      ).rejects.toThrow(/Rate limit exceeded.*temporarily unavailable/);
+    });
+
+    test('should handle SSE rate limit errors with "too many requests" in message', async () => {
+      const mockChunks = [
+        'data: {"error":{"message":"Too many requests from this IP"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(createSuccessResponse(mockChunks));
+
+      await expect(
+        collectChunks(
+          streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
+        )
+      ).rejects.toThrow(/Rate limit exceeded.*temporarily unavailable/);
+    });
+
+    test('should handle SSE error objects without message field', async () => {
+      const mockChunks = [
+        'data: {"error":{"code":"PROVIDER_ERROR","detail":"Provider unavailable"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(createSuccessResponse(mockChunks));
+
+      await expect(
+        collectChunks(
+          streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
+        )
+      ).rejects.toThrow(/Provider unavailable|PROVIDER_ERROR/);
+    });
+
+    test('should handle response.error event type with rate limit', async () => {
+      const mockChunks = [
+        'data: {"type":"response.error","error":{"type":"rate_limit_error"}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(createSuccessResponse(mockChunks));
+
+      await expect(
+        collectChunks(
+          streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
+        )
+      ).rejects.toThrow(/Rate limit exceeded.*temporarily unavailable/);
+    });
+
+    test('should extract error message from nested error object', async () => {
+      const mockChunks = [
+        'data: {"error":{"error":{"message":"Nested error message"}}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(createSuccessResponse(mockChunks));
+
+      await expect(
+        collectChunks(
+          streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
+        )
+      ).rejects.toThrow(/Nested error message/);
+    });
+
+    test('should provide meaningful error when error object has no extractable message', async () => {
+      const mockChunks = [
+        'data: {"error":{"unknown_field":123}}\n\n',
+      ];
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(createSuccessResponse(mockChunks));
+
+      await expect(
+        collectChunks(
+          streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
+        )
+      ).rejects.toThrow(/Stream error.*unknown_field/);
     });
   });
 

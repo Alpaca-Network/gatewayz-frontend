@@ -34,9 +34,9 @@ export function TrialCreditsNotice() {
         return;
       }
 
-      // Show dialog if user has trial credits (10 or less) and hasn't added payment
-      // This assumes users start with 10 credits and trial users haven't purchased more
-      if (userData.credits > 0 && userData.credits <= 10) {
+      // Show dialog if user has trial credits (3 or less) and hasn't added payment
+      // This assumes users start with 3 credits and trial users haven't purchased more
+      if (userData.credits > 0 && userData.credits <= 3) {
         setCredits(Math.floor(userData.credits));
         setShowDialog(true);
       }
@@ -75,7 +75,7 @@ export function TrialCreditsNotice() {
             <div className="text-sm">
               <p className="font-semibold text-amber-900 dark:text-amber-100">Important:</p>
               <p className="text-amber-800 dark:text-amber-200 mt-1">
-                Trial credits expire <span className="font-semibold">3 days after signup</span> unless you add $10 or more to your account.
+                Trial credits expire <span className="font-semibold">3 days after signup</span> unless you add $3 or more to your account.
               </p>
             </div>
           </div>

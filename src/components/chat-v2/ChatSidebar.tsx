@@ -16,6 +16,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -181,7 +182,12 @@ export function ChatSidebar({ className, onClose }: { className?: string; onClos
                         </div>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
                                     <MoreHorizontal className="h-3 w-3" />
                                 </Button>
                             </DropdownMenuTrigger>
@@ -236,10 +242,13 @@ export function ChatSidebar({ className, onClose }: { className?: string; onClos
           <DialogContent>
               <DialogHeader>
                   <DialogTitle>Rename Chat</DialogTitle>
+                  <DialogDescription>
+                      Enter a new name for this chat session.
+                  </DialogDescription>
               </DialogHeader>
-              <Input 
-                value={newName} 
-                onChange={(e) => setNewName(e.target.value)} 
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleRename()}
               />
               <DialogFooter>

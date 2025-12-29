@@ -94,7 +94,7 @@
     "embla-carousel-react": "^8.6.0",
     "ioredis": "^5.8.2",
     "lucide-react": "^0.475.0",
-    "next": "15.3.6",
+    "next": "15.3.8",
     "next-auth": "^4.24.11",
     "patch-package": "^8.0.0",
     "posthog-js": "^1.275.1",
@@ -149,5 +149,18 @@
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "webpack-dev-server": "^5.2.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@vercel/speed-insights",
+      "bufferutil",
+      "core-js",
+      "cypress",
+      "esbuild",
+      "keccak",
+      "sharp",
+      "unrs-resolver",
+      "utf-8-validate"
+    ]
   }
 }

@@ -4,6 +4,7 @@ import { usePrivy, User, LinkedAccountWithMetadata } from '@privy-io/react-auth'
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData, AUTH_REFRESH_COMPLETE_EVENT } from '@/lib/api';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 // Helper to strip undefined values (copied from original context)
 const stripUndefined = <T>(value: T): T => {
@@ -66,13 +67,17 @@ export function useAuthSync() {
   const queryClient = useQueryClient();
 
   // Initialize store from localStorage on mount
+  // This effect MUST set isLoading to false to allow the chat UI to render
   useEffect(() => {
     const storedKey = getApiKey();
     const storedUser = getUserData();
     if (storedKey && storedUser) {
+      // User has cached credentials - set auth state
       setAuth(storedKey, storedUser);
     } else {
-        setLoading(false);
+      // No cached credentials - this is a guest user or fresh session
+      // CRITICAL: Set loading to false so the chat UI renders
+      setLoading(false);
     }
   }, [setAuth, setLoading]);
 
@@ -94,13 +99,13 @@ export function useAuthSync() {
       const isNewUser = !existingUserData;
       const hasStoredApiKey = Boolean(existingUserData?.api_key);
 
-      let referralCode = localStorage.getItem("gatewayz_referral_code");
+      let referralCode = safeLocalStorageGet("gatewayz_referral_code");
       if (!referralCode && typeof window !== "undefined") {
         const urlParams = new URLSearchParams(window.location.search);
         const urlRefCode = urlParams.get("ref");
         if (urlRefCode) {
           referralCode = urlRefCode;
-          localStorage.setItem("gatewayz_referral_code", urlRefCode);
+          safeLocalStorageSet("gatewayz_referral_code", urlRefCode);
         }
       }
 
@@ -121,7 +126,7 @@ export function useAuthSync() {
         referral_code: referralCode ?? null,
         privy_user_id: user.id,
         // Add trial credits if new
-        ...(isNewUser ? { trial_credits: 10 } : {})
+        ...(isNewUser ? { trial_credits: 3 } : {})
       };
 
       // 3. Fetch

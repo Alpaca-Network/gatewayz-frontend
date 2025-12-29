@@ -1,12 +1,58 @@
 "use client";
 
+// Web Speech API types for TypeScript
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  0: {
+    transcript: string;
+    confidence: number;
+  };
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: ((this: SpeechRecognition, ev: Event) => void) | null;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => void) | null;
+  onerror: ((this: SpeechRecognition, ev: SpeechRecognitionErrorEvent) => void) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic as AudioIcon, X, RefreshCw } from "lucide-react";
+import * as Sentry from "@sentry/nextjs";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useCreateSession, useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
+import { useAutoModelSwitch } from "@/lib/hooks/use-auto-model-switch";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/auth-store";
@@ -18,6 +64,7 @@ import {
 } from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { usePrivy } from "@privy-io/react-auth";
+import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -26,6 +73,54 @@ const fileToBase64 = (file: File): Promise<string> => {
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = () => reject(new Error('Failed to read file'));
         reader.readAsDataURL(file);
+    });
+};
+
+// Maximum raw image file size (10MB)
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+// Helper to compress images before upload to avoid 413 errors
+const compressImage = (file: File, maxWidth = 1920, maxHeight = 1920, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+        }
+
+        img.onload = () => {
+            let { width, height } = img;
+
+            // Calculate new dimensions maintaining aspect ratio
+            if (width > maxWidth || height > maxHeight) {
+                const ratio = Math.min(maxWidth / width, maxHeight / height);
+                width = Math.round(width * ratio);
+                height = Math.round(height * ratio);
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Use JPEG for photos (smaller), PNG for images with transparency
+            const mimeType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+            const compressedDataUrl = canvas.toDataURL(mimeType, quality);
+
+            // Clean up object URL
+            URL.revokeObjectURL(img.src);
+
+            resolve(compressedDataUrl);
+        };
+
+        img.onerror = () => {
+            URL.revokeObjectURL(img.src);
+            reject(new Error('Failed to load image'));
+        };
+
+        img.src = URL.createObjectURL(file);
     });
 };
 
@@ -45,24 +140,43 @@ const generateSessionTitle = (text: string, maxLength: number = 30): string => {
 };
 
 export function ChatInput() {
-  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue } = useChatUIStore();
+  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
-  const { isStreaming, streamMessage } = useChatStream();
+  const { isStreaming, streamMessage, stopStream } = useChatStream();
+  const { checkImageSupport, checkVideoSupport, checkAudioSupport, checkFileSupport } = useAutoModelSwitch();
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const { login } = usePrivy();
+  const { logout } = useGatewayzAuth();
+
+  // Handle stop button click
+  const handleStop = useCallback(() => {
+    stopStream();
+    // Clear the timer when stopped
+    setMessageStartTime(null);
+  }, [stopStream, setMessageStartTime]);
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
+  const [selectedDocumentName, setSelectedDocumentName] = useState<string | null>(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
+  const [interimTranscript, setInterimTranscript] = useState<string>('');
+  const [transcriptBeforeRecording, setTranscriptBeforeRecording] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Ref for synchronous recording state check to prevent race conditions on rapid clicks
+  const isRecordingRef = useRef(false);
 
   // Derive input empty state directly from inputValue to avoid desync issues
   const isInputEmpty = !inputValue.trim();
@@ -93,7 +207,7 @@ export function ChatInput() {
     // Also check the actual input field as a fallback for typing scenarios
     const currentInputValue = freshInputValue || inputRef.current?.value || inputValue;
 
-    if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio) || isStreaming) return;
+    if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument) || isStreaming) return;
     if (!freshSelectedModel) {
         toast({ title: "No model selected", variant: "destructive" });
         return;
@@ -117,6 +231,8 @@ export function ChatInput() {
     const currentImage = selectedImage;
     const currentVideo = selectedVideo;
     const currentAudio = selectedAudio;
+    const currentDocument = selectedDocument;
+    const currentDocumentName = selectedDocumentName;
 
     // Clear input immediately for better UX
     setInputValue("");
@@ -127,6 +243,8 @@ export function ChatInput() {
     setSelectedImage(null);
     setSelectedVideo(null);
     setSelectedAudio(null);
+    setSelectedDocument(null);
+    setSelectedDocumentName(null);
 
     let sessionId = activeSessionId;
     // Create a snapshot of messages BEFORE session creation to avoid race conditions
@@ -148,6 +266,8 @@ export function ChatInput() {
         setSelectedImage(currentImage);
         setSelectedVideo(currentVideo);
         setSelectedAudio(currentAudio);
+        setSelectedDocument(currentDocument);
+        setSelectedDocumentName(currentDocumentName);
         toast({ title: "Failed to create session", variant: "destructive" });
         return;
       }
@@ -155,22 +275,29 @@ export function ChatInput() {
 
     // Combine message and attachments
     let content: any = messageText;
-    if (currentImage || currentVideo || currentAudio) {
+    if (currentImage || currentVideo || currentAudio || currentDocument) {
         content = [
             { type: "text", text: messageText },
             ...(currentImage ? [{ type: "image_url", image_url: { url: currentImage } }] : []),
             ...(currentVideo ? [{ type: "video_url", video_url: { url: currentVideo } }] : []),
-            ...(currentAudio ? [{ type: "audio_url", audio_url: { url: currentAudio } }] : [])
+            ...(currentAudio ? [{ type: "audio_url", audio_url: { url: currentAudio } }] : []),
+            ...(currentDocument ? [{ type: "file_url", file_url: { url: currentDocument } }] : [])
         ];
     }
 
     try {
+        // Start the timer when message is sent
+        setMessageStartTime(Date.now());
+
         await streamMessage({
             sessionId,
             content,
             model: freshSelectedModel,
             messagesHistory: currentMessages
         });
+
+        // Clear the timer when streaming completes
+        setMessageStartTime(null);
 
         // Mark chat task as complete in onboarding after first message (authenticated users only)
         if (typeof window !== 'undefined' && isAuthenticated) {
@@ -218,9 +345,92 @@ export function ChatInput() {
           }
         }
     } catch (e) {
-        toast({ title: "Failed to send message", variant: "destructive" });
+        // Clear the timer on error
+        setMessageStartTime(null);
+
+        const errorMessage = e instanceof Error ? e.message : "Failed to send message";
+
+        // Check if the error is auth-related (guest mode not available, session expired, or API key issues)
+        const lowerErrorMessage = errorMessage.toLowerCase();
+
+        // Rate limit errors should NOT be treated as auth errors, even if they mention "sign up"
+        // Rate limit messages like "You've used all X messages for today. Sign up..." contain "sign up"
+        // but should show the rate limit message, not trigger login
+        const isRateLimitError = lowerErrorMessage.includes('rate limit') ||
+                                lowerErrorMessage.includes('daily limit') ||
+                                lowerErrorMessage.includes('messages for today') ||
+                                lowerErrorMessage.includes('too many');
+
+        // Only check for guest auth errors if NOT a rate limit error
+        const isGuestAuthError = !isRateLimitError && (
+                                lowerErrorMessage.includes('sign in') ||
+                                lowerErrorMessage.includes('sign up') ||
+                                lowerErrorMessage.includes('create a free account'));
+        const isApiKeyError = lowerErrorMessage.includes('api key') ||
+                             lowerErrorMessage.includes('access forbidden') ||
+                             lowerErrorMessage.includes('logging out and back in') ||
+                             lowerErrorMessage.includes('log out and log back in') ||
+                             lowerErrorMessage === 'forbidden';
+        const isSessionError = lowerErrorMessage.includes('session expired') ||
+                              lowerErrorMessage.includes('authentication');
+        const isAuthError = isGuestAuthError || isApiKeyError || isSessionError;
+
+        // Capture error to Sentry with appropriate tags
+        const errorType = isRateLimitError ? 'chat_rate_limit_error' : isAuthError ? 'chat_auth_error' : 'chat_send_error';
+        Sentry.captureException(
+          e instanceof Error ? e : new Error(errorMessage),
+          {
+            tags: {
+              error_type: errorType,
+              is_authenticated: isAuthenticated ? 'true' : 'false',
+              model: freshSelectedModel?.value || 'unknown',
+            },
+            extra: {
+              errorMessage,
+              isRateLimitError,
+              isGuestAuthError,
+              isApiKeyError,
+              isSessionError,
+              sessionId,
+              hasImage: !!currentImage,
+              hasVideo: !!currentVideo,
+              hasAudio: !!currentAudio,
+              hasDocument: !!currentDocument,
+            },
+            level: isRateLimitError ? 'warning' : isAuthError ? 'warning' : 'error',
+          }
+        );
+
+        if (isAuthError) {
+          if (!isAuthenticated) {
+            // Unauthenticated user - show the login modal
+            toast({
+              title: "Sign in required",
+              description: "Create a free account to use the chat feature.",
+              variant: "destructive"
+            });
+            // Trigger Privy login modal
+            login();
+          } else if (isApiKeyError) {
+            // Authenticated user with invalid API key - prompt to re-authenticate
+            toast({
+              title: "Session expired",
+              description: "Your session has expired. Please log out and log back in.",
+              variant: "destructive"
+            });
+            // Auto-logout and re-login to refresh API key
+            Promise.resolve(logout())
+              .catch(() => {/* ignore logout errors */})
+              .finally(() => login());
+          } else {
+            // Other auth errors for authenticated users
+            toast({ title: errorMessage, variant: "destructive" });
+          }
+        } else {
+          toast({ title: errorMessage, variant: "destructive" });
+        }
     }
-  }, [inputValue, selectedImage, selectedVideo, selectedAudio, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login]);
+  }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login, logout, setMessageStartTime]);
 
   // Expose send function for prompt auto-send from WelcomeScreen
   useEffect(() => {
@@ -237,9 +447,26 @@ export function ChatInput() {
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+
+      // Validate file size before processing
+      if (file.size > MAX_IMAGE_SIZE) {
+          toast({
+              title: "Image too large",
+              description: "Please select an image under 10MB",
+              variant: "destructive"
+          });
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+      }
+
       try {
-          const base64 = await fileToBase64(file);
-          setSelectedImage(base64);
+          // Compress image to avoid 413 payload too large errors
+          const compressedBase64 = await compressImage(file);
+          setSelectedImage(compressedBase64);
+
+          // Auto-switch to a multimodal model if current model doesn't support images
+          const currentModel = useChatUIStore.getState().selectedModel;
+          checkImageSupport(currentModel);
       } catch (e) {
           toast({ title: "Failed to load image", variant: "destructive" });
       }
@@ -253,6 +480,10 @@ export function ChatInput() {
       try {
           const base64 = await fileToBase64(file);
           setSelectedVideo(base64);
+
+          // Auto-switch to a multimodal model if current model doesn't support video
+          const currentModel = useChatUIStore.getState().selectedModel;
+          checkVideoSupport(currentModel);
       } catch (e) {
           toast({ title: "Failed to load video", variant: "destructive" });
       }
@@ -266,6 +497,10 @@ export function ChatInput() {
       try {
           const base64 = await fileToBase64(file);
           setSelectedAudio(base64);
+
+          // Auto-switch to a multimodal model if current model doesn't support audio
+          const currentModel = useChatUIStore.getState().selectedModel;
+          checkAudioSupport(currentModel);
       } catch (e) {
           toast({ title: "Failed to load audio", variant: "destructive" });
       }
@@ -273,7 +508,260 @@ export function ChatInput() {
       if (audioInputRef.current) audioInputRef.current.value = '';
   };
 
+  const handleDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+          const base64 = await fileToBase64(file);
+          setSelectedDocument(base64);
+          setSelectedDocumentName(file.name);
+
+          // Auto-switch to a multimodal model if current model doesn't support files
+          const currentModel = useChatUIStore.getState().selectedModel;
+          checkFileSupport(currentModel);
+      } catch (e) {
+          toast({ title: "Failed to load document", variant: "destructive" });
+      }
+      // Reset input so the same file can be selected again
+      if (documentInputRef.current) documentInputRef.current.value = '';
+  };
+
+  // Ref to track current recognition instance for race condition prevention
+  const currentRecognitionRef = useRef<SpeechRecognition | null>(null);
+  // Ref to track last processed result index to prevent duplicates
+  const lastProcessedIndexRef = useRef<number>(-1);
+
+  // Speech Recognition for transcription
+  const startRecording = useCallback(() => {
+    // Prevent race condition: use ref for synchronous check to avoid state timing issues
+    // State updates are asynchronous, so rapid double-clicks could bypass state-based guards
+    if (isRecordingRef.current) {
+      return;
+    }
+
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognitionAPI) {
+      toast({
+        title: "Speech recognition not supported",
+        description: "Your browser doesn't support speech recognition. Try using Chrome or Edge.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Set ref IMMEDIATELY to block any concurrent calls (synchronous update)
+    isRecordingRef.current = true;
+    setIsRecording(true);
+
+    // Reset tracking state for new recording session
+    lastProcessedIndexRef.current = -1;
+    setInterimTranscript('');
+    // Save the current input value before recording starts
+    setTranscriptBeforeRecording(useChatUIStore.getState().inputValue);
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    // Track this recognition instance to prevent stale handlers from corrupting state
+    currentRecognitionRef.current = recognition;
+
+    // Set speechRecognition state BEFORE starting to ensure error handlers have access
+    setSpeechRecognition(recognition);
+
+    recognition.onstart = () => {
+      // Confirm state is set (should already be set above)
+      setIsRecording(true);
+      isRecordingRef.current = true;
+    };
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      // Build complete transcript from all results, only processing new finals
+      let newFinalTranscript = '';
+      let currentInterim = '';
+
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i];
+        const transcript = result[0].transcript;
+
+        if (result.isFinal) {
+          // Only add to newFinalTranscript if this is a newly finalized result
+          if (i > lastProcessedIndexRef.current) {
+            newFinalTranscript += transcript;
+            lastProcessedIndexRef.current = i;
+          }
+        } else {
+          // Interim results - these are still being processed
+          currentInterim += transcript;
+        }
+      }
+
+      // Update interim transcript display
+      setInterimTranscript(currentInterim);
+
+      // Only update input if we have new final transcript
+      if (newFinalTranscript) {
+        const currentValue = useChatUIStore.getState().inputValue;
+        const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
+        setInputValue(currentValue + separator + newFinalTranscript);
+      }
+    };
+
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+      // Only handle error if this is still the current recognition instance
+      // This prevents stale handlers from corrupting state of a new recording
+      if (currentRecognitionRef.current !== recognition) {
+        return;
+      }
+      console.error('Speech recognition error:', event.error);
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setSpeechRecognition(null);
+      currentRecognitionRef.current = null;
+
+      if (event.error === 'not-allowed') {
+        toast({
+          title: "Microphone access denied",
+          description: "Please allow microphone access to use voice input.",
+          variant: "destructive"
+        });
+      } else if (event.error !== 'aborted') {
+        toast({
+          title: "Speech recognition error",
+          description: `Error: ${event.error}`,
+          variant: "destructive"
+        });
+      }
+    };
+
+    recognition.onend = () => {
+      // Only clean up state if this is still the current recognition instance
+      // This prevents an old recognition's onend from corrupting a new recording's state
+      if (currentRecognitionRef.current !== recognition) {
+        return;
+      }
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setSpeechRecognition(null);
+      currentRecognitionRef.current = null;
+    };
+
+    try {
+      recognition.start();
+    } catch (error) {
+      // Handle synchronous errors from recognition.start()
+      // This can happen when audio context is blocked by browser policy
+      console.error('Speech recognition start failed:', error);
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setSpeechRecognition(null);
+      currentRecognitionRef.current = null;
+      toast({
+        title: "Failed to start speech recognition",
+        description: "Your browser blocked the microphone. Please check your permissions.",
+        variant: "destructive"
+      });
+    }
+  }, [toast, setInputValue]);
+
+  const stopRecording = useCallback(() => {
+    if (speechRecognition) {
+      // Clear the current recognition ref BEFORE stopping to prevent onend handler
+      // from running (since we're intentionally stopping)
+      currentRecognitionRef.current = null;
+      speechRecognition.stop();
+      setSpeechRecognition(null);
+      isRecordingRef.current = false;
+      setIsRecording(false);
+      setInterimTranscript('');
+      lastProcessedIndexRef.current = -1;
+    }
+  }, [speechRecognition]);
+
+  const toggleRecording = useCallback(() => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }, [isRecording, startRecording, stopRecording]);
+
+  // Cleanup speech recognition on component unmount
+  useEffect(() => {
+    return () => {
+      if (speechRecognition) {
+        try {
+          speechRecognition.abort();
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+    };
+  }, [speechRecognition]);
+
   return (
+    <>
+      {/* Recording Overlay - Full screen modal when recording */}
+      {isRecording && (
+        <div className="recording-overlay">
+          <div className="recording-overlay-content">
+            {/* Animated waveform */}
+            <div className="recording-waveform">
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+              <span className="recording-waveform-bar" />
+            </div>
+
+            {/* Transcription text display */}
+            <div className="recording-transcript-container">
+              {/* Show what was already in the input before recording */}
+              {transcriptBeforeRecording && (
+                <span className="recording-transcript-existing">
+                  {transcriptBeforeRecording}{' '}
+                </span>
+              )}
+              {/* Show newly captured text (already added to input) */}
+              {inputValue.slice(transcriptBeforeRecording.length).trim() && (
+                <span className="recording-transcript-final">
+                  {inputValue.slice(transcriptBeforeRecording.length).trim()}{' '}
+                </span>
+              )}
+              {/* Show interim (in-progress) text */}
+              {interimTranscript && (
+                <span className="recording-transcript-interim">
+                  {interimTranscript}
+                </span>
+              )}
+              {/* Show placeholder if nothing captured yet */}
+              {!inputValue.slice(transcriptBeforeRecording.length).trim() && !interimTranscript && (
+                <span className="recording-transcript-placeholder">
+                  Listening...
+                </span>
+              )}
+            </div>
+
+            {/* Stop button */}
+            <Button
+              size="lg"
+              variant="destructive"
+              onClick={toggleRecording}
+              className="recording-stop-button"
+            >
+              <Square className="h-5 w-5 mr-2" />
+              Stop Recording
+            </Button>
+          </div>
+        </div>
+      )}
+
     <div className="w-full p-4 border-t bg-background">
       <div className="max-w-4xl mx-auto">
         {/* Guest Daily Limit Warning */}
@@ -322,23 +810,88 @@ export function ChatInput() {
                     <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => setSelectedAudio(null)}><X className="h-3 w-3" /></Button>
                 </div>
             )}
+            {selectedDocument && (
+                <div className="relative flex items-center justify-center h-16 px-3 bg-muted rounded gap-2">
+                    <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <span className="text-xs text-muted-foreground truncate max-w-[100px]">{selectedDocumentName}</span>
+                    <Button size="icon" variant="destructive" className="absolute -top-1 -right-1 h-4 w-4 rounded-full" onClick={() => { setSelectedDocument(null); setSelectedDocumentName(null); }}><X className="h-3 w-3" /></Button>
+                </div>
+            )}
         </div>
 
-        <div className="flex gap-2 items-center bg-muted p-2 rounded-lg border">
+        <div className="flex gap-2 items-center bg-muted p-3 rounded-2xl border">
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
+            <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
             <div className="flex gap-1">
-                <Button size="icon" variant="ghost" onClick={() => fileInputRef.current?.click()} title="Upload image">
-                    <ImageIcon className="h-5 w-5 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => videoInputRef.current?.click()} title="Upload video">
-                    <VideoIcon className="h-5 w-5 text-muted-foreground" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={() => audioInputRef.current?.click()} title="Upload audio">
-                    <AudioIcon className="h-5 w-5 text-muted-foreground" />
+                {/* Combined "Add photos & files" dropdown with [+] button */}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost" title="Add photos & files" className="h-10 w-10 rounded-full border border-border hover:bg-accent">
+                            <Plus className="h-5 w-5 text-muted-foreground" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" side="top" className="w-80 p-4">
+                        {/* Top row: Camera, Photos, Files */}
+                        <div className="grid grid-cols-3 gap-3 mb-4">
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                            >
+                                <Camera className="h-6 w-6 mb-2 text-foreground" />
+                                <span className="text-sm font-medium">Camera</span>
+                            </button>
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                            >
+                                <ImageIcon className="h-6 w-6 mb-2 text-foreground" />
+                                <span className="text-sm font-medium">Photos</span>
+                            </button>
+                            <button
+                                onClick={() => documentInputRef.current?.click()}
+                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                            >
+                                <FileText className="h-6 w-6 mb-2 text-foreground" />
+                                <span className="text-sm font-medium">Files</span>
+                            </button>
+                        </div>
+                        {/* Divider */}
+                        <div className="border-t border-border mb-3" />
+                        {/* Additional options */}
+                        <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="py-3">
+                            <VideoIcon className="h-5 w-5 mr-3" />
+                            <div>
+                                <p className="font-medium">Upload video</p>
+                                <p className="text-xs text-muted-foreground">Add video files</p>
+                            </div>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => audioInputRef.current?.click()} className="py-3">
+                            <AudioIcon className="h-5 w-5 mr-3" />
+                            <div>
+                                <p className="font-medium">Upload audio</p>
+                                <p className="text-xs text-muted-foreground">Add audio files</p>
+                            </div>
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Microphone button for speech-to-text */}
+                <Button
+                    size="icon"
+                    variant={isRecording ? "destructive" : "ghost"}
+                    onClick={toggleRecording}
+                    title={isRecording ? "Stop recording" : "Start voice input"}
+                    className={cn(isRecording && "animate-pulse")}
+                >
+                    {isRecording ? (
+                        <Square className="h-4 w-4" />
+                    ) : (
+                        <Mic className="h-5 w-5 text-muted-foreground" />
+                    )}
                 </Button>
             </div>
 
@@ -352,31 +905,51 @@ export function ChatInput() {
                         handleSend();
                     }
                 }}
-                placeholder="Type a message..."
-                className="flex-1 border-0 bg-background focus-visible:ring-0"
+                placeholder="Ask Gatewayz"
+                className="flex-1 border-0 bg-background focus-visible:ring-0 h-12 text-base"
                 disabled={isStreaming}
                 enterKeyHint="send"
             />
 
-            <Button
-                type="button"
-                size="icon"
-                onPointerDown={(e) => {
-                    // Prevent focus loss on mobile which can cause state sync issues
-                    e.preventDefault();
-                }}
-                onClick={(e) => {
-                    // Prevent any default behavior that might interfere
-                    e.preventDefault();
-                    handleSend();
-                }}
-                disabled={isStreaming}
-                className={cn("bg-primary", isStreaming && "opacity-50")}
-            >
-                {isStreaming ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
+            {isStreaming ? (
+                <Button
+                    type="button"
+                    size="icon"
+                    variant="destructive"
+                    onPointerDown={(e) => {
+                        // Prevent focus loss on mobile which can cause state sync issues
+                        e.preventDefault();
+                    }}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        handleStop();
+                    }}
+                    title="Stop generating"
+                >
+                    <Square className="h-4 w-4" />
+                </Button>
+            ) : (
+                <Button
+                    type="button"
+                    size="icon"
+                    onPointerDown={(e) => {
+                        // Prevent focus loss on mobile which can cause state sync issues
+                        e.preventDefault();
+                    }}
+                    onClick={(e) => {
+                        // Prevent any default behavior that might interfere
+                        e.preventDefault();
+                        handleSend();
+                    }}
+                    disabled={isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument}
+                    className="bg-primary"
+                >
+                    <Send className="h-4 w-4" />
+                </Button>
+            )}
         </div>
       </div>
     </div>
+    </>
   );
 }

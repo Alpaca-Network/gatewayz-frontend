@@ -1,8 +1,10 @@
 /**
  * Session Invalidation Management
- * Handles session invalidation on critical account changes
+ * Handles session invalidation on critical account changes (with safe storage fallback)
  * Prevents attackers from maintaining access after password/email changes
  */
+
+import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemove } from './safe-storage';
 
 const SESSION_INVALIDATION_ID_KEY = 'gatewayz_session_invalidation_id';
 
@@ -24,14 +26,13 @@ export function generateSessionInvalidationId(): string {
 }
 
 /**
- * Get current session invalidation ID
+ * Get current session invalidation ID (with safe storage fallback)
  */
 export function getSessionInvalidationId(): string | null {
   if (typeof window === 'undefined') return null;
 
   try {
-    const storage = window.localStorage;
-    return storage.getItem(SESSION_INVALIDATION_ID_KEY);
+    return safeLocalStorageGet(SESSION_INVALIDATION_ID_KEY);
   } catch (error) {
     console.warn('[session-invalidation] Failed to get session invalidation ID:', error);
     return null;
@@ -39,14 +40,13 @@ export function getSessionInvalidationId(): string | null {
 }
 
 /**
- * Save session invalidation ID
+ * Save session invalidation ID (with safe storage fallback)
  */
 export function saveSessionInvalidationId(id: string): void {
   if (typeof window === 'undefined') return;
 
   try {
-    const storage = window.localStorage;
-    storage.setItem(SESSION_INVALIDATION_ID_KEY, id);
+    safeLocalStorageSet(SESSION_INVALIDATION_ID_KEY, id);
     console.log('[session-invalidation] Updated session invalidation ID');
   } catch (error) {
     console.warn('[session-invalidation] Failed to save session invalidation ID:', error);
@@ -54,14 +54,13 @@ export function saveSessionInvalidationId(id: string): void {
 }
 
 /**
- * Clear session invalidation ID (typically on logout)
+ * Clear session invalidation ID (typically on logout, with safe storage fallback)
  */
 export function clearSessionInvalidationId(): void {
   if (typeof window === 'undefined') return;
 
   try {
-    const storage = window.localStorage;
-    storage.removeItem(SESSION_INVALIDATION_ID_KEY);
+    safeLocalStorageRemove(SESSION_INVALIDATION_ID_KEY);
   } catch (error) {
     console.warn('[session-invalidation] Failed to clear session invalidation ID:', error);
   }

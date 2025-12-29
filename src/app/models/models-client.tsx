@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
 import { safeParseJson } from '@/lib/http';
+import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, getAllActiveGatewayIds } from '@/lib/gateway-registry';
 
 
 interface Model {
@@ -53,32 +54,19 @@ interface Model {
   is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 }
 
-// Gateway display configuration
-const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React.ReactNode }> = {
-  openrouter: { name: 'OpenRouter', color: 'bg-blue-500' },
-  portkey: { name: 'Portkey', color: 'bg-purple-500' },
-  featherless: { name: 'Featherless', color: 'bg-green-500' },
-  groq: { name: 'Groq', color: 'bg-orange-500', icon: <Zap className="w-3 h-3" /> },
-  together: { name: 'Together', color: 'bg-indigo-500' },
-  fireworks: { name: 'Fireworks', color: 'bg-red-500' },
-  chutes: { name: 'Chutes', color: 'bg-yellow-500' },
-  deepinfra: { name: 'DeepInfra', color: 'bg-cyan-500' },
-  // New Portkey SDK providers
-  google: { name: 'Google', color: 'bg-blue-600' },
-  cerebras: { name: 'Cerebras', color: 'bg-amber-600' },
-  nebius: { name: 'Nebius', color: 'bg-slate-600' },
-  xai: { name: 'xAI', color: 'bg-black' },
-  novita: { name: 'Novita', color: 'bg-violet-600' },
-  huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
-  hug: { name: 'Hugging Face', color: 'bg-yellow-600' }, // Backend uses 'hug' abbreviation
-  aimo: { name: 'AiMo', color: 'bg-pink-600' },
-  near: { name: 'NEAR', color: 'bg-teal-600' },
-  fal: { name: 'Fal', color: 'bg-emerald-600' },
-  'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
-  helicone: { name: 'Helicone', color: 'bg-indigo-600' },
-  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
-  clarifai: { name: 'Clarifai', color: 'bg-purple-600' }
-};
+// Gateway display configuration - now uses centralized gateway registry
+// To add a new gateway, simply add it to src/lib/gateway-registry.ts
+// Icon components need to be resolved here since the registry stores string identifiers
+const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React.ReactNode }> = Object.fromEntries(
+  Object.entries(REGISTRY_GATEWAY_CONFIG).map(([id, config]) => [
+    id,
+    {
+      name: config.name,
+      color: config.color,
+      icon: config.icon === 'zap' ? <Zap className="w-3 h-3" /> : undefined,
+    },
+  ])
+);
 
 // Provider display configuration (for providers that differ from gateway names)
 const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
@@ -812,10 +800,9 @@ export default function ModelsClient({
       });
     });
 
-    // Define all known gateways that should appear in the filter
-    // This ensures all gateways are visible even if they have 0 models currently
-    // Excludes 'portkey' as it's deprecated (use individual Portkey SDK providers instead)
-    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway', 'helicone', 'alibaba', 'alpaca'];
+    // Use getAllActiveGatewayIds() to include dynamically registered gateways
+    // To add a new gateway, simply add it to src/lib/gateway-registry.ts
+    const allKnownGateways = getAllActiveGatewayIds();
 
     // Log gateway counts for debugging
     const gatewayStats = allKnownGateways.map(g => ({
@@ -1211,10 +1198,13 @@ export default function ModelsClient({
 
           {/* End of results */}
           {!hasMore && filteredModels.length > 0 && (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
               <div className="text-sm text-muted-foreground">
                 Showing all {filteredModels.length} models
               </div>
+              <Link href="/releases" className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                What's new
+              </Link>
             </div>
           )}
           </div>

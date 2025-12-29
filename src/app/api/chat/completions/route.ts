@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { profiler, generateRequestId } from '@/lib/performance-profiler';
 import { normalizeModelId } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 import { handleApiError } from '@/app/api/middleware/error-handler';
+import {
+  getClientIP,
+  checkGuestRateLimit,
+  incrementGuestRateLimit,
+  formatResetTime,
+  getGuestDailyLimit,
+} from '@/lib/guest-rate-limiter';
 
 /**
  * Calculate retry delay for rate limit errors with exponential backoff
@@ -235,20 +243,64 @@ export async function POST(request: NextRequest) {
     // Determine if this is an explicit guest request vs missing/invalid API key
     const isExplicitGuestRequest = apiKey === 'guest';
     const isMissingApiKey = !apiKey || apiKey.trim() === '';
+    const isGuestRequest = isExplicitGuestRequest || isMissingApiKey;
 
-    // Default guest API key for unauthenticated users
-    // This key should have limited rate limits on the backend
-    const DEFAULT_GUEST_API_KEY = 'gatewayz-guest-demo-key';
+    // For explicit guest requests or missing API key, check rate limit and use the guest API key
+    if (isGuestRequest) {
+      const guestKey = process.env.GUEST_API_KEY;
+      const clientIP = getClientIP(request);
 
-    // For explicit guest requests or missing API key, use the guest API key
-    if (isExplicitGuestRequest || isMissingApiKey) {
-      const guestKey = process.env.GUEST_API_KEY || DEFAULT_GUEST_API_KEY;
+      // Check guest rate limit (3 messages per 24 hours per IP)
+      const rateLimitCheck = checkGuestRateLimit(clientIP);
+
+      if (!rateLimitCheck.allowed) {
+        // Guest has exceeded daily limit
+        const resetTime = formatResetTime(rateLimitCheck.resetInMs);
+        console.warn(`[API Completions] Guest rate limit exceeded for IP: ${clientIP}`);
+
+        return new Response(JSON.stringify({
+          error: 'Daily limit reached',
+          code: 'GUEST_RATE_LIMIT_EXCEEDED',
+          message: `You've used all ${getGuestDailyLimit()} free messages for today. Sign up for a free account to continue chatting!`,
+          detail: `Your guest message limit will reset in ${resetTime}.`,
+          remaining: 0,
+          limit: rateLimitCheck.limit,
+          resetInMs: rateLimitCheck.resetInMs,
+        }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': String(rateLimitCheck.limit),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(Math.ceil(rateLimitCheck.resetInMs / 1000)),
+            'Retry-After': String(Math.ceil(rateLimitCheck.resetInMs / 1000)),
+          },
+        });
+      }
+
+      if (!guestKey) {
+        // Guest mode is not configured - return a helpful error
+        console.warn('[API Completions] Guest mode attempted but GUEST_API_KEY not configured');
+        return new Response(JSON.stringify({
+          error: 'Guest mode not available',
+          code: 'GUEST_NOT_CONFIGURED',
+          message: 'Please sign in to use the chat feature. Create a free account to get started!',
+          detail: 'Guest chat is temporarily unavailable. Sign up for a free account to continue.'
+        }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Store client IP for later increment (after successful response)
+      // This ensures failed requests don't consume guest quota
+      (request as any).__guestClientIP = clientIP;
+
       console.log('[API Completions] Guest mode detected:', {
         isExplicitGuestRequest,
         isMissingApiKey,
-        hasEnvGuestKey: !!process.env.GUEST_API_KEY,
-        usingKey: guestKey.substring(0, 15) + '...',
-        willBeAnonymous: !process.env.GUEST_API_KEY // If no env key, backend will treat as anonymous
+        clientIP,
+        usingKey: guestKey.substring(0, 15) + '...'
       });
       apiKey = guestKey;
     }
@@ -276,7 +328,7 @@ export async function POST(request: NextRequest) {
       messageCount: body.messages?.length || 0,
       stream: body.stream,
       hasApiKey: !!apiKey,
-      isGuestRequest: isExplicitGuestRequest,
+      isGuestRequest,
       apiKeyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : 'none',
     });
 
@@ -428,11 +480,64 @@ export async function POST(request: NextRequest) {
               errorData = { raw: errorText };
             }
 
+            // Provide user-friendly error messages for common status codes
+            let userMessage = errorData.message || errorData.detail || errorText.substring(0, 500);
+            let errorType = 'api_error';
+
+            if (response.status === 401 || response.status === 403) {
+              userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
+              errorType = 'auth_error';
+
+              // Capture auth errors to Sentry
+              Sentry.captureException(
+                new Error(`Chat auth error: ${response.status} ${response.statusText}`),
+                {
+                  tags: {
+                    error_type: 'chat_auth_error',
+                    http_status: response.status,
+                    model: body.model,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                  },
+                  level: 'warning',
+                }
+              );
+            } else if (response.status === 429) {
+              userMessage = errorData.detail || errorData.message || 'Rate limit exceeded. Please wait a moment and try again.';
+              errorType = 'rate_limit_error';
+            } else if (response.status >= 500) {
+              // Capture server errors to Sentry
+              Sentry.captureException(
+                new Error(`Chat API server error: ${response.status} ${response.statusText}`),
+                {
+                  tags: {
+                    error_type: 'chat_server_error',
+                    http_status: response.status,
+                    model: body.model,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                  },
+                  level: 'error',
+                }
+              );
+            }
+
             return new Response(JSON.stringify({
               error: 'Backend API Error',
               status: response.status,
               statusText: response.statusText,
-              message: errorData.message || errorData.detail || errorText.substring(0, 500),
+              message: userMessage,
+              type: errorType,
               model: body.model,
               gateway: body.gateway,
               errorData: errorData
@@ -483,17 +588,31 @@ export async function POST(request: NextRequest) {
           const totalTime = performance.now() - requestStartTime;
           const backendTime = backendResponseTime; // Time it took for backend to respond
 
+          // Build response headers
+          const responseHeaders: Record<string, string> = {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Request-ID': requestId,
+            'X-Response-Time': `${totalTime.toFixed(2)}ms`,
+            'X-Backend-Time': `${backendTime.toFixed(2)}ms`,
+            'X-Network-Time': `${(totalTime - backendTime).toFixed(2)}ms`,
+          };
+
+          // Increment guest rate limit only after successful response
+          // This ensures quota is not consumed on failed requests
+          const guestClientIP = (request as any).__guestClientIP;
+          if (guestClientIP) {
+            const incrementResult = incrementGuestRateLimit(guestClientIP);
+            console.log(`[API Completions] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+            responseHeaders['X-RateLimit-Limit'] = String(incrementResult.limit);
+            responseHeaders['X-RateLimit-Remaining'] = String(incrementResult.remaining);
+            responseHeaders['X-RateLimit-Reset'] = String(Math.ceil(incrementResult.resetInMs / 1000));
+          }
+
           return new Response(wrappedStream, {
             status: response.status,
-            headers: {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache',
-              'Connection': 'keep-alive',
-              'X-Request-ID': requestId,
-              'X-Response-Time': `${totalTime.toFixed(2)}ms`,
-              'X-Backend-Time': `${backendTime.toFixed(2)}ms`,
-              'X-Network-Time': `${(totalTime - backendTime).toFixed(2)}ms`,
-            },
+            headers: responseHeaders,
           });
         } catch (fetchError) {
           clearTimeout(timeoutId);
@@ -533,26 +652,54 @@ export async function POST(request: NextRequest) {
     if ('data' in result) {
       profiler.endRequest(requestId);
       console.log(`[API Proxy] Request ${requestId} complete. Total time: ${(performance.now() - requestStartTime).toFixed(2)}ms`);
-      
+
+      // Build response headers
+      const responseHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Request-ID': requestId,
+        'X-Response-Time': `${(performance.now() - requestStartTime).toFixed(2)}ms`,
+      };
+
+      // Increment guest rate limit only after successful response (2xx status)
+      // This ensures quota is not consumed on failed requests
+      const guestClientIP = (request as any).__guestClientIP;
+      if (guestClientIP && result.status >= 200 && result.status < 300) {
+        const incrementResult = incrementGuestRateLimit(guestClientIP);
+        console.log(`[API Completions] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+        responseHeaders['X-RateLimit-Limit'] = String(incrementResult.limit);
+        responseHeaders['X-RateLimit-Remaining'] = String(incrementResult.remaining);
+        responseHeaders['X-RateLimit-Reset'] = String(Math.ceil(incrementResult.resetInMs / 1000));
+      }
+
       return new Response(JSON.stringify(result.data), {
         status: result.status,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Request-ID': requestId,
-          'X-Response-Time': `${(performance.now() - requestStartTime).toFixed(2)}ms`,
-        },
+        headers: responseHeaders,
       });
     }
 
     // Handle streaming response from processCompletion
     if ('stream' in result) {
+      // Build response headers
+      const streamHeaders: Record<string, string> = {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      };
+
+      // Increment guest rate limit only after successful response (2xx status)
+      // This ensures quota is not consumed on failed requests
+      const guestClientIP = (request as any).__guestClientIP;
+      if (guestClientIP && result.status >= 200 && result.status < 300) {
+        const incrementResult = incrementGuestRateLimit(guestClientIP);
+        console.log(`[API Completions] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+        streamHeaders['X-RateLimit-Limit'] = String(incrementResult.limit);
+        streamHeaders['X-RateLimit-Remaining'] = String(incrementResult.remaining);
+        streamHeaders['X-RateLimit-Reset'] = String(Math.ceil(incrementResult.resetInMs / 1000));
+      }
+
       return new Response(result.stream, {
         status: result.status,
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-        },
+        headers: streamHeaders,
       });
     }
   } catch (error) {
@@ -570,6 +717,23 @@ export async function POST(request: NextRequest) {
       cause: (error as any).cause,
       stack: error.stack
     } : { message: 'Unknown error', name: 'UnknownError' };
+
+    // Capture all chat completion errors to Sentry
+    Sentry.captureException(
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        tags: {
+          error_type: 'chat_completion_error',
+          error_name: errorDetails.name,
+        },
+        extra: {
+          requestId,
+          errorDetails,
+          timeoutMs,
+        },
+        level: 'error',
+      }
+    );
 
     // Determine appropriate status code based on error type
     let status = 500;

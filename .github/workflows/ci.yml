@@ -10,11 +10,15 @@ on:
     branches:
       - '**'
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   # Check for merge conflicts first
   check-merge-conflicts:
     name: Check Merge Conflicts
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       has-conflicts: ${{ steps.check.outputs.has-conflicts }}
       conflicted-files: ${{ steps.check.outputs.conflicted-files }}
@@ -45,7 +49,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
@@ -90,9 +94,10 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
@@ -127,7 +132,7 @@ jobs:
 
   typecheck:
     name: Type Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
@@ -162,7 +167,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
@@ -212,7 +217,7 @@ jobs:
 
   e2e:
     name: E2E Tests (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     # Only run E2E tests on main branches and PRs to avoid excessive test runs, and if no merge conflicts
     if: (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && needs.check-merge-conflicts.outputs.has-conflicts == 'false'
@@ -341,7 +346,7 @@ jobs:
   # AI-powered tool. Manual resolution is required when conflicts are detected.
   resolve-conflicts:
     name: Resolve Merge Conflicts
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts]
     if: needs.check-merge-conflicts.outputs.has-conflicts == 'true'
 
@@ -359,10 +364,19 @@ jobs:
   # AI-powered tool. Manual fixes are required when CI fails.
   # This job is kept as a placeholder and does not run.
 
+  # Note: Automatic retry of failed jobs has been removed.
+  # The previous implementation caused "This workflow is already running" errors
+  # because the retry job itself was part of the same workflow run.
+  #
+  # GitHub Actions does not support re-running failed jobs from within
+  # the same workflow run. To retry failed jobs:
+  # 1. Use the GitHub UI "Re-run failed jobs" button
+  # 2. Or configure branch protection to require passing checks before merge
+
   # Summary job that all other jobs depend on - useful for branch protection rules
   ci-success:
     name: CI Success
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e]
     if: always()
 

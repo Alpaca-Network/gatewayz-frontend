@@ -1,13 +1,15 @@
 /**
  * Guest Chat Utilities
  * Manages guest mode chat functionality with 10-message limit
- * and persistent localStorage-based chat history for unauthenticated users
+ * and persistent storage-based chat history for unauthenticated users
+ * with safe storage fallback
  */
 
 import type { ChatSession, ChatMessage } from './chat-history';
+import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemove } from './safe-storage';
 
 const GUEST_MESSAGE_DATA_KEY = 'gatewayz_guest_message_data';
-const GUEST_DAILY_MESSAGE_LIMIT = 10;
+const GUEST_DAILY_MESSAGE_LIMIT = 3;
 const GUEST_SESSIONS_KEY = 'gatewayz_guest_sessions';
 const GUEST_MESSAGES_KEY = 'gatewayz_guest_messages';
 const GUEST_SESSION_TTL_DAYS = 7; // Sessions expire after 7 days
@@ -35,7 +37,7 @@ function getGuestMessageData(): GuestMessageData {
   if (typeof window === 'undefined') return { count: 0, date: getTodayDateString() };
 
   try {
-    const stored = localStorage.getItem(GUEST_MESSAGE_DATA_KEY);
+    const stored = safeLocalStorageGet(GUEST_MESSAGE_DATA_KEY);
     if (!stored) return { count: 0, date: getTodayDateString() };
 
     const data: GuestMessageData = JSON.parse(stored);
@@ -44,7 +46,7 @@ function getGuestMessageData(): GuestMessageData {
     // Reset count if it's a new day
     if (data.date !== today) {
       const newData = { count: 0, date: today };
-      localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify(newData));
+      safeLocalStorageSet(GUEST_MESSAGE_DATA_KEY, JSON.stringify(newData));
       return newData;
     }
 
@@ -52,7 +54,7 @@ function getGuestMessageData(): GuestMessageData {
   } catch {
     // Handle corrupted data
     const newData = { count: 0, date: getTodayDateString() };
-    localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify(newData));
+    safeLocalStorageSet(GUEST_MESSAGE_DATA_KEY, JSON.stringify(newData));
     return newData;
   }
 }
@@ -73,7 +75,7 @@ export function incrementGuestMessageCount(): number {
 
   const data = getGuestMessageData();
   const newData = { count: data.count + 1, date: data.date };
-  localStorage.setItem(GUEST_MESSAGE_DATA_KEY, JSON.stringify(newData));
+  safeLocalStorageSet(GUEST_MESSAGE_DATA_KEY, JSON.stringify(newData));
   return newData.count;
 }
 
@@ -98,7 +100,7 @@ export function getRemainingGuestMessages(): number {
  */
 export function resetGuestMessageCount(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(GUEST_MESSAGE_DATA_KEY);
+  safeLocalStorageRemove(GUEST_MESSAGE_DATA_KEY);
 }
 
 /**
@@ -140,7 +142,7 @@ export function getGuestSessions(): ChatSession[] {
   if (typeof window === 'undefined') return [];
 
   try {
-    const stored = localStorage.getItem(GUEST_SESSIONS_KEY);
+    const stored = safeLocalStorageGet(GUEST_SESSIONS_KEY);
     if (!stored) return [];
 
     const sessions: StoredGuestSession[] = JSON.parse(stored);
@@ -184,7 +186,7 @@ export function getGuestMessages(sessionId: number): ChatMessage[] {
   if (typeof window === 'undefined') return [];
 
   try {
-    const stored = localStorage.getItem(GUEST_MESSAGES_KEY);
+    const stored = safeLocalStorageGet(GUEST_MESSAGES_KEY);
     if (!stored) return [];
 
     const allMessages: StoredGuestMessages = JSON.parse(stored);
@@ -267,11 +269,11 @@ export function deleteGuestSession(sessionId: number): void {
     saveGuestSessionsInternal(filtered);
 
     // Remove messages for this session
-    const stored = localStorage.getItem(GUEST_MESSAGES_KEY);
+    const stored = safeLocalStorageGet(GUEST_MESSAGES_KEY);
     if (stored) {
       const allMessages: StoredGuestMessages = JSON.parse(stored);
       delete allMessages[sessionId.toString()];
-      localStorage.setItem(GUEST_MESSAGES_KEY, JSON.stringify(allMessages));
+      safeLocalStorageSet(GUEST_MESSAGES_KEY, JSON.stringify(allMessages));
     }
   } catch (error) {
     console.error('[GuestChat] Failed to delete session:', error);
@@ -296,7 +298,7 @@ export function saveGuestMessage(
   }
 
   try {
-    const stored = localStorage.getItem(GUEST_MESSAGES_KEY);
+    const stored = safeLocalStorageGet(GUEST_MESSAGES_KEY);
     const allMessages: StoredGuestMessages = stored ? JSON.parse(stored) : {};
     const sessionKey = sessionId.toString();
 
@@ -318,7 +320,7 @@ export function saveGuestMessage(
       allMessages[sessionKey] = allMessages[sessionKey].slice(-100);
     }
 
-    localStorage.setItem(GUEST_MESSAGES_KEY, JSON.stringify(allMessages));
+    safeLocalStorageSet(GUEST_MESSAGES_KEY, JSON.stringify(allMessages));
 
     // Update session's updated_at timestamp
     updateGuestSession(sessionId, {});
@@ -342,9 +344,9 @@ export function clearGuestChatData(): void {
   if (typeof window === 'undefined') return;
 
   try {
-    localStorage.removeItem(GUEST_SESSIONS_KEY);
-    localStorage.removeItem(GUEST_MESSAGES_KEY);
-    localStorage.removeItem(GUEST_MESSAGE_DATA_KEY);
+    safeLocalStorageRemove(GUEST_SESSIONS_KEY);
+    safeLocalStorageRemove(GUEST_MESSAGES_KEY);
+    safeLocalStorageRemove(GUEST_MESSAGE_DATA_KEY);
   } catch (error) {
     console.error('[GuestChat] Failed to clear chat data:', error);
   }
@@ -373,7 +375,7 @@ function getStoredSessions(): StoredGuestSession[] {
   if (typeof window === 'undefined') return [];
 
   try {
-    const stored = localStorage.getItem(GUEST_SESSIONS_KEY);
+    const stored = safeLocalStorageGet(GUEST_SESSIONS_KEY);
     if (!stored) return [];
     return JSON.parse(stored);
   } catch {
@@ -386,7 +388,7 @@ function getStoredSessions(): StoredGuestSession[] {
  */
 function saveGuestSessionsInternal(sessions: StoredGuestSession[]): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(GUEST_SESSIONS_KEY, JSON.stringify(sessions));
+  safeLocalStorageSet(GUEST_SESSIONS_KEY, JSON.stringify(sessions));
 }
 
 /**
@@ -396,7 +398,7 @@ function cleanupOrphanedMessages(validSessionIds: number[]): void {
   if (typeof window === 'undefined') return;
 
   try {
-    const stored = localStorage.getItem(GUEST_MESSAGES_KEY);
+    const stored = safeLocalStorageGet(GUEST_MESSAGES_KEY);
     if (!stored) return;
 
     const allMessages: StoredGuestMessages = JSON.parse(stored);
@@ -409,7 +411,7 @@ function cleanupOrphanedMessages(validSessionIds: number[]): void {
       }
     }
 
-    localStorage.setItem(GUEST_MESSAGES_KEY, JSON.stringify(cleaned));
+    safeLocalStorageSet(GUEST_MESSAGES_KEY, JSON.stringify(cleaned));
   } catch (error) {
     console.error('[GuestChat] Failed to cleanup orphaned messages:', error);
   }

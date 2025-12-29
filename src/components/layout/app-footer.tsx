@@ -75,9 +75,9 @@ export function AppFooter() {
                 </a>
               </li>
               <li>
-                <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/settings/credits" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Pricing
-                </a>
+                </Link>
               </li>
               <li>
                 <Link href="https://docs.gatewayz.ai/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">

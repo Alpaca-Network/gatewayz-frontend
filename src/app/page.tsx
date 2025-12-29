@@ -273,9 +273,10 @@ console.log(completion.choices[0].message);`,
   useEffect(() => {
     const updateOffset = () => {
       if (carouselRef.current && activeModelIndex !== null) {
+        // Safely check window width only on client-side (inside useEffect)
         // Assume compact cards are ~96px on desktop, ~80px on mobile
         // Expanded card is ~400px on desktop, ~280px on mobile
-        const compactWidth = window.innerWidth >= 640 ? 96 : 80;
+        const compactWidth = typeof window !== 'undefined' && window.innerWidth >= 640 ? 96 : 80;
         const gap = 8;
 
         // Calculate offset: number of cards before active * (compact width + gap)

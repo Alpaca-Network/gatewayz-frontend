@@ -1,0 +1,25 @@
+name: Notify Monorepo
+
+on:
+  push:
+    branches: [main, master]
+
+jobs:
+  notify:
+    name: Trigger Monorepo Update
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    steps:
+      - name: Trigger monorepo submodule update
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.MONOREPO_DISPATCH_TOKEN }}
+          repository: Alpaca-Network/gatewayz-monorepo
+          event-type: frontend-updated
+          client-payload: '{"ref": "${{ github.sha }}", "branch": "${{ github.ref_name }}"}'
+
+      - name: Log dispatch
+        run: |
+          echo "✅ Dispatched frontend-updated event to monorepo"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"

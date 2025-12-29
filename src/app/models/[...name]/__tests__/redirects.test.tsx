@@ -180,31 +180,14 @@ describe('ModelProfilePage - Redirect Behavior', () => {
     });
   });
 
-  describe('Alibaba to Qwen redirect', () => {
-    it('should redirect alibaba models to qwen namespace', async () => {
+  describe('Alibaba models - no redirect', () => {
+    // Alibaba Cloud models now have developer: 'alibaba' and should NOT redirect
+    // They should be accessible directly at /models/alibaba/...
+    it('should not redirect alibaba models (they have their own developer tag)', async () => {
       const testCases = [
         ['alibaba', 'qwen2-5-32b'],
         ['alibaba', 'qwen2-5-72b'],
         ['alibaba', 'qwen-turbo'],
-      ];
-
-      for (const [provider, modelName] of testCases) {
-        mockReplace.mockClear();
-        (useParams as jest.Mock).mockReturnValue({ name: [provider, modelName] });
-
-        render(<ModelProfilePage />);
-
-        await waitFor(() => {
-          expect(mockReplace).toHaveBeenCalledWith(`/models/qwen/${modelName}`);
-        }, { timeout: 1000 });
-      }
-    });
-
-    it('should not redirect non-alibaba models', async () => {
-      const testCases = [
-        ['qwen', 'qwen2-5-32b'],
-        ['openrouter', 'qwen2-5-72b'],
-        ['cerebras', 'llama3-1-8b'],
       ];
 
       for (const params of testCases) {
@@ -216,7 +199,7 @@ describe('ModelProfilePage - Redirect Behavior', () => {
         // Wait a bit to ensure no redirect happens
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        // Should not redirect to qwen namespace for non-alibaba providers
+        // Should NOT redirect alibaba models - they have their own developer tag now
         const calls = mockReplace.mock.calls.filter((call: any[]) =>
           call[0].includes('/models/qwen/')
         );
@@ -226,9 +209,8 @@ describe('ModelProfilePage - Redirect Behavior', () => {
   });
 
   describe('Redirect specificity', () => {
-    it('should prioritize cerebras qwen-3-32b redirect over alibaba redirect', async () => {
-      // This test ensures cerebras/qwen-3-32b goes to the specific qwen2-5-32b page,
-      // not just qwen/qwen-3-32b
+    it('should redirect cerebras qwen-3-32b to the correct qwen model', async () => {
+      // This test ensures cerebras/qwen-3-32b goes to the specific qwen2-5-32b page
       (useParams as jest.Mock).mockReturnValue({
         name: ['cerebras', 'qwen-3-32b'],
       });
@@ -239,7 +221,7 @@ describe('ModelProfilePage - Redirect Behavior', () => {
         expect(mockReplace).toHaveBeenCalled();
       }, { timeout: 1000 });
 
-      // Should redirect to the specific qwen2-5-32b model, not generic qwen/qwen-3-32b
+      // Should redirect to the specific qwen2-5-32b model
       expect(mockReplace).toHaveBeenCalledWith('/models/qwen/qwen2-5-32b');
       expect(mockReplace).not.toHaveBeenCalledWith('/models/qwen/qwen-3-32b');
     });
