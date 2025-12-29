@@ -221,7 +221,23 @@ export async function* executeWorkflowStream(
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        // Process any remaining content in buffer
+        if (buffer.trim()) {
+          const lines = buffer.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                yield data;
+              } catch {
+                // Skip invalid JSON
+              }
+            }
+          }
+        }
+        break;
+      }
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
@@ -308,7 +324,12 @@ export async function compressImage(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
     img.onload = () => {
+      // Revoke the object URL to free memory
+      URL.revokeObjectURL(objectUrl);
+
       let { width, height } = img;
 
       // Calculate new dimensions
@@ -335,8 +356,12 @@ export async function compressImage(
       const base64 = canvas.toDataURL('image/jpeg', quality);
       resolve(base64);
     };
-    img.onerror = reject;
-    img.src = URL.createObjectURL(file);
+    img.onerror = (error) => {
+      // Revoke the object URL on error as well
+      URL.revokeObjectURL(objectUrl);
+      reject(error);
+    };
+    img.src = objectUrl;
   });
 }
 

@@ -52,6 +52,7 @@ import {
   compressImage,
   getWorkflowTypeDisplayName,
   getStatusDisplayInfo,
+  cancelExecution,
   type WorkflowTemplate,
   type WorkflowType,
   type ExecutionOutput,
@@ -233,7 +234,7 @@ function OutputGallery({
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => downloadOutput(output, `${result.workflow}-${idx + 1}`)}
+                      onClick={() => downloadOutput(output, `${result.workflow}-${idx + 1}.${output.type === 'video' ? 'mp4' : 'png'}`)}
                     >
                       <Download className="w-4 h-4 mr-1" />
                       Download
@@ -294,6 +295,7 @@ export default function ComfyUIPlaygroundPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initializedRef = useRef(false);
+  const currentExecutionIdRef = useRef<string | null>(null);
 
   // Check server status
   const checkServerStatus = useCallback(async () => {
@@ -404,7 +406,7 @@ export default function ComfyUIPlaygroundPage() {
         height,
         steps,
         cfg_scale: cfgScale,
-        seed: seed || undefined,
+        seed: seed !== null ? seed : undefined,
         input_image: inputImage || undefined,
         denoise_strength: denoiseStrength,
         frames,
@@ -412,6 +414,7 @@ export default function ComfyUIPlaygroundPage() {
       };
 
       let finalResponse: ExecutionResponse | null = null;
+      currentExecutionIdRef.current = null;
 
       for await (const update of executeWorkflowStream(request)) {
         if (abortControllerRef.current?.signal.aborted) break;
@@ -422,6 +425,10 @@ export default function ComfyUIPlaygroundPage() {
         } else {
           // This is a progress update
           const progressUpdate = update as ProgressUpdate;
+          // Track the execution ID for cancellation
+          if (progressUpdate.execution_id) {
+            currentExecutionIdRef.current = progressUpdate.execution_id;
+          }
           setProgress(progressUpdate.progress || 0);
           setStatusMessage(progressUpdate.message || `Status: ${progressUpdate.status}`);
         }
@@ -480,8 +487,19 @@ export default function ComfyUIPlaygroundPage() {
   ]);
 
   // Cancel generation
-  const handleCancel = useCallback(() => {
+  const handleCancel = useCallback(async () => {
     abortControllerRef.current?.abort();
+
+    // Try to cancel on server side as well
+    if (currentExecutionIdRef.current) {
+      try {
+        await cancelExecution(currentExecutionIdRef.current);
+      } catch (error) {
+        console.error('Failed to cancel execution on server:', error);
+      }
+    }
+
+    currentExecutionIdRef.current = null;
     setIsGenerating(false);
     setProgress(0);
     setStatusMessage('');
