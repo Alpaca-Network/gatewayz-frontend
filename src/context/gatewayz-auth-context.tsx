@@ -27,6 +27,7 @@ import {
 } from "@/integrations/privy/auth-session-transfer";
 import { getReferralCode, clearReferralCode } from "@/lib/referral";
 import { resetGuestMessageCount } from "@/lib/guest-chat";
+import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -283,7 +284,7 @@ export function GatewayzAuthProvider({
         console.log(`[Auth] Auto-retrying authentication (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
         setError("Authentication is taking longer than expected - retrying...");
 
-        Sentry.captureMessage("Authentication timeout - auto-retrying", {
+        rateLimitedCaptureMessage("Authentication timeout - auto-retrying", {
           level: 'warning',
           tags: {
             auth_error: 'authenticating_timeout_retry',
@@ -308,7 +309,7 @@ export function GatewayzAuthProvider({
         // Clear any stuck credentials but keep retry counter to prevent infinite loop
         clearStoredCredentials(false);
 
-        Sentry.captureMessage("Authentication timeout - stuck in authenticating state", {
+        rateLimitedCaptureMessage("Authentication timeout - stuck in authenticating state", {
           level: 'error',
           tags: {
             auth_error: 'authenticating_timeout',
@@ -734,7 +735,7 @@ export function GatewayzAuthProvider({
       if (isNewUser) {
         return {
           ...authRequestBody,
-          trial_credits: 10,
+          trial_credits: 3,
         };
       }
 
@@ -997,13 +998,18 @@ export function GatewayzAuthProvider({
             return;
           }
 
-          clearStoredCredentials();
-          setAuthStatus("error", `backend status ${response.status}`);
-
-          // Provide user-friendly error messages based on status code
+          // CRITICAL: Check if we should retry BEFORE clearing credentials
+          // clearStoredCredentials() resets authRetryCountRef.current to 0 by default
+          // which would cause infinite retry loops
+          let shouldRetry = false;
           let userMessage: string;
-          if (is5xxError) {
+
+          if (response.status === 504) {
+            userMessage = "Gateway timeout - our servers are taking too long to respond. Retrying...";
+            shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
+          } else if (is5xxError) {
             userMessage = "Our servers are experiencing issues. Please try again in a moment.";
+            shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
           } else if (response.status === 401 || response.status === 403) {
             userMessage = "Authentication failed. Please try logging in again.";
           } else if (response.status === 429) {
@@ -1011,6 +1017,11 @@ export function GatewayzAuthProvider({
           } else {
             userMessage = `Authentication failed (${response.status}). Please try again.`;
           }
+
+          // Clear credentials after determining shouldRetry
+          // For retryable errors, preserve retry counter; otherwise reset it
+          clearStoredCredentials(!shouldRetry);
+          setAuthStatus("error", `backend status ${response.status}`);
 
           const authError: AuthError = { status: response.status, message: rawResponseText };
           setError(userMessage);
@@ -1022,16 +1033,36 @@ export function GatewayzAuthProvider({
               tags: {
                 auth_error: 'backend_auth_failed',
                 http_status: response.status,
+                is_gateway_timeout: response.status === 504 ? 'true' : 'false',
               },
               extra: {
                 response_status: response.status,
                 response_text: rawResponseText.substring(0, 500),
                 auth_method: (authBody as { auth_method?: string }).auth_method,
                 retry_attempt: authRetryCountRef.current,
+                will_retry: shouldRetry,
               },
               level: is5xxError ? 'error' : 'warning',
             }
           );
+
+          // Auto-retry for 504 Gateway Timeout and 5xx errors
+          if (shouldRetry) {
+            console.log(`[Auth] Retrying authentication after ${response.status} error (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
+
+            // NOTE: Do NOT increment authRetryCountRef here!
+            // syncWithBackend will increment it when handling the AUTH_REFRESH_EVENT
+            // Incrementing twice would cause retries to exhaust prematurely
+
+            // Wait 2 seconds before retrying to give backend time to recover
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Dispatch refresh event to trigger retry
+            // syncWithBackend will increment authRetryCountRef.current
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+            }
+          }
 
           onAuthError?.(authError);
           return;
@@ -1176,7 +1207,7 @@ export function GatewayzAuthProvider({
             setStatus("error");
             setError("Authentication request timed out. Please try again.");
 
-            Sentry.captureMessage("Authentication sync aborted by client timeout", {
+            rateLimitedCaptureMessage("Authentication sync aborted by client timeout", {
               level: "warning",
               tags: {
                 auth_error: "frontend_timeout",

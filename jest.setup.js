@@ -215,6 +215,16 @@ jest.mock('@coinbase/wallet-sdk', () => ({
   __esModule: true,
 }))
 
+// Mock @marsidev/react-turnstile (ESM module used by Privy)
+jest.mock('@marsidev/react-turnstile', () => ({
+  Turnstile: () => null,
+  DEFAULT_CONTAINER_ID: 'cf-turnstile',
+  DEFAULT_ONLOAD_NAME: 'onloadTurnstileCallback',
+  DEFAULT_SCRIPT_ID: 'cf-turnstile-script',
+  SCRIPT_URL: 'https://challenges.cloudflare.com/turnstile/v0/api.js',
+  __esModule: true,
+}))
+
 // Mock next/server NextResponse to use our Response mock
 jest.mock('next/server', () => {
   const actualModule = jest.requireActual('next/server')

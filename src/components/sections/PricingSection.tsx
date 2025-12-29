@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
+import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
 
 const tiers = [
   {
@@ -9,7 +10,7 @@ const tiers = [
     period: "/month",
     subtitle: "Perfect for experimenting",
     description: "Get started with free credits",
-    features: ["$10 free credits monthly", "Access to 5+ models", "Community support", "Basic analytics"],
+    features: ["$3 free credits monthly", "Access to 5+ models", "Community support", "Basic analytics"],
     cta: "Join Beta",
     highlighted: false,
   },
@@ -20,9 +21,9 @@ const tiers = [
     subtitle: "Scale with confidence",
     description: "Only pay for what you use",
     originalPrice: "$20",
-    discount: "50% discount on\nfirst $10 credits",
+    discount: "50% discount on\nfirst $3 credits",
     features: [
-      "50% discount on first $10 credits",
+      "50% discount on first $3 credits",
       "Access to 10,000+ models",
       "Smart cost optimization",
       "Advanced analytics",
@@ -70,8 +71,11 @@ const tiers = [
 export function PricingSection() {
   const handleClick = (tierName: string) => {
     if (tierName === "Enterprise") {
+      // Enterprise tier goes to contact sales - don't track as signup conversion
       window.location.href = "/contact";
     } else {
+      // Track Twitter conversion for ad attribution (signup tiers only)
+      trackTwitterSignupClick();
       document.getElementById("waitlist")?.scrollIntoView({ behavior: "smooth" });
     }
   };

@@ -1,7 +1,9 @@
 /**
  * Referral Code Utilities
- * Manages referral code storage and retrieval from URL and localStorage
+ * Manages referral code storage and retrieval from URL and localStorage (with safe storage fallback)
  */
+
+import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemove } from './safe-storage';
 
 const REFERRAL_CODE_KEY = 'gatewayz_referral_code';
 const REFERRAL_SOURCE_KEY = 'gatewayz_referral_source';
@@ -17,35 +19,35 @@ export function getReferralCodeFromURL(): string | null {
 }
 
 /**
- * Get stored referral code from localStorage
+ * Get stored referral code from localStorage (with safe storage fallback)
  */
 export function getStoredReferralCode(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(REFERRAL_CODE_KEY);
+  return safeLocalStorageGet(REFERRAL_CODE_KEY);
 }
 
 /**
- * Store referral code in localStorage
+ * Store referral code in localStorage (with safe storage fallback)
  * @param code The referral code to store
  * @param source Where the code came from (e.g., 'url', 'manual')
  */
 export function storeReferralCode(code: string, source: string = 'url'): void {
   if (typeof window === 'undefined') return;
 
-  localStorage.setItem(REFERRAL_CODE_KEY, code);
-  localStorage.setItem(REFERRAL_SOURCE_KEY, source);
+  safeLocalStorageSet(REFERRAL_CODE_KEY, code);
+  safeLocalStorageSet(REFERRAL_SOURCE_KEY, source);
 
   console.log(`[Referral] Stored referral code: ${code} (source: ${source})`);
 }
 
 /**
- * Clear referral code from localStorage
+ * Clear referral code from localStorage (with safe storage fallback)
  */
 export function clearReferralCode(): void {
   if (typeof window === 'undefined') return;
 
-  localStorage.removeItem(REFERRAL_CODE_KEY);
-  localStorage.removeItem(REFERRAL_SOURCE_KEY);
+  safeLocalStorageRemove(REFERRAL_CODE_KEY);
+  safeLocalStorageRemove(REFERRAL_SOURCE_KEY);
 }
 
 /**
@@ -77,7 +79,26 @@ export function initializeReferralTracking(): void {
     storeReferralCode(urlCode, 'url');
     console.log('[Referral] Captured referral code from URL:', urlCode);
     // Clear any previous dismissal when a new referral code arrives
-    sessionStorage.removeItem('gatewayz_referral_toast_dismissed');
+    // Note: sessionStorage used intentionally here for non-persistent dismissal state
+    try {
+      sessionStorage.removeItem('gatewayz_referral_toast_dismissed');
+    } catch {
+      // Silently fail if sessionStorage is unavailable
+    }
+
+    // CRITICAL FIX: Remove the ref parameter from the URL to prevent it from interfering with chat functionality
+    // The referral code is now safely stored in localStorage and will be sent during authentication
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('ref');
+      url.searchParams.delete('referral');
+      // Use replaceState to update URL without triggering a page reload
+      // IMPORTANT: Preserve existing history state (used by Next.js router) to prevent navigation issues
+      window.history.replaceState(window.history.state, '', url.toString());
+      console.log('[Referral] Removed ref parameter from URL');
+    } catch (error) {
+      console.warn('[Referral] Failed to remove ref parameter from URL:', error);
+    }
   } else {
     const storedCode = getStoredReferralCode();
     if (storedCode) {
@@ -87,9 +108,9 @@ export function initializeReferralTracking(): void {
 }
 
 /**
- * Get the referral source
+ * Get the referral source (with safe storage fallback)
  */
 export function getReferralSource(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(REFERRAL_SOURCE_KEY);
+  return safeLocalStorageGet(REFERRAL_SOURCE_KEY);
 }

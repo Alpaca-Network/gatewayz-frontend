@@ -1,7 +1,23 @@
 /**
- * Utility for handling streaming responses from chat API
+ * Streaming Utilities
+ *
+ * @deprecated This file is deprecated and will be removed in a future version.
+ * Import from '@/lib/streaming/index' instead, or preferably use the AI SDK route
+ * (/api/chat/ai-sdk-completions) which now handles all provider formats.
+ *
+ * Migration guide:
+ * - For new code: Use the AI SDK route which handles Fireworks, DeepSeek, and all other formats
+ * - For existing imports: Change `import { streamChatResponse } from '@/lib/streaming'`
+ *   to `import { streamChatResponse } from '@/lib/streaming/index'`
+ *
+ * The modular streaming implementation is now in:
+ * - @/lib/streaming/types.ts - Type definitions
+ * - @/lib/streaming/errors.ts - Error classes
+ * - @/lib/streaming/sse-parser.ts - SSE parsing logic
+ * - @/lib/streaming/stream-chat.ts - Main streaming function
  */
 
+import * as Sentry from '@sentry/nextjs';
 import { requestAuthRefresh, getApiKey } from '@/lib/api';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
 
@@ -120,10 +136,10 @@ export async function* streamChatResponse(
   retryCount = 0,
   maxRetries = 7  // Increased from 5 for better 429 handling
 ): AsyncGenerator<StreamChunk> {
-  // Client-side timeout for the fetch request (10 minutes for streaming)
-  // Increased to accommodate reasoning models, slow providers, and models with large context windows
+  // Client-side timeout for the fetch request (1 minute max)
+  // If a model doesn't respond within 1 minute, it's likely unavailable or experiencing issues
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 600000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
@@ -237,6 +253,25 @@ export async function* streamChatResponse(
       const errorCode = errorData.code;
       devError('401 Unauthorized - triggering auth refresh');
 
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error(`Chat 401 Unauthorized: ${errorMessage}`),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 401,
+            error_code: errorCode || 'unknown',
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+            retryCount,
+          },
+          level: 'warning',
+        }
+      );
+
       // Check if this is a guest user who needs to sign up
       if (errorCode === 'GUEST_NOT_CONFIGURED') {
         throw new Error(
@@ -278,11 +313,27 @@ export async function* streamChatResponse(
 
     // Handle 403 Forbidden - invalid or expired API key
     if (response.status === 403) {
-      const errorMessage = errorData.detail || errorData.error?.message || 'Access forbidden';
       devError('403 Forbidden details:', errorData);
 
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error('Chat 403 Forbidden - session expired'),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 403,
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+          },
+          level: 'warning',
+        }
+      );
+
       throw new Error(
-        errorMessage + '. Your API key may be invalid or expired. Please try logging out and back in.'
+        'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.'
       );
     }
 
@@ -295,10 +346,11 @@ export async function* streamChatResponse(
       );
     }
 
-    // Handle 503 Service Unavailable and 504 Gateway Timeout with retry logic
-    if (response.status === 503 || response.status === 504) {
-      const isTimeout = response.status === 504;
-      const statusText = isTimeout ? 'Gateway Timeout' : 'Service Unavailable';
+    // Handle 502 Bad Gateway, 503 Service Unavailable and 504 Gateway Timeout with retry logic
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      const statusText = response.status === 504 ? 'Gateway Timeout'
+        : response.status === 502 ? 'Bad Gateway'
+        : 'Service Unavailable';
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || statusText;
 
       if (retryCount < maxRetries) {
@@ -734,8 +786,9 @@ export async function* streamChatResponse(
               // Log the full error object for debugging
               devError('[Streaming] Received error object in stream:', JSON.stringify(errorObj, null, 2));
 
-              // Try multiple common error message formats
-              const errorMessage =
+              // Extract error message from various possible locations
+              // Priority: message > detail > error (string) > text > reason > code/type > nested error > stringified object
+              let errorMessage =
                 (typeof errorObj.message === 'string' && errorObj.message) ||
                 (typeof errorObj.detail === 'string' && errorObj.detail) ||
                 (typeof errorObj.error === 'string' && errorObj.error) ||
@@ -746,8 +799,46 @@ export async function* streamChatResponse(
                   ? `${errorObj.type}: ${errorObj.code}`
                   : (typeof errorObj.code === 'string' && `Error code: ${errorObj.code}`)) ||
                 (typeof errorObj.type === 'string' && `Error type: ${errorObj.type}`) ||
-                // Last resort: stringify the entire error object so we can see what it contains
-                `Stream error: ${JSON.stringify(errorObj)}`;
+                '';
+
+              // Handle cases where message might be nested or in a different format
+              if (!errorMessage) {
+                // Check for nested error object
+                if (errorObj.error && typeof errorObj.error === 'object') {
+                  const nestedError = errorObj.error as Record<string, unknown>;
+                  errorMessage =
+                    (typeof nestedError.message === 'string' && nestedError.message) ||
+                    (typeof nestedError.detail === 'string' && nestedError.detail) ||
+                    '';
+                }
+                // Check for status code in error object
+                if (!errorMessage && typeof errorObj.status === 'number') {
+                  errorMessage = `HTTP ${errorObj.status} error`;
+                }
+                // Last resort: stringify the error object for debugging
+                if (!errorMessage) {
+                  devError('[Streaming] Error object without extractable message:', errorObj);
+                  errorMessage = `Stream error: ${JSON.stringify(errorObj).slice(0, 200)}`;
+                }
+              }
+
+              // Detect rate limit / 429 errors from error type or message
+              const errorType = String(errorObj.type || '').toLowerCase();
+              const errorCode = String(errorObj.code || '').toLowerCase();
+              const isRateLimitError =
+                errorType.includes('rate_limit') ||
+                errorType.includes('too_many') ||
+                errorCode.includes('rate_limit') ||
+                errorCode === '429' ||
+                errorMessage.toLowerCase().includes('rate limit') ||
+                errorMessage.toLowerCase().includes('too many requests') ||
+                (typeof errorObj.status === 'number' && errorObj.status === 429);
+
+              if (isRateLimitError) {
+                throw new StreamingError(
+                  'Rate limit exceeded. The AI provider is temporarily unavailable due to high demand. Please wait a moment and try again.'
+                );
+              }
 
               // Check if it's a trial expiration error
               if (errorMessage.toLowerCase().includes('trial has expired') ||
@@ -821,7 +912,26 @@ export async function* streamChatResponse(
                   const errorMessage =
                     (typeof data.error?.message === 'string' && data.error.message) ||
                     (typeof data.message === 'string' && data.message) ||
+                    (typeof data.error?.type === 'string' && data.error.type) ||
                     'Response stream error';
+
+                  // Detect rate limit errors in response.error events
+                  const errorType = String(data.error?.type || '').toLowerCase();
+                  const errorCode = String(data.error?.code || '').toLowerCase();
+                  const isRateLimitError =
+                    errorType.includes('rate_limit') ||
+                    errorType.includes('too_many') ||
+                    errorCode.includes('rate_limit') ||
+                    errorCode === '429' ||
+                    errorMessage.toLowerCase().includes('rate limit') ||
+                    errorMessage.toLowerCase().includes('too many requests');
+
+                  if (isRateLimitError) {
+                    throw new StreamingError(
+                      'Rate limit exceeded. The AI provider is temporarily unavailable due to high demand. Please wait a moment and try again.'
+                    );
+                  }
+
                   throw new StreamingError(errorMessage);
                 }
                 default:
@@ -865,15 +975,52 @@ export async function* streamChatResponse(
               // Check if the data has error indicators at the top level
               // Some APIs return errors directly without a nested error object
               if (data.error || data.detail || data.message) {
-                const errorObj = typeof data.error === 'object' ? data.error as Record<string, unknown> : null;
-                const errorMsg =
-                  (errorObj && typeof errorObj.message === 'string' && errorObj.message) ||
-                  (typeof data.error === 'string' && data.error) ||
-                  (typeof data.detail === 'string' && data.detail) ||
-                  (typeof data.message === 'string' && data.message) ||
-                  JSON.stringify(data.error || data.detail || data.message);
+                let errorMsg: string;
+
+                if (typeof data.error === 'object' && data.error !== null) {
+                  // Use the same comprehensive error extraction logic as the nested error handler above
+                  const errorObj = data.error as Record<string, unknown>;
+                  devError('[Streaming] Top-level error object in SSE data:', JSON.stringify(errorObj, null, 2));
+                  errorMsg =
+                    (typeof errorObj.message === 'string' && errorObj.message) ||
+                    (typeof errorObj.detail === 'string' && errorObj.detail) ||
+                    (typeof errorObj.error === 'string' && errorObj.error) ||
+                    (typeof errorObj.text === 'string' && errorObj.text) ||
+                    (typeof errorObj.reason === 'string' && errorObj.reason) ||
+                    // If error has a code/type, include it in the message
+                    (errorObj.code && errorObj.type
+                      ? `${errorObj.type}: ${errorObj.code}`
+                      : (typeof errorObj.code === 'string' && `Error code: ${errorObj.code}`)) ||
+                    (typeof errorObj.type === 'string' && `Error type: ${errorObj.type}`) ||
+                    // Last resort: stringify the entire error object so we can see what it contains
+                    JSON.stringify(errorObj);
+                } else {
+                  // Handle string error or top-level detail/message fields
+                  errorMsg =
+                    (typeof data.error === 'string' && data.error) ||
+                    (typeof data.detail === 'string' && data.detail) ||
+                    (typeof data.message === 'string' && data.message) ||
+                    JSON.stringify(data.error || data.detail || data.message);
+                }
+
                 devError('[Streaming] Error in SSE data:', errorMsg);
                 console.error('[Streaming] Backend returned an error:', JSON.stringify(data, null, 2));
+
+                // Check if it's a trial expiration error
+                if (errorMsg.toLowerCase().includes('trial has expired') ||
+                    errorMsg.toLowerCase().includes('insufficient credits')) {
+                  throw new StreamingError(
+                    'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
+                  );
+                }
+
+                // Handle "upstream rejected" errors with the actual backend message
+                if (errorMsg.toLowerCase().includes('upstream rejected')) {
+                  throw new StreamingError(
+                    `Backend error: ${errorMsg}. This may be a temporary issue with the model provider. Please try again or select a different model.`
+                  );
+                }
+
                 // Throw the error so it's properly handled instead of silently ignored
                 throw new StreamingError(`Stream error: ${errorMsg}`);
               }
@@ -932,7 +1079,7 @@ export async function* streamChatResponse(
     // Handle abort/timeout errors
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 10 minutes. The model may be overloaded, unavailable, or generating a very long response. Please try again or select a different model.');
+        throw new Error('Request timed out after 1 minute. The model may be overloaded or unavailable. Please try again or select a different model.');
       }
     }
 
@@ -952,7 +1099,7 @@ export async function* streamChatResponse(
     // Handle abort/timeout errors from outer try block
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 10 minutes. The model may be overloaded, unavailable, or generating a very long response. Please try again or select a different model.');
+        throw new Error('Request timed out after 1 minute. The model may be overloaded or unavailable. Please try again or select a different model.');
       }
     }
 

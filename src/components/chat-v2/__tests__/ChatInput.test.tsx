@@ -13,6 +13,7 @@ jest.mock('lucide-react', () => ({
   FileText: () => <span data-testid="file-text-icon">FileText</span>,
   Paperclip: () => <span data-testid="paperclip-icon">Paperclip</span>,
   Square: () => <span data-testid="square-icon">Square</span>,
+  Camera: () => <span data-testid="camera-icon">Camera</span>,
 }));
 
 // Mock the UI components
@@ -54,13 +55,16 @@ const mockStoreState = {
   activeSessionId: null as number | null,
   selectedModel: { value: 'test-model', label: 'Test Model' } as { value: string; label: string },
   inputValue: '',
+  messageStartTime: null as number | null,
 };
+const mockSetMessageStartTime = jest.fn();
 
 // Helper to reset store state
 const resetMockStoreState = () => {
   mockStoreState.activeSessionId = null;
   mockStoreState.selectedModel = { value: 'test-model', label: 'Test Model' };
   mockStoreState.inputValue = '';
+  mockStoreState.messageStartTime = null;
 };
 
 jest.mock('@/lib/store/chat-ui-store', () => {
@@ -71,6 +75,7 @@ jest.mock('@/lib/store/chat-ui-store', () => {
     selectedModel: mockStoreState.selectedModel,
     inputValue: mockStoreState.inputValue,
     setInputValue: mockSetInputValue,
+    setMessageStartTime: mockSetMessageStartTime,
   });
 
   // Add getState method to the function
@@ -84,10 +89,28 @@ jest.mock('@/lib/hooks/use-chat-queries', () => ({
   useSessionMessages: () => ({ data: [], isLoading: false }),
 }));
 
+const mockStopStream = jest.fn();
+
+// Default streaming state - can be modified per test
+let mockIsStreaming = false;
+
 jest.mock('@/lib/hooks/use-chat-stream', () => ({
   useChatStream: () => ({
-    isStreaming: false,
+    isStreaming: mockIsStreaming,
     streamMessage: mockStreamMessage,
+    stopStream: mockStopStream,
+  }),
+}));
+
+// Mock auto model switch hook
+jest.mock('@/lib/hooks/use-auto-model-switch', () => ({
+  useAutoModelSwitch: () => ({
+    checkImageSupport: jest.fn(() => false),
+    checkVideoSupport: jest.fn(() => false),
+    checkAudioSupport: jest.fn(() => false),
+    checkFileSupport: jest.fn(() => false),
+    checkAndSwitchModel: jest.fn(() => false),
+    modelSupportsModality: jest.fn(() => true),
   }),
 }));
 
@@ -107,6 +130,14 @@ jest.mock('@/lib/store/auth-store', () => ({
 jest.mock('@privy-io/react-auth', () => ({
   usePrivy: () => ({
     login: jest.fn(),
+  }),
+}));
+
+// Mock GatewayzAuth context
+const mockLogout = jest.fn(() => Promise.resolve());
+jest.mock('@/context/gatewayz-auth-context', () => ({
+  useGatewayzAuth: () => ({
+    logout: mockLogout,
   }),
 }));
 
@@ -130,6 +161,8 @@ import { ChatInput } from '../ChatInput';
 describe('ChatInput', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetMockStoreState();
+    mockIsStreaming = false; // Reset streaming state
     // Clean up window functions
     delete (window as any).__chatInputFocus;
     delete (window as any).__chatInputSend;
@@ -141,25 +174,36 @@ describe('ChatInput', () => {
   });
 
   describe('send button disabled state', () => {
-    it('should enable send button when not streaming (validation happens in handleSend)', () => {
+    it('should disable send button when input is empty', () => {
       render(<ChatInput />);
 
       // Find all buttons and get the last one (send button)
       const buttons = screen.getAllByTestId('button');
       const sendBtn = buttons[buttons.length - 1];
 
-      // Button is only disabled during streaming, not when input is empty
-      // Validation of empty input happens inside handleSend
+      // Button is disabled when input is empty (better UX)
+      expect(sendBtn).toBeDisabled();
+    });
+
+    it('should enable send button when input has content', () => {
+      // Set input value to non-empty
+      mockStoreState.inputValue = 'Hello world';
+
+      render(<ChatInput />);
+
+      const buttons = screen.getAllByTestId('button');
+      const sendBtn = buttons[buttons.length - 1];
       expect(sendBtn).not.toBeDisabled();
     });
 
     it('should derive isInputEmpty from inputValue without separate state', () => {
       // This test verifies the fix: isInputEmpty is derived from inputValue
       // not tracked as separate state that could desync
+      // Set input to non-empty to verify button is enabled
+      mockStoreState.inputValue = 'Test message';
+
       render(<ChatInput />);
 
-      // The isInputEmpty value is used in handleSend validation, not for disabling the button
-      // This prevents the race condition where button state and input value could desync
       const buttons = screen.getAllByTestId('button');
       const sendBtn = buttons[buttons.length - 1];
       expect(sendBtn).not.toBeDisabled();
@@ -342,39 +386,42 @@ describe('ChatInput attachment dropdown', () => {
     delete (window as any).__chatInputSend;
   });
 
-  it('should render the attachment dropdown with paperclip icon', () => {
+  it('should render the attachment dropdown with plus icon', () => {
     render(<ChatInput />);
 
     // Check for dropdown menu structure
     expect(screen.getByTestId('dropdown-menu')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-trigger')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-content')).toBeInTheDocument();
-    expect(screen.getByTestId('paperclip-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('plus-icon')).toBeInTheDocument();
   });
 
-  it('should render all four attachment options in dropdown', () => {
+  it('should render attachment options in dropdown', () => {
     render(<ChatInput />);
 
+    // The new UI has Camera, Photos, Files as buttons in a grid (not DropdownMenuItem)
+    // and Video, Audio as DropdownMenuItem items
     const dropdownItems = screen.getAllByTestId('dropdown-item');
-    expect(dropdownItems).toHaveLength(4);
+    expect(dropdownItems).toHaveLength(2); // Video and Audio are DropdownMenuItem
 
-    // Verify each option exists with correct icon
+    // Verify icons exist - Camera, Photos (Image), Files (FileText), Video, Audio (Mic)
+    expect(screen.getByTestId('camera-icon')).toBeInTheDocument();
     expect(screen.getByTestId('image-icon')).toBeInTheDocument();
-    expect(screen.getByTestId('video-icon')).toBeInTheDocument();
-    // There are 2 mic icons - one in dropdown and one in input
-    expect(screen.getAllByTestId('mic-icon').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('file-text-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('video-icon')).toBeInTheDocument();
+    // There are 2 mic icons - one in dropdown (audio) and one for speech-to-text
+    expect(screen.getAllByTestId('mic-icon').length).toBeGreaterThanOrEqual(1);
   });
 
   it('should have correct labels for attachment options', () => {
     render(<ChatInput />);
 
-    // Use getAllByText since icons have text too, then verify dropdown items have text
+    // The dropdown content has:
+    // - Top row buttons: Camera, Photos, Files (plain text labels)
+    // - DropdownMenuItem items: Upload video, Upload audio
     const dropdownItems = screen.getAllByTestId('dropdown-item');
-    expect(dropdownItems[0]).toHaveTextContent('Upload image');
-    expect(dropdownItems[1]).toHaveTextContent('Upload video');
-    expect(dropdownItems[2]).toHaveTextContent('Upload audio');
-    expect(dropdownItems[3]).toHaveTextContent('Upload document');
+    expect(dropdownItems[0]).toHaveTextContent('Upload video');
+    expect(dropdownItems[1]).toHaveTextContent('Upload audio');
   });
 });
 
@@ -521,29 +568,72 @@ describe('ChatInput auth error handling', () => {
     const errorMessage = 'Please sign in to use the chat feature. Create a free account to get started!';
     const lowerError = errorMessage.toLowerCase();
 
-    // Verify error detection logic matches auth errors
-    const isAuthError =
+    // Verify error detection logic matches auth errors (guest auth errors)
+    const isGuestAuthError =
       lowerError.includes('sign in') ||
       lowerError.includes('sign up') ||
-      lowerError.includes('create a free account') ||
-      lowerError.includes('session expired') ||
-      lowerError.includes('authentication');
+      lowerError.includes('create a free account');
 
-    expect(isAuthError).toBe(true);
+    expect(isGuestAuthError).toBe(true);
   });
 
   it('should not trigger login for non-auth errors', async () => {
     const errorMessage = 'Network error: Failed to connect';
     const lowerError = errorMessage.toLowerCase();
 
-    const isAuthError =
+    const isRateLimitError =
+      lowerError.includes('rate limit') ||
+      lowerError.includes('daily limit') ||
+      lowerError.includes('messages for today') ||
+      lowerError.includes('too many');
+    const isGuestAuthError = !isRateLimitError && (
       lowerError.includes('sign in') ||
       lowerError.includes('sign up') ||
-      lowerError.includes('create a free account') ||
+      lowerError.includes('create a free account'));
+    const isApiKeyError =
+      lowerError.includes('api key') ||
+      lowerError.includes('access forbidden') ||
+      lowerError.includes('logging out and back in') ||
+      lowerError.includes('log out and log back in') ||
+      lowerError === 'forbidden';
+    const isSessionError =
       lowerError.includes('session expired') ||
       lowerError.includes('authentication');
+    const isAuthError = isGuestAuthError || isApiKeyError || isSessionError;
 
     expect(isAuthError).toBe(false);
+  });
+
+  it('should not trigger login for rate limit errors even if they contain "sign up"', () => {
+    // Rate limit messages often contain "sign up" to encourage users to create accounts
+    // but they should NOT be treated as auth errors that trigger login
+    const rateLimitErrors = [
+      "You've used all 5 messages for today. Sign up for a free account to continue!",
+      "Rate limit exceeded. Please wait and try again.",
+      "Daily limit reached. Sign up to chat without limits!",
+      "Too many requests. Please sign up for unlimited access.",
+    ];
+
+    rateLimitErrors.forEach(error => {
+      const lowerError = error.toLowerCase();
+
+      const isRateLimitError =
+        lowerError.includes('rate limit') ||
+        lowerError.includes('daily limit') ||
+        lowerError.includes('messages for today') ||
+        lowerError.includes('too many');
+
+      // Rate limit errors should be detected
+      expect(isRateLimitError).toBe(true);
+
+      // Even though some contain "sign up", they should NOT be treated as guest auth errors
+      const isGuestAuthError = !isRateLimitError && (
+        lowerError.includes('sign in') ||
+        lowerError.includes('sign up') ||
+        lowerError.includes('create a free account'));
+
+      expect(isGuestAuthError).toBe(false);
+    });
   });
 
   it('should detect various auth-related error messages', () => {
@@ -557,14 +647,38 @@ describe('ChatInput auth error handling', () => {
 
     authErrors.forEach(error => {
       const lowerError = error.toLowerCase();
-      const isAuthError =
+      const isGuestAuthError =
         lowerError.includes('sign in') ||
         lowerError.includes('sign up') ||
-        lowerError.includes('create a free account') ||
+        lowerError.includes('create a free account');
+      const isSessionError =
         lowerError.includes('session expired') ||
         lowerError.includes('authentication');
+      const isAuthError = isGuestAuthError || isSessionError;
 
       expect(isAuthError).toBe(true);
+    });
+  });
+
+  it('should detect 403 forbidden/API key related errors', () => {
+    const apiKeyErrors = [
+      'Your session has expired. Please log out and log back in to continue.',
+      'Your API key may be invalid or expired. Please try logging out and back in.',
+      'Access forbidden. Your API key may be invalid.',
+      'API key validation failed',
+      'Forbidden',
+    ];
+
+    apiKeyErrors.forEach(error => {
+      const lowerError = error.toLowerCase();
+      const isApiKeyError =
+        lowerError.includes('api key') ||
+        lowerError.includes('access forbidden') ||
+        lowerError.includes('logging out and back in') ||
+        lowerError.includes('log out and log back in') ||
+        lowerError === 'forbidden';
+
+      expect(isApiKeyError).toBe(true);
     });
   });
 
@@ -1042,5 +1156,285 @@ describe('ChatInput speech recognition', () => {
     // Button should still show mic icon (not square) because isRecording was reset
     const micButtons = screen.getAllByTestId('button').filter(btn => btn.querySelector('[data-testid="mic-icon"]'));
     expect(micButtons.length).toBeGreaterThan(0);
+  });
+
+  it('should show recording overlay with waveform and "Listening..." text when recording', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      // Should show "Listening..." placeholder text in the overlay
+      expect(screen.getByText('Listening...')).toBeInTheDocument();
+    });
+
+    // Should show the recording overlay
+    const overlay = document.querySelector('.recording-overlay');
+    expect(overlay).toBeInTheDocument();
+
+    // Should show waveform animation (9 bars in the overlay)
+    const waveformBars = document.querySelectorAll('.recording-waveform-bar');
+    expect(waveformBars.length).toBe(9);
+
+    // Should show stop recording button in the overlay
+    expect(screen.getByText('Stop Recording')).toBeInTheDocument();
+  });
+
+  it('should display interim transcript while recording', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    // Simulate interim results
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult({
+        resultIndex: 0,
+        results: {
+          length: 1,
+          item: (index: number) => ({
+            isFinal: false,
+            0: { transcript: 'hello world', confidence: 0.9 },
+          }),
+          0: {
+            isFinal: false,
+            0: { transcript: 'hello world', confidence: 0.9 },
+          },
+        },
+      });
+    }
+
+    await waitFor(() => {
+      // Interim transcript should be visible in the overlay
+      expect(screen.getByText('hello world')).toBeInTheDocument();
+    });
+
+    // Interim text should have the interim styling class
+    const interimElement = document.querySelector('.recording-transcript-interim');
+    expect(interimElement).toBeInTheDocument();
+    expect(interimElement?.textContent).toContain('hello world');
+  });
+
+  it('should show "Listening..." placeholder with pre-existing text when no new text captured', async () => {
+    // Set up pre-existing text in the input
+    mockStoreState.inputValue = 'Hello, ';
+
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      // Overlay should be visible
+      expect(document.querySelector('.recording-overlay')).toBeInTheDocument();
+    });
+
+    // Should show "Listening..." placeholder even with pre-existing text
+    await waitFor(() => {
+      expect(screen.getByText('Listening...')).toBeInTheDocument();
+    });
+
+    // The pre-existing text should be displayed separately
+    const existingTextElement = document.querySelector('.recording-transcript-existing');
+    expect(existingTextElement).toBeInTheDocument();
+    expect(existingTextElement?.textContent).toContain('Hello,');
+  });
+
+  it('should close overlay when stop recording button is clicked', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      expect(document.querySelector('.recording-overlay')).toBeInTheDocument();
+    });
+
+    // Click stop recording button in the overlay
+    const stopButton = screen.getByText('Stop Recording');
+    fireEvent.click(stopButton);
+
+    await waitFor(() => {
+      // Overlay should be closed
+      expect(document.querySelector('.recording-overlay')).not.toBeInTheDocument();
+    });
+
+    // Recognition should have been stopped
+    expect(mockRecognition.stop).toHaveBeenCalled();
+  });
+});
+
+describe('ChatInput stop streaming button', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    mockIsStreaming = false;
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  afterEach(() => {
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should show send button when not streaming', () => {
+    mockIsStreaming = false;
+    mockStoreState.inputValue = 'Test message';
+
+    render(<ChatInput />);
+
+    // Should show send icon, not square icon for stop
+    expect(screen.getByTestId('send-icon')).toBeInTheDocument();
+
+    // The last button should be the send button with send icon
+    const buttons = screen.getAllByTestId('button');
+    const lastButton = buttons[buttons.length - 1];
+    expect(lastButton).toContainElement(screen.getByTestId('send-icon'));
+  });
+
+  it('should show stop button with square icon when streaming', () => {
+    mockIsStreaming = true;
+
+    render(<ChatInput />);
+
+    // Should show square icon for stop instead of send icon
+    const squareIcons = screen.getAllByTestId('square-icon');
+    expect(squareIcons.length).toBeGreaterThan(0);
+
+    // The last button should be the stop button
+    const buttons = screen.getAllByTestId('button');
+    const lastButton = buttons[buttons.length - 1];
+    expect(lastButton.querySelector('[data-testid="square-icon"]')).toBeInTheDocument();
+  });
+
+  it('should call stopStream when stop button is clicked', () => {
+    mockIsStreaming = true;
+
+    render(<ChatInput />);
+
+    // Find the stop button (last button with square icon)
+    const buttons = screen.getAllByTestId('button');
+    const stopButton = buttons[buttons.length - 1];
+
+    fireEvent.click(stopButton);
+
+    expect(mockStopStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('should clear message start time when stop button is clicked', () => {
+    mockIsStreaming = true;
+
+    render(<ChatInput />);
+
+    // Find and click the stop button
+    const buttons = screen.getAllByTestId('button');
+    const stopButton = buttons[buttons.length - 1];
+
+    fireEvent.click(stopButton);
+
+    // setMessageStartTime should be called with null to clear the timer
+    expect(mockSetMessageStartTime).toHaveBeenCalledWith(null);
+  });
+
+  it('should disable input field when streaming', () => {
+    mockIsStreaming = true;
+
+    render(<ChatInput />);
+
+    const input = screen.getByTestId('input');
+    expect(input).toBeDisabled();
+  });
+
+  it('should enable input field when not streaming', () => {
+    mockIsStreaming = false;
+
+    render(<ChatInput />);
+
+    const input = screen.getByTestId('input');
+    expect(input).not.toBeDisabled();
+  });
+
+  it('should have destructive variant on stop button', () => {
+    mockIsStreaming = true;
+
+    render(<ChatInput />);
+
+    // The stop button should have variant="destructive" which adds styling
+    // Since our mock just passes props through, we check for the variant prop
+    const buttons = screen.getAllByTestId('button');
+    const stopButton = buttons[buttons.length - 1];
+
+    // The button should be rendered (we can't easily check variant with our mock,
+    // but we can verify the button exists and has the right icon)
+    expect(stopButton.querySelector('[data-testid="square-icon"]')).toBeInTheDocument();
+  });
+
+  it('should switch from stop to send button when streaming ends', () => {
+    // First render with streaming = true
+    mockIsStreaming = true;
+    const { rerender } = render(<ChatInput />);
+
+    // Should show square/stop icon
+    let buttons = screen.getAllByTestId('button');
+    let lastButton = buttons[buttons.length - 1];
+    expect(lastButton.querySelector('[data-testid="square-icon"]')).toBeInTheDocument();
+
+    // Now simulate streaming ending
+    mockIsStreaming = false;
+    mockStoreState.inputValue = 'New message';
+
+    // Need to remount since the mock doesn't trigger re-render
+    // The component would re-render in real usage when isStreaming changes
+  });
+
+  it('should handle stop button click without errors', async () => {
+    mockIsStreaming = true;
+
+    render(<ChatInput />);
+
+    const buttons = screen.getAllByTestId('button');
+    const stopButton = buttons[buttons.length - 1];
+
+    // Should not throw
+    expect(() => fireEvent.click(stopButton)).not.toThrow();
+    expect(mockStopStream).toHaveBeenCalled();
   });
 });

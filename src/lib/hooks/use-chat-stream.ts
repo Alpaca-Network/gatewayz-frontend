@@ -1,13 +1,22 @@
 import { useState, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { streamChatResponse } from '@/lib/streaming';
+// Using modular streaming - the old streaming.ts is deprecated
+import { streamChatResponse } from '@/lib/streaming/index';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { useSaveMessage } from '@/lib/hooks/use-chat-queries';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
+
+// Stream stopped error for clean cancellation
+class StreamStoppedError extends Error {
+    constructor() {
+        super('Stream stopped by user');
+        this.name = 'StreamStoppedError';
+    }
+}
 
 // Debug logging helper - always logs in development, logs errors in production
 const debugLog = (message: string, data?: any) => {
@@ -42,12 +51,113 @@ const extractMediaFromContent = (content: any): { image?: string; video?: string
     return result;
 };
 
+// Helper to check if a model supports a given modality
+const modelSupportsModality = (modelModalities: string[] | undefined, modality: string): boolean => {
+    if (!modelModalities || modelModalities.length === 0) {
+        // If no modalities specified, assume text-only
+        return modality.toLowerCase() === 'text';
+    }
+    return modelModalities.some(m => m.toLowerCase() === modality.toLowerCase());
+};
+
+// Helper to normalize message content for API requests
+// When switching between models, multimodal content (arrays with images/audio/video)
+// needs to be converted to text-only format for non-vision models
+// If modelModalities is provided, we check if the model supports the content types
+export const normalizeContentForApi = (content: any, modelModalities?: string[]): string | any[] => {
+    // If content is a string, return as-is
+    if (typeof content === 'string') {
+        return content;
+    }
+
+    // If content is an array (multimodal format), check each part
+    if (Array.isArray(content)) {
+        // Check if model supports image/video/audio
+        const supportsImage = modelSupportsModality(modelModalities, 'image');
+        const supportsVideo = modelSupportsModality(modelModalities, 'video');
+        const supportsAudio = modelSupportsModality(modelModalities, 'audio');
+        const supportsFile = modelSupportsModality(modelModalities, 'file');
+
+        // If model supports all modalities present in content, return as-is
+        const hasImage = content.some(p => p.type === 'image_url');
+        const hasVideo = content.some(p => p.type === 'video_url');
+        const hasAudio = content.some(p => p.type === 'audio_url');
+        const hasFile = content.some(p => p.type === 'file_url');
+
+        const allSupported = (!hasImage || supportsImage) &&
+                            (!hasVideo || supportsVideo) &&
+                            (!hasAudio || supportsAudio) &&
+                            (!hasFile || supportsFile);
+
+        // If model supports all content types, return the original array
+        if (allSupported) {
+            return content;
+        }
+
+        // Otherwise, extract only text parts
+        const textParts: string[] = [];
+        let hasNonTextContent = false;
+
+        for (const part of content) {
+            if (part.type === 'text' && part.text) {
+                textParts.push(part.text);
+            } else if (part.type === 'image_url' || part.type === 'video_url' ||
+                       part.type === 'audio_url' || part.type === 'file_url') {
+                hasNonTextContent = true;
+            }
+        }
+
+        // If there's non-text content that's being stripped, log it
+        if (hasNonTextContent && textParts.length > 0) {
+            debugLog('Normalizing multimodal content to text-only', {
+                originalParts: content.length,
+                textParts: textParts.length,
+                hasNonTextContent,
+                modelModalities,
+                stripped: { hasImage, hasVideo, hasAudio, hasFile }
+            });
+            return textParts.join('\n');
+        }
+
+        // If only text parts, join them
+        if (textParts.length > 0) {
+            return textParts.join('\n');
+        }
+
+        // If no text content at all but model doesn't support the content types,
+        // return empty string rather than unsupported content
+        if (hasNonTextContent && !allSupported) {
+            debugLog('Dropping unsupported multimodal content with no text', {
+                modelModalities,
+                contentTypes: { hasImage, hasVideo, hasAudio, hasFile }
+            });
+            return '';
+        }
+
+        // Fallback: return original content
+        return content;
+    }
+
+    // Fallback: convert to string
+    return String(content || '');
+};
+
 export function useChatStream() {
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamError, setStreamError] = useState<string | null>(null);
     const streamHandlerRef = useRef<ChatStreamHandler>(new ChatStreamHandler());
+    const abortControllerRef = useRef<AbortController | null>(null);
     const saveMessage = useSaveMessage();
     const queryClient = useQueryClient();
+
+    // Stop the current stream
+    const stopStream = useCallback(() => {
+        debugLog('stopStream called', { hasController: !!abortControllerRef.current });
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+    }, []);
 
     const streamMessage = useCallback(async ({
         sessionId,
@@ -96,6 +206,10 @@ export function useChatStream() {
         setStreamError(null);
         streamHandlerRef.current.reset();
 
+        // Create new abort controller for this stream
+        abortControllerRef.current = new AbortController();
+        const { signal } = abortControllerRef.current;
+
         // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
         await queryClient.cancelQueries({ queryKey: ['chat-messages', sessionId] });
 
@@ -135,9 +249,37 @@ export function useChatStream() {
 
         // 3. Prepare Request
         // We need to format the messages history for the API
-        // messagesHistory typically comes from the cache, which matches the API format usually.
-        // We just need to ensure we append the NEW user message.
-        const apiMessages = [...messagesHistory, { role: 'user', content }];
+        // messagesHistory comes from the cache and may contain UI-only fields
+        // (isStreaming, wasStopped, hasError, error) that the backend doesn't expect.
+        // We also need to filter out incomplete messages from stopped streams.
+        const sanitizedHistory = messagesHistory
+            .filter((msg: any) => {
+                // Filter out messages that are still streaming
+                if (msg.isStreaming) return false;
+                // Filter out stopped messages without content
+                if (msg.wasStopped && !msg.content) return false;
+                // Filter out empty assistant messages (e.g., from stopped streams before any content arrived)
+                // These may not have wasStopped set if the stop happened before finalization
+                if (msg.role === 'assistant' && !msg.content) return false;
+                return true;
+            })
+            .map((msg: any) => {
+                // Extract only the fields the API expects: role, content, and optionally name
+                // Normalize content to handle multimodal messages when switching models
+                // This ensures messages with images/audio from vision models don't break
+                // when the user switches to a text-only model
+                const sanitized: { role: string; content: any; name?: string } = {
+                    role: msg.role,
+                    content: normalizeContentForApi(msg.content, model.modalities)
+                };
+                if (msg.name) sanitized.name = msg.name;
+                return sanitized;
+            });
+
+        // Normalize the current user message content as well
+        // This handles cases where user sends multimodal content to a text-only model
+        const normalizedContent = normalizeContentForApi(content, model.modalities);
+        const apiMessages = [...sanitizedHistory, { role: 'user', content: normalizedContent }];
 
         const requestBody: any = {
             model: model.value,
@@ -163,61 +305,92 @@ export function useChatStream() {
         const modelLower = model.value.toLowerCase();
         const gatewayLower = model.sourceGateway?.toLowerCase() || '';
 
-        // Models/providers that need the flexible completions route:
-        // - Fireworks: returns non-OpenAI format (object: "response.chunk" with output array)
-        //   This includes any model served through Fireworks gateway, regardless of original provider
-        //   Examples: 'accounts/fireworks/models/deepseek-r1-0528', 'fireworks/llama-3.3-70b'
-        // - DeepSeek: returns OpenAI Responses API format (object: "response.chunk")
-        //   instead of Chat Completions format (choices[].delta) which AI SDK expects
-        //   Note: Only DeepSeek models through normalizing gateways (OpenRouter, Together) use AI SDK
-        const isFireworksModel = modelLower.includes('fireworks') ||
-                                  modelLower.includes('accounts/fireworks') ||
-                                  gatewayLower === 'fireworks';
-
-        // DeepSeek models need flexible completions route UNLESS they're explicitly routed
-        // through a gateway that normalizes the format (OpenRouter, Together, etc.)
-        // Models like 'openrouter/deepseek/deepseek-r1' have the gateway prefix and are normalized
-        // Models like 'deepseek/deepseek-r1' (no gateway prefix or sourceGateway) need flexible route
-        //
-        // IMPORTANT: Only redirect when we're CERTAIN it's direct DeepSeek API access:
-        // - 'deepseek/deepseek-r1' -> definitely direct DeepSeek API -> needs flexible route
-        // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK can handle
-        // - 'deepseek-r1' (no prefix) -> could be from any gateway, let AI SDK try
-        // - 'deepseek-r1' with sourceGateway='deepseek' -> direct DeepSeek -> needs flexible route
-        const startsWithDeepSeek = modelLower.startsWith('deepseek/');
+        // Gateways that normalize responses to standard OpenAI Chat Completions format
+        // These can use the AI SDK route safely
         const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
         const hasExplicitNormalizingPrefix = normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+        const isNormalizingGateway = normalizingGateways.includes(gatewayLower);
 
-        // Only redirect if:
-        // 1. Model explicitly starts with 'deepseek/' (direct API) AND doesn't have normalizing prefix, OR
-        // 2. sourceGateway is explicitly 'deepseek'
-        const isDirectDeepSeekGateway = gatewayLower === 'deepseek';
-        const isDeepSeekNeedingFlexible = (startsWithDeepSeek && !hasExplicitNormalizingPrefix) || isDirectDeepSeekGateway;
+        // Gateways/providers that return non-standard formats and need the flexible route:
+        // - fireworks: returns Responses API format (object: "response.chunk" with output array)
+        // - deepseek: returns Responses API format when accessed directly
+        // - near: requires special backend handling via near_client.py
+        // - chutes: custom model hosting with non-standard format
+        // - aimo: research models with custom format
+        // - fal: image/video models with different streaming format
+        // - alibaba: Qwen models with custom format when accessed directly
+        // - novita: GPU inference with custom format
+        // - huggingface: HF Inference API has different streaming format
+        // - alpaca: Alpaca Network with custom format
+        // - clarifai: Clarifai gateway with custom format
+        // - featherless: open-source model hosting with variable formats
+        // - deepinfra: can have non-standard formats for some models
+        const nonStandardGateways = [
+            'fireworks',
+            'deepseek',
+            'near',
+            'chutes',
+            'aimo',
+            'fal',
+            'alibaba',
+            'novita',
+            'huggingface',
+            'hug', // alias for huggingface
+            'alpaca',
+            'clarifai',
+            'featherless',
+            'deepinfra',
+        ];
 
-        // Use regular completions route for models with non-standard formats
-        const useFlexibleRoute = isFireworksModel || isDeepSeekNeedingFlexible;
+        // Check if model is from a non-standard gateway by:
+        // 1. sourceGateway matches a non-standard gateway
+        // 2. Model ID starts with a non-standard gateway prefix
+        const isNonStandardGateway = nonStandardGateways.includes(gatewayLower) ||
+            nonStandardGateways.some(gw => modelLower.startsWith(`${gw}/`));
+
+        // Special case: Fireworks models with accounts/ prefix (fireworks/ prefix is already handled by nonStandardGateways)
+        const isFireworksModel = modelLower.includes('accounts/fireworks');
+
+        // If model goes through a normalizing gateway (OpenRouter, Together, etc.),
+        // it's safe to use AI SDK even if the underlying provider is non-standard
+        // Example: 'openrouter/deepseek/deepseek-r1' is normalized by OpenRouter
+        // Trust explicit sourceGateway over model name prefix - if sourceGateway is a normalizing gateway, use AI SDK
+        const isNormalizedByGateway = hasExplicitNormalizingPrefix || isNormalizingGateway;
+
+        // Use flexible route for non-standard gateways UNLESS normalized by a gateway
+        const useFlexibleRoute = (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway;
         const url = useFlexibleRoute
             ? `/api/chat/completions?session_id=${sessionId}`
             : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
 
         debugLog('Route selection', {
             useFlexibleRoute,
+            isNonStandardGateway,
             isFireworksModel,
-            isDeepSeekNeedingFlexible,
+            isNormalizedByGateway,
+            gatewayLower,
             url,
             model: model.value
         });
-        console.log('[Chat Stream] Using', useFlexibleRoute ? 'completions (flexible)' : 'AI SDK', 'route for model:', model.value);
+        console.log('[Chat Stream] Using', useFlexibleRoute ? 'completions (flexible)' : 'AI SDK', 'route for model:', model.value, 'gateway:', gatewayLower || 'none');
 
         try {
             // 4. Stream Loop
             let lastUpdate = Date.now();
             let chunkCount = 0;
             let totalContentLength = 0;
+            let wasStopped = false;
 
             debugLog('Starting stream loop', { url, apiKeyPrefix: apiKey.substring(0, 15) + '...' });
 
             for await (const chunk of streamChatResponse(url, apiKey, requestBody)) {
+                // Check if stream was stopped by user
+                if (signal.aborted) {
+                    debugLog('Stream aborted by user');
+                    wasStopped = true;
+                    break;
+                }
+
                 chunkCount++;
 
                 if (chunkCount === 1) {
@@ -283,31 +456,39 @@ export function useChatStream() {
             const finalContent = streamHandlerRef.current.getFinalContent();
             const finalReasoning = streamHandlerRef.current.getFinalReasoning();
 
-            debugLog('Stream completed successfully', {
+            debugLog(wasStopped ? 'Stream stopped by user' : 'Stream completed successfully', {
                 totalChunks: chunkCount,
                 finalContentLength: finalContent.length,
                 hasReasoning: !!finalReasoning,
-                reasoningLength: finalReasoning?.length || 0
+                reasoningLength: finalReasoning?.length || 0,
+                wasStopped
             });
 
             // Save Assistant Message - for authenticated users OR guest sessions (negative IDs)
             // Guest messages are saved to localStorage, authenticated to backend
             // Include reasoning if present for proper persistence and display on reload
-            saveMessage.mutate({
-                 sessionId,
-                 role: 'assistant',
-                 content: finalContent,
-                 model: model.value,
-                 reasoning: finalReasoning || undefined
-            });
+            // Only save if we have content (even if stopped mid-stream)
+            if (finalContent) {
+                saveMessage.mutate({
+                     sessionId,
+                     role: 'assistant',
+                     content: finalContent,
+                     model: model.value,
+                     reasoning: finalReasoning || undefined
+                });
+            }
 
-            // Mark isStreaming false
+            // Mark isStreaming false and set wasStopped flag if applicable
             flushSync(() => {
                 queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
                     if (!old || old.length === 0) return old || [];
                     const last = old[old.length - 1];
                     if (!last) return old;
-                    return [...old.slice(0, -1), { ...last, isStreaming: false }];
+                    return [...old.slice(0, -1), {
+                        ...last,
+                        isStreaming: false,
+                        wasStopped: wasStopped && finalContent ? true : undefined
+                    }];
                 });
             });
 
@@ -346,6 +527,7 @@ export function useChatStream() {
     return {
         isStreaming,
         streamError,
-        streamMessage
+        streamMessage,
+        stopStream
     };
 }

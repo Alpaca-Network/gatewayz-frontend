@@ -1,9 +1,11 @@
 /**
  * Message queue implementation to prevent race conditions in message sending
- * Enhanced with offline support and localStorage persistence for reliability
+ * Enhanced with offline support and storage persistence for reliability
+ * with safe storage fallback
  */
 
 import { networkMonitor } from './network-utils';
+import { safeLocalStorageGet, safeLocalStorageSet } from './safe-storage';
 
 export interface QueuedMessage {
   id: string;
@@ -48,11 +50,11 @@ export class MessageQueue {
   }
 
   /**
-   * Load queue from localStorage for persistence across page reloads
+   * Load queue from storage for persistence across page reloads
    */
   private loadFromStorage(): void {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = safeLocalStorageGet(STORAGE_KEY);
       if (stored) {
         const parsedQueue = JSON.parse(stored) as QueuedMessage[];
         // Reset any "processing" messages to "pending" (they were interrupted)
@@ -69,13 +71,13 @@ export class MessageQueue {
   }
 
   /**
-   * Save queue to localStorage
+   * Save queue to storage
    */
   private saveToStorage(): void {
     try {
       // Only persist pending and failed messages (not sent ones)
       const toSave = this.queue.filter(msg => msg.status !== 'sent');
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+      safeLocalStorageSet(STORAGE_KEY, JSON.stringify(toSave));
     } catch (error) {
       console.error('[MessageQueue] Failed to save to storage:', error);
     }

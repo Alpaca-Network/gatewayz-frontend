@@ -1,7 +1,7 @@
 /**
  * Unit tests for use-chat-stream.ts
  *
- * Tests the Fireworks and DeepSeek model routing logic
+ * Tests the Fireworks, DeepSeek, and NEAR AI model routing logic
  * Tests media extraction from content arrays
  */
 
@@ -150,40 +150,49 @@ describe('useChatStream routing logic', () => {
   /**
    * Helper function that mirrors the routing logic in use-chat-stream.ts
    * This allows us to test the routing decision without mocking React hooks
+   *
+   * Updated to match the new comprehensive gateway detection logic
    */
   function getRouteForModel(modelValue: string, sourceGateway?: string): 'completions' | 'ai-sdk' {
     const modelLower = modelValue.toLowerCase();
     const gatewayLower = (sourceGateway || '').toLowerCase();
 
-    // Models/providers that need the flexible completions route:
-    // - Fireworks: returns non-OpenAI format (object: "response.chunk" with output array)
-    //   This includes any model served through Fireworks gateway, regardless of original provider
-    //   Examples: 'accounts/fireworks/models/deepseek-r1-0528', 'fireworks/llama-3.3-70b'
-    const isFireworksModel = modelLower.includes('fireworks') ||
-                              modelLower.includes('accounts/fireworks') ||
-                              gatewayLower === 'fireworks';
-
-    // DeepSeek models need flexible completions route UNLESS they're explicitly routed
-    // through a gateway that normalizes the format (OpenRouter, Together, etc.)
-    // Models like 'openrouter/deepseek/deepseek-r1' have the gateway prefix and are normalized
-    // Models like 'deepseek/deepseek-r1' (no gateway prefix or sourceGateway) need flexible route
-    //
-    // IMPORTANT: Only redirect when we're CERTAIN it's direct DeepSeek API access:
-    // - 'deepseek/deepseek-r1' -> definitely direct DeepSeek API -> needs flexible route
-    // - 'openrouter/deepseek/deepseek-r1' -> normalized by OpenRouter -> AI SDK can handle
-    // - 'deepseek-r1' (no prefix) -> could be from any gateway, let AI SDK try
-    // - 'deepseek-r1' with sourceGateway='deepseek' -> direct DeepSeek -> needs flexible route
-    const startsWithDeepSeek = modelLower.startsWith('deepseek/');
+    // Gateways that normalize responses to standard OpenAI Chat Completions format
     const normalizingGateways = ['openrouter', 'together', 'groq', 'cerebras', 'anyscale'];
     const hasExplicitNormalizingPrefix = normalizingGateways.some(g => modelLower.startsWith(`${g}/`));
+    const isNormalizingGateway = normalizingGateways.includes(gatewayLower);
 
-    // Only redirect if:
-    // 1. Model explicitly starts with 'deepseek/' (direct API) AND doesn't have normalizing prefix, OR
-    // 2. sourceGateway is explicitly 'deepseek'
-    const isDirectDeepSeekGateway = gatewayLower === 'deepseek';
-    const isDeepSeekNeedingFlexible = (startsWithDeepSeek && !hasExplicitNormalizingPrefix) || isDirectDeepSeekGateway;
+    // Gateways/providers that return non-standard formats and need the flexible route
+    const nonStandardGateways = [
+      'fireworks',
+      'deepseek',
+      'near',
+      'chutes',
+      'aimo',
+      'fal',
+      'alibaba',
+      'novita',
+      'huggingface',
+      'hug', // alias for huggingface
+      'alpaca',
+      'clarifai',
+      'featherless',
+      'deepinfra',
+    ];
 
-    return (isFireworksModel || isDeepSeekNeedingFlexible) ? 'completions' : 'ai-sdk';
+    // Check if model is from a non-standard gateway
+    const isNonStandardGateway = nonStandardGateways.includes(gatewayLower) ||
+      nonStandardGateways.some(gw => modelLower.startsWith(`${gw}/`));
+
+    // Special case: Fireworks models with accounts/ prefix (fireworks/ prefix is already handled by nonStandardGateways)
+    const isFireworksModel = modelLower.includes('accounts/fireworks');
+
+    // If model goes through a normalizing gateway, it's safe to use AI SDK
+    // Trust explicit sourceGateway over model name prefix - if sourceGateway is a normalizing gateway, use AI SDK
+    const isNormalizedByGateway = hasExplicitNormalizingPrefix || isNormalizingGateway;
+
+    // Use flexible route for non-standard gateways UNLESS normalized by a gateway
+    return (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway ? 'completions' : 'ai-sdk';
   }
 
   describe('Fireworks model detection', () => {
@@ -210,8 +219,8 @@ describe('useChatStream routing logic', () => {
       expect(getRouteForModel('google/gemini-pro')).toBe('ai-sdk');
     });
 
-    test('should route DeepSeek models from other providers to AI SDK endpoint', () => {
-      // DeepSeek through OpenRouter should use AI SDK
+    test('should route DeepSeek models from normalizing gateways to AI SDK endpoint', () => {
+      // DeepSeek through OpenRouter should use AI SDK (normalized)
       expect(getRouteForModel('openrouter/deepseek/deepseek-r1')).toBe('ai-sdk');
       expect(getRouteForModel('together/deepseek-r1')).toBe('ai-sdk');
     });
@@ -220,6 +229,79 @@ describe('useChatStream routing logic', () => {
       expect(getRouteForModel('gpt-4o', 'openai')).toBe('ai-sdk');
       expect(getRouteForModel('claude-3-opus', 'anthropic')).toBe('ai-sdk');
       expect(getRouteForModel('deepseek-r1', 'openrouter')).toBe('ai-sdk');
+    });
+  })
+
+  describe('New gateway detection', () => {
+    test('should route Chutes models to completions endpoint', () => {
+      expect(getRouteForModel('chutes/llama-3')).toBe('completions');
+      expect(getRouteForModel('some-model', 'chutes')).toBe('completions');
+    });
+
+    test('should route AiMo models to completions endpoint', () => {
+      expect(getRouteForModel('aimo/model-x')).toBe('completions');
+      expect(getRouteForModel('some-model', 'aimo')).toBe('completions');
+    });
+
+    test('should route Fal models to completions endpoint', () => {
+      expect(getRouteForModel('fal/flux-pro')).toBe('completions');
+      expect(getRouteForModel('some-model', 'fal')).toBe('completions');
+    });
+
+    test('should route Alibaba models to completions endpoint', () => {
+      expect(getRouteForModel('alibaba/qwen-72b')).toBe('completions');
+      expect(getRouteForModel('qwen-72b', 'alibaba')).toBe('completions');
+    });
+
+    test('should route Novita models to completions endpoint', () => {
+      expect(getRouteForModel('novita/llama-3')).toBe('completions');
+      expect(getRouteForModel('some-model', 'novita')).toBe('completions');
+    });
+
+    test('should route HuggingFace models to completions endpoint', () => {
+      expect(getRouteForModel('huggingface/meta-llama/llama-3')).toBe('completions');
+      expect(getRouteForModel('hug/some-model')).toBe('completions');
+      expect(getRouteForModel('some-model', 'huggingface')).toBe('completions');
+      expect(getRouteForModel('some-model', 'hug')).toBe('completions');
+    });
+
+    test('should route Alpaca models to completions endpoint', () => {
+      expect(getRouteForModel('alpaca/some-model')).toBe('completions');
+      expect(getRouteForModel('model-x', 'alpaca')).toBe('completions');
+    });
+
+    test('should route Clarifai models to completions endpoint', () => {
+      expect(getRouteForModel('clarifai/gpt-4')).toBe('completions');
+      expect(getRouteForModel('some-model', 'clarifai')).toBe('completions');
+    });
+
+    test('should route Featherless models to completions endpoint', () => {
+      expect(getRouteForModel('featherless/llama-3')).toBe('completions');
+      expect(getRouteForModel('some-model', 'featherless')).toBe('completions');
+    });
+
+    test('should route DeepInfra models to completions endpoint', () => {
+      expect(getRouteForModel('deepinfra/meta-llama')).toBe('completions');
+      expect(getRouteForModel('some-model', 'deepinfra')).toBe('completions');
+    });
+
+    test('should route non-standard gateway models through normalizing gateways to AI SDK', () => {
+      // When a non-standard provider goes through a normalizing gateway, use AI SDK
+      expect(getRouteForModel('openrouter/huggingface/llama')).toBe('ai-sdk');
+      expect(getRouteForModel('together/deepinfra-model')).toBe('ai-sdk');
+      expect(getRouteForModel('groq/custom-model')).toBe('ai-sdk');
+    });
+
+    test('should trust explicit sourceGateway over model name prefix', () => {
+      // Critical: When sourceGateway is explicitly a normalizing gateway,
+      // use AI SDK even if model name starts with a non-standard prefix
+      // This fixes the bug where 'deepseek/model' with sourceGateway='openrouter'
+      // was incorrectly routed to flexible endpoint
+      expect(getRouteForModel('deepseek/deepseek-r1', 'openrouter')).toBe('ai-sdk');
+      expect(getRouteForModel('deepseek/deepseek-chat', 'together')).toBe('ai-sdk');
+      expect(getRouteForModel('huggingface/llama', 'groq')).toBe('ai-sdk');
+      expect(getRouteForModel('deepinfra/model', 'cerebras')).toBe('ai-sdk');
+      expect(getRouteForModel('near/some-model', 'anyscale')).toBe('ai-sdk');
     });
   });
 
@@ -230,10 +312,6 @@ describe('useChatStream routing logic', () => {
       expect(getRouteForModel('deepseek/deepseek-r1')).toBe('completions');
       expect(getRouteForModel('deepseek/deepseek-chat')).toBe('completions');
       expect(getRouteForModel('DeepSeek/DeepSeek-R1')).toBe('completions');
-      // Even with sourceGateway set, trust the model ID prefix
-      expect(getRouteForModel('deepseek/deepseek-r1', 'together')).toBe('completions');
-      expect(getRouteForModel('deepseek/deepseek-r1', 'openrouter')).toBe('completions');
-      expect(getRouteForModel('deepseek/deepseek-chat', 'groq')).toBe('completions');
     });
 
     test('should route models with deepseek sourceGateway to completions endpoint', () => {
@@ -253,10 +331,46 @@ describe('useChatStream routing logic', () => {
       expect(getRouteForModel('groq/deepseek-r1-distill-llama-70b')).toBe('ai-sdk');
       expect(getRouteForModel('deepseek-r1', 'openrouter')).toBe('ai-sdk');
       expect(getRouteForModel('deepseek-chat', 'together')).toBe('ai-sdk');
-      // Through other providers, also use AI SDK (we're not certain about the format)
-      expect(getRouteForModel('huggingface/deepseek-ai/DeepSeek-R1')).toBe('ai-sdk');
-      expect(getRouteForModel('nebius/deepseek-r1')).toBe('ai-sdk');
-      expect(getRouteForModel('chutes/deepseek-r1')).toBe('ai-sdk');
+    });
+
+    test('should route DeepSeek through non-standard gateways to completions endpoint', () => {
+      // When DeepSeek models go through non-standard gateways (not normalizing ones),
+      // they still need the flexible route because those gateways don't normalize format
+      expect(getRouteForModel('huggingface/deepseek-ai/DeepSeek-R1')).toBe('completions');
+      expect(getRouteForModel('chutes/deepseek-r1')).toBe('completions');
+    });
+  });
+
+  describe('NEAR AI model detection', () => {
+    test('should route NEAR models with near/ prefix to completions endpoint', () => {
+      // NEAR AI models need the flexible completions route because
+      // the AI SDK endpoint doesn't handle them - they'd fall through to Vercel AI Gateway
+      // which doesn't know about NEAR models and returns 400 errors.
+      expect(getRouteForModel('near/zai-org/GLM-4.6')).toBe('completions');
+      expect(getRouteForModel('near/deepseek-ai/DeepSeek-V3.1')).toBe('completions');
+      expect(getRouteForModel('NEAR/zai-org/GLM-4.6')).toBe('completions');
+      expect(getRouteForModel('Near/DeepSeek-R1')).toBe('completions');
+    });
+
+    test('should route models with near sourceGateway to completions endpoint', () => {
+      // When sourceGateway is explicitly 'near', route to completions
+      expect(getRouteForModel('zai-org/GLM-4.6', 'near')).toBe('completions');
+      expect(getRouteForModel('deepseek-v3', 'NEAR')).toBe('completions');
+      expect(getRouteForModel('GLM-4.6', 'Near')).toBe('completions');
+    });
+
+    test('should route incognito mode model to completions endpoint', () => {
+      // The incognito mode default model: near/zai-org/GLM-4.6 with sourceGateway: 'near'
+      expect(getRouteForModel('near/zai-org/GLM-4.6', 'near')).toBe('completions');
+    });
+
+    test('should not route non-NEAR models to completions endpoint', () => {
+      // Models that don't start with 'near/' and don't have 'near' as sourceGateway
+      // should go through AI SDK as normal
+      expect(getRouteForModel('openai/gpt-4o')).toBe('ai-sdk');
+      expect(getRouteForModel('anthropic/claude-3')).toBe('ai-sdk');
+      expect(getRouteForModel('openrouter/auto')).toBe('ai-sdk');
+      expect(getRouteForModel('zai-org/GLM-4.6', 'openrouter')).toBe('ai-sdk');
     });
   });
 
@@ -384,6 +498,610 @@ describe('Reasoning parameter handling', () => {
       const finalReasoning = getFinalReasoning() || undefined;
 
       expect(finalReasoning).toBeUndefined();
+    });
+  });
+});
+
+describe('Stop stream functionality', () => {
+  /**
+   * Tests for the stop/abort stream feature
+   * The useChatStream hook now exposes a stopStream function that aborts the current stream
+   */
+
+  describe('AbortController behavior', () => {
+    test('should create AbortController signal that can be aborted', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      expect(signal.aborted).toBe(false);
+
+      controller.abort();
+
+      expect(signal.aborted).toBe(true);
+    });
+
+    test('should allow checking abort status during stream loop', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      let wasAborted = false;
+      let iterations = 0;
+
+      // Simulate a stream loop that checks abort status
+      const simulateStreamLoop = () => {
+        for (let i = 0; i < 10; i++) {
+          if (signal.aborted) {
+            wasAborted = true;
+            break;
+          }
+          iterations++;
+
+          // Abort after 5 iterations (simulates user clicking stop)
+          if (i === 4) {
+            controller.abort();
+          }
+        }
+      };
+
+      simulateStreamLoop();
+
+      expect(wasAborted).toBe(true);
+      expect(iterations).toBe(5);
+    });
+
+    test('should preserve partial content when stopped', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      let accumulatedContent = '';
+      const chunks = ['Hello', ' ', 'world', ', ', 'how', ' ', 'are', ' ', 'you', '?'];
+
+      // Simulate streaming with abort
+      for (const chunk of chunks) {
+        if (signal.aborted) {
+          break;
+        }
+        accumulatedContent += chunk;
+
+        // Abort after "how"
+        if (chunk === 'how') {
+          controller.abort();
+        }
+      }
+
+      expect(accumulatedContent).toBe('Hello world, how');
+      expect(signal.aborted).toBe(true);
+    });
+
+    test('should allow abort even when no chunks received yet', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      // Abort immediately before any chunks
+      controller.abort();
+
+      let chunkCount = 0;
+      const chunks = ['a', 'b', 'c'];
+
+      for (const chunk of chunks) {
+        if (signal.aborted) break;
+        chunkCount++;
+      }
+
+      expect(chunkCount).toBe(0);
+      expect(signal.aborted).toBe(true);
+    });
+
+    test('should handle multiple aborts gracefully', () => {
+      const controller = new AbortController();
+      const { signal } = controller;
+
+      controller.abort();
+      controller.abort(); // Second abort should not throw
+      controller.abort(); // Third abort should not throw
+
+      expect(signal.aborted).toBe(true);
+    });
+  });
+
+  describe('Stream stopped state', () => {
+    test('should set wasStopped flag when stream is aborted with content', () => {
+      const finalContent = 'Partial response';
+      const wasStopped = true;
+
+      // Mirrors the logic in use-chat-stream.ts for setting wasStopped
+      const shouldSetWasStopped = wasStopped && finalContent;
+
+      expect(shouldSetWasStopped).toBeTruthy();
+    });
+
+    test('should not set wasStopped flag when stream is aborted without content', () => {
+      const finalContent = '';
+      const wasStopped = true;
+
+      // Mirrors the logic in use-chat-stream.ts for setting wasStopped
+      const shouldSetWasStopped = wasStopped && finalContent ? true : undefined;
+
+      expect(shouldSetWasStopped).toBeUndefined();
+    });
+
+    test('should not set wasStopped flag when stream completes normally', () => {
+      const finalContent = 'Complete response';
+      const wasStopped = false;
+
+      // Mirrors the logic in use-chat-stream.ts for setting wasStopped
+      const shouldSetWasStopped = wasStopped && finalContent ? true : undefined;
+
+      expect(shouldSetWasStopped).toBeUndefined();
+    });
+  });
+
+  describe('Message saving on stop', () => {
+    test('should save message when stopped with partial content', () => {
+      const finalContent = 'Partial but useful response';
+      const wasStopped = true;
+
+      // Mirrors the conditional save logic in use-chat-stream.ts
+      const shouldSaveMessage = !!finalContent;
+
+      expect(shouldSaveMessage).toBe(true);
+    });
+
+    test('should not save message when stopped with no content', () => {
+      const finalContent = '';
+      const wasStopped = true;
+
+      // Mirrors the conditional save logic in use-chat-stream.ts
+      const shouldSaveMessage = !!finalContent;
+
+      expect(shouldSaveMessage).toBe(false);
+    });
+
+    test('should save message with reasoning when stopped', () => {
+      const finalContent = 'Response text';
+      const finalReasoning = 'Step by step thinking...';
+      const wasStopped = true;
+
+      // Both content and reasoning should be saved together
+      const saveParams = {
+        content: finalContent,
+        reasoning: finalReasoning || undefined
+      };
+
+      expect(saveParams.content).toBe('Response text');
+      expect(saveParams.reasoning).toBe('Step by step thinking...');
+    });
+
+    test('should not include reasoning when empty', () => {
+      const finalContent = 'Response text';
+      const finalReasoning = '';
+
+      // Empty reasoning should become undefined
+      const saveParams = {
+        content: finalContent,
+        reasoning: finalReasoning || undefined
+      };
+
+      expect(saveParams.reasoning).toBeUndefined();
+    });
+  });
+
+  describe('UI state updates on stop', () => {
+    test('should mark message as not streaming when stopped', () => {
+      // Simulates the final state update
+      const updateState = (wasStopped: boolean, finalContent: string) => {
+        return {
+          isStreaming: false,
+          wasStopped: wasStopped && finalContent ? true : undefined
+        };
+      };
+
+      const state = updateState(true, 'Some content');
+
+      expect(state.isStreaming).toBe(false);
+      expect(state.wasStopped).toBe(true);
+    });
+
+    test('should handle state update when stop clicked but no content yet', () => {
+      const updateState = (wasStopped: boolean, finalContent: string) => {
+        return {
+          isStreaming: false,
+          wasStopped: wasStopped && finalContent ? true : undefined
+        };
+      };
+
+      const state = updateState(true, '');
+
+      expect(state.isStreaming).toBe(false);
+      expect(state.wasStopped).toBeUndefined();
+    });
+  });
+
+  describe('AbortController reference management', () => {
+    test('should allow setting controller to null after abort', () => {
+      let controllerRef: AbortController | null = new AbortController();
+
+      // Simulate abort
+      controllerRef.abort();
+      controllerRef = null;
+
+      expect(controllerRef).toBeNull();
+    });
+
+    test('should create new controller for each stream', () => {
+      const controller1 = new AbortController();
+      const signal1 = controller1.signal;
+
+      const controller2 = new AbortController();
+      const signal2 = controller2.signal;
+
+      // Different controllers should have different signals
+      expect(signal1).not.toBe(signal2);
+
+      // Aborting one should not affect the other
+      controller1.abort();
+      expect(signal1.aborted).toBe(true);
+      expect(signal2.aborted).toBe(false);
+    });
+
+    test('should safely handle stopStream when no active controller', () => {
+      let controllerRef: AbortController | null = null;
+
+      // Simulates calling stopStream when there's no active stream
+      const stopStream = () => {
+        if (controllerRef) {
+          controllerRef.abort();
+          controllerRef = null;
+        }
+      };
+
+      // Should not throw
+      expect(() => stopStream()).not.toThrow();
+    });
+  });
+
+  describe('Message history sanitization', () => {
+    test('should filter out messages with isStreaming flag', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there!', model: 'gpt-4' },
+        { role: 'user', content: 'How are you?' },
+        { role: 'assistant', content: 'Partial response...', isStreaming: true }
+      ];
+
+      // Simulates the filtering logic from use-chat-stream.ts
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(3);
+      expect(sanitizedHistory).not.toContainEqual(
+        expect.objectContaining({ isStreaming: true })
+      );
+    });
+
+    test('should include stopped messages if they have content', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Partial but useful response', wasStopped: true }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(2);
+      expect(sanitizedHistory[1].content).toBe('Partial but useful response');
+    });
+
+    test('should filter out stopped messages with no content', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: '', wasStopped: true }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(1);
+      expect(sanitizedHistory[0].role).toBe('user');
+    });
+
+    test('should filter out empty assistant messages without wasStopped flag', () => {
+      // When a stream is stopped before any content arrives, wasStopped may be undefined
+      // because the flag is only set to true when finalContent is truthy (line 389).
+      // These empty assistant messages should still be filtered out.
+      const messagesHistory = [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: '' } // No wasStopped flag, just empty content
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory).toHaveLength(1);
+      expect(sanitizedHistory[0].role).toBe('user');
+    });
+
+    test('should strip UI-only fields from messages', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello', created_at: '2024-01-01', model: 'gpt-4' },
+        {
+          role: 'assistant',
+          content: 'Response',
+          hasError: false,
+          error: undefined,
+          wasStopped: false,
+          reasoning: 'Some reasoning',
+          model: 'gpt-4'
+        }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      // Should only have role and content
+      expect(sanitizedHistory[0]).toEqual({ role: 'user', content: 'Hello' });
+      expect(sanitizedHistory[1]).toEqual({ role: 'assistant', content: 'Response' });
+      expect(sanitizedHistory[1]).not.toHaveProperty('hasError');
+      expect(sanitizedHistory[1]).not.toHaveProperty('error');
+      expect(sanitizedHistory[1]).not.toHaveProperty('wasStopped');
+      expect(sanitizedHistory[1]).not.toHaveProperty('reasoning');
+      expect(sanitizedHistory[1]).not.toHaveProperty('model');
+    });
+
+    test('should preserve name field when present', () => {
+      const messagesHistory = [
+        { role: 'user', content: 'Hello', name: 'John' },
+        { role: 'assistant', content: 'Hi John!' }
+      ];
+
+      const sanitizedHistory = messagesHistory
+        .filter((msg: any) => {
+          if (msg.isStreaming) return false;
+          if (msg.wasStopped && !msg.content) return false;
+          if (msg.role === 'assistant' && !msg.content) return false;
+          return true;
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          ...(msg.name && { name: msg.name })
+        }));
+
+      expect(sanitizedHistory[0]).toEqual({ role: 'user', content: 'Hello', name: 'John' });
+      expect(sanitizedHistory[1]).toEqual({ role: 'assistant', content: 'Hi John!' });
+    });
+  });
+});
+
+// Import the normalizeContentForApi function
+import { normalizeContentForApi } from '../use-chat-stream';
+
+describe('normalizeContentForApi', () => {
+  describe('string content', () => {
+    test('should return string content as-is', () => {
+      expect(normalizeContentForApi('Hello world')).toBe('Hello world');
+      expect(normalizeContentForApi('Hello world', ['Text'])).toBe('Hello world');
+      expect(normalizeContentForApi('Hello world', ['Text', 'Image'])).toBe('Hello world');
+    });
+
+    test('should handle empty string', () => {
+      expect(normalizeContentForApi('')).toBe('');
+    });
+  });
+
+  describe('text-only array content', () => {
+    test('should preserve text-only array when model supports all content', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: 'World' }
+      ];
+      // Text-only arrays are valid OpenAI format, no need to convert
+      expect(normalizeContentForApi(content)).toEqual(content);
+    });
+
+    test('should preserve text-only array regardless of modalities', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: 'World' }
+      ];
+      // Text-only arrays don't contain unsupported media, so they're preserved
+      expect(normalizeContentForApi(content, ['Text'])).toEqual(content);
+      expect(normalizeContentForApi(content, ['Text', 'Image'])).toEqual(content);
+    });
+  });
+
+  describe('multimodal content with supported modalities', () => {
+    test('should preserve image when model supports Image modality', () => {
+      const content = [
+        { type: 'text', text: 'Check this image' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Image']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve video when model supports Video modality', () => {
+      const content = [
+        { type: 'text', text: 'Watch this' },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Video']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve audio when model supports Audio modality', () => {
+      const content = [
+        { type: 'text', text: 'Listen to this' },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Audio']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve file when model supports File modality', () => {
+      const content = [
+        { type: 'text', text: 'Read this document' },
+        { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'File']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve all media when model supports all modalities', () => {
+      const content = [
+        { type: 'text', text: 'Check all these' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } },
+        { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Image', 'Video', 'Audio', 'File']);
+      expect(result).toEqual(content);
+    });
+  });
+
+  describe('multimodal content with unsupported modalities', () => {
+    test('should strip image when model does not support Image modality', () => {
+      const content = [
+        { type: 'text', text: 'Check this image' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('Check this image');
+    });
+
+    test('should strip video when model does not support Video modality', () => {
+      const content = [
+        { type: 'text', text: 'Watch this' },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('Watch this');
+    });
+
+    test('should strip image when no modalities specified (assumes text-only)', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content);
+      expect(result).toBe('Check this');
+    });
+
+    test('should strip image when empty modalities array (assumes text-only)', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, []);
+      expect(result).toBe('Check this');
+    });
+
+    test('should strip all unsupported media types', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+        { type: 'text', text: 'World' },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('Hello\nWorld');
+    });
+
+    test('should return empty string when only unsupported media with no text', () => {
+      const content = [
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('');
+    });
+  });
+
+  describe('modality case insensitivity', () => {
+    test('should match modalities case-insensitively', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      expect(normalizeContentForApi(content, ['text', 'image'])).toEqual(content);
+      expect(normalizeContentForApi(content, ['TEXT', 'IMAGE'])).toEqual(content);
+      expect(normalizeContentForApi(content, ['Text', 'Image'])).toEqual(content);
+    });
+  });
+
+  describe('edge cases', () => {
+    test('should handle null content', () => {
+      expect(normalizeContentForApi(null)).toBe('');
+    });
+
+    test('should handle undefined content', () => {
+      expect(normalizeContentForApi(undefined)).toBe('');
+    });
+
+    test('should handle number content', () => {
+      expect(normalizeContentForApi(123)).toBe('123');
+    });
+
+    test('should handle empty array', () => {
+      expect(normalizeContentForApi([])).toEqual([]);
+    });
+
+    test('should handle array with no text or media parts', () => {
+      const content = [
+        { type: 'unknown', data: 'something' }
+      ];
+      expect(normalizeContentForApi(content)).toEqual(content);
     });
   });
 });

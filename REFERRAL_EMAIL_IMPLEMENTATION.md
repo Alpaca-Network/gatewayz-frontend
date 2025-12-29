@@ -174,8 +174,8 @@ The Gatewayz Team
 │  │  Thank you for joining through a referral link          │  │
 │  │                                                         │  │
 │  │  Your Referral Bonus                                    │  │
-│  │  +$10 in bonus credits                                  │  │
-│  │  Plus your $10 in trial credits = $20 total             │  │
+│  │  +$3 in bonus credits                                   │  │
+│  │  Plus your $3 in trial credits = $6 total               │  │
 │  │                                                         │  │
 │  │  [Explore Platform] [Share & Earn] [Add Payment]       │  │
 │  └─────────────────────────────────────────────────────────┘  │

@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import posthog from 'posthog-js';
 import { Code2, Calculator, Sparkles } from 'lucide-react';
+import { FEATURED_MODELS } from '@/lib/config';
 
 export default function StartChatPage() {
   const router = useRouter();
@@ -40,7 +41,8 @@ export default function StartChatPage() {
       title: "Code",
       description: "Best for programming tasks",
       prompt: "Help me write a Python function to process CSV files",
-      model: "Claude Sonnet 4.5",
+      model: FEATURED_MODELS.code.id,
+      modelDisplayName: FEATURED_MODELS.code.displayName,
       color: "blue",
       bgColor: "bg-blue-50 dark:bg-blue-950/20",
       borderColor: "border-blue-200 dark:border-blue-800",
@@ -53,7 +55,8 @@ export default function StartChatPage() {
       title: "Math",
       description: "Best for calculations & reasoning",
       prompt: "Solve this calculus problem: find the derivative of x³ + 2x² - 5x + 3",
-      model: "google/gemini-2.5-flash",
+      model: FEATURED_MODELS.math.id,
+      modelDisplayName: FEATURED_MODELS.math.displayName,
       color: "purple",
       bgColor: "bg-purple-50 dark:bg-purple-950/20",
       borderColor: "border-purple-200 dark:border-purple-800",
@@ -66,7 +69,8 @@ export default function StartChatPage() {
       title: "General",
       description: "Best for everyday questions",
       prompt: "What are the key benefits of renewable energy?",
-      model: "openai/chatgpt-4o-latest",
+      model: FEATURED_MODELS.general.id,
+      modelDisplayName: FEATURED_MODELS.general.displayName,
       color: "green",
       bgColor: "bg-green-50 dark:bg-green-950/20",
       borderColor: "border-green-200 dark:border-green-800",
@@ -148,7 +152,7 @@ export default function StartChatPage() {
                   "{option.prompt}"
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Powered by <strong>{option.model}</strong>
+                  Powered by <strong>{option.modelDisplayName}</strong>
                 </p>
               </button>
             ))}

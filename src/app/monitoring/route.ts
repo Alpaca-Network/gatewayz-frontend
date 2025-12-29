@@ -21,11 +21,12 @@ const CORS_HEADERS = {
 };
 
 // Rate limiting configuration
-// AGGRESSIVE: Reduced to prevent 429 errors from Sentry
+// EXTREMELY AGGRESSIVE: Further reduced to prevent 429 errors from Sentry
+// Client now sends max 2 events/min + 3 transactions/min = 5 total/min
 const RATE_LIMIT_CONFIG = {
-  maxRequestsPerMinute: 15, // REDUCED from 50 - client sends max 10/min, allow some buffer
+  maxRequestsPerMinute: 8, // REDUCED from 15 - client sends max 5/min, small buffer
   windowMs: 60000, // 1 minute window
-  maxRequestsPerSecond: 2,  // REDUCED from 5 - prevent bursts
+  maxRequestsPerSecond: 1,  // REDUCED from 2 - strict burst prevention
   secondWindowMs: 1000,
 };
 

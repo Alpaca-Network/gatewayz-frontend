@@ -207,9 +207,9 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
   });
 
   describe('Streaming Operations', () => {
-    it('should have very long timeout for streaming responses', () => {
-      // 5 minutes for initial streaming response
-      expect(TIMEOUT_CONFIG.streaming.initial).toBe(300000);
+    it('should have 1 minute max timeout for streaming responses', () => {
+      // 1 minute max for initial streaming response - if model doesn't respond, it's likely unavailable
+      expect(TIMEOUT_CONFIG.streaming.initial).toBe(60000);
     });
 
     it('should have chunk timeout for continued streaming', () => {
@@ -217,10 +217,10 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
       expect(TIMEOUT_CONFIG.streaming.chunk).toBe(30000);
     });
 
-    it('should allow long-running model inference', () => {
-      // Some models take a while to generate responses
-      expect(TIMEOUT_CONFIG.streaming.initial).toBeGreaterThan(
-        TIMEOUT_CONFIG.chat.messagesSave * 10
+    it('should have reasonable timeout for model inference', () => {
+      // Streaming timeout should be reasonable but not excessively long
+      expect(TIMEOUT_CONFIG.streaming.initial).toBeGreaterThanOrEqual(
+        TIMEOUT_CONFIG.chat.messagesSave
       );
     });
   });
