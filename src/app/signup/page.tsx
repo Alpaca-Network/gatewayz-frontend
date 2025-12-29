@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Gift } from 'lucide-react';
 import { storeReferralCode } from '@/lib/referral';
+import { trackTwitterSignupClick } from '@/components/analytics/twitter-pixel';
 
 function SignupContent() {
   const searchParams = useSearchParams();
@@ -45,6 +46,9 @@ function SignupContent() {
       router.push('/chat');
       return;
     }
+
+    // Track Twitter conversion for ad attribution
+    trackTwitterSignupClick();
 
     login();
   };
@@ -120,7 +124,7 @@ function SignupContent() {
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
-                $10 in free trial credits
+                $3 in free trial credits
               </li>
               {refCode && (
                 <li className="flex items-center gap-2">

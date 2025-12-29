@@ -36,16 +36,6 @@ jest.mock('ai', () => {
   return {
     streamText: jest.fn(),
     convertToCoreMessages: jest.fn((messages: unknown[]) => messages),
-    // Mock convertToModelMessages to simulate the AI SDK's conversion behavior
-    // In real usage, this strips UI-specific fields and converts to ModelMessage format
-    convertToModelMessages: jest.fn((messages: unknown[]) => {
-      // Simulate the conversion by returning messages with only role and content
-      if (!Array.isArray(messages)) return messages;
-      return messages.map((msg: any) => ({
-        role: msg.role,
-        content: msg.content,
-      }));
-    }),
     APICallError: MockAPICallError,
   };
 });
@@ -832,41 +822,27 @@ describe('AI SDK Completions Route', () => {
     });
   });
 
-  describe('UIMessage to ModelMessage Conversion', () => {
-    it('should convert UIMessage format to ModelMessage format', async () => {
-      const { streamText, convertToModelMessages } = require('ai');
+  describe('Message Format Conversion', () => {
+    it('should convert OpenAI format messages with image_url to AI SDK format', async () => {
+      const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
+          yield { type: 'text-delta', text: 'I see the image' };
           yield { type: 'finish', finishReason: 'stop' };
         })(),
       });
 
-      // UIMessage format with additional UI-specific properties
-      const uiMessages = [
-        {
-          id: 'msg-1',
-          role: 'user',
-          content: 'Hello',
-          createdAt: new Date().toISOString(),
-          // UI-specific properties that should be stripped
-          experimental_attachments: [],
-        },
-        {
-          id: 'msg-2',
-          role: 'assistant',
-          content: 'Hi there!',
-          createdAt: new Date().toISOString(),
-          // UI-specific properties
-          toolInvocations: [],
-        },
-      ];
-
       const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
         method: 'POST',
         body: JSON.stringify({
-          model: 'gpt-4',
-          messages: uiMessages,
+          model: 'gpt-4o',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What is in this image?' },
+              { type: 'image_url', image_url: { url: 'https://example.com/image.jpg' } }
+            ]
+          }],
           apiKey: 'test-key',
         }),
       });
@@ -874,15 +850,58 @@ describe('AI SDK Completions Route', () => {
       const response = await POST(request);
       expect(response.status).toBe(200);
 
-      // Verify convertToModelMessages was called
-      expect(convertToModelMessages).toHaveBeenCalled();
-
-      // Verify the converted messages were passed to streamText
+      // Verify streamText was called with converted messages
       expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      expect(callArgs.messages).toBeDefined();
+      expect(callArgs.messages.length).toBe(1);
+      expect(callArgs.messages[0].role).toBe('user');
+      expect(Array.isArray(callArgs.messages[0].content)).toBe(true);
+
+      const content = callArgs.messages[0].content;
+      expect(content[0].type).toBe('text');
+      expect(content[0].text).toBe('What is in this image?');
+      expect(content[1].type).toBe('image');
+      expect(content[1].image).toBeInstanceOf(URL);
+      expect(content[1].image.toString()).toBe('https://example.com/image.jpg');
     });
 
-    it('should handle messages with providerMetadata', async () => {
-      const { streamText, convertToModelMessages } = require('ai');
+    it('should handle string content without modification', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Hello!' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hi there!' },
+            { role: 'user', content: 'How are you?' }
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      expect(callArgs.messages).toEqual([
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there!' },
+        { role: 'user', content: 'How are you?' }
+      ]);
+    });
+
+    it('should handle system messages with array content', async () => {
+      const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Response' };
@@ -890,85 +909,32 @@ describe('AI SDK Completions Route', () => {
         })(),
       });
 
-      // Messages with providerMetadata that could cause issues
-      const messagesWithMetadata = [
-        {
-          role: 'user',
-          content: 'Test message',
-          providerMetadata: { someField: 'value' },
-        },
-      ];
-
       const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
         method: 'POST',
         body: JSON.stringify({
           model: 'gpt-4',
-          messages: messagesWithMetadata,
+          messages: [{
+            role: 'system',
+            content: [
+              { type: 'text', text: 'You are a helpful assistant.' },
+              { type: 'text', text: 'Be concise.' }
+            ]
+          }],
           apiKey: 'test-key',
         }),
       });
 
       const response = await POST(request);
       expect(response.status).toBe(200);
-      expect(convertToModelMessages).toHaveBeenCalled();
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      expect(callArgs.messages[0].role).toBe('system');
+      expect(callArgs.messages[0].content).toBe('You are a helpful assistant.\nBe concise.');
     });
 
-    it('should handle messages with tool results containing providerExecuted', async () => {
-      const { streamText, convertToModelMessages } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Tool response' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      // Messages with tool call parts that could cause issues
-      const messagesWithToolCalls = [
-        {
-          role: 'user',
-          content: 'Use the tool',
-        },
-        {
-          role: 'assistant',
-          content: [
-            {
-              type: 'tool-call',
-              toolCallId: 'call-1',
-              toolName: 'test-tool',
-              args: { input: 'test' },
-              // This field can cause "Invalid prompt" errors
-              providerExecuted: null,
-            },
-          ],
-        },
-        {
-          role: 'tool',
-          content: [
-            {
-              type: 'tool-result',
-              toolCallId: 'call-1',
-              result: { output: 'result' },
-            },
-          ],
-        },
-      ];
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: messagesWithToolCalls,
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-      expect(convertToModelMessages).toHaveBeenCalled();
-    });
-
-    it('should deep clone messages before conversion to avoid reference issues', async () => {
-      const { streamText, convertToModelMessages } = require('ai');
+    it('should convert multiple text parts to single string for simpler format', async () => {
+      const { streamText } = require('ai');
       streamText.mockReturnValue({
         fullStream: (async function* () {
           yield { type: 'text-delta', text: 'Response' };
@@ -976,31 +942,61 @@ describe('AI SDK Completions Route', () => {
         })(),
       });
 
-      const originalMessages = [
-        {
-          role: 'user',
-          content: 'Test',
-          nested: { deep: { value: 'original' } },
-        },
-      ];
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Single text part' }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      // Single text part should be converted to string
+      expect(callArgs.messages[0].content).toBe('Single text part');
+    });
+
+    it('should skip unsupported media types gracefully', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
 
       const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
         method: 'POST',
         body: JSON.stringify({
           model: 'gpt-4',
-          messages: originalMessages,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Check this video' },
+              { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+              { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+            ]
+          }],
           apiKey: 'test-key',
         }),
       });
 
-      await POST(request);
+      const response = await POST(request);
+      expect(response.status).toBe(200);
 
-      // Verify convertToModelMessages was called with a deep-cloned copy
-      expect(convertToModelMessages).toHaveBeenCalled();
-      const passedMessages = convertToModelMessages.mock.calls[0][0];
-
-      // The passed messages should be a separate copy (due to JSON parse/stringify)
-      expect(passedMessages).toEqual(originalMessages);
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      // Video and audio should be skipped, only text remains
+      expect(callArgs.messages[0].content).toBe('Check this video');
     });
   });
 });
