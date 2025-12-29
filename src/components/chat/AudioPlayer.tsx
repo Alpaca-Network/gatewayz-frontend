@@ -100,7 +100,10 @@ export function AudioPlayer({
     const newVolume = value[0];
     audio.volume = newVolume;
     setVolume(newVolume);
-    setIsMuted(newVolume === 0);
+    // Also update audio.muted to unmute when volume is adjusted above 0
+    const shouldBeMuted = newVolume === 0;
+    audio.muted = shouldBeMuted;
+    setIsMuted(shouldBeMuted);
   }, []);
 
   // Toggle mute
@@ -153,13 +156,15 @@ export function AudioPlayer({
     document.body.removeChild(link);
   }, [src, title]);
 
-  // Reset state when src changes
+  // Reset state when src changes and reload audio
   useEffect(() => {
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
     setIsLoading(true);
     setError(null);
+    // Force the audio element to load the new source
+    audioRef.current?.load();
   }, [src]);
 
   // Audio event handlers
