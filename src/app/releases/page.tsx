@@ -15,6 +15,72 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
+    date: "December 28, 2025",
+    features: [
+      "Web Search Integration: Added real-time web search capability to chat with Tavily API integration, search results UI component, and toggle control",
+      "ChatGPT History Import: Import your ChatGPT conversations with drag-and-drop file upload, supporting both .zip and .json export formats with automatic memory extraction",
+      "AI Memory System: Added cross-session AI memory that learns user preferences from conversations, with a dedicated settings page to view and manage memories",
+      "Camera & Audio Recording: Camera button now opens device camera directly on mobile; audio button triggers live microphone recording with visual feedback",
+      "Attachment UI Redesign: Updated chat input with [+] button, larger input area, and prompt chips for improved UX",
+      "Image/Video Model Category: Added dedicated Image/Video section in model dropdown for easy multimodal model discovery",
+      "Auto-Switch to Multimodal: Automatically switches to a multimodal model when users upload images, videos, audio, or documents",
+      "Free Models List: Display all free models for users with updated backend and frontend support",
+      "Trial Credit System Overhaul: Restructured trial credits to $1/day with $5 total cap (3-day trial period)",
+    ],
+    bugFixes: [
+      {
+        category: "Backend Fixes",
+        items: [
+          "Fixed share chat API endpoints returning 404 errors",
+          "Added HTTP/2 retry logic and Featherless message sanitization",
+          "Restored 402 failover code and improved c10x model routing to Featherless",
+          "Fixed handling of missing rate_limit tables with improved error handling",
+          "Fixed gateway pricing issues in backend",
+          "Fixed Google Vertex model loading",
+          "Fixed DeepSeek model mapping",
+          "Fixed Privy email handling",
+          "Fixed Fireworks model ID fallback",
+          "Resolved composite key deduplication issues",
+          "Added 402 to failover codes for better provider switching",
+        ],
+      },
+      {
+        category: "Frontend Fixes",
+        items: [
+          "Eliminated N+1 API calls when fetching models for better performance",
+          "Fixed Privy passwordless network errors with graceful handling",
+          "Fixed PostHog provider loading issues",
+          "Fixed message format conversion",
+          "Updated chat dropdown to show \"Load all 10,000+ models\"",
+          "Fixed Invalid hook call error in PrivyProviderWrapper",
+          "Fixed crypto.randomUUID compatibility issues",
+          "Fixed Google gateway ID mismatch",
+        ],
+      },
+      {
+        category: "CI/CD Fixes",
+        items: [
+          "Added permissions and handling for null head_commit in workflows",
+          "Fixed SUBREPO_DISPATCH_TOKEN usage for submodule checkout",
+          "Added GitHub Actions workflow to auto-sync PR branches with main",
+          "Verified token access and refactored PR search in auto-merge",
+          "Sped up test-subrepos workflow",
+        ],
+      },
+    ],
+    infrastructure: [
+      "Multiple submodule updates to keep frontend and backend in sync",
+      "Added server-side tools documentation (TOOLS.md, TOOLS_IMPLEMENTATION.md)",
+      "LinkedIn Insight Tag integration",
+      "Improved API alignment with OpenAI docs for /messages and /responses endpoints",
+      "Added Statsig integration for frontend",
+    ],
+    documentation: [
+      "Added Visual Regression Testing guide with baseline steps",
+      "Added pending migrations documentation for missing rate limit tables",
+    ],
+  },
+  {
     date: "December 21, 2025",
     features: [
       "Share Chat with Unique URLs: Added ability to share chat conversations via unique URLs for easy collaboration and sharing",
