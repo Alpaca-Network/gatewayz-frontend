@@ -207,17 +207,6 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
-  // Filter out 429 rate limit errors - these are expected and handled gracefully
-  // by the UI (RateLimitHandler component) and don't need Sentry tracking
-  if (
-    errorMessageLower.includes('429') ||
-    errorMessageLower.includes('rate limit') ||
-    errorMessageLower.includes('too many requests')
-  ) {
-    console.debug('[Sentry] Filtered out 429 rate limit error (handled by UI)');
-    return true;
-  }
-
   // Filter out Next.js hydration errors from Google Ads parameters and dynamic content
   // These errors occur when SSR HTML doesn't match CSR due to:
   // - Google Ads query parameters (gad_source, gad_campaignid, gclid)
