@@ -15,6 +15,260 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
+    date: "December 28, 2025",
+    features: [
+      "Web Search Integration: Added real-time web search capability to chat with Tavily API integration, search results UI component, and toggle control",
+      "ChatGPT History Import: Import your ChatGPT conversations with drag-and-drop file upload, supporting both .zip and .json export formats with automatic memory extraction",
+      "AI Memory System: Added cross-session AI memory that learns user preferences from conversations, with a dedicated settings page to view and manage memories",
+      "Camera & Audio Recording: Camera button now opens device camera directly on mobile; audio button triggers live microphone recording with visual feedback",
+      "Attachment UI Redesign: Updated chat input with [+] button, larger input area, and prompt chips for improved UX",
+      "Image/Video Model Category: Added dedicated Image/Video section in model dropdown for easy multimodal model discovery",
+      "Auto-Switch to Multimodal: Automatically switches to a multimodal model when users upload images, videos, audio, or documents",
+      "Free Models List: Display all free models for users with updated backend and frontend support",
+      "Trial Credit System Overhaul: Restructured trial credits to $1/day with $5 total cap (3-day trial period)",
+    ],
+    bugFixes: [
+      {
+        category: "Backend Fixes",
+        items: [
+          "Fixed share chat API endpoints returning 404 errors",
+          "Added HTTP/2 retry logic and Featherless message sanitization",
+          "Restored 402 failover code and improved c10x model routing to Featherless",
+          "Fixed handling of missing rate_limit tables with improved error handling",
+          "Fixed gateway pricing issues in backend",
+          "Fixed Google Vertex model loading",
+          "Fixed DeepSeek model mapping",
+          "Fixed Privy email handling",
+          "Fixed Fireworks model ID fallback",
+          "Resolved composite key deduplication issues",
+          "Added 402 to failover codes for better provider switching",
+        ],
+      },
+      {
+        category: "Frontend Fixes",
+        items: [
+          "Eliminated N+1 API calls when fetching models for better performance",
+          "Fixed Privy passwordless network errors with graceful handling",
+          "Fixed PostHog provider loading issues",
+          "Fixed message format conversion",
+          "Updated chat dropdown to show \"Load all 10,000+ models\"",
+          "Fixed Invalid hook call error in PrivyProviderWrapper",
+          "Fixed crypto.randomUUID compatibility issues",
+          "Fixed Google gateway ID mismatch",
+        ],
+      },
+      {
+        category: "CI/CD Fixes",
+        items: [
+          "Added permissions and handling for null head_commit in workflows",
+          "Fixed SUBREPO_DISPATCH_TOKEN usage for submodule checkout",
+          "Added GitHub Actions workflow to auto-sync PR branches with main",
+          "Verified token access and refactored PR search in auto-merge",
+          "Sped up test-subrepos workflow",
+        ],
+      },
+    ],
+    infrastructure: [
+      "Multiple submodule updates to keep frontend and backend in sync",
+      "Added server-side tools documentation (TOOLS.md, TOOLS_IMPLEMENTATION.md)",
+      "LinkedIn Insight Tag integration",
+      "Improved API alignment with OpenAI docs for /messages and /responses endpoints",
+      "Added Statsig integration for frontend",
+    ],
+    documentation: [
+      "Added Visual Regression Testing guide with baseline steps",
+      "Added pending migrations documentation for missing rate limit tables",
+    ],
+  },
+  {
+    date: "December 21, 2025",
+    features: [
+      "Share Chat with Unique URLs: Added ability to share chat conversations via unique URLs for easy collaboration and sharing",
+      "Floating New Chat Button (Mobile): Added floating New Chat button for mobile users, hidden on /chat page for cleaner UX",
+      "Checkout & Confirmation Pages: Added checkout and confirmation pages for improved conversion tracking",
+      "Cerebras Model Support: Added complete Cerebras model support including Qwen-3-32b",
+      "Provider Pricing Audit System: Implemented dynamic provider pricing with 4-layer fallback across 4 providers, including standardized pricing registry",
+      "Privy User Reconciliation: Added scheduled user reconciliation tooling between Privy and Supabase with bulk API key regeneration support",
+      "Credit Package Updates: Updated credit page to three monthly tiers, removed Starter tier",
+    ],
+    bugFixes: [
+      {
+        category: "Mobile & Responsiveness",
+        items: [
+          "Fixed mobile chat responsiveness improvements",
+          "Fixed table scrolling improvements in frontend",
+          "Improved floating button visibility and z-index handling",
+        ],
+      },
+      {
+        category: "Model & Provider Fixes",
+        items: [
+          "Fixed Cerebras Qwen-3-32b chat functionality",
+          "Fixed Gemini model configuration (2.1-pro → 2.5-pro)",
+          "Fixed Google Vertex AI model initialization at startup",
+          "Fixed OneRouter models display with authenticated /v1/models endpoint",
+          "Removed Kimi-K2-Thinking from NEAR AI model lists",
+          "Fixed context_length default detection for 4096 token models",
+          "Preserved multimodal info and fixed context_length defaults",
+        ],
+      },
+      {
+        category: "Security Fixes",
+        items: [
+          "Fixed command injection vulnerability in validation scripts",
+          "Removed wildcard CORS configuration from OTEL collector",
+          "Improved wildcard detection and fixed false positives in validation",
+        ],
+      },
+      {
+        category: "API & Backend Fixes",
+        items: [
+          "Fixed API key generation to remove special characters for compatibility",
+          "Improved forbidden error messages in chat",
+          "Set default gateway to 'all' for /models endpoint",
+          "Fixed API key verification improvements",
+          "Fixed SQL query to return both users in verification",
+        ],
+      },
+      {
+        category: "Frontend Fixes",
+        items: [
+          "Fixed referred user chat send issue",
+          "Eliminated N+1 API calls when fetching models",
+          "Improved Sentry error visibility with balanced rate limits",
+          "Added early error suppressor for Ethereum property conflicts",
+          "Fixed JSX structure issues",
+        ],
+      },
+      {
+        category: "CI/CD Fixes",
+        items: [
+          "Increased Node.js memory limit in Vercel build steps",
+          "Added write permissions for submodule update job",
+          "Fixed Jest mock hoisting for FloatingNewChatButton tests",
+        ],
+      },
+    ],
+    infrastructure: [
+      "Release email notification system with Resend API integration",
+      "Provider pricing audit implementation with comprehensive documentation",
+      "Multiple submodule updates to keep frontend and backend in sync",
+      "Improved pricing enrichment validation and logging",
+    ],
+    documentation: [
+      "Added visibility debugging guide for FloatingNewChatButton",
+      "Added comprehensive pricing audit documentation",
+      "Fixed documentation paths and removed time-based estimates",
+    ],
+  },
+  {
+    date: "December 14, 2025",
+    features: [
+      "Incognito Mode: Added incognito mode with NEAR models (GLM-4.6 by default)",
+      "Visual Regression Testing: Added Playwright-based visual regression testing",
+      "Model Dropdown Virtualization: Optimized model dropdown with virtualization for better performance",
+      "Rate Limit Retry Button: Added retry button UI when users encounter rate limit (429) errors",
+      "Test Coverage Integration: Added Codecov integration for frontend and backend test coverage",
+    ],
+    bugFixes: [
+      {
+        category: "Streaming Fixes",
+        items: [
+          "Fixed SSE streaming buffering issues",
+          "Fixed StopIteration error in streaming (PEP 479 compliance)",
+          "Reduced streaming timeout from 10 minutes to 1 minute max",
+        ],
+      },
+      {
+        category: "Model & Routing Fixes",
+        items: [
+          "Fixed NEAR model routing and improved OpenRouter error logging",
+          "Fixed auto-router bad request issues",
+          "Fixed trial validation in backend",
+        ],
+      },
+      {
+        category: "Frontend Fixes",
+        items: [
+          "Fixed pricing/contact links",
+          "Fixed speech recognition error handling and cleanup",
+        ],
+      },
+    ],
+    infrastructure: [],
+    documentation: [],
+  },
+  {
+    date: "December 7, 2025",
+    features: [
+      "Auto-Merge Workflow: Added GitHub Actions workflow to automatically merge subrepo PRs when the corresponding monorepo PR is merged",
+      "New Chat Button Styling: Updated New Chat button styling in the sidebar for improved UX",
+      "PR Preview Deployments: Added GitHub Actions workflow for automated PR preview deployments with Vercel and Railway integration",
+      "Document Upload: Added document upload feature to chat interface",
+      "Voice Transcription: Added voice transcription feature to frontend",
+    ],
+    bugFixes: [
+      {
+        category: "Security Fixes",
+        items: [
+          "Addressed security vulnerabilities in auto-merge workflow",
+          "Fixed CVE-2025-55182 in frontend dependencies",
+          "Fixed chat failure for unauthenticated users with invalid API key header",
+        ],
+      },
+      {
+        category: "Image Handling",
+        items: [
+          "Fixed image compression improvements in frontend",
+          "Fixed image load failure handling and multimodal chat content",
+          "Fixed image attachment errors",
+        ],
+      },
+      {
+        category: "Streaming Improvements",
+        items: [
+          "Optimized streaming startup time",
+          "Fixed anonymous user streaming errors",
+          "Added adaptive timeouts for mobile network support",
+          "Fixed chat streaming optimizations",
+        ],
+      },
+      {
+        category: "Provider & Model Fixes",
+        items: [
+          "Fixed Google, Nebius, and Alpaca model listings in backend",
+          "Fixed Alibaba models loading",
+          "Fixed gateway model counts showing zero",
+          "Fixed INVALID_API_KEY error handling",
+        ],
+      },
+      {
+        category: "CI/CD Fixes",
+        items: [
+          "Improved change detection for PR merge commits in deploy workflow",
+          "Fixed npm ci failures with package-lock.json updates",
+          "Added checks to detect dirty git submodules in workflows",
+          "Fixed Node.js heap memory limits for frontend preview builds",
+          "Added pnpm setup for frontend preview deployment",
+        ],
+      },
+      {
+        category: "Frontend Fixes",
+        items: [
+          "Fixed bullet alignment in UI components",
+          "Fixed Redis graceful degradation",
+          "Fixed PostHog SDK v6.x compatibility",
+        ],
+      },
+    ],
+    infrastructure: [
+      "Multiple submodule updates to keep frontend and backend in sync",
+      "Improved submodule consistency and conflict resolution",
+      "Enhanced deployment workflow reliability with symmetric empty checks and push retry logic",
+    ],
+    documentation: [],
+  },
+  {
     date: "December 5, 2025",
     features: [
       "Streaming Standardization: Implemented unified streaming response format across the backend with stream_normalizer to standardize all provider responses",

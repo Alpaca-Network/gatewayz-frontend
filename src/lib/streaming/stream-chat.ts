@@ -76,8 +76,27 @@ async function handleHttpError(
   // Handle specific status codes
   switch (response.status) {
     case 400: {
+      // Extract error message from various response formats:
+      // - Direct: errorData.detail, errorData.message
+      // - Nested error object: errorData.error?.message
+      // - Wrapped by API proxy: errorData.errorData?.detail, errorData.errorData?.message
       const errorMessage =
-        errorData.detail || errorData.error?.message || errorData.message || 'Bad request';
+        errorData.detail ||
+        errorData.error?.message ||
+        errorData.message ||
+        errorData.errorData?.detail ||
+        errorData.errorData?.message ||
+        errorData.errorData?.error?.message ||
+        'Bad request';
+
+      devError('400 Bad Request details:', {
+        detail: errorData.detail,
+        message: errorData.message,
+        errorMessage: errorData.error?.message,
+        nestedDetail: errorData.errorData?.detail,
+        nestedMessage: errorData.errorData?.message,
+        fullErrorData: errorData,
+      });
 
       if (
         errorMessage.toLowerCase().includes('trial has expired') ||
@@ -227,6 +246,7 @@ async function handleHttpError(
         `Server error: ${errorData.detail || errorData.message || 'Internal server error'}. Please try again.`
       );
 
+    case 502:
     case 503:
     case 504: {
       if (retryCount < maxRetries) {
@@ -415,6 +435,24 @@ export async function* streamChatResponse(
               type: chunk.error.type,
               code: chunk.error.code,
             });
+          }
+
+          // Handle tool call events (server executing a tool)
+          if (chunk.type === 'tool_call' && chunk.toolCall) {
+            yield {
+              type: 'tool_call',
+              toolCall: chunk.toolCall,
+            };
+            continue;
+          }
+
+          // Handle tool result events (tool execution completed)
+          if (chunk.type === 'tool_result' && chunk.toolResult) {
+            yield {
+              type: 'tool_result',
+              toolResult: chunk.toolResult,
+            };
+            continue;
           }
 
           if (chunk.content || chunk.reasoning) {

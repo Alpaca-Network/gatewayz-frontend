@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, Pencil, Lock, Unlock, Shield, Plus } from "lucide-react";
+import { Menu, Pencil, Lock, Unlock, Shield, Plus, ImageIcon, BarChart3, Code2, Lightbulb, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { ChatSidebar } from "./ChatSidebar";
@@ -13,6 +13,7 @@ import { ModelSelect } from "@/components/chat/model-select";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { getApiKey } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
@@ -20,6 +21,16 @@ import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateSession } from "@/lib/hooks/use-chat-queries";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
@@ -41,6 +52,14 @@ const ALL_PROMPTS = [
     { title: "What's the difference between HTTP and HTTPS?", subtitle: "Learn about web security basics" },
 ];
 
+// Quick action prompt chips
+const PROMPT_CHIPS = [
+    { label: "Create image", icon: ImageIcon, prompt: "Create an image of " },
+    { label: "Analyze data", icon: BarChart3, prompt: "Analyze the following data: " },
+    { label: "Code", icon: Code2, prompt: "Write code to " },
+    { label: "Brainstorm", icon: Lightbulb, prompt: "Brainstorm ideas for " },
+];
+
 // Fisher-Yates shuffle algorithm
 function shuffleArray<T>(array: T[]): T[] {
     const shuffled = [...array];
@@ -51,20 +70,40 @@ function shuffleArray<T>(array: T[]): T[] {
     return shuffled;
 }
 
-function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => void }) {
+function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect: (txt: string) => void; onPromptChipSelect?: (prompt: string) => void }) {
     // Select 4 random prompts on mount (useMemo ensures consistency during render)
     const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
 
     // Note: We no longer show a loading spinner here because ChatLayout immediately
     // switches to MessageList with optimistic UI when a prompt is clicked.
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
-             <h1 className="text-2xl sm:text-4xl font-bold mb-8 text-center">What's On Your Mind?</h1>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl w-full">
+        <div className="flex-1 flex flex-col items-center justify-start sm:justify-center p-4 pt-6 sm:pt-4 overflow-y-auto">
+             <h1 className="text-2xl sm:text-4xl font-bold mb-4 sm:mb-6 text-center">What can I help with?</h1>
+
+             {/* Prompt chips like ChatGPT */}
+             <div className="flex flex-wrap justify-center gap-2 mb-6 sm:mb-8 max-w-2xl">
+                 {PROMPT_CHIPS.map((chip) => (
+                     <button
+                        key={chip.label}
+                        onClick={() => onPromptChipSelect?.(chip.prompt)}
+                        className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
+                     >
+                         <chip.icon className="h-4 w-4" />
+                         {chip.label}
+                     </button>
+                 ))}
+                 <button
+                    className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
+                 >
+                     More
+                 </button>
+             </div>
+
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-4xl w-full">
                  {prompts.map((p) => (
                      <Card
                         key={p.title}
-                        className="p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
+                        className="p-3 sm:p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
                         onClick={() => onPromptSelect(p.title)}
                      >
                          <p className="font-medium text-sm">{p.title}</p>
@@ -72,7 +111,7 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
                      </Card>
                  ))}
              </div>
-             <a href="/releases" className="mt-8 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+             <a href="/releases" className="mt-6 sm:mt-8 mb-4 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
                  What's new
              </a>
         </div>
@@ -96,6 +135,9 @@ export function ChatLayout() {
 
    // Track if user has clicked a prompt (to immediately hide welcome screen)
    const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
+   // Share privacy dialog state
+   const [showSharePrivacyDialog, setShowSharePrivacyDialog] = useState(false);
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
 
@@ -258,6 +300,15 @@ export function ChatLayout() {
        });
    };
 
+   // Handle prompt chip selection - just sets input value without sending, allows user to complete the prompt
+   const handlePromptChipSelect = (prompt: string) => {
+       setInputValue(prompt);
+       // Focus the input field so user can continue typing
+       if (typeof window !== 'undefined' && (window as any).__chatInputFocus) {
+           (window as any).__chatInputFocus();
+       }
+   };
+
    // Handle retry for failed messages (e.g., rate limit errors)
    // This removes both the failed assistant message AND the user message, then resends
    const handleRetry = useCallback(() => {
@@ -323,10 +374,204 @@ export function ChatLayout() {
        (window as any).__chatInputSend();
    }, [activeSessionId, activeMessages, queryClient, setInputValue]);
 
-   // When logged out, always show welcome screen (ignore cached messages and activeSessionId)
-   // When logged in, show welcome screen only if no active session or no messages after loading
-   // ALSO hide welcome screen immediately when a prompt is clicked (pendingPrompt is set)
-   const showWelcomeScreen = !pendingPrompt && (!isAuthenticated || !activeSessionId || (!messagesLoading && activeMessages.length === 0));
+   // Handle regenerate - re-send the last user message to get a new response
+   const handleRegenerate = useCallback(() => {
+       if (!activeSessionId || activeMessages.length < 2) return;
+
+       // Find the last user message
+       const lastAssistantIndex = activeMessages.length - 1;
+       const lastUserIndex = lastAssistantIndex - 1;
+       const lastUserMessage = activeMessages[lastUserIndex];
+       const lastAssistantMessage = activeMessages[lastAssistantIndex];
+
+       if (lastUserMessage?.role !== 'user' || lastAssistantMessage?.role !== 'assistant') {
+           console.warn('[ChatLayout] Unexpected message structure for regenerate');
+           return;
+       }
+
+       // Don't regenerate while streaming
+       if (lastAssistantMessage.isStreaming) {
+           console.warn('[ChatLayout] Cannot regenerate while message is still streaming');
+           return;
+       }
+
+       // Extract text content
+       let userContent = '';
+       if (typeof lastUserMessage.content === 'string') {
+           userContent = lastUserMessage.content;
+       } else if (Array.isArray(lastUserMessage.content)) {
+           userContent = lastUserMessage.content
+               .filter((c: any) => c.type === 'text' && c.text)
+               .map((c: any) => c.text)
+               .join('');
+       }
+
+       if (!userContent.trim()) return;
+
+       // Check if __chatInputSend is available
+       if (typeof window === 'undefined' || !(window as any).__chatInputSend) {
+           console.warn('[ChatLayout] __chatInputSend not available, cannot regenerate');
+           return;
+       }
+
+       // Remove BOTH the user message AND the assistant message from cache
+       // This prevents duplicate user messages when handleSend adds the message again
+       queryClient.setQueryData(['chat-messages', activeSessionId], (old: any[] | undefined) => {
+           if (!old || old.length < 2) return old;
+           return old.slice(0, -2);
+       });
+
+       // Set the input and re-send
+       setInputValue(userContent);
+       (window as any).__chatInputSend();
+   }, [activeSessionId, activeMessages, queryClient, setInputValue]);
+
+   // Handle feedback - like a message
+   const handleLike = useCallback(async (messageId: number) => {
+       const apiKey = getApiKey();
+       const message = activeMessages.find(m => m.id === messageId);
+
+       try {
+           const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+               method: 'POST',
+               headers: {
+                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                   feedback_type: 'thumbs_up',
+                   session_id: activeSessionId,
+                   message_id: messageId,
+                   model: message?.model,
+                   rating: 5,
+                   metadata: {
+                       response_content: typeof message?.content === 'string' ? message.content : undefined
+                   }
+               })
+           });
+
+           if (!response.ok) {
+               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+           }
+
+           toast({
+               title: "Feedback received",
+               description: "Thanks for the positive feedback!",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to submit feedback:', error);
+           toast({
+               title: "Feedback failed",
+               description: "Unable to submit feedback. Please try again.",
+               variant: "destructive",
+           });
+       }
+   }, [activeSessionId, activeMessages, toast]);
+
+   // Handle feedback - dislike a message
+   const handleDislike = useCallback(async (messageId: number) => {
+       const apiKey = getApiKey();
+       const message = activeMessages.find(m => m.id === messageId);
+
+       try {
+           const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
+               method: 'POST',
+               headers: {
+                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                   feedback_type: 'thumbs_down',
+                   session_id: activeSessionId,
+                   message_id: messageId,
+                   model: message?.model,
+                   rating: 1,
+                   metadata: {
+                       response_content: typeof message?.content === 'string' ? message.content : undefined
+                   }
+               })
+           });
+
+           if (!response.ok) {
+               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+           }
+
+           toast({
+               title: "Feedback received",
+               description: "Thanks for letting us know. We'll work to improve.",
+           });
+       } catch (error) {
+           console.error('[ChatLayout] Failed to submit feedback:', error);
+           toast({
+               title: "Feedback failed",
+               description: "Unable to submit feedback. Please try again.",
+               variant: "destructive",
+           });
+       }
+   }, [activeSessionId, activeMessages, toast]);
+
+   // Handle share - create and copy shareable link
+   // Note: messageId parameter is kept for interface compatibility with MessageList,
+   // but we share the entire session (not individual messages)
+   const handleShare = useCallback(async (messageId: number) => {
+       if (!activeSessionId) {
+           toast({
+               title: "Unable to share",
+               description: "No active chat session.",
+               variant: "destructive",
+           });
+           return;
+       }
+
+       // Show privacy warning dialog (messageId not used in actual sharing)
+       setShowSharePrivacyDialog(true);
+   }, [activeSessionId, toast]);
+
+   // Execute share after user confirms privacy warning
+   const executeShare = useCallback(async () => {
+       try {
+           if (!activeSessionId) {
+               toast({
+                   title: "Unable to share",
+                   description: "No active chat session.",
+                   variant: "destructive",
+               });
+               return;
+           }
+           // Import the share utility function
+           const { createShareLink, copyShareUrlToClipboard } = await import('@/lib/share-chat');
+
+           // Create a shareable link for the entire chat session
+           const result = await createShareLink({
+               sessionId: activeSessionId,
+           });
+
+           if (!result.success || !result.share_url) {
+               throw new Error(result.error || 'Failed to create share link');
+           }
+
+           // Copy the share URL to clipboard
+           await copyShareUrlToClipboard(result.share_url, toast);
+
+       } catch (error) {
+           console.error('[ChatLayout] Failed to create share link:', error);
+           toast({
+               title: "Share failed",
+               description: "Unable to create share link. Please try again.",
+               variant: "destructive",
+           });
+       } finally {
+           // Clean up
+           setShowSharePrivacyDialog(false);
+       }
+   }, [activeSessionId, toast]);
+
+   // Show welcome screen only when:
+   // 1. No pending prompt (user hasn't clicked a starter prompt)
+   // 2. AND either no active session OR (not loading AND no messages)
+   // This applies to both authenticated and guest users to ensure the welcome screen
+   // disappears when a message is sent or a prompt is clicked
+   const showWelcomeScreen = !pendingPrompt && (!activeSessionId || (!messagesLoading && activeMessages.length === 0));
 
    // Handle creating a new chat session (for mobile new chat button)
    const handleCreateNewChat = useCallback(async () => {
@@ -470,7 +715,7 @@ export function ChatLayout() {
               {/* Main Content */}
               <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
                   {showWelcomeScreen ? (
-                      <WelcomeScreen onPromptSelect={handlePromptSelect} />
+                      <WelcomeScreen onPromptSelect={handlePromptSelect} onPromptChipSelect={handlePromptChipSelect} />
                   ) : (
                       <MessageList
                         sessionId={activeSessionId}
@@ -478,6 +723,10 @@ export function ChatLayout() {
                         isLoading={messagesLoading}
                         pendingPrompt={pendingPrompt}
                         onRetry={handleRetry}
+                        onRegenerate={handleRegenerate}
+                        onLike={handleLike}
+                        onDislike={handleDislike}
+                        onShare={handleShare}
                       />
                   )}
                </div>
@@ -487,6 +736,39 @@ export function ChatLayout() {
                     <ChatInput />
                </div>
            </div>
+
+           {/* Privacy Warning Dialog for Sharing */}
+           <AlertDialog open={showSharePrivacyDialog} onOpenChange={setShowSharePrivacyDialog}>
+             <AlertDialogContent>
+               <AlertDialogHeader>
+                 <AlertDialogTitle>Share this conversation?</AlertDialogTitle>
+                 <AlertDialogDescription className="space-y-2">
+                   <p>
+                     Anyone with the link will be able to view the entire conversation, including all messages and responses.
+                   </p>
+                   <p className="font-medium text-foreground">
+                     Please ensure your conversation doesn't contain:
+                   </p>
+                   <ul className="list-disc list-inside space-y-1 text-sm">
+                     <li>Personal information (names, emails, phone numbers)</li>
+                     <li>Passwords or API keys</li>
+                     <li>Confidential or sensitive data</li>
+                     <li>Private business information</li>
+                   </ul>
+                 </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                 <AlertDialogCancel onClick={() => {
+                   setShowSharePrivacyDialog(false);
+                 }}>
+                   Cancel
+                 </AlertDialogCancel>
+                 <AlertDialogAction onClick={executeShare}>
+                   I understand, share anyway
+                 </AlertDialogAction>
+               </AlertDialogFooter>
+             </AlertDialogContent>
+           </AlertDialog>
        </div>
    )
 }

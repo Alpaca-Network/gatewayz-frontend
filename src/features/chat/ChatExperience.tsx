@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { Plus, Send, Edit3, Trash2, Loader2, MessageSquare, Check } from "lucide-react";
+import { Plus, Send, Edit3, Trash2, Loader2, MessageSquare, Check, Search } from "lucide-react";
 
 import { useChatController } from "./useChatController";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,23 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { useToast } from "@/hooks/use-toast";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import type { ModelOption } from "@/components/chat/model-select";
+
+// Helper to extract text from multimodal content
+function getTextFromContent(content: string | Array<{ type: string; text?: string }>): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .filter((c) => c.type === 'text' && c.text)
+      .map((c) => c.text)
+      .join('');
+  }
+  return '';
+}
 
 const ModelSelect = dynamic(() => import("@/components/chat/model-select").then((m) => m.ModelSelect), {
   ssr: false,
@@ -52,6 +68,7 @@ export function ChatExperience() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [selectedModel, setSelectedModel] = useState<ModelOption | null>(DEFAULT_MODEL);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(false);
 
   useEffect(() => {
     if (!error) return;
@@ -64,7 +81,7 @@ export function ChatExperience() {
   const handleSend = async (value?: string) => {
     const payload = (value ?? input).trim();
     if (!payload) return;
-    await sendMessage(payload, selectedModel);
+    await sendMessage(payload, selectedModel, { enableWebSearch: webSearchEnabled });
     setInput("");
   };
 
@@ -180,6 +197,23 @@ export function ChatExperience() {
             {loadingMessages && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </div>
           <div className="ml-auto flex items-center gap-3">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-2">
+                    <Search className={`h-4 w-4 ${webSearchEnabled ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <Switch
+                      checked={webSearchEnabled}
+                      onCheckedChange={setWebSearchEnabled}
+                      aria-label="Enable web search"
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Enable web search for current information</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} />
             <Button variant="outline" onClick={() => createSession()}>
               <Plus className="mr-2 h-4 w-4" /> New chat
@@ -211,15 +245,27 @@ export function ChatExperience() {
                 </CardContent>
               </Card>
             ) : (
-              activeMessages.map((msg) => (
-                <ChatMessage
-                  key={msg.id}
-                  role={msg.role}
-                  content={msg.content}
-                  isStreaming={msg.isStreaming}
-                  model={msg.model}
-                />
-              ))
+              activeMessages.map((msg, idx) => {
+                const isLastAssistant = msg.role === 'assistant' && idx === activeMessages.length - 1;
+                return (
+                  <ChatMessage
+                    key={msg.id}
+                    role={msg.role}
+                    content={msg.content}
+                    isStreaming={msg.isStreaming}
+                    model={msg.model}
+                    isSearching={msg.isSearching}
+                    searchQuery={msg.searchQuery}
+                    searchResults={msg.searchResults}
+                    searchError={msg.searchError}
+                    onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
+                    onLike={msg.role === 'assistant' ? () => console.log('Liked message:', msg.id) : undefined}
+                    onDislike={msg.role === 'assistant' ? () => console.log('Disliked message:', msg.id) : undefined}
+                    onShare={msg.role === 'assistant' ? () => navigator.clipboard.writeText(getTextFromContent(msg.content)) : undefined}
+                    onRegenerate={isLastAssistant && !msg.isStreaming ? () => console.log('Regenerate:', msg.id) : undefined}
+                  />
+                );
+              })
             )}
             {sending && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

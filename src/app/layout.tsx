@@ -14,6 +14,7 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
+import { TwitterPixel } from '@/components/analytics/twitter-pixel';
 import { SessionInitializer } from '@/components/SessionInitializer';
 import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-restorer';
 import { GTMLoader } from '@/components/analytics/gtm-loader';
@@ -23,6 +24,8 @@ import { ReferralBonusDialog } from '@/components/dialogs/referral-bonus-dialog'
 import { SafeStorageShim } from '@/components/safe-storage-shim';
 import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
+import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
+import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -87,12 +90,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
-      {/* ... (head content) */}
+      <head>
+        {/* Early error suppressor must run before wallet extensions inject ethereum */}
+        <EarlyErrorSuppressor />
+      </head>
         <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
           <SafeStorageShim />
         <ErrorSuppressor />
         {/* ... (script) */}
         <GoogleAnalytics />
+        <TwitterPixel />
         <ThemeProvider
           defaultTheme="system"
           storageKey="ui-theme"
@@ -125,6 +132,7 @@ export default function RootLayout({
                 <TrialCreditsNotice />
                 <ReferralBonusDialog />
                 <ReferralToast />
+                <FloatingNewChatButton />
                 <Analytics />
                 <SpeedInsights />
                 <WebVitalsReporter />

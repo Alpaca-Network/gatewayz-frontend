@@ -1,6 +1,243 @@
 import { NextRequest } from 'next/server';
-import { streamText, APICallError } from 'ai';
+import { streamText, APICallError, type ModelMessage } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
+import { checkGuestRateLimit, incrementGuestRateLimit, getClientIP, formatResetTime } from '@/lib/guest-rate-limiter';
+
+/**
+ * Content part types for OpenAI format (what frontend sends)
+ */
+interface OpenAITextPart {
+  type: 'text';
+  text: string;
+}
+
+interface OpenAIImageUrlPart {
+  type: 'image_url';
+  image_url: { url: string; detail?: string };
+}
+
+interface OpenAIAudioUrlPart {
+  type: 'audio_url';
+  audio_url: { url: string };
+}
+
+interface OpenAIVideoUrlPart {
+  type: 'video_url';
+  video_url: { url: string };
+}
+
+interface OpenAIFileUrlPart {
+  type: 'file_url';
+  file_url: { url: string; mime_type?: string };
+}
+
+type OpenAIContentPart = OpenAITextPart | OpenAIImageUrlPart | OpenAIAudioUrlPart | OpenAIVideoUrlPart | OpenAIFileUrlPart;
+
+interface OpenAIMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | OpenAIContentPart[];
+  name?: string;
+  tool_call_id?: string;
+  tool_calls?: Array<{
+    id: string;
+    type: 'function';
+    function: { name: string; arguments: string };
+  }>;
+}
+
+/**
+ * AI SDK v5 content part types for proper type casting
+ */
+interface AISDKTextPart {
+  type: 'text';
+  text: string;
+}
+
+interface AISDKImagePart {
+  type: 'image';
+  image: URL | string; // URL object or base64 string
+  mediaType?: string;
+}
+
+interface AISDKFilePart {
+  type: 'file';
+  data: URL | string; // URL object or base64 string
+  mediaType: string;
+  filename?: string;
+}
+
+interface AISDKToolCallPart {
+  type: 'tool-call';
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+}
+
+interface AISDKToolResultPart {
+  type: 'tool-result';
+  toolCallId: string;
+  toolName: string;
+  output: { type: 'text'; text: string };
+}
+
+type AISDKUserContentPart = AISDKTextPart | AISDKImagePart | AISDKFilePart;
+type AISDKAssistantContentPart = AISDKTextPart | AISDKToolCallPart;
+
+/**
+ * Convert OpenAI format messages to AI SDK ModelMessage format.
+ *
+ * The AI SDK v5 uses strict Zod validation and expects messages in a specific format:
+ * - User messages: role: 'user', content: string | Array<{type: 'text', text} | {type: 'image', image} | {type: 'file', data, mediaType}>
+ * - Assistant messages: role: 'assistant', content: string | Array<...>
+ * - System messages: role: 'system', content: string
+ * - Tool messages: role: 'tool', content: Array<{type: 'tool-result', ...}>
+ *
+ * OpenAI format uses:
+ * - type: 'image_url' with image_url: { url: ... }
+ * - type: 'text' with text: ...
+ *
+ * This function converts between these formats.
+ */
+function convertToAISDKMessages(openAIMessages: OpenAIMessage[]): ModelMessage[] {
+  return openAIMessages.map((msg): ModelMessage => {
+    const { role, content, name, tool_call_id, tool_calls } = msg;
+
+    // Handle tool messages
+    if (role === 'tool') {
+      // Tool messages require specific format, cast through unknown for TypeScript
+      return {
+        role: 'tool',
+        content: [{
+          type: 'tool-result',
+          toolCallId: tool_call_id || '',
+          toolName: name || '',
+          output: {
+            type: 'text',
+            text: typeof content === 'string' ? content : JSON.stringify(content)
+          },
+        }],
+      } as unknown as ModelMessage;
+    }
+
+    // Handle system messages - always string content
+    if (role === 'system') {
+      return {
+        role: 'system',
+        content: typeof content === 'string' ? content :
+          Array.isArray(content)
+            ? content.filter((p): p is OpenAITextPart => p.type === 'text').map(p => p.text).join('\n')
+            : String(content),
+      };
+    }
+
+    // Handle string content - pass through
+    if (typeof content === 'string') {
+      if (role === 'assistant') {
+        // Check if there are tool calls
+        if (tool_calls && tool_calls.length > 0) {
+          const parts: AISDKAssistantContentPart[] = [];
+
+          if (content) {
+            parts.push({ type: 'text', text: content });
+          }
+
+          for (const tc of tool_calls) {
+            parts.push({
+              type: 'tool-call',
+              toolCallId: tc.id,
+              toolName: tc.function.name,
+              input: JSON.parse(tc.function.arguments || '{}'),
+            });
+          }
+
+          return { role: 'assistant', content: parts } as ModelMessage;
+        }
+        return { role: 'assistant', content };
+      }
+      return { role: 'user', content };
+    }
+
+    // Handle array content - convert each part
+    if (Array.isArray(content)) {
+      const convertedParts: AISDKUserContentPart[] = [];
+
+      for (const part of content) {
+        if (part.type === 'text') {
+          convertedParts.push({ type: 'text', text: part.text });
+        } else if (part.type === 'image_url' && part.image_url?.url) {
+          // Convert OpenAI image_url format to AI SDK image format
+          const url = part.image_url.url;
+          // Check if it's a data URL (base64)
+          if (url.startsWith('data:')) {
+            // For base64 data URLs, the AI SDK accepts them as strings
+            convertedParts.push({
+              type: 'image',
+              image: url,
+            });
+          } else {
+            // For regular URLs, parse as URL object
+            try {
+              convertedParts.push({
+                type: 'image',
+                image: new URL(url),
+              });
+            } catch {
+              console.warn('[AI SDK Route] Failed to parse image URL, skipping:', url.substring(0, 50));
+            }
+          }
+        } else if (part.type === 'file_url' && part.file_url?.url) {
+          const url = part.file_url.url;
+          const mediaType = part.file_url.mime_type || 'application/octet-stream';
+
+          if (url.startsWith('data:')) {
+            convertedParts.push({
+              type: 'file',
+              data: url,
+              mediaType,
+            });
+          } else {
+            try {
+              convertedParts.push({
+                type: 'file',
+                data: new URL(url),
+                mediaType,
+              });
+            } catch {
+              console.warn('[AI SDK Route] Failed to parse file URL, skipping');
+            }
+          }
+        }
+        // Skip audio_url and video_url as they're not supported by the AI SDK in the same way
+        // They would need special handling based on the model/provider
+      }
+
+      // If no parts were converted, use empty string
+      if (convertedParts.length === 0) {
+        return role === 'assistant'
+          ? { role: 'assistant', content: '' }
+          : { role: 'user', content: '' };
+      }
+
+      // If only text parts, consider joining them for simpler format
+      const hasOnlyText = convertedParts.every(p => p.type === 'text');
+      if (hasOnlyText && convertedParts.length === 1) {
+        return role === 'assistant'
+          ? { role: 'assistant', content: (convertedParts[0] as AISDKTextPart).text }
+          : { role: 'user', content: (convertedParts[0] as AISDKTextPart).text };
+      }
+
+      // Cast to ModelMessage to satisfy TypeScript - the runtime validation happens in AI SDK
+      return role === 'assistant'
+        ? { role: 'assistant', content: convertedParts } as ModelMessage
+        : { role: 'user', content: convertedParts } as ModelMessage;
+    }
+
+    // Fallback for unexpected content types
+    return role === 'assistant'
+      ? { role: 'assistant', content: String(content || '') }
+      : { role: 'user', content: String(content || '') };
+  });
+}
 
 /**
  * AI SDK Chat Completions Route
@@ -284,6 +521,36 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // Check guest rate limit before proceeding
+      const clientIP = getClientIP(request);
+      const rateLimitCheck = checkGuestRateLimit(clientIP);
+
+      if (!rateLimitCheck.allowed) {
+        const resetTime = formatResetTime(rateLimitCheck.resetInMs);
+        console.log(`[AI SDK Route] Guest rate limit exceeded for IP ${clientIP}. Reset in ${resetTime}`);
+        return new Response(JSON.stringify({
+          error: 'Rate limit exceeded',
+          code: 'GUEST_RATE_LIMIT_EXCEEDED',
+          message: `You've reached the free chat limit. Create a free account for unlimited access, or try again in ${resetTime}.`,
+          detail: `Guest users are limited to ${rateLimitCheck.limit} messages per day.`,
+          remaining: 0,
+          limit: rateLimitCheck.limit,
+          resetInMs: rateLimitCheck.resetInMs
+        }), {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': String(rateLimitCheck.limit),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(Math.floor(Date.now() / 1000) + Math.ceil(rateLimitCheck.resetInMs / 1000))
+          },
+        });
+      }
+
+      // Store guest info for rate limit increment after successful stream initialization
+      // We don't increment here to avoid consuming quota on pre-stream errors
+      (request as any).__guestClientIP = clientIP;
+
       apiKey = guestKey;
       console.log('[AI SDK Route] Using guest API key for unauthenticated request');
     }
@@ -363,6 +630,15 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify(forwardedBody),
       });
 
+      // Increment guest rate limit for redirected requests if the response was successful
+      // This is critical: we check rate limits before redirect but must increment after
+      // to prevent guests from bypassing limits on non-standard model requests
+      const guestClientIP = (request as any).__guestClientIP;
+      if (guestClientIP && forwardedResponse.ok) {
+        const incrementResult = incrementGuestRateLimit(guestClientIP);
+        console.log(`[AI SDK Route] Guest redirected request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+      }
+
       // Return the response from the flexible completions route
       return new Response(forwardedResponse.body, {
         status: forwardedResponse.status,
@@ -406,13 +682,18 @@ export async function POST(request: NextRequest) {
           attempt,
         });
 
-        // Messages are already in the correct ModelMessage format (OpenAI-compatible)
-        console.log('[AI SDK Route] Using messages directly (already in ModelMessage format)');
+        // Convert OpenAI format messages to AI SDK ModelMessage format
+        // The AI SDK v5 uses strict Zod validation that rejects OpenAI format (e.g., 'image_url' vs 'image')
+        const convertedMessages = convertToAISDKMessages(messages as OpenAIMessage[]);
+        console.log('[AI SDK Route] Converted messages to AI SDK format:', {
+          originalCount: messages.length,
+          convertedCount: convertedMessages.length,
+        });
 
         // Stream the response using AI SDK
         result = streamText({
           model,
-          messages,
+          messages: convertedMessages,
           temperature,
           maxOutputTokens: max_tokens,
           topP: top_p,
@@ -433,6 +714,15 @@ export async function POST(request: NextRequest) {
         });
 
         console.log('[AI SDK Route] streamText call successful, starting stream...');
+
+        // Increment guest rate limit only after successful stream initialization
+        // This ensures quota is not consumed on pre-stream errors (invalid model, connection failure, etc.)
+        const guestClientIP = (request as any).__guestClientIP;
+        if (guestClientIP) {
+          const incrementResult = incrementGuestRateLimit(guestClientIP);
+          console.log(`[AI SDK Route] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+        }
+
         break; // Success - exit retry loop
 
       } catch (streamInitError) {

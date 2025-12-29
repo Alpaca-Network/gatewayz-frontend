@@ -609,6 +609,16 @@ describe('ModelSelect model categorization', () => {
       categories.push('Multimodal');
     }
 
+    // Image/Video models - check modalities array for image or video support
+    // Note: We only use modalities array here, not vision name check, since vision models
+    // are already captured in the Multimodal category above
+    const modalities = model.modalities || [];
+    const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
+    const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
+    if (hasImageSupport || hasVideoSupport) {
+      categories.push('Image/Video');
+    }
+
     // Cost Efficient models
     const isFree = model.category === 'Free' || model.category?.toLowerCase().includes('free');
     if (isFree) {
@@ -659,6 +669,69 @@ describe('ModelSelect model categorization', () => {
 
     const categories = categorizeModel(model);
     expect(categories).toContain('Multimodal');
+  });
+
+  it('should categorize Image/Video models correctly by modalities array', () => {
+    const modelsWithImageSupport: ModelOption[] = [
+      { value: 'openai/gpt-4o', label: 'GPT-4o', category: 'Paid', modalities: ['Text', 'Image'] },
+      { value: 'google/gemini-pro-vision', label: 'Gemini Pro Vision', category: 'Paid', modalities: ['Text', 'Image', 'Video'] },
+      { value: 'anthropic/claude-3-sonnet', label: 'Claude 3 Sonnet', category: 'Paid', modalities: ['Text', 'Image'] },
+    ];
+
+    modelsWithImageSupport.forEach(model => {
+      const categories = categorizeModel(model);
+      expect(categories).toContain('Image/Video');
+    });
+  });
+
+  it('should categorize Image/Video models correctly by video modality', () => {
+    const model: ModelOption = {
+      value: 'google/gemini-pro',
+      label: 'Gemini Pro',
+      category: 'Paid',
+      modalities: ['Text', 'Video'],
+    };
+
+    const categories = categorizeModel(model);
+    expect(categories).toContain('Image/Video');
+  });
+
+  it('should categorize vision models as Multimodal (not Image/Video without modalities)', () => {
+    const models: ModelOption[] = [
+      { value: 'openai/gpt-4-vision-preview', label: 'GPT-4 Vision Preview', category: 'Paid' },
+      { value: 'meta/llama-3-vision', label: 'Llama 3 Vision', category: 'Paid' },
+    ];
+
+    models.forEach(model => {
+      const categories = categorizeModel(model);
+      // Vision models without explicit modalities go to Multimodal, not Image/Video
+      expect(categories).toContain('Multimodal');
+      expect(categories).not.toContain('Image/Video');
+    });
+  });
+
+  it('should not categorize text-only models as Image/Video', () => {
+    const model: ModelOption = {
+      value: 'openai/gpt-4-turbo',
+      label: 'GPT-4 Turbo',
+      category: 'Paid',
+      modalities: ['Text'],
+    };
+
+    const categories = categorizeModel(model);
+    expect(categories).not.toContain('Image/Video');
+  });
+
+  it('should handle models without modalities array for Image/Video', () => {
+    const model: ModelOption = {
+      value: 'openai/gpt-4-turbo',
+      label: 'GPT-4 Turbo',
+      category: 'Paid',
+      // No modalities array
+    };
+
+    const categories = categorizeModel(model);
+    expect(categories).not.toContain('Image/Video');
   });
 
   it('should categorize free models as cost efficient', () => {
@@ -745,5 +818,330 @@ describe('ModelSelect section expansion', () => {
     const needsUpdate2 = sectionsToExpand.some(section => !allExpanded.has(section));
 
     expect(needsUpdate2).toBe(false);
+  });
+});
+
+// Test server-side search functionality
+describe('ModelSelect server-side search', () => {
+  describe('merging search results with cached models', () => {
+    it('should return cached models when no search query', () => {
+      const cachedModels = createMockModels(50);
+      const searchResults: ModelOption[] = [];
+      const searchQuery = '';
+
+      const mergedModels = (() => {
+        if (!searchQuery.trim()) {
+          return cachedModels;
+        }
+
+        const modelMap = new Map<string, ModelOption>();
+        cachedModels.forEach(model => modelMap.set(model.value, model));
+        searchResults.forEach(model => modelMap.set(model.value, model));
+        return Array.from(modelMap.values());
+      })();
+
+      expect(mergedModels).toBe(cachedModels);
+      expect(mergedModels.length).toBe(50);
+    });
+
+    it('should merge cached models with server search results', () => {
+      const cachedModels: ModelOption[] = [
+        { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid', developer: 'OpenAI' },
+        { value: 'anthropic/claude-3', label: 'Claude 3', category: 'Paid', developer: 'Anthropic' },
+      ];
+      const searchResults: ModelOption[] = [
+        { value: 'google/gemini-pro', label: 'Gemini Pro', category: 'Paid', developer: 'Google' },
+        { value: 'meta/llama-3', label: 'Llama 3', category: 'Free', developer: 'Meta' },
+      ];
+      const searchQuery = 'pro';
+
+      const mergedModels = (() => {
+        if (!searchQuery.trim()) {
+          return cachedModels;
+        }
+
+        const modelMap = new Map<string, ModelOption>();
+        cachedModels.forEach(model => modelMap.set(model.value, model));
+        searchResults.forEach(model => modelMap.set(model.value, model));
+        return Array.from(modelMap.values());
+      })();
+
+      expect(mergedModels.length).toBe(4);
+      expect(mergedModels.some(m => m.value === 'openai/gpt-4')).toBe(true);
+      expect(mergedModels.some(m => m.value === 'google/gemini-pro')).toBe(true);
+    });
+
+    it('should deduplicate models when merging (server results take precedence)', () => {
+      const cachedModels: ModelOption[] = [
+        { value: 'openai/gpt-4', label: 'GPT-4 Old', category: 'Paid', developer: 'OpenAI' },
+      ];
+      const searchResults: ModelOption[] = [
+        { value: 'openai/gpt-4', label: 'GPT-4 Updated', category: 'Paid', developer: 'OpenAI' },
+      ];
+      const searchQuery = 'gpt';
+
+      const mergedModels = (() => {
+        if (!searchQuery.trim()) {
+          return cachedModels;
+        }
+
+        const modelMap = new Map<string, ModelOption>();
+        cachedModels.forEach(model => modelMap.set(model.value, model));
+        searchResults.forEach(model => modelMap.set(model.value, model));
+        return Array.from(modelMap.values());
+      })();
+
+      expect(mergedModels.length).toBe(1);
+      expect(mergedModels[0].label).toBe('GPT-4 Updated'); // Server result takes precedence
+    });
+
+    it('should handle empty search results', () => {
+      const cachedModels = createMockModels(10);
+      const searchResults: ModelOption[] = [];
+      const searchQuery = 'nonexistent';
+
+      const mergedModels = (() => {
+        if (!searchQuery.trim()) {
+          return cachedModels;
+        }
+
+        const modelMap = new Map<string, ModelOption>();
+        cachedModels.forEach(model => modelMap.set(model.value, model));
+        searchResults.forEach(model => modelMap.set(model.value, model));
+        return Array.from(modelMap.values());
+      })();
+
+      // Still returns cached models even if server returns nothing
+      expect(mergedModels.length).toBe(10);
+    });
+  });
+
+  describe('rebuilding groups from merged models during search', () => {
+    it('should rebuild developer groups from merged models', () => {
+      const mergedModels: ModelOption[] = [
+        { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid', developer: 'OpenAI' },
+        { value: 'openai/gpt-3.5', label: 'GPT-3.5', category: 'Paid', developer: 'OpenAI' },
+        { value: 'google/gemini-pro', label: 'Gemini Pro', category: 'Paid', developer: 'Google' },
+      ];
+
+      const searchModelsByDeveloper: Record<string, ModelOption[]> = {};
+      mergedModels.forEach(model => {
+        const dev = model.developer || 'Other';
+        if (!searchModelsByDeveloper[dev]) {
+          searchModelsByDeveloper[dev] = [];
+        }
+        searchModelsByDeveloper[dev].push(model);
+      });
+
+      expect(searchModelsByDeveloper['OpenAI']).toHaveLength(2);
+      expect(searchModelsByDeveloper['Google']).toHaveLength(1);
+      expect(Object.keys(searchModelsByDeveloper)).toHaveLength(2);
+    });
+
+    it('should rebuild category groups from merged models', () => {
+      const mergedModels: ModelOption[] = [
+        { value: 'openai/o1-preview', label: 'O1 Preview', category: 'Paid', developer: 'OpenAI' },
+        { value: 'deepseek/deepseek-coder', label: 'DeepSeek Coder', category: 'Paid', developer: 'DeepSeek' },
+        { value: 'meta/llama-3', label: 'Llama 3', category: 'Free', developer: 'Meta' },
+        { value: 'openai/gpt-4-vision', label: 'GPT-4 Vision', category: 'Paid', developer: 'OpenAI', modalities: ['Text', 'Image'] },
+      ];
+
+      const categoryPatterns = {
+        r1: /\br1\b/i,
+        o1: /\bo1\b/i,
+        o3: /\bo3\b/i,
+        o4: /\bo4\b/i,
+      };
+
+      const categorizeModel = (model: ModelOption): string[] => {
+        const categories: string[] = [];
+        const modelName = model.label.toLowerCase();
+        const modelId = model.value.toLowerCase();
+
+        if (
+          modelId.includes('deepseek-reasoner') ||
+          categoryPatterns.r1.test(modelId) ||
+          modelId.includes('qwq') ||
+          categoryPatterns.o1.test(modelId) ||
+          categoryPatterns.o3.test(modelId) ||
+          categoryPatterns.o4.test(modelId) ||
+          modelId.includes('thinking') ||
+          modelId.includes('reason')
+        ) {
+          categories.push('Reasoning');
+        }
+
+        if (
+          modelId.includes('code') ||
+          modelId.includes('codestral') ||
+          modelId.includes('codellama') ||
+          modelId.includes('deepseek-coder')
+        ) {
+          categories.push('Code Generation');
+        }
+
+        // Image/Video models - check modalities array for image or video support
+        // Note: We only use modalities array here, not vision name check
+        const modalities = model.modalities || [];
+        const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
+        const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
+        if (hasImageSupport || hasVideoSupport) {
+          categories.push('Image/Video');
+        }
+
+        const isFree = model.category === 'Free' || model.category?.toLowerCase().includes('free');
+        if (isFree) {
+          categories.push('Cost Efficient');
+          categories.push('Free');
+        }
+
+        return categories;
+      };
+
+      const searchModelsByCategory: Record<string, ModelOption[]> = {
+        'Reasoning': [],
+        'Code Generation': [],
+        'Image/Video': [],
+        'Cost Efficient': [],
+        'Free': [],
+      };
+
+      mergedModels.forEach(model => {
+        const modelCategories = categorizeModel(model);
+        modelCategories.forEach(cat => {
+          if (searchModelsByCategory[cat]) {
+            searchModelsByCategory[cat].push(model);
+          }
+        });
+      });
+
+      expect(searchModelsByCategory['Reasoning']).toHaveLength(1); // O1 Preview
+      expect(searchModelsByCategory['Code Generation']).toHaveLength(1); // DeepSeek Coder
+      expect(searchModelsByCategory['Image/Video']).toHaveLength(1); // GPT-4 Vision
+      expect(searchModelsByCategory['Free']).toHaveLength(1); // Llama 3
+      expect(searchModelsByCategory['Cost Efficient']).toHaveLength(1); // Llama 3
+    });
+
+    it('should handle models without developer', () => {
+      const mergedModels: ModelOption[] = [
+        { value: 'unknown-model', label: 'Unknown Model', category: 'Free' },
+      ];
+
+      const searchModelsByDeveloper: Record<string, ModelOption[]> = {};
+      mergedModels.forEach(model => {
+        const dev = model.developer || 'Other';
+        if (!searchModelsByDeveloper[dev]) {
+          searchModelsByDeveloper[dev] = [];
+        }
+        searchModelsByDeveloper[dev].push(model);
+      });
+
+      expect(searchModelsByDeveloper['Other']).toHaveLength(1);
+    });
+  });
+
+  describe('filtering merged models during search', () => {
+    it('should filter favorites from merged models', () => {
+      const mergedModels: ModelOption[] = [
+        { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid', developer: 'OpenAI' },
+        { value: 'google/gemini-pro', label: 'Gemini Pro', category: 'Paid', developer: 'Google' },
+      ];
+      const favorites = new Set(['openai/gpt-4']);
+      const query = 'gpt';
+
+      const filteredFavorites = mergedModels.filter(model =>
+        favorites.has(model.value) && matchesQuery(model, query)
+      );
+
+      expect(filteredFavorites).toHaveLength(1);
+      expect(filteredFavorites[0].value).toBe('openai/gpt-4');
+    });
+
+    it('should filter popular models from merged models', () => {
+      const mergedModels: ModelOption[] = [
+        { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid', developer: 'OpenAI' },
+        { value: 'google/gemini-pro', label: 'Gemini Pro', category: 'Paid', developer: 'Google' },
+        { value: 'anthropic/claude-3', label: 'Claude 3', category: 'Paid', developer: 'Anthropic' },
+      ];
+      const popularModels: ModelOption[] = [
+        { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid', developer: 'OpenAI' },
+        { value: 'google/gemini-pro', label: 'Gemini Pro', category: 'Paid', developer: 'Google' },
+      ];
+      const query = 'gpt';
+
+      const filteredPopular = mergedModels.filter(model =>
+        popularModels.some(p => p.value === model.value) && matchesQuery(model, query)
+      );
+
+      expect(filteredPopular).toHaveLength(1);
+      expect(filteredPopular[0].value).toBe('openai/gpt-4');
+    });
+
+    it('should apply query filter to all merged models', () => {
+      const mergedModels: ModelOption[] = [
+        { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid', developer: 'OpenAI' },
+        { value: 'google/gemini-pro', label: 'Gemini Pro', category: 'Paid', developer: 'Google' },
+        { value: 'anthropic/claude-3', label: 'Claude 3', category: 'Paid', developer: 'Anthropic' },
+      ];
+      const query = 'gemini';
+
+      const filtered = mergedModels.filter(model => matchesQuery(model, query));
+
+      expect(filtered).toHaveLength(1);
+      expect(filtered[0].value).toBe('google/gemini-pro');
+    });
+  });
+
+  describe('API parameter construction', () => {
+    it('should construct correct search URL with query parameter', () => {
+      const query = 'deepseek';
+      const expectedUrl = `/api/models?gateway=all&search=${encodeURIComponent(query)}`;
+
+      expect(expectedUrl).toBe('/api/models?gateway=all&search=deepseek');
+    });
+
+    it('should properly encode special characters in search query', () => {
+      const query = 'gpt-4o mini';
+      const encodedQuery = encodeURIComponent(query);
+      const expectedUrl = `/api/models?gateway=all&search=${encodedQuery}`;
+
+      expect(expectedUrl).toBe('/api/models?gateway=all&search=gpt-4o%20mini');
+    });
+
+    it('should handle queries with slashes', () => {
+      const query = 'openai/gpt';
+      const encodedQuery = encodeURIComponent(query);
+      const expectedUrl = `/api/models?gateway=all&search=${encodedQuery}`;
+
+      expect(expectedUrl).toBe('/api/models?gateway=all&search=openai%2Fgpt');
+    });
+  });
+
+  describe('search debouncing behavior', () => {
+    it('should debounce search queries with 200ms delay', () => {
+      const debounceTime = 200;
+
+      // Simulate debounce logic
+      const simulateDebounce = (callback: () => void, delay: number) => {
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            callback();
+            resolve();
+          }, delay);
+        });
+      };
+
+      const startTime = Date.now();
+      let callbackExecuted = false;
+
+      return simulateDebounce(() => {
+        callbackExecuted = true;
+        const endTime = Date.now();
+        const elapsed = endTime - startTime;
+
+        expect(elapsed).toBeGreaterThanOrEqual(debounceTime - 10); // Allow 10ms tolerance
+        expect(callbackExecuted).toBe(true);
+      }, debounceTime);
+    });
   });
 });

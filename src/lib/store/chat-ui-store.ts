@@ -36,14 +36,6 @@ export const NEAR_INCOGNITO_MODELS: ModelOption[] = [
     developer: 'Qwen',
     modalities: ['Text']
   },
-  {
-    value: 'near/moonshotai/Kimi-K2-Thinking',
-    label: 'Kimi K2 Thinking',
-    category: 'Reasoning',
-    sourceGateway: 'near',
-    developer: 'Moonshot AI',
-    modalities: ['Text']
-  },
 ];
 
 // Incognito mode default model (first model in the list)
@@ -103,13 +95,14 @@ interface ChatUIState {
 }
 
 // Standard default model
-// NOTE: Model ID must include the gateway prefix (e.g., 'openrouter/') for proper backend routing
+// NOTE: Model ID must include the gateway prefix (e.g., 'cerebras/') for proper backend routing
+// Using Qwen3 32B as default - a reliable production model on Cerebras
 const STANDARD_DEFAULT_MODEL: ModelOption = {
-  value: 'openrouter/deepseek/deepseek-r1',
-  label: 'DeepSeek R1',
-  category: 'Reasoning',
-  sourceGateway: 'openrouter',
-  developer: 'DeepSeek',
+  value: 'cerebras/qwen-3-32b',
+  label: 'Qwen3 32B',
+  category: 'General',
+  sourceGateway: 'cerebras',
+  developer: 'Qwen',
   modalities: ['Text']
 };
 

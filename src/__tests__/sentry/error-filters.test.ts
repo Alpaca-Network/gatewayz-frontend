@@ -55,30 +55,8 @@ describe('Sentry Error Filters', () => {
         return null;
       }
 
-      // Filter out Next.js hydration errors
-      // These are often caused by browser extensions, ad blockers, or dynamic content
-      // and are non-critical since we have suppressHydrationWarning set
-      const eventMessageLower = eventMessage.toLowerCase();
-      const errorMessageLower = errorMessage.toLowerCase();
-      if (
-        errorMessageLower.includes('hydration') ||
-        (errorMessageLower.includes('text content does not match') && errorMessageLower.includes('server')) ||
-        eventMessageLower.includes('hydration') ||
-        eventMessageLower.includes('server rendered html')
-      ) {
-        // Only filter if it's a generic hydration error without specific component info
-        // This allows us to still catch real hydration bugs in our code
-        // Use case-insensitive checks to catch all variants (e.g., "At Path", "Component Stack")
-        const messageLower = errorMessage.toLowerCase();
-        const hasComponentInfo =
-          messageLower.includes('at path') ||
-          messageLower.includes('component stack');
-
-        if (!hasComponentInfo) {
-          console.warn('[Sentry] Filtered out generic hydration error (likely caused by browser extensions)');
-          return null;
-        }
-      }
+      // NOTE: Hydration errors are now captured (not filtered)
+      // This allows debugging of SSR/hydration mismatches
 
       return event;
     };
@@ -536,8 +514,9 @@ describe('Sentry Error Filters', () => {
     });
   });
 
-  describe('Hydration error filtering (JAVASCRIPT-NEXTJS-K)', () => {
-    it('should filter out generic hydration errors', () => {
+  describe('Hydration error handling (JAVASCRIPT-NEXTJS-K)', () => {
+    // NOTE: Hydration errors are no longer filtered - they are captured for debugging
+    it('should capture generic hydration errors (not filtered)', () => {
       const error = new Error('Hydration failed - the server rendered HTML did not match the client.');
       const event: Sentry.ErrorEvent = {
         message: 'Hydration Error',
@@ -553,13 +532,12 @@ describe('Sentry Error Filters', () => {
       const hint: Sentry.EventHint = { originalException: error };
       const result = beforeSendCallback(event, hint);
 
-      expect(result).toBeNull();
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '[Sentry] Filtered out generic hydration error (likely caused by browser extensions)'
-      );
+      // Hydration errors are now captured (not filtered)
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
     });
 
-    it('should filter out "text content does not match server" errors', () => {
+    it('should capture "text content does not match server" errors (not filtered)', () => {
       const error = new Error('Text content does not match server-rendered HTML');
       const event: Sentry.ErrorEvent = {
         exception: {
@@ -574,10 +552,12 @@ describe('Sentry Error Filters', () => {
       const hint: Sentry.EventHint = { originalException: error };
       const result = beforeSendCallback(event, hint);
 
-      expect(result).toBeNull();
+      // Hydration errors are now captured (not filtered)
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
     });
 
-    it('should NOT filter hydration errors with component path info', () => {
+    it('should capture hydration errors with component path info', () => {
       const error = new Error('Hydration failed at path /app/page.tsx in component Header');
       const event: Sentry.ErrorEvent = {
         exception: {
@@ -592,12 +572,11 @@ describe('Sentry Error Filters', () => {
       const hint: Sentry.EventHint = { originalException: error };
       const result = beforeSendCallback(event, hint);
 
-      // Should NOT be filtered because it has "at path" - indicates real bug
       expect(result).not.toBeNull();
       expect(result).toBe(event);
     });
 
-    it('should NOT filter hydration errors with component stack', () => {
+    it('should capture hydration errors with component stack', () => {
       const error = new Error('Hydration mismatch in component stack: Header > Navigation > Logo');
       const event: Sentry.ErrorEvent = {
         exception: {
@@ -612,12 +591,11 @@ describe('Sentry Error Filters', () => {
       const hint: Sentry.EventHint = { originalException: error };
       const result = beforeSendCallback(event, hint);
 
-      // Should NOT be filtered because it has "component stack" - indicates real bug
       expect(result).not.toBeNull();
       expect(result).toBe(event);
     });
 
-    it('should filter hydration errors from event message field', () => {
+    it('should capture hydration errors from event message field (not filtered)', () => {
       const error = new Error('Something went wrong');
       const event: Sentry.ErrorEvent = {
         message: 'Hydration failed because server rendered HTML did not match',
@@ -633,7 +611,9 @@ describe('Sentry Error Filters', () => {
       const hint: Sentry.EventHint = { originalException: error };
       const result = beforeSendCallback(event, hint);
 
-      expect(result).toBeNull();
+      // Hydration errors are now captured (not filtered)
+      expect(result).not.toBeNull();
+      expect(result).toBe(event);
     });
   });
 

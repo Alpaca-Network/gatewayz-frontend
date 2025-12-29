@@ -85,6 +85,20 @@ export function initializeReferralTracking(): void {
     } catch {
       // Silently fail if sessionStorage is unavailable
     }
+
+    // CRITICAL FIX: Remove the ref parameter from the URL to prevent it from interfering with chat functionality
+    // The referral code is now safely stored in localStorage and will be sent during authentication
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('ref');
+      url.searchParams.delete('referral');
+      // Use replaceState to update URL without triggering a page reload
+      // IMPORTANT: Preserve existing history state (used by Next.js router) to prevent navigation issues
+      window.history.replaceState(window.history.state, '', url.toString());
+      console.log('[Referral] Removed ref parameter from URL');
+    } catch (error) {
+      console.warn('[Referral] Failed to remove ref parameter from URL:', error);
+    }
   } else {
     const storedCode = getStoredReferralCode();
     if (storedCode) {

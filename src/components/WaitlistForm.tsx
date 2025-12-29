@@ -15,6 +15,7 @@ import { toast } from "@/hooks/use-toast";
 import { useState } from "react";
 // import { supabase } from "@/integrations/supabase/client";
 import SuccessPopup from "./SuccessPopup";
+import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
 
 const schema = z.object({
   email: z.string().email("Please enter a valid email"),
@@ -68,6 +69,10 @@ export default function WaitlistForm({ compact = false }: WaitlistFormProps) {
       if (process.env.NODE_ENV === 'development') {
         console.log("Waitlist signup:", payload, fnData);
       }
+
+      // Track Twitter conversion for ad attribution only after successful submission
+      trackTwitterSignupClick();
+
       setSubmitted(true);
       setUserEmail(data.email);
       reset();

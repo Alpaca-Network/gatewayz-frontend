@@ -922,3 +922,186 @@ describe('Stop stream functionality', () => {
     });
   });
 });
+
+// Import the normalizeContentForApi function
+import { normalizeContentForApi } from '../use-chat-stream';
+
+describe('normalizeContentForApi', () => {
+  describe('string content', () => {
+    test('should return string content as-is', () => {
+      expect(normalizeContentForApi('Hello world')).toBe('Hello world');
+      expect(normalizeContentForApi('Hello world', ['Text'])).toBe('Hello world');
+      expect(normalizeContentForApi('Hello world', ['Text', 'Image'])).toBe('Hello world');
+    });
+
+    test('should handle empty string', () => {
+      expect(normalizeContentForApi('')).toBe('');
+    });
+  });
+
+  describe('text-only array content', () => {
+    test('should preserve text-only array when model supports all content', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: 'World' }
+      ];
+      // Text-only arrays are valid OpenAI format, no need to convert
+      expect(normalizeContentForApi(content)).toEqual(content);
+    });
+
+    test('should preserve text-only array regardless of modalities', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: 'World' }
+      ];
+      // Text-only arrays don't contain unsupported media, so they're preserved
+      expect(normalizeContentForApi(content, ['Text'])).toEqual(content);
+      expect(normalizeContentForApi(content, ['Text', 'Image'])).toEqual(content);
+    });
+  });
+
+  describe('multimodal content with supported modalities', () => {
+    test('should preserve image when model supports Image modality', () => {
+      const content = [
+        { type: 'text', text: 'Check this image' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Image']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve video when model supports Video modality', () => {
+      const content = [
+        { type: 'text', text: 'Watch this' },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Video']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve audio when model supports Audio modality', () => {
+      const content = [
+        { type: 'text', text: 'Listen to this' },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Audio']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve file when model supports File modality', () => {
+      const content = [
+        { type: 'text', text: 'Read this document' },
+        { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'File']);
+      expect(result).toEqual(content);
+    });
+
+    test('should preserve all media when model supports all modalities', () => {
+      const content = [
+        { type: 'text', text: 'Check all these' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } },
+        { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text', 'Image', 'Video', 'Audio', 'File']);
+      expect(result).toEqual(content);
+    });
+  });
+
+  describe('multimodal content with unsupported modalities', () => {
+    test('should strip image when model does not support Image modality', () => {
+      const content = [
+        { type: 'text', text: 'Check this image' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('Check this image');
+    });
+
+    test('should strip video when model does not support Video modality', () => {
+      const content = [
+        { type: 'text', text: 'Watch this' },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('Watch this');
+    });
+
+    test('should strip image when no modalities specified (assumes text-only)', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content);
+      expect(result).toBe('Check this');
+    });
+
+    test('should strip image when empty modalities array (assumes text-only)', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, []);
+      expect(result).toBe('Check this');
+    });
+
+    test('should strip all unsupported media types', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+        { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+        { type: 'text', text: 'World' },
+        { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('Hello\nWorld');
+    });
+
+    test('should return empty string when only unsupported media with no text', () => {
+      const content = [
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      const result = normalizeContentForApi(content, ['Text']);
+      expect(result).toBe('');
+    });
+  });
+
+  describe('modality case insensitivity', () => {
+    test('should match modalities case-insensitively', () => {
+      const content = [
+        { type: 'text', text: 'Check this' },
+        { type: 'image_url', image_url: { url: 'https://example.com/image.png' } }
+      ];
+      expect(normalizeContentForApi(content, ['text', 'image'])).toEqual(content);
+      expect(normalizeContentForApi(content, ['TEXT', 'IMAGE'])).toEqual(content);
+      expect(normalizeContentForApi(content, ['Text', 'Image'])).toEqual(content);
+    });
+  });
+
+  describe('edge cases', () => {
+    test('should handle null content', () => {
+      expect(normalizeContentForApi(null)).toBe('');
+    });
+
+    test('should handle undefined content', () => {
+      expect(normalizeContentForApi(undefined)).toBe('');
+    });
+
+    test('should handle number content', () => {
+      expect(normalizeContentForApi(123)).toBe('123');
+    });
+
+    test('should handle empty array', () => {
+      expect(normalizeContentForApi([])).toEqual([]);
+    });
+
+    test('should handle array with no text or media parts', () => {
+      const content = [
+        { type: 'unknown', data: 'something' }
+      ];
+      expect(normalizeContentForApi(content)).toEqual(content);
+    });
+  });
+});
