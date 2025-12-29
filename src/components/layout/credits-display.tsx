@@ -177,7 +177,7 @@ export function CreditsDisplay() {
       >
         <Coins className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
         <span className="font-semibold text-xs sm:text-sm">
-          ${credits.toLocaleString()}
+          {credits.toLocaleString()}
         </span>
       </Button>
     </Link>
