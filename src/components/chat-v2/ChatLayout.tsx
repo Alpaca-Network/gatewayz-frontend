@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, Pencil, Lock, Unlock, Shield, Plus } from "lucide-react";
+import { Menu, Pencil, Lock, Unlock, Shield, Plus, ImageIcon, BarChart3, Code2, Lightbulb, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { ChatSidebar } from "./ChatSidebar";
@@ -52,6 +52,14 @@ const ALL_PROMPTS = [
     { title: "What's the difference between HTTP and HTTPS?", subtitle: "Learn about web security basics" },
 ];
 
+// Quick action prompt chips
+const PROMPT_CHIPS = [
+    { label: "Create image", icon: ImageIcon, prompt: "Create an image of " },
+    { label: "Analyze data", icon: BarChart3, prompt: "Analyze the following data: " },
+    { label: "Code", icon: Code2, prompt: "Write code to " },
+    { label: "Brainstorm", icon: Lightbulb, prompt: "Brainstorm ideas for " },
+];
+
 // Fisher-Yates shuffle algorithm
 function shuffleArray<T>(array: T[]): T[] {
     const shuffled = [...array];
@@ -62,20 +70,40 @@ function shuffleArray<T>(array: T[]): T[] {
     return shuffled;
 }
 
-function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => void }) {
+function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect: (txt: string) => void; onPromptChipSelect?: (prompt: string) => void }) {
     // Select 4 random prompts on mount (useMemo ensures consistency during render)
     const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
 
     // Note: We no longer show a loading spinner here because ChatLayout immediately
     // switches to MessageList with optimistic UI when a prompt is clicked.
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
-             <h1 className="text-2xl sm:text-4xl font-bold mb-8 text-center">What's On Your Mind?</h1>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl w-full">
+        <div className="flex-1 flex flex-col items-center justify-start sm:justify-center p-4 pt-6 sm:pt-4 overflow-y-auto">
+             <h1 className="text-2xl sm:text-4xl font-bold mb-4 sm:mb-6 text-center">What can I help with?</h1>
+
+             {/* Prompt chips like ChatGPT */}
+             <div className="flex flex-wrap justify-center gap-2 mb-6 sm:mb-8 max-w-2xl">
+                 {PROMPT_CHIPS.map((chip) => (
+                     <button
+                        key={chip.label}
+                        onClick={() => onPromptChipSelect?.(chip.prompt)}
+                        className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
+                     >
+                         <chip.icon className="h-4 w-4" />
+                         {chip.label}
+                     </button>
+                 ))}
+                 <button
+                    className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
+                 >
+                     More
+                 </button>
+             </div>
+
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-4xl w-full">
                  {prompts.map((p) => (
                      <Card
                         key={p.title}
-                        className="p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
+                        className="p-3 sm:p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
                         onClick={() => onPromptSelect(p.title)}
                      >
                          <p className="font-medium text-sm">{p.title}</p>
@@ -83,7 +111,7 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
                      </Card>
                  ))}
              </div>
-             <a href="/releases" className="mt-8 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+             <a href="/releases" className="mt-6 sm:mt-8 mb-4 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
                  What's new
              </a>
         </div>
@@ -270,6 +298,15 @@ export function ChatLayout() {
                setPendingPrompt(null);
            }
        });
+   };
+
+   // Handle prompt chip selection - just sets input value without sending, allows user to complete the prompt
+   const handlePromptChipSelect = (prompt: string) => {
+       setInputValue(prompt);
+       // Focus the input field so user can continue typing
+       if (typeof window !== 'undefined' && (window as any).__chatInputFocus) {
+           (window as any).__chatInputFocus();
+       }
    };
 
    // Handle retry for failed messages (e.g., rate limit errors)
@@ -678,7 +715,7 @@ export function ChatLayout() {
               {/* Main Content */}
               <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
                   {showWelcomeScreen ? (
-                      <WelcomeScreen onPromptSelect={handlePromptSelect} />
+                      <WelcomeScreen onPromptSelect={handlePromptSelect} onPromptChipSelect={handlePromptChipSelect} />
                   ) : (
                       <MessageList
                         sessionId={activeSessionId}

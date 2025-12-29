@@ -1,11 +1,17 @@
 "use client";
 
 import Link from 'next/link';
+import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
 
 export function GetCreditsButton() {
 
+  const handleClick = () => {
+    // Track Twitter conversion for ad attribution
+    trackTwitterSignupClick();
+  };
+
   return (
-    <Link href="/onboarding" className="relative group inline-block">
+    <Link href="/onboarding" className="relative group inline-block" onClick={handleClick}>
       {/* Multi-layered LED-style glow with color shifting */}
       <div className="absolute -inset-[3px] rounded-lg opacity-90 blur-md animate-led-shimmer"></div>
       <div className="absolute -inset-[2px] rounded-lg opacity-80 blur-sm animate-led-shimmer" style={{ animationDelay: '0.5s' }}></div>

@@ -45,7 +45,10 @@ function shouldFilterEdgeEvent(errorMessage: string, event?: Sentry.ErrorEvent):
   const isWalletExtensionError =
     normalizedMessage.includes('chrome.runtime.sendmessage') ||
     normalizedMessage.includes('runtime.sendmessage') ||
-    (normalizedMessage.includes('extension id') && normalizedMessage.includes('from a webpage'));
+    (normalizedMessage.includes('extension id') && normalizedMessage.includes('from a webpage')) ||
+    normalizedMessage.includes('removelistener') ||
+    normalizedMessage.includes('stoplisteners') ||
+    normalizedMessage.includes('inpage.js');
 
   const isWalletConnectRelayError =
     normalizedMessage.includes('walletconnect') ||
@@ -53,6 +56,13 @@ function shouldFilterEdgeEvent(errorMessage: string, event?: Sentry.ErrorEvent):
     normalizedMessage.includes('websocket error 1006') ||
     normalizedMessage.includes('explorer-api.walletconnect.com') ||
     normalizedMessage.includes('relay.walletconnect.com');
+
+  // Filter out hydration errors from Google Ads parameters and dynamic content
+  const isHydrationError =
+    normalizedMessage.includes('hydration') &&
+    (normalizedMessage.includes("didn't match") ||
+     normalizedMessage.includes('text content does not match') ||
+     normalizedMessage.includes('there was an error while hydrating'));
 
   // Filter out "N+1 API Call" performance monitoring events
   // These are triggered by our intentional parallel model prefetch optimization
@@ -102,7 +112,7 @@ function shouldFilterEdgeEvent(errorMessage: string, event?: Sentry.ErrorEvent):
      normalizedMessage.includes('google-analytics') ||
      hasGtagOrExtensionFrames);
 
-  return isWalletExtensionError || isWalletConnectRelayError || isN1ApiCall || isStorageAccessDenied || isJavaObjectGone || isPrivyIframeError || isLargePayloadInfo || isGtagOrExtensionFetchError;
+  return isWalletExtensionError || isWalletConnectRelayError || isHydrationError || isN1ApiCall || isStorageAccessDenied || isJavaObjectGone || isPrivyIframeError || isLargePayloadInfo || isGtagOrExtensionFetchError;
 }
 
 function shouldEdgeRateLimit(event: Sentry.ErrorEvent): boolean {
