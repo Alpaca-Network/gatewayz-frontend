@@ -293,6 +293,7 @@ export default function ComfyUIPlaygroundPage() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initializedRef = useRef(false);
 
   // Check server status
   const checkServerStatus = useCallback(async () => {
@@ -314,9 +315,13 @@ export default function ComfyUIPlaygroundPage() {
     try {
       const response = await listWorkflows();
       setWorkflows(response.workflows);
-      if (response.workflows.length > 0 && !selectedWorkflow) {
-        setSelectedWorkflow(response.workflows[0]);
-      }
+      // Only set initial workflow if none selected yet
+      setSelectedWorkflow((current) => {
+        if (current === null && response.workflows.length > 0) {
+          return response.workflows[0];
+        }
+        return current;
+      });
     } catch (error) {
       console.error('Failed to load workflows:', error);
       toast({
@@ -327,11 +332,12 @@ export default function ComfyUIPlaygroundPage() {
     } finally {
       setLoadingWorkflows(false);
     }
-  }, [selectedWorkflow, toast]);
+  }, [toast]);
 
-  // Initialize
+  // Initialize - runs once when authenticated
   useEffect(() => {
-    if (ready && authenticated) {
+    if (ready && authenticated && !initializedRef.current) {
+      initializedRef.current = true;
       checkServerStatus();
       loadWorkflows();
     }
