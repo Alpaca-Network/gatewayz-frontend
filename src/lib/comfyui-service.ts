@@ -188,7 +188,8 @@ export async function executeWorkflow(request: ExecutionRequest): Promise<Execut
  * Execute a workflow with streaming progress updates
  */
 export async function* executeWorkflowStream(
-  request: ExecutionRequest
+  request: ExecutionRequest,
+  signal?: AbortSignal
 ): AsyncGenerator<ProgressUpdate | ExecutionResponse, void, unknown> {
   const apiKey = getApiKey();
   if (!apiKey) {
@@ -203,6 +204,7 @@ export async function* executeWorkflowStream(
       Accept: 'text/event-stream',
     },
     body: JSON.stringify(request),
+    signal,
   });
 
   if (!response.ok) {

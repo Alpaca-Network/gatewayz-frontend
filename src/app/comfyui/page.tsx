@@ -216,9 +216,9 @@ function OutputGallery({
                       className="w-full h-full object-cover"
                     />
                   )}
-                  {output.type === 'video' && output.url && (
+                  {output.type === 'video' && (output.b64_data || output.url) && (
                     <video
-                      src={output.url}
+                      src={output.b64_data || output.url}
                       className="w-full h-full object-cover"
                       controls
                       loop
@@ -343,6 +343,11 @@ export default function ComfyUIPlaygroundPage() {
       checkServerStatus();
       loadWorkflows();
     }
+    // For unauthenticated users, stop the loading spinners
+    if (ready && !authenticated) {
+      setCheckingStatus(false);
+      setLoadingWorkflows(false);
+    }
   }, [ready, authenticated, checkServerStatus, loadWorkflows]);
 
   // Handle image upload
@@ -416,11 +421,11 @@ export default function ComfyUIPlaygroundPage() {
       let finalResponse: ExecutionResponse | null = null;
       currentExecutionIdRef.current = null;
 
-      for await (const update of executeWorkflowStream(request)) {
+      for await (const update of executeWorkflowStream(request, abortControllerRef.current.signal)) {
         if (abortControllerRef.current?.signal.aborted) break;
 
-        if ('outputs' in update && update.outputs) {
-          // This is the final response
+        if ('outputs' in update && Array.isArray(update.outputs)) {
+          // This is the final response (outputs can be empty array)
           finalResponse = update as ExecutionResponse;
         } else {
           // This is a progress update
