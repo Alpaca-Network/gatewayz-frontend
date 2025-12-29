@@ -146,6 +146,13 @@ describe('gateway-registry', () => {
       expect(GATEWAY_BY_ID['hug']).toBeDefined();
       expect(GATEWAY_BY_ID['hug'].id).toBe('huggingface');
     });
+
+    it('should have google-vertex with "google" alias', () => {
+      expect(GATEWAY_BY_ID['google']).toBeDefined();
+      expect(GATEWAY_BY_ID['google'].id).toBe('google-vertex');
+      expect(GATEWAY_BY_ID['google-vertex']).toBeDefined();
+      expect(GATEWAY_BY_ID['google-vertex'].name).toBe('Google');
+    });
   });
 
   describe('Gateway Utility Functions', () => {
