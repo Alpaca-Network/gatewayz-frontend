@@ -169,6 +169,15 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
   },
 
   setIncognitoMode: (enabled) => {
+    const currentIncognitoMode = get().isIncognitoMode;
+
+    // No-op if already in the desired state (makes this function idempotent)
+    // This prevents unexpected model changes when calling setIncognitoMode(false)
+    // while incognito is already disabled (which would restore previousModel)
+    if (currentIncognitoMode === enabled) {
+      return;
+    }
+
     const currentModel = get().selectedModel;
     const previousModel = get().previousModel;
 
