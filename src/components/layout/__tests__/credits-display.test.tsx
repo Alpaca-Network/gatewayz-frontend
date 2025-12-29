@@ -40,8 +40,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show credit count
-      expect(screen.getByText('1,000')).toBeInTheDocument();
+      // Should show credit count with $ prefix
+      expect(screen.getByText(/\$.*1,000/)).toBeInTheDocument();
       // Should not show tier badge
       expect(screen.queryByText('PRO')).not.toBeInTheDocument();
       expect(screen.queryByText('MAX')).not.toBeInTheDocument();
@@ -63,7 +63,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      expect(screen.getByText('0')).toBeInTheDocument();
+      // Should show $0 with $ prefix
+      expect(screen.getByText(/\$.*0/)).toBeInTheDocument();
     });
 
     it('should display credits when tier is undefined', () => {
@@ -81,7 +82,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      expect(screen.getByText('500')).toBeInTheDocument();
+      // Should show $500 with $ prefix
+      expect(screen.getByText(/\$.*500/)).toBeInTheDocument();
     });
   });
 
@@ -242,7 +244,8 @@ describe('CreditsDisplay', () => {
 
       const { rerender } = render(<CreditsDisplay />);
 
-      expect(screen.getByText('1,000')).toBeInTheDocument();
+      // Should show credits with $ prefix
+      expect(screen.getByText(/\$.*1,000/)).toBeInTheDocument();
 
       // Simulate upgrade to PRO
       const upgradedUserData: UserData = {

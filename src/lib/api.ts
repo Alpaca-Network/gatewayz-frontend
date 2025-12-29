@@ -35,7 +35,7 @@ export const AUTH_REFRESH_COMPLETE_EVENT = 'gatewayz:refresh-complete';
 export const NEW_USER_WELCOME_EVENT = 'gatewayz:new-user-welcome';
 
 export type UserTier = 'basic' | 'pro' | 'max';
-export type SubscriptionStatus = 'active' | 'cancelled' | 'past_due' | 'inactive';
+export type SubscriptionStatus = 'active' | 'cancelled' | 'past_due' | 'inactive' | 'trial' | 'expired';
 
 export interface AuthResponse {
   success: boolean;
@@ -53,6 +53,7 @@ export interface AuthResponse {
   tier_display_name?: string; // Formatted tier name from backend (e.g., "Pro", "MAX")
   subscription_status?: SubscriptionStatus;
   subscription_end_date?: number; // Unix timestamp
+  trial_expires_at?: string; // ISO 8601 string of when trial expires
 }
 
 export interface UserData {
@@ -67,6 +68,7 @@ export interface UserData {
   tier_display_name?: string; // Formatted tier name from backend (e.g., "Pro", "MAX")
   subscription_status?: SubscriptionStatus;
   subscription_end_date?: number; // Unix timestamp
+  trial_expires_at?: string; // ISO 8601 string of when trial expires
 }
 
 // API Key Management
@@ -297,6 +299,7 @@ export const processAuthResponse = (response: AuthResponse): void => {
       tier_display_name: response.tier_display_name,
       subscription_status: response.subscription_status,
       subscription_end_date: response.subscription_end_date,
+      trial_expires_at: response.trial_expires_at,
     };
 
     saveUserData(userData);
