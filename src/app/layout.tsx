@@ -14,6 +14,7 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
 import { GoogleAnalytics } from '@/components/analytics/google-analytics';
+import { TwitterPixel } from '@/components/analytics/twitter-pixel';
 import { SessionInitializer } from '@/components/SessionInitializer';
 import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-restorer';
 import { GTMLoader } from '@/components/analytics/gtm-loader';
@@ -98,6 +99,7 @@ export default function RootLayout({
         <ErrorSuppressor />
         {/* ... (script) */}
         <GoogleAnalytics />
+        <TwitterPixel />
         <ThemeProvider
           defaultTheme="system"
           storageKey="ui-theme"

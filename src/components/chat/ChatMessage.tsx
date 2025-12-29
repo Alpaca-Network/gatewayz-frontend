@@ -22,6 +22,7 @@ const ReasoningDisplay = dynamic(
   () => import('@/components/chat/reasoning-display').then(mod => ({ default: mod.ReasoningDisplay })),
   { ssr: true }
 );
+const SearchResults = dynamic(() => import('@/components/chat/SearchResults'), { ssr: true });
 
 export interface ChatMessageProps {
   role: 'user' | 'assistant';
@@ -44,6 +45,15 @@ export interface ChatMessageProps {
   onShare?: () => void;
   onMore?: () => void;
   showActions?: boolean;
+  // Search tool state
+  isSearching?: boolean;
+  searchQuery?: string;
+  searchResults?: {
+    query: string;
+    results: Array<{ title: string; url: string; content: string; score?: number }>;
+    answer?: string;
+  };
+  searchError?: string;
 }
 
 // Helper to compare content (handles arrays properly)
@@ -176,6 +186,10 @@ export const ChatMessage = memo<ChatMessageProps>(
     onShare,
     onMore,
     showActions = true,
+    isSearching,
+    searchQuery,
+    searchResults,
+    searchError,
   }) => {
     const isUser = role === 'user';
 
@@ -214,9 +228,9 @@ export const ChatMessage = memo<ChatMessageProps>(
           </Avatar>
         )}
 
-        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[80%]`}>
+        <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[80%] sm:max-w-[80%] w-full sm:w-auto`}>
           <Card
-            className={`p-4 ${
+            className={`p-4 w-full ${
               isUser
                 ? 'bg-blue-600 text-white dark:bg-blue-500'
                 : 'bg-transparent border-border text-foreground'
@@ -279,8 +293,19 @@ export const ChatMessage = memo<ChatMessageProps>(
               </div>
             )}
 
+            {/* Search results (for web search tool) */}
+            {!isUser && (isSearching || searchResults || searchError) && (
+              <SearchResults
+                query={searchQuery || searchResults?.query}
+                results={searchResults?.results}
+                isSearching={isSearching}
+                answer={searchResults?.answer}
+                error={searchError}
+              />
+            )}
+
             {/* Message content */}
-            <div className={`prose prose-sm max-w-none ${isUser ? 'text-white prose-invert' : 'text-foreground dark:prose-invert'}`}>
+            <div className={`prose prose-sm max-w-none break-words overflow-wrap-anywhere ${isUser ? 'text-white prose-invert' : 'text-foreground dark:prose-invert'}`}>
               {isUser ? (
                 <p className="whitespace-pre-wrap m-0">{displayContent}</p>
               ) : (
@@ -289,20 +314,20 @@ export const ChatMessage = memo<ChatMessageProps>(
                   components={{
                     code: ({ inline, className, children, node, ...props }: any) => {
                       return !inline ? (
-                        <pre className="bg-slate-800 dark:bg-slate-900 text-slate-100 p-3 rounded-md overflow-x-auto">
-                          <code className={className} {...props}>
+                        <pre className="bg-slate-800 dark:bg-slate-900 text-slate-100 p-3 rounded-md overflow-x-auto max-w-full">
+                          <code className={`${className} break-words whitespace-pre-wrap`} {...props}>
                             {children}
                           </code>
                         </pre>
                       ) : (
-                        <code className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-1.5 py-0.5 rounded text-sm" {...props}>
+                        <code className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-1.5 py-0.5 rounded text-sm break-words" {...props}>
                           {children}
                         </code>
                       );
                     },
                     p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
                     table: ({ children }) => (
-                      <div className="overflow-x-auto my-4">
+                      <div className="overflow-x-auto my-4 max-w-full -mx-4 px-4 sm:mx-0 sm:px-0">
                         <table className="min-w-full border-collapse border border-border">
                           {children}
                         </table>
@@ -397,7 +422,7 @@ export const ChatMessage = memo<ChatMessageProps>(
                     size="icon"
                     className="h-6 w-6"
                     onClick={onShare}
-                    title="Share"
+                    title="Share chat"
                   >
                     <Share className="h-3 w-3" />
                   </Button>
@@ -461,7 +486,12 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.onDislike === nextProps.onDislike &&
       prevProps.onShare === nextProps.onShare &&
       prevProps.onMore === nextProps.onMore &&
-      prevProps.onRegenerate === nextProps.onRegenerate
+      prevProps.onRegenerate === nextProps.onRegenerate &&
+      // Search-related props
+      prevProps.isSearching === nextProps.isSearching &&
+      prevProps.searchQuery === nextProps.searchQuery &&
+      prevProps.searchError === nextProps.searchError &&
+      JSON.stringify(prevProps.searchResults) === JSON.stringify(nextProps.searchResults)
     );
   }
 );

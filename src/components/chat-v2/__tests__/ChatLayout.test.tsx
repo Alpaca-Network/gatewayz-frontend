@@ -21,11 +21,26 @@ jest.mock('@/components/ui/sheet', () => ({
   SheetTitle: ({ children }: any) => <div>{children}</div>,
 }));
 
+jest.mock('@/components/ui/alert-dialog', () => ({
+  AlertDialog: ({ children, open }: any) => open ? <div role="dialog">{children}</div> : null,
+  AlertDialogContent: ({ children }: any) => <div>{children}</div>,
+  AlertDialogHeader: ({ children }: any) => <div>{children}</div>,
+  AlertDialogTitle: ({ children }: any) => <div>{children}</div>,
+  AlertDialogDescription: ({ children }: any) => <div>{children}</div>,
+  AlertDialogFooter: ({ children }: any) => <div>{children}</div>,
+  AlertDialogAction: ({ children, onClick }: any) => (
+    <button role="button" onClick={onClick}>{children}</button>
+  ),
+  AlertDialogCancel: ({ children, onClick }: any) => (
+    <button role="button" onClick={onClick}>{children}</button>
+  ),
+}));
+
 jest.mock('@/lib/utils', () => ({
   cn: (...args: any[]) => args.filter(Boolean).join(' '),
 }));
 
-// Mock lucide-react icons
+// Mock lucide-react icons (including icons used by sub-components)
 jest.mock('lucide-react', () => ({
   Menu: () => <span data-testid="menu-icon">Menu</span>,
   Pencil: () => <span data-testid="pencil-icon">Pencil</span>,
@@ -33,6 +48,33 @@ jest.mock('lucide-react', () => ({
   Unlock: () => <span data-testid="unlock-icon">Unlock</span>,
   Shield: () => <span data-testid="shield-icon">Shield</span>,
   Plus: () => <span data-testid="plus-icon">Plus</span>,
+  ImageIcon: () => <span data-testid="image-icon">Image</span>,
+  BarChart3: () => <span data-testid="bar-chart-icon">BarChart</span>,
+  Code2: () => <span data-testid="code-icon">Code</span>,
+  Lightbulb: () => <span data-testid="lightbulb-icon">Lightbulb</span>,
+  MoreHorizontal: () => <span data-testid="more-icon">More</span>,
+  // Icons used by ConnectionStatus
+  WifiOff: () => <span data-testid="wifi-off-icon">WifiOff</span>,
+  Wifi: () => <span data-testid="wifi-icon">Wifi</span>,
+  RefreshCw: () => <span data-testid="refresh-icon">RefreshCw</span>,
+  AlertCircle: () => <span data-testid="alert-circle-icon">AlertCircle</span>,
+  // Icons used by GuestChatCounter
+  MessageSquare: () => <span data-testid="message-square-icon">MessageSquare</span>,
+}));
+
+// Mock ConnectionStatus to avoid its dependencies
+jest.mock('../ConnectionStatus', () => ({
+  ConnectionStatus: () => <div data-testid="connection-status">ConnectionStatus</div>,
+}));
+
+// Mock GuestChatCounter to avoid its dependencies
+jest.mock('@/components/chat/guest-chat-counter', () => ({
+  GuestChatCounter: () => <div data-testid="guest-chat-counter">GuestChatCounter</div>,
+}));
+
+// Mock use-network-status hook
+jest.mock('@/hooks/use-network-status', () => ({
+  useNetworkStatus: () => ({ isOnline: true, isChecking: false }),
 }));
 
 // Mock the stores and hooks
@@ -178,8 +220,8 @@ describe('ChatLayout', () => {
     it('should render 4 prompt cards on welcome screen', () => {
       render(<ChatLayout />);
 
-      // Welcome screen should show "What's On Your Mind?"
-      expect(screen.getByText("What's On Your Mind?")).toBeInTheDocument();
+      // Welcome screen should show "What can I help with?"
+      expect(screen.getByText("What can I help with?")).toBeInTheDocument();
 
       // Should have exactly 4 prompt cards
       const cards = screen.getAllByTestId('card');
@@ -493,7 +535,7 @@ describe('Feedback handlers', () => {
 
     // Component renders successfully with feedback handlers defined internally
     // The handlers are passed to MessageList when there's an active session
-    expect(screen.getByText("What's On Your Mind?")).toBeInTheDocument();
+    expect(screen.getByText("What can I help with?")).toBeInTheDocument();
   });
 });
 
@@ -527,7 +569,7 @@ describe('handleShare', () => {
     render(<ChatLayout />);
 
     // Component renders without errors, handler is defined internally
-    expect(screen.getByText("What's On Your Mind?")).toBeInTheDocument();
+    expect(screen.getByText("What can I help with?")).toBeInTheDocument();
   });
 });
 
@@ -728,38 +770,124 @@ describe('Handlers with active session', () => {
     });
   });
 
-  it('should call handleShare and copy content to clipboard', async () => {
+  it('should call handleShare and create share URL', async () => {
+    // Mock global fetch BEFORE render to ensure it intercepts the dynamic import's fetch call
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        share_url: 'https://gatewayz.ai/share/abc123',
+      }),
+    });
+
     render(<ChatLayout />);
 
     expect(mockMessageListProps.onShare).toBeDefined();
 
+    // Call onShare to trigger privacy dialog
     await mockMessageListProps.onShare(2);
 
+    // Wait for dialog to appear and find the confirmation button
     await waitFor(() => {
-      expect(clipboardWriteText).toHaveBeenCalledWith('Hi there!');
+      expect(screen.getByText('Share this conversation?')).toBeInTheDocument();
+    });
+
+    // Click the confirmation button
+    const confirmButton = screen.getByRole('button', { name: /I understand, share anyway/i });
+    fireEvent.click(confirmButton);
+
+    await waitFor(() => {
+      expect(clipboardWriteText).toHaveBeenCalledWith('https://gatewayz.ai/share/abc123');
     });
 
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Copied to clipboard',
+          title: 'Share link copied!',
         })
       );
     });
   });
 
-  it('should show error toast when handleShare cannot find message', async () => {
+  it('should show privacy dialog when share is clicked', async () => {
     render(<ChatLayout />);
 
     expect(mockMessageListProps.onShare).toBeDefined();
 
-    // Try to share a non-existent message
-    await mockMessageListProps.onShare(999);
+    // Call onShare to trigger privacy dialog
+    await mockMessageListProps.onShare(2);
+
+    // Wait for dialog to appear with privacy warning
+    await waitFor(() => {
+      expect(screen.getByText('Share this conversation?')).toBeInTheDocument();
+      expect(screen.getByText(/Anyone with the link will be able to view/i)).toBeInTheDocument();
+    });
+
+    // Check for the presence of privacy warnings
+    expect(screen.getByText(/Personal information/i)).toBeInTheDocument();
+    expect(screen.getByText(/Passwords or API keys/i)).toBeInTheDocument();
+  });
+
+  it('should not create share link if user cancels privacy dialog', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: true,
+        share_url: 'https://gatewayz.ai/share/abc123',
+      }),
+    });
+
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onShare).toBeDefined();
+
+    // Call onShare to trigger privacy dialog
+    await mockMessageListProps.onShare(2);
+
+    // Wait for dialog to appear
+    await waitFor(() => {
+      expect(screen.getByText('Share this conversation?')).toBeInTheDocument();
+    });
+
+    // Click the cancel button
+    const cancelButton = screen.getByRole('button', { name: /Cancel/i });
+    fireEvent.click(cancelButton);
+
+    // Verify that fetch was NOT called (no share link created)
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    // Verify clipboard was NOT written to
+    expect(clipboardWriteText).not.toHaveBeenCalled();
+  });
+
+  it('should show error toast when handleShare fails to create share link', async () => {
+    // Mock global fetch BEFORE render to ensure it intercepts the dynamic import's fetch call
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'Failed to create share link' }),
+    });
+
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onShare).toBeDefined();
+
+    // Call onShare to trigger privacy dialog
+    await mockMessageListProps.onShare(2);
+
+    // Wait for dialog to appear
+    await waitFor(() => {
+      expect(screen.getByText('Share this conversation?')).toBeInTheDocument();
+    });
+
+    // Click the confirmation button
+    const confirmButton = screen.getByRole('button', { name: /I understand, share anyway/i });
+    fireEvent.click(confirmButton);
 
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Unable to share',
+          title: 'Share failed',
           variant: 'destructive',
         })
       );
@@ -957,223 +1085,6 @@ describe('handleRegenerate edge cases', () => {
   });
 });
 
-describe('handleShare with array content', () => {
-  let mockToast: jest.Mock;
-  let clipboardWriteText: jest.Mock;
-
-  beforeEach(() => {
-    mockToast = jest.fn();
-    clipboardWriteText = jest.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText: clipboardWriteText },
-      writable: true,
-      configurable: true,
-    });
-    jest.spyOn(require('@/hooks/use-toast'), 'useToast').mockReturnValue({ toast: mockToast });
-    Object.keys(mockMessageListProps).forEach(key => delete mockMessageListProps[key]);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  it('should extract text from array content when sharing', async () => {
-    const arrayContentMessages = [
-      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
-      {
-        id: 2,
-        role: 'assistant',
-        content: [
-          { type: 'text', text: 'First part. ' },
-          { type: 'text', text: 'Second part.' },
-          { type: 'image', url: 'test.jpg' },
-        ],
-        isStreaming: false,
-      },
-    ];
-
-    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-      activeSessionId: 123,
-      setActiveSessionId: mockSetActiveSessionId,
-      selectedModel: { value: 'test-model', label: 'Test Model' },
-      setSelectedModel: mockSetSelectedModel,
-      inputValue: '',
-      setInputValue: mockSetInputValue,
-      mobileSidebarOpen: false,
-      setMobileSidebarOpen: mockSetMobileSidebarOpen,
-      isIncognitoMode: false,
-      setIncognitoMode: mockSetIncognitoMode,
-      toggleIncognitoMode: mockToggleIncognitoMode,
-      syncIncognitoState: jest.fn(),
-    });
-    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
-      data: arrayContentMessages,
-      isLoading: false,
-    });
-
-    render(<ChatLayout />);
-
-    expect(mockMessageListProps.onShare).toBeDefined();
-
-    await mockMessageListProps.onShare(2);
-
-    await waitFor(() => {
-      expect(clipboardWriteText).toHaveBeenCalledWith('First part. Second part.');
-    });
-  });
-
-  it('should filter out undefined text values in array content', async () => {
-    const arrayContentWithUndefined = [
-      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
-      {
-        id: 2,
-        role: 'assistant',
-        content: [
-          { type: 'text', text: 'Valid text.' },
-          { type: 'text' }, // missing text property
-          { type: 'text', text: undefined }, // explicit undefined
-          { type: 'text', text: '' }, // empty string - should be filtered
-          { type: 'text', text: 'More text.' },
-        ],
-        isStreaming: false,
-      },
-    ];
-
-    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-      activeSessionId: 123,
-      setActiveSessionId: mockSetActiveSessionId,
-      selectedModel: { value: 'test-model', label: 'Test Model' },
-      setSelectedModel: mockSetSelectedModel,
-      inputValue: '',
-      setInputValue: mockSetInputValue,
-      mobileSidebarOpen: false,
-      setMobileSidebarOpen: mockSetMobileSidebarOpen,
-      isIncognitoMode: false,
-      setIncognitoMode: mockSetIncognitoMode,
-      toggleIncognitoMode: mockToggleIncognitoMode,
-      syncIncognitoState: jest.fn(),
-    });
-    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
-      data: arrayContentWithUndefined,
-      isLoading: false,
-    });
-
-    render(<ChatLayout />);
-
-    expect(mockMessageListProps.onShare).toBeDefined();
-
-    await mockMessageListProps.onShare(2);
-
-    await waitFor(() => {
-      // Should only contain valid text values, not "undefined" literals
-      expect(clipboardWriteText).toHaveBeenCalledWith('Valid text.More text.');
-    });
-  });
-
-  it('should show error toast when clipboard.writeText fails', async () => {
-    clipboardWriteText.mockRejectedValue(new Error('Clipboard access denied'));
-
-    const messages = [
-      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
-      { id: 2, role: 'assistant', content: 'Response text', isStreaming: false },
-    ];
-
-    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-      activeSessionId: 123,
-      setActiveSessionId: mockSetActiveSessionId,
-      selectedModel: { value: 'test-model', label: 'Test Model' },
-      setSelectedModel: mockSetSelectedModel,
-      inputValue: '',
-      setInputValue: mockSetInputValue,
-      mobileSidebarOpen: false,
-      setMobileSidebarOpen: mockSetMobileSidebarOpen,
-      isIncognitoMode: false,
-      setIncognitoMode: mockSetIncognitoMode,
-      toggleIncognitoMode: mockToggleIncognitoMode,
-      syncIncognitoState: jest.fn(),
-    });
-    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
-      data: messages,
-      isLoading: false,
-    });
-
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    render(<ChatLayout />);
-
-    expect(mockMessageListProps.onShare).toBeDefined();
-
-    await mockMessageListProps.onShare(2);
-
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Copy failed',
-          description: 'Unable to copy to clipboard. Please try again.',
-          variant: 'destructive',
-        })
-      );
-    });
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[ChatLayout] Failed to copy to clipboard:',
-      expect.any(Error)
-    );
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('should show success toast only after clipboard.writeText resolves', async () => {
-    // Track the order of calls
-    const callOrder: string[] = [];
-
-    clipboardWriteText.mockImplementation(() => {
-      callOrder.push('clipboard');
-      return Promise.resolve();
-    });
-
-    mockToast.mockImplementation(() => {
-      callOrder.push('toast');
-    });
-
-    const messages = [
-      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
-      { id: 2, role: 'assistant', content: 'Response text', isStreaming: false },
-    ];
-
-    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
-      activeSessionId: 123,
-      setActiveSessionId: mockSetActiveSessionId,
-      selectedModel: { value: 'test-model', label: 'Test Model' },
-      setSelectedModel: mockSetSelectedModel,
-      inputValue: '',
-      setInputValue: mockSetInputValue,
-      mobileSidebarOpen: false,
-      setMobileSidebarOpen: mockSetMobileSidebarOpen,
-      isIncognitoMode: false,
-      setIncognitoMode: mockSetIncognitoMode,
-      toggleIncognitoMode: mockToggleIncognitoMode,
-      syncIncognitoState: jest.fn(),
-    });
-    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
-      data: messages,
-      isLoading: false,
-    });
-
-    render(<ChatLayout />);
-
-    await mockMessageListProps.onShare(2);
-
-    await waitFor(() => {
-      expect(clipboardWriteText).toHaveBeenCalled();
-      expect(mockToast).toHaveBeenCalled();
-    });
-
-    // Verify clipboard was called before toast (async behavior is correct)
-    expect(callOrder[0]).toBe('clipboard');
-    expect(callOrder[1]).toBe('toast');
-  });
-});
 
 describe('handleRegenerate with undefined text values', () => {
   let mockToast: jest.Mock;
@@ -1235,6 +1146,73 @@ describe('handleRegenerate with undefined text values', () => {
     await waitFor(() => {
       // Should only contain valid text, not "undefined" literals
       expect(mockSetInputValue).toHaveBeenCalledWith('Valid content.More content.');
+    });
+  });
+});
+
+describe('Background logo rendering', () => {
+  it('should render background logos with correct styling', () => {
+    const { container } = render(<ChatLayout />);
+
+    // Find the background logo images
+    const backgroundLogos = container.querySelectorAll('img[alt="Background"]');
+
+    // Should have 2 logos (light and dark mode)
+    expect(backgroundLogos).toHaveLength(2);
+
+    // Check light mode logo
+    const lightLogo = backgroundLogos[0];
+    expect(lightLogo).toHaveAttribute('src', '/logo_transparent.svg');
+    expect(lightLogo.className).toContain('w-48');
+    expect(lightLogo.className).toContain('h-48');
+    expect(lightLogo.className).toContain('top-8');
+    expect(lightLogo.className).toContain('opacity-50');
+    expect(lightLogo.className).toContain('z-0');
+
+    // Check dark mode logo
+    const darkLogo = backgroundLogos[1];
+    expect(darkLogo).toHaveAttribute('src', '/logo_black.svg');
+    expect(darkLogo.className).toContain('w-48');
+    expect(darkLogo.className).toContain('h-48');
+    expect(darkLogo.className).toContain('top-8');
+    expect(darkLogo.className).toContain('opacity-50');
+    expect(darkLogo.className).toContain('z-0');
+  });
+
+  it('should position background logo behind content', () => {
+    const { container } = render(<ChatLayout />);
+
+    const backgroundLogos = container.querySelectorAll('img[alt="Background"]');
+
+    // Both logos should have z-0 to stay behind content
+    backgroundLogos.forEach(logo => {
+      expect(logo.className).toContain('z-0');
+    });
+
+    // Main content should have higher z-index (z-10)
+    const mainContent = container.querySelector('[class*="z-10"]');
+    expect(mainContent).toBeInTheDocument();
+  });
+
+  it('should hide background logos on small screens', () => {
+    const { container } = render(<ChatLayout />);
+
+    const backgroundLogos = container.querySelectorAll('img[alt="Background"]');
+
+    // Both logos should have "hidden lg:block" or "hidden dark:lg:block"
+    expect(backgroundLogos[0].className).toContain('hidden');
+    expect(backgroundLogos[0].className).toContain('lg:block');
+    expect(backgroundLogos[1].className).toContain('hidden');
+  });
+
+  it('should make background logos non-interactive', () => {
+    const { container } = render(<ChatLayout />);
+
+    const backgroundLogos = container.querySelectorAll('img[alt="Background"]');
+
+    // Both logos should have pointer-events-none
+    backgroundLogos.forEach(logo => {
+      expect(logo.className).toContain('pointer-events-none');
     });
   });
 });

@@ -16,6 +16,7 @@ import { CreditsDisplay } from "./credits-display";
 import { Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
+import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
 
 const getWalletAddress = (user: any) => {
   try {
@@ -200,7 +201,7 @@ export function AppHeader() {
             <Link href="/chat" className="transition-colors hover:text-foreground/80 ">Chat</Link>
             <Link href="/developers" className="transition-colors hover:text-foreground/80 ">Researchers</Link>
             <Link href="/rankings" className="transition-colors hover:text-foreground/80 ">Ranking</Link>
-            <Link href="https://blog.gatewayz.ai/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground/80 ">Insights</Link>
+            <Link href="https://blog.gatewayz.ai" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground/80 ">Insights</Link>
             <Link href="https://docs.gatewayz.ai/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground/80 ">Docs</Link>
           </nav>
 
@@ -216,7 +217,7 @@ export function AppHeader() {
                 <UserNav user={user} />
               </>
             ) : (
-              <Button variant="outline" onClick={() => login()}>Sign In</Button>
+              <Button variant="outline" onClick={() => { trackTwitterSignupClick(); login(); }}>Sign In</Button>
             )}
             <ThemeToggle />
           </div>
@@ -230,7 +231,7 @@ export function AppHeader() {
               </>
             )}
             {!user && (
-              <Button variant="outline" size="sm" onClick={() => login()}>Sign In</Button>
+              <Button variant="outline" size="sm" onClick={() => { trackTwitterSignupClick(); login(); }}>Sign In</Button>
             )}
           </div>
           <div className="lg:hidden shrink-0">
@@ -279,7 +280,7 @@ export function AppHeader() {
                       Ranking
                     </Link>
                     <Link
-                      href="https://blog.gatewayz.ai/"
+                      href="https://blog.gatewayz.ai"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
@@ -417,6 +418,7 @@ export function AppHeader() {
                         className="w-full"
                         disabled={isAuthenticating}
                         onClick={() => {
+                          trackTwitterSignupClick();
                           login();
                           setMobileMenuOpen(false);
                         }}

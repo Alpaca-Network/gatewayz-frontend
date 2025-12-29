@@ -45,7 +45,10 @@ function shouldFilterEdgeEvent(errorMessage: string, event?: Sentry.ErrorEvent):
   const isWalletExtensionError =
     normalizedMessage.includes('chrome.runtime.sendmessage') ||
     normalizedMessage.includes('runtime.sendmessage') ||
-    (normalizedMessage.includes('extension id') && normalizedMessage.includes('from a webpage'));
+    (normalizedMessage.includes('extension id') && normalizedMessage.includes('from a webpage')) ||
+    normalizedMessage.includes('removelistener') ||
+    normalizedMessage.includes('stoplisteners') ||
+    normalizedMessage.includes('inpage.js');
 
   const isWalletConnectRelayError =
     normalizedMessage.includes('walletconnect') ||
@@ -54,6 +57,13 @@ function shouldFilterEdgeEvent(errorMessage: string, event?: Sentry.ErrorEvent):
     normalizedMessage.includes('explorer-api.walletconnect.com') ||
     normalizedMessage.includes('relay.walletconnect.com');
 
+  // Filter out hydration errors from Google Ads parameters and dynamic content
+  const isHydrationError =
+    normalizedMessage.includes('hydration') &&
+    (normalizedMessage.includes("didn't match") ||
+     normalizedMessage.includes('text content does not match') ||
+     normalizedMessage.includes('there was an error while hydrating'));
+
   // Filter out "N+1 API Call" performance monitoring events
   // These are triggered by our intentional parallel model prefetch optimization
   const isN1ApiCall =
@@ -61,7 +71,28 @@ function shouldFilterEdgeEvent(errorMessage: string, event?: Sentry.ErrorEvent):
     (normalizedMessage.includes('n+1 api call') ||
      (event?.message?.toLowerCase() || '').includes('n+1 api call'));
 
-  return isWalletExtensionError || isWalletConnectRelayError || isN1ApiCall;
+  // Filter out localStorage/sessionStorage access denied errors (browser privacy mode)
+  const isStorageAccessDenied =
+    (normalizedMessage.includes('localstorage') || normalizedMessage.includes('sessionstorage') || normalizedMessage.includes('local storage')) &&
+    (normalizedMessage.includes('access is denied') || normalizedMessage.includes('access denied') || normalizedMessage.includes('not available') || normalizedMessage.includes('permission denied'));
+
+  // Filter out Android WebView "Java object is gone" errors
+  const isJavaObjectGone =
+    normalizedMessage.includes('java object is gone') ||
+    normalizedMessage.includes('javaobject');
+
+  // Filter out Privy iframe errors (external auth provider)
+  const isPrivyIframeError =
+    (normalizedMessage.includes('iframe not initialized') || normalizedMessage.includes('origin not allowed')) &&
+    normalizedMessage.includes('privy');
+
+  // Filter out "Large HTTP payload" info events
+  const isLargePayloadInfo =
+    event?.level === 'info' &&
+    (normalizedMessage.includes('large http payload') ||
+     (event?.message?.toLowerCase() || '').includes('large http payload'));
+
+  return isWalletExtensionError || isWalletConnectRelayError || isHydrationError || isN1ApiCall || isStorageAccessDenied || isJavaObjectGone || isPrivyIframeError || isLargePayloadInfo;
 }
 
 function shouldEdgeRateLimit(event: Sentry.ErrorEvent): boolean {

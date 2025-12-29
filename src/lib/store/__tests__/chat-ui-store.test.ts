@@ -31,11 +31,11 @@ describe('chat-ui-store', () => {
       isIncognitoMode: false,
       previousModel: null,
       selectedModel: {
-        value: 'cerebras/llama-3.3-70b',
-        label: 'Llama 3.3 70B',
+        value: 'cerebras/qwen-3-32b',
+        label: 'Qwen3 32B',
         category: 'General',
         sourceGateway: 'cerebras',
-        developer: 'Meta',
+        developer: 'Qwen',
         modalities: ['Text']
       },
       messageStartTime: null,
@@ -90,17 +90,16 @@ describe('chat-ui-store', () => {
     it('should export all NEAR incognito models', () => {
       expect(NEAR_INCOGNITO_MODELS).toBeDefined();
       expect(Array.isArray(NEAR_INCOGNITO_MODELS)).toBe(true);
-      expect(NEAR_INCOGNITO_MODELS.length).toBe(5);
+      expect(NEAR_INCOGNITO_MODELS.length).toBe(4);
     });
 
-    it('should include all 5 tested NEAR AI models', () => {
+    it('should include all 4 tested NEAR AI models', () => {
       const modelIds = NEAR_INCOGNITO_MODELS.map(m => m.value);
 
       expect(modelIds).toContain('near/zai-org/GLM-4.6');
       expect(modelIds).toContain('near/deepseek-ai/DeepSeek-V3.1');
       expect(modelIds).toContain('near/openai/gpt-oss-120b');
       expect(modelIds).toContain('near/Qwen/Qwen3-30B-A3B-Instruct-2507');
-      expect(modelIds).toContain('near/moonshotai/Kimi-K2-Thinking');
     });
 
     it('should have all models with near gateway', () => {

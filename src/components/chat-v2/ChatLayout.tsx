@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, Pencil, Lock, Unlock, Shield, Plus } from "lucide-react";
+import { Menu, Pencil, Lock, Unlock, Shield, Plus, ImageIcon, BarChart3, Code2, Lightbulb, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { ChatSidebar } from "./ChatSidebar";
@@ -21,6 +21,16 @@ import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateSession } from "@/lib/hooks/use-chat-queries";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Pool of prompts to randomly select from
 const ALL_PROMPTS = [
@@ -42,6 +52,14 @@ const ALL_PROMPTS = [
     { title: "What's the difference between HTTP and HTTPS?", subtitle: "Learn about web security basics" },
 ];
 
+// Quick action prompt chips
+const PROMPT_CHIPS = [
+    { label: "Create image", icon: ImageIcon, prompt: "Create an image of " },
+    { label: "Analyze data", icon: BarChart3, prompt: "Analyze the following data: " },
+    { label: "Code", icon: Code2, prompt: "Write code to " },
+    { label: "Brainstorm", icon: Lightbulb, prompt: "Brainstorm ideas for " },
+];
+
 // Fisher-Yates shuffle algorithm
 function shuffleArray<T>(array: T[]): T[] {
     const shuffled = [...array];
@@ -52,20 +70,40 @@ function shuffleArray<T>(array: T[]): T[] {
     return shuffled;
 }
 
-function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => void }) {
+function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect: (txt: string) => void; onPromptChipSelect?: (prompt: string) => void }) {
     // Select 4 random prompts on mount (useMemo ensures consistency during render)
     const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
 
     // Note: We no longer show a loading spinner here because ChatLayout immediately
     // switches to MessageList with optimistic UI when a prompt is clicked.
     return (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 overflow-y-auto">
-             <h1 className="text-2xl sm:text-4xl font-bold mb-8 text-center">What's On Your Mind?</h1>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-4xl w-full">
+        <div className="flex-1 flex flex-col items-center justify-start sm:justify-center p-4 pt-6 sm:pt-4 overflow-y-auto">
+             <h1 className="text-2xl sm:text-4xl font-bold mb-4 sm:mb-6 text-center">What can I help with?</h1>
+
+             {/* Prompt chips like ChatGPT */}
+             <div className="flex flex-wrap justify-center gap-2 mb-6 sm:mb-8 max-w-2xl">
+                 {PROMPT_CHIPS.map((chip) => (
+                     <button
+                        key={chip.label}
+                        onClick={() => onPromptChipSelect?.(chip.prompt)}
+                        className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
+                     >
+                         <chip.icon className="h-4 w-4" />
+                         {chip.label}
+                     </button>
+                 ))}
+                 <button
+                    className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
+                 >
+                     More
+                 </button>
+             </div>
+
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-4xl w-full">
                  {prompts.map((p) => (
                      <Card
                         key={p.title}
-                        className="p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
+                        className="p-3 sm:p-4 cursor-pointer hover:border-primary transition-colors bg-transparent border-border"
                         onClick={() => onPromptSelect(p.title)}
                      >
                          <p className="font-medium text-sm">{p.title}</p>
@@ -73,7 +111,7 @@ function WelcomeScreen({ onPromptSelect }: { onPromptSelect: (txt: string) => vo
                      </Card>
                  ))}
              </div>
-             <a href="/releases" className="mt-8 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+             <a href="/releases" className="mt-6 sm:mt-8 mb-4 text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
                  What's new
              </a>
         </div>
@@ -97,6 +135,9 @@ export function ChatLayout() {
 
    // Track if user has clicked a prompt (to immediately hide welcome screen)
    const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
+   // Share privacy dialog state
+   const [showSharePrivacyDialog, setShowSharePrivacyDialog] = useState(false);
 
    const { data: activeMessages = [], isLoading: messagesLoading } = useSessionMessages(activeSessionId);
 
@@ -257,6 +298,15 @@ export function ChatLayout() {
                setPendingPrompt(null);
            }
        });
+   };
+
+   // Handle prompt chip selection - just sets input value without sending, allows user to complete the prompt
+   const handlePromptChipSelect = (prompt: string) => {
+       setInputValue(prompt);
+       // Focus the input field so user can continue typing
+       if (typeof window !== 'undefined' && (window as any).__chatInputFocus) {
+           (window as any).__chatInputFocus();
+       }
    };
 
    // Handle retry for failed messages (e.g., rate limit errors)
@@ -460,42 +510,61 @@ export function ChatLayout() {
        }
    }, [activeSessionId, activeMessages, toast]);
 
-   // Handle share - copy message or share link
+   // Handle share - create and copy shareable link
+   // Note: messageId parameter is kept for interface compatibility with MessageList,
+   // but we share the entire session (not individual messages)
    const handleShare = useCallback(async (messageId: number) => {
-       // Find the message and copy its content
-       const message = activeMessages.find(m => m.id === messageId);
-       if (!message) {
+       if (!activeSessionId) {
            toast({
                title: "Unable to share",
-               description: "Message not found.",
+               description: "No active chat session.",
                variant: "destructive",
            });
            return;
        }
-       let content = '';
-       if (typeof message.content === 'string') {
-           content = message.content;
-       } else if (Array.isArray(message.content)) {
-           content = message.content
-               .filter((c: any) => c.type === 'text' && c.text)
-               .map((c: any) => c.text)
-               .join('');
-       }
+
+       // Show privacy warning dialog (messageId not used in actual sharing)
+       setShowSharePrivacyDialog(true);
+   }, [activeSessionId, toast]);
+
+   // Execute share after user confirms privacy warning
+   const executeShare = useCallback(async () => {
        try {
-           await navigator.clipboard.writeText(content);
-           toast({
-               title: "Copied to clipboard",
-               description: "Response has been copied to your clipboard.",
+           if (!activeSessionId) {
+               toast({
+                   title: "Unable to share",
+                   description: "No active chat session.",
+                   variant: "destructive",
+               });
+               return;
+           }
+           // Import the share utility function
+           const { createShareLink, copyShareUrlToClipboard } = await import('@/lib/share-chat');
+
+           // Create a shareable link for the entire chat session
+           const result = await createShareLink({
+               sessionId: activeSessionId,
            });
+
+           if (!result.success || !result.share_url) {
+               throw new Error(result.error || 'Failed to create share link');
+           }
+
+           // Copy the share URL to clipboard
+           await copyShareUrlToClipboard(result.share_url, toast);
+
        } catch (error) {
-           console.error('[ChatLayout] Failed to copy to clipboard:', error);
+           console.error('[ChatLayout] Failed to create share link:', error);
            toast({
-               title: "Copy failed",
-               description: "Unable to copy to clipboard. Please try again.",
+               title: "Share failed",
+               description: "Unable to create share link. Please try again.",
                variant: "destructive",
            });
+       } finally {
+           // Clean up
+           setShowSharePrivacyDialog(false);
        }
-   }, [activeMessages, toast]);
+   }, [activeSessionId, toast]);
 
    // Show welcome screen only when:
    // 1. No pending prompt (user hasn't clicked a starter prompt)
@@ -646,7 +715,7 @@ export function ChatLayout() {
               {/* Main Content */}
               <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
                   {showWelcomeScreen ? (
-                      <WelcomeScreen onPromptSelect={handlePromptSelect} />
+                      <WelcomeScreen onPromptSelect={handlePromptSelect} onPromptChipSelect={handlePromptChipSelect} />
                   ) : (
                       <MessageList
                         sessionId={activeSessionId}
@@ -667,6 +736,39 @@ export function ChatLayout() {
                     <ChatInput />
                </div>
            </div>
+
+           {/* Privacy Warning Dialog for Sharing */}
+           <AlertDialog open={showSharePrivacyDialog} onOpenChange={setShowSharePrivacyDialog}>
+             <AlertDialogContent>
+               <AlertDialogHeader>
+                 <AlertDialogTitle>Share this conversation?</AlertDialogTitle>
+                 <AlertDialogDescription className="space-y-2">
+                   <p>
+                     Anyone with the link will be able to view the entire conversation, including all messages and responses.
+                   </p>
+                   <p className="font-medium text-foreground">
+                     Please ensure your conversation doesn't contain:
+                   </p>
+                   <ul className="list-disc list-inside space-y-1 text-sm">
+                     <li>Personal information (names, emails, phone numbers)</li>
+                     <li>Passwords or API keys</li>
+                     <li>Confidential or sensitive data</li>
+                     <li>Private business information</li>
+                   </ul>
+                 </AlertDialogDescription>
+               </AlertDialogHeader>
+               <AlertDialogFooter>
+                 <AlertDialogCancel onClick={() => {
+                   setShowSharePrivacyDialog(false);
+                 }}>
+                   Cancel
+                 </AlertDialogCancel>
+                 <AlertDialogAction onClick={executeShare}>
+                   I understand, share anyway
+                 </AlertDialogAction>
+               </AlertDialogFooter>
+             </AlertDialogContent>
+           </AlertDialog>
        </div>
    )
 }

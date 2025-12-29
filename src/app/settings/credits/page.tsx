@@ -13,7 +13,7 @@
  */
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -242,6 +242,7 @@ const TransactionRow = ({ transaction }: { transaction: Transaction }) => {
 // Component that uses useSearchParams - must be wrapped in Suspense
 function CreditsPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [cardName, setCardName] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
@@ -474,13 +475,13 @@ function CreditsPageContent() {
         return;
       }
 
-      // Pass the discounted price as the payment amount, and credit value as the credits to add
-      await redirectToCheckout(selectedPackage.price, userData.email, userData.user_id, selectedPackage.creditValue);
+      // Redirect to checkout page with package info
+      router.push(`/checkout?package=${selectedPackage.id}&mode=credits`);
     } catch (error) {
       console.log('Checkout error:', error);
       alert('Failed to start checkout. Please try again.');
-      setIsLoading(false);
     } finally {
+      setIsLoading(false);
       setSelectedPackage(null);
     }
   };

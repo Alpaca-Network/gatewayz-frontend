@@ -2,7 +2,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, TrendingUp, Shield, Image as ImageIcon, Video } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
@@ -163,6 +163,8 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
   const [loadAllModels, setLoadAllModels] = React.useState(false)
   const [totalAvailableModels, setTotalAvailableModels] = React.useState<number | null>(null)
   const [popularModels, setPopularModels] = React.useState<ModelOption[]>([])
+  const [searchResults, setSearchResults] = React.useState<ModelOption[]>([])
+  const [searchLoading, setSearchLoading] = React.useState(false)
 
   const persistModelsToCache = React.useCallback((options: ModelOption[], totalCount: number | null) => {
     try {
@@ -189,6 +191,65 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Perform server-side search when user types
+  React.useEffect(() => {
+    async function performServerSearch() {
+      const query = debouncedSearchQuery.trim();
+
+      // Clear search results if query is empty
+      if (!query) {
+        setSearchResults([]);
+        setSearchLoading(false);
+        return;
+      }
+
+      // Start loading
+      setSearchLoading(true);
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for search
+
+        // Perform server-side search with gateway=all to search across all models
+        const response = await fetch(
+          `/api/models?gateway=all&search=${encodeURIComponent(query)}`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.data && Array.isArray(data.data)) {
+            const searchOptions: ModelOption[] = data.data.map((model: any) => {
+              const gateway = model.source_gateway || 'openrouter';
+              return {
+                value: model.id,
+                label: cleanModelName(model.name),
+                category: model.category || 'Paid',
+                developer: getDeveloper(model.id),
+                sourceGateway: gateway,
+                modalities: ['Text'],
+                speedTier: getModelSpeedTier(model.id, gateway),
+                huggingfaceMetrics: model.huggingface_metrics ? {
+                  downloads: model.huggingface_metrics.downloads || 0,
+                  likes: model.huggingface_metrics.likes || 0,
+                } : undefined,
+              };
+            });
+            setSearchResults(searchOptions);
+          }
+        }
+      } catch (error) {
+        console.error('[ModelSelect] Server search failed:', error);
+        // Keep previous results on error
+      } finally {
+        setSearchLoading(false);
+      }
+    }
+
+    performServerSearch();
+  }, [debouncedSearchQuery]);
 
   // Load favorites from localStorage
   React.useEffect(() => {
@@ -498,6 +559,16 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
       categories.push('Multimodal');
     }
 
+    // Image/Video models - check modalities array for image or video support
+    // Note: We only use modalities array here, not vision name check, since vision models
+    // are already captured in the Multimodal category above
+    const modalities = model.modalities || [];
+    const hasImageSupport = modalities.some(m => m.toLowerCase() === 'image');
+    const hasVideoSupport = modalities.some(m => m.toLowerCase() === 'video');
+    if (hasImageSupport || hasVideoSupport) {
+      categories.push('Image/Video');
+    }
+
     // Cost Efficient models (free OR paid under $1/M input tokens)
     // Note: Price info not available in ModelOption currently, so we'll use category
     const isFree = model.category === 'Free' || model.category?.toLowerCase().includes('free');
@@ -519,6 +590,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     const categories: Record<string, ModelOption[]> = {
       'Reasoning': [],
       'Code Generation': [],
+      'Image/Video': [],
       'Multimodal': [],
       'Cost Efficient': [],
       'Free': [],
@@ -548,6 +620,24 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     });
   };
 
+  // Merge server search results with locally cached models when searching
+  // This ensures users see both preloaded models AND models from server search
+  const mergedModelsForSearch = React.useMemo(() => {
+    if (!debouncedSearchQuery.trim()) {
+      return models; // No search, just use cached models
+    }
+
+    const modelMap = new Map<string, ModelOption>();
+
+    // Add all locally cached models first
+    models.forEach(model => modelMap.set(model.value, model));
+
+    // Add or update with server search results (server results take precedence)
+    searchResults.forEach(model => modelMap.set(model.value, model));
+
+    return Array.from(modelMap.values());
+  }, [models, searchResults, debouncedSearchQuery]);
+
   // Combined filter computation in a single pass for better performance
   // This avoids multiple separate filter operations that each iterate through all models
   const filteredData = React.useMemo(() => {
@@ -575,9 +665,40 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
         developerLower.includes(query);
     };
 
+    // When searching, filter from merged models (cached + server results)
+    const modelsToFilter = mergedModelsForSearch;
+
+    // Rebuild developer groups from merged models
+    const searchModelsByDeveloper: Record<string, ModelOption[]> = {};
+    modelsToFilter.forEach(model => {
+      const dev = model.developer || 'Other';
+      if (!searchModelsByDeveloper[dev]) {
+        searchModelsByDeveloper[dev] = [];
+      }
+      searchModelsByDeveloper[dev].push(model);
+    });
+
+    // Rebuild category groups from merged models
+    const searchModelsByCategory: Record<string, ModelOption[]> = {
+      'Reasoning': [],
+      'Code Generation': [],
+      'Image/Video': [],
+      'Multimodal': [],
+      'Cost Efficient': [],
+      'Free': [],
+    };
+    modelsToFilter.forEach(model => {
+      const modelCategories = categorizeModel(model);
+      modelCategories.forEach(cat => {
+        if (searchModelsByCategory[cat]) {
+          searchModelsByCategory[cat].push(model);
+        }
+      });
+    });
+
     // Filter developer groups
     const filteredByDeveloper: Record<string, ModelOption[]> = {};
-    Object.entries(modelsByDeveloper).forEach(([developer, devModels]) => {
+    Object.entries(searchModelsByDeveloper).forEach(([developer, devModels]) => {
       const developerLower = developer.toLowerCase();
       const developerMatches = developerLower.includes(query);
 
@@ -592,7 +713,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
 
     // Filter category groups
     const filteredByCategory: Record<string, ModelOption[]> = {};
-    Object.entries(modelsByCategory).forEach(([category, catModels]) => {
+    Object.entries(searchModelsByCategory).forEach(([category, catModels]) => {
       const categoryLower = category.toLowerCase();
       const categoryMatches = categoryLower.includes(query);
 
@@ -605,9 +726,13 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
       }
     });
 
-    // Filter other lists
-    const filteredFavorites = favoriteModels.filter(model => matchesQuery(model));
-    const filteredPopular = popularModels.filter(model => matchesQuery(model));
+    // Filter other lists from merged models
+    const filteredFavorites = modelsToFilter.filter(model =>
+      favorites.has(model.value) && matchesQuery(model)
+    );
+    const filteredPopular = modelsToFilter.filter(model =>
+      popularModels.some(p => p.value === model.value) && matchesQuery(model)
+    );
     const filteredIncognito = NEAR_INCOGNITO_MODELS.filter(model => matchesQuery(model));
 
     return {
@@ -617,7 +742,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
       popularModels: filteredPopular,
       incognitoModels: filteredIncognito,
     };
-  }, [debouncedSearchQuery, modelsByDeveloper, modelsByCategory, favoriteModels, popularModels]);
+  }, [debouncedSearchQuery, modelsByDeveloper, modelsByCategory, favoriteModels, popularModels, mergedModelsForSearch, favorites, categorizeModel]);
 
   // Destructure for cleaner access in render
   const filteredModelsByDeveloper = filteredData.modelsByDeveloper;
@@ -779,7 +904,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           {selectedModel ? (
             <>
               <span className="truncate text-sm sm:text-base">{selectedModel.label}</span>
-              {loading && <Loader2 className="ml-1 h-3 w-3 animate-spin flex-shrink-0 opacity-50" />}
+              {(loading || searchLoading) && <Loader2 className="ml-1 h-3 w-3 animate-spin flex-shrink-0 opacity-50" />}
             </>
           ) : loading ? (
             <>
@@ -995,6 +1120,21 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
               // Skip empty categories
               if (catModels.length === 0) return null;
 
+              // Get icon for category
+              const getCategoryIcon = (cat: string) => {
+                switch (cat) {
+                  case 'Image/Video':
+                    return (
+                      <span className="flex items-center gap-0.5">
+                        <ImageIcon className="h-4 w-4 text-pink-500" />
+                        <Video className="h-4 w-4 text-pink-500" />
+                      </span>
+                    );
+                  default:
+                    return null;
+                }
+              };
+
               return (
                 <div key={category} className="border-b">
                   <button
@@ -1006,6 +1146,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
                     ) : (
                       <ChevronRight className="h-4 w-4" />
                     )}
+                    {getCategoryIcon(category)}
                     <span>{category} ({catModels.length})</span>
                   </button>
                   {expandedDevelopers.has(category) && (

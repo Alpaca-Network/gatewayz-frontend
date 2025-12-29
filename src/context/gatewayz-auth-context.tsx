@@ -735,7 +735,7 @@ export function GatewayzAuthProvider({
       if (isNewUser) {
         return {
           ...authRequestBody,
-          trial_credits: 10,
+          trial_credits: 3,
         };
       }
 

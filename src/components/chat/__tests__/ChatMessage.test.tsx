@@ -535,7 +535,7 @@ describe('ChatMessage', () => {
       const onShare = jest.fn();
       render(<ChatMessage {...defaultProps} onShare={onShare} />);
 
-      const shareButton = screen.getByTitle('Share');
+      const shareButton = screen.getByTitle('Share chat');
       fireEvent.click(shareButton);
 
       expect(onShare).toHaveBeenCalledTimes(1);

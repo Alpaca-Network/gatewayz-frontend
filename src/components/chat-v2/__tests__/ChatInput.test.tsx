@@ -13,6 +13,7 @@ jest.mock('lucide-react', () => ({
   FileText: () => <span data-testid="file-text-icon">FileText</span>,
   Paperclip: () => <span data-testid="paperclip-icon">Paperclip</span>,
   Square: () => <span data-testid="square-icon">Square</span>,
+  Camera: () => <span data-testid="camera-icon">Camera</span>,
 }));
 
 // Mock the UI components
@@ -98,6 +99,18 @@ jest.mock('@/lib/hooks/use-chat-stream', () => ({
     isStreaming: mockIsStreaming,
     streamMessage: mockStreamMessage,
     stopStream: mockStopStream,
+  }),
+}));
+
+// Mock auto model switch hook
+jest.mock('@/lib/hooks/use-auto-model-switch', () => ({
+  useAutoModelSwitch: () => ({
+    checkImageSupport: jest.fn(() => false),
+    checkVideoSupport: jest.fn(() => false),
+    checkAudioSupport: jest.fn(() => false),
+    checkFileSupport: jest.fn(() => false),
+    checkAndSwitchModel: jest.fn(() => false),
+    modelSupportsModality: jest.fn(() => true),
   }),
 }));
 
@@ -373,39 +386,42 @@ describe('ChatInput attachment dropdown', () => {
     delete (window as any).__chatInputSend;
   });
 
-  it('should render the attachment dropdown with paperclip icon', () => {
+  it('should render the attachment dropdown with plus icon', () => {
     render(<ChatInput />);
 
     // Check for dropdown menu structure
     expect(screen.getByTestId('dropdown-menu')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-trigger')).toBeInTheDocument();
     expect(screen.getByTestId('dropdown-content')).toBeInTheDocument();
-    expect(screen.getByTestId('paperclip-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('plus-icon')).toBeInTheDocument();
   });
 
-  it('should render all four attachment options in dropdown', () => {
+  it('should render attachment options in dropdown', () => {
     render(<ChatInput />);
 
+    // The new UI has Camera, Photos, Files as buttons in a grid (not DropdownMenuItem)
+    // and Video, Audio as DropdownMenuItem items
     const dropdownItems = screen.getAllByTestId('dropdown-item');
-    expect(dropdownItems).toHaveLength(4);
+    expect(dropdownItems).toHaveLength(2); // Video and Audio are DropdownMenuItem
 
-    // Verify each option exists with correct icon
+    // Verify icons exist - Camera, Photos (Image), Files (FileText), Video, Audio (Mic)
+    expect(screen.getByTestId('camera-icon')).toBeInTheDocument();
     expect(screen.getByTestId('image-icon')).toBeInTheDocument();
-    expect(screen.getByTestId('video-icon')).toBeInTheDocument();
-    // There are 2 mic icons - one in dropdown and one in input
-    expect(screen.getAllByTestId('mic-icon').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByTestId('file-text-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('video-icon')).toBeInTheDocument();
+    // There are 2 mic icons - one in dropdown (audio) and one for speech-to-text
+    expect(screen.getAllByTestId('mic-icon').length).toBeGreaterThanOrEqual(1);
   });
 
   it('should have correct labels for attachment options', () => {
     render(<ChatInput />);
 
-    // Use getAllByText since icons have text too, then verify dropdown items have text
+    // The dropdown content has:
+    // - Top row buttons: Camera, Photos, Files (plain text labels)
+    // - DropdownMenuItem items: Upload video, Upload audio
     const dropdownItems = screen.getAllByTestId('dropdown-item');
-    expect(dropdownItems[0]).toHaveTextContent('Upload image');
-    expect(dropdownItems[1]).toHaveTextContent('Upload video');
-    expect(dropdownItems[2]).toHaveTextContent('Upload audio');
-    expect(dropdownItems[3]).toHaveTextContent('Upload document');
+    expect(dropdownItems[0]).toHaveTextContent('Upload video');
+    expect(dropdownItems[1]).toHaveTextContent('Upload audio');
   });
 });
 
@@ -1140,6 +1156,148 @@ describe('ChatInput speech recognition', () => {
     // Button should still show mic icon (not square) because isRecording was reset
     const micButtons = screen.getAllByTestId('button').filter(btn => btn.querySelector('[data-testid="mic-icon"]'));
     expect(micButtons.length).toBeGreaterThan(0);
+  });
+
+  it('should show recording overlay with waveform and "Listening..." text when recording', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      // Should show "Listening..." placeholder text in the overlay
+      expect(screen.getByText('Listening...')).toBeInTheDocument();
+    });
+
+    // Should show the recording overlay
+    const overlay = document.querySelector('.recording-overlay');
+    expect(overlay).toBeInTheDocument();
+
+    // Should show waveform animation (9 bars in the overlay)
+    const waveformBars = document.querySelectorAll('.recording-waveform-bar');
+    expect(waveformBars.length).toBe(9);
+
+    // Should show stop recording button in the overlay
+    expect(screen.getByText('Stop Recording')).toBeInTheDocument();
+  });
+
+  it('should display interim transcript while recording', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    // Simulate interim results
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult({
+        resultIndex: 0,
+        results: {
+          length: 1,
+          item: (index: number) => ({
+            isFinal: false,
+            0: { transcript: 'hello world', confidence: 0.9 },
+          }),
+          0: {
+            isFinal: false,
+            0: { transcript: 'hello world', confidence: 0.9 },
+          },
+        },
+      });
+    }
+
+    await waitFor(() => {
+      // Interim transcript should be visible in the overlay
+      expect(screen.getByText('hello world')).toBeInTheDocument();
+    });
+
+    // Interim text should have the interim styling class
+    const interimElement = document.querySelector('.recording-transcript-interim');
+    expect(interimElement).toBeInTheDocument();
+    expect(interimElement?.textContent).toContain('hello world');
+  });
+
+  it('should show "Listening..." placeholder with pre-existing text when no new text captured', async () => {
+    // Set up pre-existing text in the input
+    mockStoreState.inputValue = 'Hello, ';
+
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      // Overlay should be visible
+      expect(document.querySelector('.recording-overlay')).toBeInTheDocument();
+    });
+
+    // Should show "Listening..." placeholder even with pre-existing text
+    await waitFor(() => {
+      expect(screen.getByText('Listening...')).toBeInTheDocument();
+    });
+
+    // The pre-existing text should be displayed separately
+    const existingTextElement = document.querySelector('.recording-transcript-existing');
+    expect(existingTextElement).toBeInTheDocument();
+    expect(existingTextElement?.textContent).toContain('Hello,');
+  });
+
+  it('should close overlay when stop recording button is clicked', async () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate onstart callback
+    if (mockRecognition.onstart) {
+      mockRecognition.onstart();
+    }
+
+    await waitFor(() => {
+      expect(document.querySelector('.recording-overlay')).toBeInTheDocument();
+    });
+
+    // Click stop recording button in the overlay
+    const stopButton = screen.getByText('Stop Recording');
+    fireEvent.click(stopButton);
+
+    await waitFor(() => {
+      // Overlay should be closed
+      expect(document.querySelector('.recording-overlay')).not.toBeInTheDocument();
+    });
+
+    // Recognition should have been stopped
+    expect(mockRecognition.stop).toHaveBeenCalled();
   });
 });
 
