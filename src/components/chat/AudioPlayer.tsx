@@ -241,6 +241,7 @@ export function AudioPlayer({
           className="h-8 w-8"
           onClick={togglePlay}
           disabled={isLoading}
+          data-testid="audio-play-pause-button"
         >
           {isPlaying ? (
             <Pause className="h-4 w-4" />
@@ -277,7 +278,7 @@ export function AudioPlayer({
         <Slider
           value={[currentTime]}
           min={0}
-          max={duration || 100}
+          max={duration || 1}
           step={0.1}
           onValueChange={handleSeek}
           className="flex-1"
@@ -298,6 +299,7 @@ export function AudioPlayer({
             className="h-8 w-8"
             onClick={restart}
             title="Restart"
+            data-testid="audio-restart-button"
           >
             <RotateCcw className="h-4 w-4" />
           </Button>
@@ -309,6 +311,7 @@ export function AudioPlayer({
             className="h-10 w-10"
             onClick={togglePlay}
             disabled={isLoading}
+            data-testid="audio-play-pause-button"
           >
             {isPlaying ? (
               <Pause className="h-5 w-5" />
@@ -324,6 +327,7 @@ export function AudioPlayer({
             className="h-8 px-2 text-xs"
             onClick={cyclePlaybackRate}
             title="Playback speed"
+            data-testid="audio-speed-button"
           >
             {playbackRate}x
           </Button>
@@ -337,6 +341,7 @@ export function AudioPlayer({
             className="h-8 w-8"
             onClick={toggleMute}
             title={isMuted ? "Unmute" : "Mute"}
+            data-testid="audio-mute-button"
           >
             {isMuted ? (
               <VolumeX className="h-4 w-4" />
@@ -360,6 +365,7 @@ export function AudioPlayer({
             className="h-8 w-8"
             onClick={downloadAudio}
             title="Download audio"
+            data-testid="audio-download-button"
           >
             <Download className="h-4 w-4" />
           </Button>

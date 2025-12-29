@@ -180,24 +180,19 @@ describe('AudioPlayer', () => {
       // Simulate audio becoming ready
       simulateAudioReady();
 
-      // Find the main play button (larger one without title, or check by class)
-      const buttons = screen.getAllByRole('button');
-      const playButton = buttons.find(btn =>
-        btn.querySelector('svg') && !btn.getAttribute('title')?.includes('Restart')
-      );
+      // Find the main play button using data-testid
+      const playButton = screen.getByTestId('audio-play-pause-button');
 
-      if (playButton) {
-        // Wait for button to be enabled after canplay event
-        await waitFor(() => {
-          expect(playButton).not.toBeDisabled();
-        });
+      // Wait for button to be enabled after canplay event
+      await waitFor(() => {
+        expect(playButton).not.toBeDisabled();
+      });
 
-        fireEvent.click(playButton);
-        // Wait for the async play() promise to resolve
-        await waitFor(() => {
-          expect(onPlay).toHaveBeenCalled();
-        });
-      }
+      fireEvent.click(playButton);
+      // Wait for the async play() promise to resolve
+      await waitFor(() => {
+        expect(onPlay).toHaveBeenCalled();
+      });
     });
 
     it('calls onPause when pause is triggered', async () => {
@@ -207,26 +202,21 @@ describe('AudioPlayer', () => {
       // Simulate audio becoming ready
       simulateAudioReady();
 
-      // Click play first, then pause
-      const buttons = screen.getAllByRole('button');
-      const playButton = buttons.find(btn =>
-        btn.querySelector('svg') && !btn.getAttribute('title')?.includes('Restart')
-      );
+      // Find the main play button using data-testid
+      const playButton = screen.getByTestId('audio-play-pause-button');
 
-      if (playButton) {
-        // Wait for button to be enabled
-        await waitFor(() => {
-          expect(playButton).not.toBeDisabled();
-        });
+      // Wait for button to be enabled
+      await waitFor(() => {
+        expect(playButton).not.toBeDisabled();
+      });
 
-        fireEvent.click(playButton); // Play
-        // Wait for play to complete
-        await waitFor(() => {
-          expect(mockPlay).toHaveBeenCalled();
-        });
-        fireEvent.click(playButton); // Pause
-        expect(onPause).toHaveBeenCalled();
-      }
+      fireEvent.click(playButton); // Play
+      // Wait for play to complete
+      await waitFor(() => {
+        expect(mockPlay).toHaveBeenCalled();
+      });
+      fireEvent.click(playButton); // Pause
+      expect(onPause).toHaveBeenCalled();
     });
   });
 
@@ -283,10 +273,10 @@ describe('AudioPlayer', () => {
     it('has title attributes for icon buttons', () => {
       render(<AudioPlayer src={mockSrc} />);
 
-      expect(screen.getByTitle(/restart/i)).toBeInTheDocument();
-      expect(screen.getByTitle(/playback speed/i)).toBeInTheDocument();
-      expect(screen.getByTitle(/mute|unmute/i)).toBeInTheDocument();
-      expect(screen.getByTitle(/download/i)).toBeInTheDocument();
+      expect(screen.getByTestId('audio-restart-button')).toHaveAttribute('title', 'Restart');
+      expect(screen.getByTestId('audio-speed-button')).toHaveAttribute('title', 'Playback speed');
+      expect(screen.getByTestId('audio-mute-button')).toHaveAttribute('title');
+      expect(screen.getByTestId('audio-download-button')).toHaveAttribute('title', 'Download audio');
     });
   });
 });
