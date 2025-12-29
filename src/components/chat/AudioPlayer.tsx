@@ -65,25 +65,25 @@ export function AudioPlayer({
   const [error, setError] = useState<string | null>(null);
 
   // Handle play/pause
+  // Note: callbacks are now handled via native audio events (pause/play)
+  // to correctly sync with external pause/play events
   const togglePlay = useCallback(async () => {
     const audio = audioRef.current;
     if (!audio) return;
 
     if (isPlaying) {
       audio.pause();
-      setIsPlaying(false);
-      onPause?.();
+      // State and callback handled by native 'pause' event
     } else {
       try {
         await audio.play();
-        setIsPlaying(true);
-        onPlay?.();
+        // State and callback handled by native 'play' event
       } catch (err) {
         console.error("Failed to play audio:", err);
         setError("Failed to play audio");
       }
     }
-  }, [isPlaying, onPlay, onPause]);
+  }, [isPlaying]);
 
   // Handle seeking
   const handleSeek = useCallback((value: number[]) => {
@@ -136,15 +136,13 @@ export function AudioPlayer({
     if (!isPlaying) {
       try {
         await audio.play();
-        setIsPlaying(true);
-        onPlay?.();
+        // State and callback handled by native 'play' event
       } catch (err) {
         console.error("Failed to play audio:", err);
-        setIsPlaying(false);
         setError("Failed to play audio");
       }
     }
-  }, [isPlaying, onPlay]);
+  }, [isPlaying]);
 
   // Download audio
   const downloadAudio = useCallback(() => {
@@ -207,11 +205,25 @@ export function AudioPlayer({
       }
     };
 
+    // Handle external pause events (e.g., audio focus changes, system audio controls)
+    const handlePause = () => {
+      setIsPlaying(false);
+      onPause?.();
+    };
+
+    // Handle external play events (e.g., media session controls)
+    const handlePlay = () => {
+      setIsPlaying(true);
+      onPlay?.();
+    };
+
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
     audio.addEventListener("canplay", handleCanPlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("play", handlePlay);
 
     return () => {
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
@@ -219,8 +231,10 @@ export function AudioPlayer({
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
       audio.removeEventListener("canplay", handleCanPlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("play", handlePlay);
     };
-  }, [autoPlay, onEnded, onPlay, src]);
+  }, [autoPlay, onEnded, onPause, onPlay, src]);
 
   if (error) {
     return (

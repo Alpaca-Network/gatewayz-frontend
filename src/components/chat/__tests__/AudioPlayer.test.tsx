@@ -32,8 +32,19 @@ let mockPause: jest.Mock;
 
 // Mock HTMLMediaElement methods
 beforeAll(() => {
-  mockPlay = jest.fn().mockResolvedValue(undefined);
-  mockPause = jest.fn();
+  // Mock play to also dispatch the native 'play' event
+  mockPlay = jest.fn().mockImplementation(function(this: HTMLAudioElement) {
+    // Dispatch the native play event after a microtask
+    Promise.resolve().then(() => {
+      this.dispatchEvent(new Event('play'));
+    });
+    return Promise.resolve();
+  });
+
+  // Mock pause to also dispatch the native 'pause' event
+  mockPause = jest.fn().mockImplementation(function(this: HTMLAudioElement) {
+    this.dispatchEvent(new Event('pause'));
+  });
 
   Object.defineProperty(HTMLMediaElement.prototype, 'play', {
     configurable: true,
@@ -53,8 +64,19 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  // Re-apply the mock implementations after clear to preserve event dispatching
   mockPlay.mockClear();
+  mockPlay.mockImplementation(function(this: HTMLAudioElement) {
+    Promise.resolve().then(() => {
+      this.dispatchEvent(new Event('play'));
+    });
+    return Promise.resolve();
+  });
+
   mockPause.mockClear();
+  mockPause.mockImplementation(function(this: HTMLAudioElement) {
+    this.dispatchEvent(new Event('pause'));
+  });
 });
 
 // Helper to simulate audio becoming ready (triggers canplay event)
