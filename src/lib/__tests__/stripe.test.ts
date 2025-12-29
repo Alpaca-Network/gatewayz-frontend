@@ -72,6 +72,7 @@ describe('stripe', () => {
         },
         body: JSON.stringify({
           amount: 1000,
+          creditValue: 1000,
           userEmail: undefined,
           userId: undefined,
           apiKey: mockApiKey,
@@ -101,6 +102,7 @@ describe('stripe', () => {
         },
         body: JSON.stringify({
           amount: 1000,
+          creditValue: 1000,
           userEmail: mockEmail,
           userId: undefined,
           apiKey: mockApiKey,
@@ -128,6 +130,7 @@ describe('stripe', () => {
         },
         body: JSON.stringify({
           amount: 1000,
+          creditValue: 1000,
           userEmail: undefined,
           userId: mockUserId,
           apiKey: mockApiKey,
@@ -156,8 +159,37 @@ describe('stripe', () => {
         },
         body: JSON.stringify({
           amount: 1000,
+          creditValue: 1000,
           userEmail: mockEmail,
           userId: mockUserId,
+          apiKey: mockApiKey,
+        }),
+      });
+    });
+
+    it('should include creditValue when different from amount (discounted packages)', async () => {
+      const mockApiKey = 'test-api-key-123';
+      const mockCheckoutUrl = 'https://checkout.stripe.com/session/123';
+
+      mockGetApiKey.mockReturnValue(mockApiKey);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ url: mockCheckoutUrl }),
+      });
+
+      // Test: payment of $75 for $100 worth of credits (25% discount)
+      await redirectToCheckout(75, undefined, undefined, 100);
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/stripe/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: 75,
+          creditValue: 100,
+          userEmail: undefined,
+          userId: undefined,
           apiKey: mockApiKey,
         }),
       });

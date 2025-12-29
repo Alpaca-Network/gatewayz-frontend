@@ -9,23 +9,39 @@ import {
   type ChatMessage,
   type ChatStats,
 } from '../chat-history';
+import {
+  createSuccessResponse,
+  createErrorResponse,
+} from '@/__tests__/utils/mock-fetch';
+import {
+  TEST_USER,
+  TEST_SESSION,
+  TEST_MESSAGE,
+  TEST_TIMESTAMPS,
+} from '@/__tests__/utils/test-constants';
 
-// Mock global fetch
-global.fetch = jest.fn();
-
-// Mock console methods
+// Mock console methods - stored for potential assertions
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 
 describe('ChatHistoryAPI', () => {
   let api: ChatHistoryAPI;
-  const mockApiKey = 'test-api-key-123';
-  const mockPrivyUserId = 'privy-user-456';
-  const mockFetch = global.fetch as jest.Mock;
+  let mockFetch: jest.Mock;
+  const mockApiKey = TEST_USER.API_KEY;
+  const mockPrivyUserId = TEST_USER.PRIVY_ID;
 
   beforeEach(() => {
+    // Standardized mock setup pattern
     jest.clearAllMocks();
     jest.useFakeTimers();
+
+    // Setup fetch mock with safe default
+    mockFetch = jest.fn();
+    mockFetch.mockRejectedValue(
+      new Error('Fetch not mocked for this test - please set up mock response')
+    );
+    global.fetch = mockFetch;
+
     api = new ChatHistoryAPI(mockApiKey);
   });
 
@@ -138,7 +154,7 @@ describe('ChatHistoryAPI', () => {
 
       const fetchCall = mockFetch.mock.calls[0];
       const url = fetchCall[0];
-      expect(url).toContain(`privy_user_id=${mockPrivyUserId}`);
+      expect(url).toContain(`privy_user_id=${encodeURIComponent(mockPrivyUserId)}`);
     });
 
     it('should throw error when API returns error', async () => {
@@ -429,7 +445,7 @@ describe('ChatHistoryAPI', () => {
 
       const fetchCall = mockFetch.mock.calls[0];
       const url = fetchCall[0];
-      expect(url).toContain(`privy_user_id=${mockPrivyUserId}`);
+      expect(url).toContain(`privy_user_id=${encodeURIComponent(mockPrivyUserId)}`);
     });
   });
 
@@ -466,6 +482,9 @@ describe('ChatHistoryAPI', () => {
     });
 
     it('should save assistant message with model and tokens', async () => {
+      // Create API without batching to test immediate save behavior
+      const apiNoBatch = new ChatHistoryAPI(mockApiKey, undefined, undefined, false);
+
       const mockMessage: ChatMessage = {
         id: 2,
         session_id: 1,
@@ -481,7 +500,7 @@ describe('ChatHistoryAPI', () => {
         json: async () => ({ success: true, data: mockMessage }),
       });
 
-      const result = await api.saveMessage(
+      const result = await apiNoBatch.saveMessage(
         1,
         'assistant',
         'I am doing well, thank you!',
@@ -535,7 +554,7 @@ describe('ChatHistoryAPI', () => {
 
       const fetchCall = mockFetch.mock.calls[0];
       const url = fetchCall[0];
-      expect(url).toContain(`privy_user_id=${mockPrivyUserId}`);
+      expect(url).toContain(`privy_user_id=${encodeURIComponent(mockPrivyUserId)}`);
     });
   });
 
@@ -738,10 +757,16 @@ describe('handleApiError', () => {
 });
 
 describe('createChatHistoryAPI', () => {
-  const mockFetch = global.fetch as jest.Mock;
+  let mockFetch: jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Setup fetch mock with safe default
+    mockFetch = jest.fn();
+    mockFetch.mockRejectedValue(
+      new Error('Fetch not mocked for this test - please set up mock response')
+    );
+    global.fetch = mockFetch;
   });
 
   it('should create ChatHistoryAPI instance', () => {
@@ -766,15 +791,195 @@ describe('createChatHistoryAPI', () => {
   });
 });
 
-describe('Integration Scenarios', () => {
+describe('saveMessage with reasoning', () => {
   let api: ChatHistoryAPI;
-  const mockApiKey = 'integration-test-key';
-  const mockFetch = global.fetch as jest.Mock;
+  let mockFetch: jest.Mock;
+  const mockApiKey = TEST_USER.API_KEY;
 
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
+
+    mockFetch = jest.fn();
+    mockFetch.mockRejectedValue(
+      new Error('Fetch not mocked for this test - please set up mock response')
+    );
+    global.fetch = mockFetch;
+
+    // Disable batching for direct testing
+    api = new ChatHistoryAPI(mockApiKey, undefined, undefined, false);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('should save assistant message with reasoning', async () => {
+    const mockMessage: ChatMessage = {
+      id: 1,
+      session_id: 1,
+      role: 'assistant',
+      content: 'The answer is 42.',
+      model: 'deepseek-r1',
+      reasoning: '<think>Let me analyze this step by step...</think>',
+      created_at: '2025-01-01T00:00:00Z',
+    };
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: mockMessage }),
+    });
+
+    const result = await api.saveMessage(
+      1,
+      'assistant',
+      'The answer is 42.',
+      'deepseek-r1',
+      100,
+      '<think>Let me analyze this step by step...</think>'
+    );
+
+    expect(result.reasoning).toBe('<think>Let me analyze this step by step...</think>');
+
+    // Verify the request body includes reasoning
+    const fetchCall = mockFetch.mock.calls[0];
+    const requestBody = JSON.parse(fetchCall[1].body);
+    expect(requestBody.reasoning).toBe('<think>Let me analyze this step by step...</think>');
+  });
+
+  it('should not include reasoning in request when not provided', async () => {
+    const mockMessage: ChatMessage = {
+      id: 1,
+      session_id: 1,
+      role: 'assistant',
+      content: 'Hello!',
+      model: 'gpt-4',
+      created_at: '2025-01-01T00:00:00Z',
+    };
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: mockMessage }),
+    });
+
+    await api.saveMessage(1, 'assistant', 'Hello!', 'gpt-4', 10);
+
+    const fetchCall = mockFetch.mock.calls[0];
+    const requestBody = JSON.parse(fetchCall[1].body);
+    expect(requestBody.reasoning).toBeUndefined();
+  });
+
+  it('should not include reasoning when it is empty string', async () => {
+    const mockMessage: ChatMessage = {
+      id: 1,
+      session_id: 1,
+      role: 'assistant',
+      content: 'Hello!',
+      model: 'gpt-4',
+      created_at: '2025-01-01T00:00:00Z',
+    };
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: mockMessage }),
+    });
+
+    await api.saveMessage(1, 'assistant', 'Hello!', 'gpt-4', 10, '');
+
+    const fetchCall = mockFetch.mock.calls[0];
+    const requestBody = JSON.parse(fetchCall[1].body);
+    // Empty string is falsy, so reasoning should not be included
+    expect(requestBody.reasoning).toBeUndefined();
+  });
+
+  it('should save user message without reasoning (reasoning only applies to assistant)', async () => {
+    const mockMessage: ChatMessage = {
+      id: 1,
+      session_id: 1,
+      role: 'user',
+      content: 'What is 2+2?',
+      created_at: '2025-01-01T00:00:00Z',
+    };
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, data: mockMessage }),
+    });
+
+    // User messages should not have reasoning, even if passed
+    const result = await api.saveMessage(1, 'user', 'What is 2+2?');
+
+    expect(result.role).toBe('user');
+    expect(result.reasoning).toBeUndefined();
+  });
+});
+
+describe('saveMessage with batching and reasoning', () => {
+  let api: ChatHistoryAPI;
+  let mockFetch: jest.Mock;
+  const mockApiKey = TEST_USER.API_KEY;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+
+    mockFetch = jest.fn();
+    mockFetch.mockRejectedValue(
+      new Error('Fetch not mocked for this test - please set up mock response')
+    );
+    global.fetch = mockFetch;
+
+    // Enable batching (default behavior)
     api = new ChatHistoryAPI(mockApiKey);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('should return optimistic response with reasoning for batched assistant message', async () => {
+    // Assistant messages are batched by default
+    const result = await api.saveMessage(
+      1,
+      'assistant',
+      'Response content',
+      'deepseek-r1',
+      50,
+      'Thinking process...'
+    );
+
+    // Should return optimistic response immediately (not wait for API)
+    expect(result.id).toBe(-1); // Temporary ID
+    expect(result.session_id).toBe(1);
+    expect(result.role).toBe('assistant');
+    expect(result.content).toBe('Response content');
+    expect(result.model).toBe('deepseek-r1');
+    expect(result.tokens).toBe(50);
+    expect(result.reasoning).toBe('Thinking process...');
+    expect(result.created_at).toBeDefined();
+  });
+});
+
+describe('Integration Scenarios', () => {
+  let api: ChatHistoryAPI;
+  let mockFetch: jest.Mock;
+  const mockApiKey = 'integration-test-key';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+
+    // Setup fetch mock with safe default
+    mockFetch = jest.fn();
+    mockFetch.mockRejectedValue(
+      new Error('Fetch not mocked for this test - please set up mock response')
+    );
+    global.fetch = mockFetch;
+
+    // Disable batching for integration tests to avoid message queueing complications
+    api = new ChatHistoryAPI(mockApiKey, undefined, undefined, false);
   });
 
   afterEach(() => {

@@ -6,6 +6,8 @@ import { usePrivy } from '@privy-io/react-auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Gift } from 'lucide-react';
+import { storeReferralCode } from '@/lib/referral';
+import { trackTwitterSignupClick } from '@/components/analytics/twitter-pixel';
 
 function SignupContent() {
   const searchParams = useSearchParams();
@@ -18,19 +20,36 @@ function SignupContent() {
 
     if (refCode) {
       console.log('Referral code detected:', refCode);
-      // Store referral code in localStorage for use during authentication
-      localStorage.setItem('gatewayz_referral_code', refCode);
+      // Store referral code using safe storage for use during authentication
+      storeReferralCode(refCode, 'signup');
+
+      // Immediately redirect to chat with referral code
+      // The referral toast will be shown after authentication
+      router.push(`/chat?ref=${refCode}`);
     }
-  }, [searchParams]);
+  }, [searchParams, router]);
 
   useEffect(() => {
-    // Redirect authenticated users to chat
-    if (ready && authenticated) {
+    // Redirect authenticated users to chat (only if no ref code)
+    const refCode = searchParams?.get('ref');
+    if (ready && authenticated && !refCode) {
       router.push('/chat');
     }
-  }, [ready, authenticated, router]);
+  }, [ready, authenticated, router, searchParams]);
 
   const handleSignup = () => {
+    if (!ready) {
+      return;
+    }
+
+    if (authenticated) {
+      router.push('/chat');
+      return;
+    }
+
+    // Track Twitter conversion for ad attribution
+    trackTwitterSignupClick();
+
     login();
   };
 
@@ -89,6 +108,7 @@ function SignupContent() {
 
           <Button
             onClick={handleSignup}
+            disabled={!ready || authenticated}
             size="lg"
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
           >
@@ -104,7 +124,7 @@ function SignupContent() {
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
-                $10 in free trial credits
+                $3 in free trial credits
               </li>
               {refCode && (
                 <li className="flex items-center gap-2">

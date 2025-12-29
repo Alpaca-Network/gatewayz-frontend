@@ -30,7 +30,7 @@ const pricingTiers: PricingTier[] = [
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      '$10 free credits monthly',
+      '$3 free credits monthly',
       'Access to 5+ models',
       'Community support',
       'Basic analytics',
@@ -46,7 +46,7 @@ const pricingTiers: PricingTier[] = [
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      '50% discount on first $10 credits',
+      '50% discount on first $3 credits',
       'Access to 10,000+ models',
       'Smart cost optimization',
       'Advanced analytics',
@@ -111,7 +111,7 @@ export function PricingSection() {
         return;
       }
 
-      // For Pro and Max tiers, handle subscription checkout
+      // For Pro and Max tiers, check authentication and redirect to checkout page
       const userData = getUserData();
 
       if (!userData || !userData.api_key) {
@@ -125,34 +125,8 @@ export function PricingSection() {
         return;
       }
 
-      // Call subscription checkout API
-      const response = await fetch('/api/stripe/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          priceId: tier.stripePriceId,
-          productId: tier.stripeProductId,
-          userEmail: userData.email,
-          userId: userData.user_id,
-          apiKey: userData.api_key,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to start subscription');
-      }
-
-      const data = await response.json();
-
-      // Redirect to Stripe Checkout
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('No checkout URL received');
-      }
+      // Redirect to checkout page with tier info
+      window.location.href = `/checkout?tier=${tier.id}&mode=subscription`;
     } catch (error) {
       console.error('Subscription error:', error);
       alert(error instanceof Error ? error.message : 'Failed to start subscription. Please try again.');

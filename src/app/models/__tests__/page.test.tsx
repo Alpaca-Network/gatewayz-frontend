@@ -345,20 +345,22 @@ describe('Models Page - Deduplication Logic', () => {
     it('should define slower deferred gateways', () => {
       const DEFERRED_GATEWAYS = [
         'featherless', 'chutes', 'deepinfra', 'google', 'cerebras',
-        'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone', 'alpaca'
+        'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone', 'alpaca', 'alibaba', 'clarifai'
       ];
 
-      expect(DEFERRED_GATEWAYS.length).toBeGreaterThanOrEqual(14);
+      expect(DEFERRED_GATEWAYS.length).toBeGreaterThanOrEqual(16);
       expect(DEFERRED_GATEWAYS).toContain('huggingface');
       expect(DEFERRED_GATEWAYS).toContain('near');
       expect(DEFERRED_GATEWAYS).toContain('alpaca');
+      expect(DEFERRED_GATEWAYS).toContain('alibaba');
+      expect(DEFERRED_GATEWAYS).toContain('clarifai');
     });
 
     it('should not have overlapping gateways between priority and deferred', () => {
       const PRIORITY_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
       const DEFERRED_GATEWAYS = [
         'featherless', 'chutes', 'deepinfra', 'google', 'cerebras',
-        'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone', 'alpaca'
+        'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone', 'alpaca', 'alibaba', 'clarifai'
       ];
 
       const overlap = PRIORITY_GATEWAYS.filter(g => DEFERRED_GATEWAYS.includes(g));

@@ -2,8 +2,10 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import * as Sentry from "@sentry/nextjs";
 import {
   AUTH_REFRESH_EVENT,
+  AUTH_REFRESH_COMPLETE_EVENT,
   getApiKey,
   getUserData,
   processAuthResponse,
@@ -13,6 +15,8 @@ import {
   type AuthResponse,
   type UserData,
 } from "@/lib/api";
+import { getAdaptiveTimeout } from "@/lib/network-timeouts";
+import { retryFetch } from "@/lib/retry-utils";
 import { usePrivy, type User, type LinkedAccountWithMetadata } from "@privy-io/react-auth";
 import {
   redirectToBetaWithSession,
@@ -21,6 +25,9 @@ import {
   storeSessionTransferToken,
   getStoredSessionTransferToken,
 } from "@/integrations/privy/auth-session-transfer";
+import { getReferralCode, clearReferralCode } from "@/lib/referral";
+import { resetGuestMessageCount } from "@/lib/guest-chat";
+import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -30,6 +37,36 @@ type AuthError = {
   raw?: unknown;
 };
 
+// Auth timing information for progressive UI feedback
+export interface AuthTimingInfo {
+  startTime: number | null;
+  elapsedMs: number;
+  retryCount: number;
+  maxRetries: number;
+  isSlowAuth: boolean; // true if auth is taking longer than expected
+  phase: "idle" | "connecting" | "verifying" | "syncing" | "retrying" | "complete" | "error";
+}
+
+// Thresholds for auth timing feedback
+const AUTH_SLOW_THRESHOLD_MS = 5000; // Show "slow" message after 5 seconds
+const AUTH_VERY_SLOW_THRESHOLD_MS = 15000; // Show "very slow" message after 15 seconds
+
+// Auth state machine for clear state transitions
+// Note: same-state transitions (e.g., authenticated -> authenticated) are handled
+// as no-ops in setAuthStatus before reaching the state machine validation
+const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
+  idle: ["unauthenticated", "authenticating", "authenticated"],
+  unauthenticated: ["authenticating", "authenticated"],
+  authenticating: ["authenticated", "unauthenticated", "error"],
+  authenticated: ["authenticating", "unauthenticated", "error"],
+  error: ["unauthenticated", "authenticating"],
+};
+
+// Auth retry configuration
+const MAX_AUTH_RETRIES = 3;
+const AUTHENTICATING_TIMEOUT_MS = 60000; // 60 seconds - increased to handle slow backend responses
+const TOKEN_TIMEOUT_BASE_MS = 8000; // Base 8 seconds, adaptive up to 15s
+
 interface GatewayzAuthContextValue {
   status: AuthStatus;
   apiKey: string | null;
@@ -38,6 +75,7 @@ interface GatewayzAuthContextValue {
   privyReady: boolean;
   privyAuthenticated: boolean;
   error: string | null;
+  authTiming: AuthTimingInfo;
   login: () => Promise<void> | void;
   logout: () => Promise<void> | void;
   refresh: (options?: { force?: boolean }) => Promise<void>;
@@ -51,8 +89,15 @@ interface GatewayzAuthProviderProps {
   betaDomain?: string;
 }
 
-const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
+export const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
 const TEMP_API_KEY_PREFIX = "gw_temp_";
+
+// Backend proxy configuration - increased timeouts to handle slow responses
+const BACKEND_PROXY_TIMEOUT_MS = 20000; // 20 seconds per retry
+const BACKEND_PROXY_MAX_RETRIES = 3;
+const BACKEND_PROXY_SAFETY_BUFFER_MS = 10000; // 10 seconds buffer
+const MIN_AUTH_SYNC_TIMEOUT_MS =
+  BACKEND_PROXY_TIMEOUT_MS * BACKEND_PROXY_MAX_RETRIES + BACKEND_PROXY_SAFETY_BUFFER_MS; // 70 seconds total
 
 const stripUndefined = <T,>(value: T): T => {
   if (Array.isArray(value)) {
@@ -95,17 +140,27 @@ const toUnixSeconds = (value: unknown): number | undefined => {
 };
 
 const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
+  // Skip wallet accounts as the backend only expects email/oauth accounts in linked_accounts
+  if (account.type === "wallet") {
+    return null;
+  }
+
   const get = (key: string) =>
     Object.prototype.hasOwnProperty.call(account, key)
       ? (account as unknown as Record<string, unknown>)[key]
       : undefined;
 
+  // Normalize account type: Privy returns 'github_oauth' but backend expects 'github'
+  let normalizedType = account.type as string | undefined;
+  if (normalizedType === "github_oauth") {
+    normalizedType = "github";
+  }
+
   return stripUndefined({
-    type: account.type as string | undefined,
+    type: normalizedType,
     subject: get("subject") as string | undefined,
     email: get("email") as string | undefined,
     name: get("name") as string | undefined,
-    address: get("address") as string | undefined,
     chain_type: get("chainType") as string | undefined,
     wallet_client_type: get("walletClientType") as string | undefined,
     connector_type: get("connectorType") as string | undefined,
@@ -154,11 +209,119 @@ export function GatewayzAuthProvider({
     return getUserData();
   });
   const [error, setError] = useState<string | null>(null);
+  const [authPhase, setAuthPhase] = useState<AuthTimingInfo["phase"]>("idle");
+  const [authStartTime, setAuthStartTime] = useState<number | null>(null);
+  const [authElapsedMs, setAuthElapsedMs] = useState(0);
 
   const syncInFlightRef = useRef(false);
+  const syncPromiseRef = useRef<Promise<void> | null>(null);
   const lastSyncedPrivyIdRef = useRef<string | null>(null);
   const upgradeAttemptedRef = useRef(false);
+  const upgradePromiseRef = useRef<Promise<void> | null>(null);
   const betaRedirectAttemptedRef = useRef(false);
+  const authRetryCountRef = useRef(0);
+  const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Helper function to validate and set auth status with state machine
+  const setAuthStatus = useCallback((newStatus: AuthStatus, reason?: string) => {
+    setStatus((currentStatus) => {
+      // Skip if already in the same state (no-op transition)
+      if (currentStatus === newStatus) {
+        return currentStatus;
+      }
+
+      const allowedTransitions = AUTH_STATE_TRANSITIONS[currentStatus];
+
+      if (!allowedTransitions.includes(newStatus)) {
+        console.warn(
+          `[Auth] Invalid state transition: ${currentStatus} -> ${newStatus}${reason ? ` (${reason})` : ""}. Skipping.`
+        );
+        return currentStatus; // Don't change status
+      }
+
+      console.log(
+        `[Auth] State transition: ${currentStatus} -> ${newStatus}${reason ? ` (${reason})` : ""}`
+      );
+      return newStatus;
+    });
+  }, []);
+
+  // Clear authenticating timeout guard
+  const clearAuthTimeout = useCallback(() => {
+    if (authTimeoutRef.current) {
+      clearTimeout(authTimeoutRef.current);
+      authTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Clear stored credentials
+  const clearStoredCredentials = useCallback((resetRetryCounter = true) => {
+    removeApiKey();
+    setApiKey(null);
+    setUserData(null);
+    lastSyncedPrivyIdRef.current = null;
+    upgradeAttemptedRef.current = false;
+    // Only reset retry counter if explicitly requested (default true)
+    // This prevents infinite retry loops when max retries are reached
+    if (resetRetryCounter) {
+      authRetryCountRef.current = 0;
+    }
+    clearAuthTimeout();
+  }, [clearAuthTimeout]);
+
+  // Set authenticating timeout guard with automatic retry
+  const setAuthTimeout = useCallback(() => {
+    clearAuthTimeout();
+    authTimeoutRef.current = setTimeout(() => {
+      console.error(`[Auth] Authentication timeout - stuck in authenticating state for ${AUTHENTICATING_TIMEOUT_MS / 1000}s`);
+
+      // Always clear sync state to prevent being stuck
+      syncInFlightRef.current = false;
+      syncPromiseRef.current = null;
+
+      // Check if we can retry
+      if (authRetryCountRef.current < MAX_AUTH_RETRIES) {
+        console.log(`[Auth] Auto-retrying authentication (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
+        setError("Authentication is taking longer than expected - retrying...");
+
+        rateLimitedCaptureMessage("Authentication timeout - auto-retrying", {
+          level: 'warning',
+          tags: {
+            auth_error: 'authenticating_timeout_retry',
+          },
+          extra: {
+            retry_count: authRetryCountRef.current,
+            timeout_ms: AUTHENTICATING_TIMEOUT_MS,
+          },
+        });
+
+        // Dispatch refresh event to trigger retry
+        // Note: syncWithBackend will increment authRetryCountRef when it handles this event
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+        }
+      } else {
+        // Max retries reached - transition to unauthenticated instead of error
+        // This allows the user to manually retry login
+        setAuthStatus("unauthenticated", "timeout - max retries");
+        setError("Authentication timeout - please try signing in again");
+
+        // Clear any stuck credentials but keep retry counter to prevent infinite loop
+        clearStoredCredentials(false);
+
+        rateLimitedCaptureMessage("Authentication timeout - stuck in authenticating state", {
+          level: 'error',
+          tags: {
+            auth_error: 'authenticating_timeout',
+          },
+          extra: {
+            retry_count: authRetryCountRef.current,
+            timeout_ms: AUTHENTICATING_TIMEOUT_MS,
+          },
+        });
+      }
+    }, AUTHENTICATING_TIMEOUT_MS);
+  }, [clearAuthTimeout, setAuthStatus, clearStoredCredentials]);
 
   const updateStateFromStorage = useCallback(() => {
     const key = getApiKey();
@@ -166,86 +329,161 @@ export function GatewayzAuthProvider({
     setApiKey(key);
     setUserData(stored);
     if (key && stored) {
-      setStatus("authenticated");
+      setAuthStatus("authenticated", "from storage");
     }
-  }, []);
-
-  const clearStoredCredentials = useCallback(() => {
-    removeApiKey();
-    setApiKey(null);
-    setUserData(null);
-    lastSyncedPrivyIdRef.current = null;
-    upgradeAttemptedRef.current = false;
-  }, []);
+  }, [setAuthStatus]);
 
   const upgradeApiKeyIfNeeded = useCallback(
     async (authData: AuthResponse) => {
       const currentKey = getApiKey();
+
+      console.log("[Auth] upgradeApiKeyIfNeeded called", {
+        has_current_key: !!currentKey,
+        is_temp_key: currentKey?.startsWith(TEMP_API_KEY_PREFIX),
+        current_key_prefix: currentKey ? currentKey.substring(0, 15) + "..." : "none",
+      });
+
       if (!currentKey || !currentKey.startsWith(TEMP_API_KEY_PREFIX)) {
+        console.log("[Auth] No upgrade needed - not a temp key");
         return;
       }
 
       try {
         const credits = Math.floor(authData.credits ?? 0);
-        if (credits <= 10) {
+        console.log("[Auth] Checking upgrade eligibility:", {
+          credits,
+          is_new_user: authData.is_new_user,
+          eligible: credits > 10 && !authData.is_new_user,
+        });
+
+        // Skip upgrade if insufficient credits or new user
+        if (credits <= 10 || authData.is_new_user) {
+          console.log("[Auth] Skipping upgrade - insufficient credits or new user");
           return;
         }
 
-        if (authData.is_new_user) {
-          return;
+        // Return existing upgrade promise if already in progress
+        if (upgradePromiseRef.current) {
+          console.log("[Auth] Upgrade already in progress, returning existing promise");
+          return upgradePromiseRef.current;
         }
 
+        // Atomic check-and-set for upgrade attempt
         if (upgradeAttemptedRef.current) {
           return;
         }
 
         upgradeAttemptedRef.current = true;
 
-        const response = await fetch("/api/user/api-keys", {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${currentKey}`,
-            "Content-Type": "application/json",
-          },
-        });
+        // Create and store the upgrade promise
+        const upgradePromise = (async () => {
+          try {
+            // Use timeout for API key fetch to prevent hanging
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-        if (!response.ok) {
-          console.log("[Auth] Unable to fetch upgraded API keys:", response.status);
-          return;
+            console.log("[Auth] Fetching upgraded API keys from /api/user/api-keys");
+
+            const response = await fetch("/api/user/api-keys", {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${currentKey}`,
+                "Content-Type": "application/json",
+              },
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            console.log("[Auth] API keys fetch response:", {
+              status: response.status,
+              ok: response.ok,
+            });
+
+            if (!response.ok) {
+              console.error("[Auth] Unable to fetch upgraded API keys:", response.status);
+              console.error("[Auth] This is a non-critical issue - user can continue with temp key");
+
+              // Log to Sentry but don't throw - let user continue with temp key
+              Sentry.captureMessage(`Failed to upgrade temporary API key: ${response.status}`, {
+                level: 'warning',
+                tags: {
+                  auth_error: 'api_key_upgrade_failed',
+                  http_status: response.status,
+                },
+                extra: {
+                  credits: authData.credits,
+                  is_new_user: authData.is_new_user,
+                },
+              });
+
+              return; // Continue with temp key - backend will create permanent key on next auth
+            }
+
+            const data = await response.json();
+            const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
+              Array.isArray(data?.keys) ? data.keys : [];
+
+            console.log("[Auth] Received API keys response:", {
+              total_keys: keys.length,
+              keys_summary: keys.map(k => ({
+                is_temp: k.api_key?.startsWith(TEMP_API_KEY_PREFIX),
+                is_primary: k.is_primary,
+                environment: k.environment_tag,
+                prefix: k.api_key ? k.api_key.substring(0, 15) + "..." : "none",
+              })),
+            });
+
+        // Find preferred key with better short-circuit logic
+        let preferredKey: { api_key?: string; is_primary?: boolean; environment_tag?: string } | undefined;
+
+        for (const key of keys) {
+          if (
+            typeof key.api_key === "string" &&
+            !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
+          ) {
+            // Primary preference: live environment + primary key
+            if (key.environment_tag === "live" && key.is_primary) {
+              preferredKey = key;
+              break;
+            }
+            // Secondary preference: live environment (any key)
+            if (key.environment_tag === "live" && !preferredKey) {
+              preferredKey = key;
+            }
+            // Fallback: any non-temp key
+            if (!preferredKey) {
+              preferredKey = key;
+            }
+          }
         }
-
-        const data = await response.json();
-        const keys: Array<{ api_key?: string; is_primary?: boolean; environment_tag?: string }> =
-          Array.isArray(data?.keys) ? data.keys : [];
-
-        const preferredKey =
-          keys.find(
-            (key) =>
-              typeof key.api_key === "string" &&
-              !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-              key.environment_tag === "live" &&
-              key.is_primary
-          ) ||
-          keys.find(
-            (key) =>
-              typeof key.api_key === "string" &&
-              !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
-              key.environment_tag === "live"
-          ) ||
-          keys.find(
-            (key) => typeof key.api_key === "string" && !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
-          );
 
         if (!preferredKey || !preferredKey.api_key) {
-          console.log("[Auth] No upgraded API key found in response");
+          console.log("[Auth] No upgraded API key found in response - continuing with temp key");
+          Sentry.captureMessage("No upgraded API key found after payment", {
+            level: 'warning',
+            tags: {
+              auth_error: 'no_upgraded_key_found',
+            },
+            extra: {
+              credits: authData.credits,
+              keys_count: keys.length,
+            },
+          });
           return;
         }
 
-        if (preferredKey.api_key === currentKey) {
-          return;
-        }
+        // Note: This condition is always false because:
+        // - currentKey starts with TEMP_API_KEY_PREFIX (checked at line 345)
+        // - preferredKey.api_key does NOT start with TEMP_API_KEY_PREFIX (selected at lines 440-442)
+        // Therefore, they can never be equal. Removed dead code.
 
-        console.log("[Auth] Upgrading stored API key to live key");
+        console.log("[Auth] Upgrading stored API key to live key:", {
+          from_prefix: currentKey.substring(0, 15) + "...",
+          to_prefix: preferredKey.api_key.substring(0, 15) + "...",
+          is_primary: preferredKey.is_primary,
+          environment: preferredKey.environment_tag,
+        });
         saveApiKey(preferredKey.api_key);
 
         const storedUser = getUserData();
@@ -274,10 +512,23 @@ export function GatewayzAuthProvider({
           });
         }
 
-        updateStateFromStorage();
+            updateStateFromStorage();
+          } catch (error) {
+            console.log("[Auth] Failed to upgrade API key after payment", error);
+            upgradeAttemptedRef.current = false;
+            throw error;
+          } finally {
+            // Clear the promise reference when done
+            upgradePromiseRef.current = null;
+          }
+        })();
+
+        upgradePromiseRef.current = upgradePromise;
+        await upgradePromise;
       } catch (error) {
         console.log("[Auth] Failed to upgrade API key after payment", error);
         upgradeAttemptedRef.current = false;
+        upgradePromiseRef.current = null;
       }
     },
     [updateStateFromStorage]
@@ -313,20 +564,36 @@ export function GatewayzAuthProvider({
         user_id: authData.user_id
       });
 
+      // Add breadcrumb for successful authentication
+      Sentry.addBreadcrumb({
+        category: 'auth',
+        message: 'User authenticated successfully',
+        level: 'info',
+        data: {
+          user_id: authData.user_id,
+          is_new_user: authData.is_new_user,
+          tier: authData.tier,
+        },
+      });
+
       processAuthResponse(authData);
       updateStateFromStorage();
       lastSyncedPrivyIdRef.current = authData.privy_user_id || null;
       setStatus("authenticated");
 
-      // Clear referral code if present
-      const referralCode = localStorage.getItem("gatewayz_referral_code");
+      // Clear referral code and reset guest message count if present
+      const referralCode = getReferralCode();
       if (referralCode) {
-        localStorage.removeItem("gatewayz_referral_code");
+        clearReferralCode();
         if (authData.is_new_user ?? isNewUserExpected) {
           localStorage.setItem("gatewayz_show_referral_bonus", "true");
         }
-        console.log("Referral code cleared from localStorage after successful auth");
+        console.log("[Auth] Referral code cleared from localStorage after successful auth");
       }
+
+      // Reset guest message count when user signs up
+      resetGuestMessageCount();
+      console.log("[Auth] Guest message count reset after successful auth");
 
       // Verify localStorage was written before redirecting
       const savedUserData = getUserData();
@@ -351,10 +618,89 @@ export function GatewayzAuthProvider({
 
   const handleAuthSuccessAsync = useCallback(
     async (authData: AuthResponse, isNewUserExpected: boolean) => {
-      handleAuthSuccess(authData, isNewUserExpected);
-      await upgradeApiKeyIfNeeded(authData);
+      // Check if we need to attempt a key upgrade
+      // New users start with trial credits and don't need immediate upgrade
+      // Users with low credits (<= 10) likely only have the temp key anyway
+      const shouldCheckUpgrade = !authData.is_new_user && (authData.credits ?? 0) > 10;
+
+      let finalAuthData = authData;
+
+      if (shouldCheckUpgrade) {
+        // Save initial credentials so upgrade logic can access them from storage
+        processAuthResponse(authData);
+
+        try {
+          // Await the upgrade to ensure we have the correct key before resolving auth
+          // This prevents race conditions where UI tries to use temp key
+          await upgradeApiKeyIfNeeded(authData);
+
+          // If key was upgraded, update authData so handleAuthSuccess uses the new key
+          const currentKey = getApiKey();
+          if (currentKey && currentKey !== authData.api_key) {
+            console.log("[Auth] API key upgraded during login, using new key");
+            finalAuthData = { ...authData, api_key: currentKey };
+          } else if (currentKey?.startsWith(TEMP_API_KEY_PREFIX)) {
+            // Still have temp key after upgrade attempt - this is critical
+            console.error("[Auth] Still using temporary API key after upgrade attempt!");
+            console.error("[Auth] This will cause 401 errors on protected endpoints");
+
+            // Clear the invalid credentials
+            clearStoredCredentials();
+
+            // Set error state
+            setAuthStatus("error", "temp key upgrade failed");
+            setError("Authentication failed: Unable to obtain valid API key. Please try logging in again.");
+
+            // Capture to Sentry
+            Sentry.captureMessage("Temporary API key could not be upgraded after authentication", {
+              level: 'error',
+              tags: {
+                auth_error: 'temp_key_upgrade_failed',
+              },
+              extra: {
+                credits: authData.credits,
+                is_new_user: authData.is_new_user,
+                has_temp_key: true,
+              },
+            });
+
+            return; // Don't proceed with authentication
+          }
+        } catch (error) {
+          console.error("[Auth] Key upgrade check failed:", error);
+
+          // If upgrade failed and we have a temp key, this is critical
+          const currentKey = getApiKey();
+          if (currentKey?.startsWith(TEMP_API_KEY_PREFIX)) {
+            clearStoredCredentials();
+            setAuthStatus("error", "temp key upgrade error");
+            setError("Authentication failed: Unable to obtain valid API key. Please try logging in again.");
+
+            Sentry.captureException(
+              error instanceof Error ? error : new Error(String(error)),
+              {
+                tags: {
+                  auth_error: 'temp_key_upgrade_exception',
+                },
+                extra: {
+                  credits: authData.credits,
+                  is_new_user: authData.is_new_user,
+                },
+                level: 'error',
+              }
+            );
+
+            return; // Don't proceed with authentication
+          }
+
+          // If not a temp key issue, just warn and continue
+          console.warn("[Auth] Key upgrade check failed but proceeding with current key");
+        }
+      }
+
+      handleAuthSuccess(finalAuthData, isNewUserExpected);
     },
-    [handleAuthSuccess, upgradeApiKeyIfNeeded]
+    [handleAuthSuccess, upgradeApiKeyIfNeeded, clearStoredCredentials, setAuthStatus, setError]
   );
 
   const buildAuthRequestBody = useCallback(
@@ -363,30 +709,22 @@ export function GatewayzAuthProvider({
       const isNewUser = !existingGatewayzUser;
       const hasStoredApiKey = Boolean(existingGatewayzUser?.api_key);
 
-      // Check for referral code from storage or URL
-      let referralCode = localStorage.getItem("gatewayz_referral_code");
-      if (!referralCode && typeof window !== "undefined") {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlRefCode = urlParams.get("ref");
-        if (urlRefCode) {
-          referralCode = urlRefCode;
-          localStorage.setItem("gatewayz_referral_code", urlRefCode);
-          console.log("[Auth] Captured referral code from URL:", urlRefCode);
-        }
-      }
-
+      // Get referral code using utility (checks URL and localStorage)
+      const referralCode = getReferralCode();
       console.log("[Auth] Final referral code:", referralCode);
 
       const authRequestBody = {
         user: stripUndefined({
           id: privyUser.id,
           created_at: toUnixSeconds(privyUser.createdAt) ?? Math.floor(Date.now() / 1000),
-          linked_accounts: (privyUser.linkedAccounts || []).map(mapLinkedAccount),
+          linked_accounts: (privyUser.linkedAccounts || []).map(mapLinkedAccount).filter(Boolean),
           mfa_methods: privyUser.mfaMethods || [],
           has_accepted_terms: privyUser.hasAcceptedTerms ?? false,
           is_guest: privyUser.isGuest ?? false,
         }),
         token: token ?? "",
+        // Only request API key creation for new users or users without stored keys
+        // Existing users should get their existing key back to avoid replacing live keys with temp keys
         auto_create_api_key: isNewUser || !hasStoredApiKey,
         is_new_user: isNewUser,
         has_referral_code: !!referralCode,
@@ -397,7 +735,7 @@ export function GatewayzAuthProvider({
       if (isNewUser) {
         return {
           ...authRequestBody,
-          trial_credits: 10,
+          trial_credits: 3,
         };
       }
 
@@ -407,55 +745,325 @@ export function GatewayzAuthProvider({
   );
 
   const syncWithBackend = useCallback(
-    async (options?: { force?: boolean }) => {
+    async (options?: { force?: boolean; resetRetryCount?: boolean }) => {
       if (!privyReady) {
         return;
       }
 
       if (!authenticated || !user) {
         clearStoredCredentials();
-        setStatus(privyReady ? "unauthenticated" : "idle");
+        setAuthStatus(privyReady ? "unauthenticated" : "idle", "no privy user");
+        syncPromiseRef.current = null;
         return;
       }
 
-      if (syncInFlightRef.current) {
-        if (!options?.force) {
+      // Check retry limit
+      if (authRetryCountRef.current >= MAX_AUTH_RETRIES && !options?.force) {
+        console.error("[Auth] Max retry limit reached, aborting sync");
+        setAuthStatus("error", "max retries");
+        setError(`Authentication failed after ${MAX_AUTH_RETRIES} attempts. Please try again later.`);
+
+        Sentry.captureMessage("Authentication max retry limit reached", {
+          level: 'error',
+          tags: {
+            auth_error: 'max_retries_exceeded',
+          },
+          extra: {
+            retry_count: authRetryCountRef.current,
+          },
+        });
+        return;
+      }
+
+      // Skip if we've already synced with this Privy user and have valid credentials
+      if (!options?.force && lastSyncedPrivyIdRef.current === user.id && apiKey) {
+        console.log("[Auth] Already synced with this Privy user, skipping sync");
+        // Don't try to transition to authenticated if already authenticated
+        // This would cause an invalid state transition warning
+        return;
+      }
+
+      // Return existing sync promise if already in progress
+      if (syncPromiseRef.current && !options?.force) {
+        console.log("[Auth] Sync already in flight, returning existing promise");
+        return syncPromiseRef.current;
+      }
+
+      // Reset retry count on user-initiated actions (login/logout)
+      // But NOT on automatic retries to prevent infinite loops
+      if (options?.force && options?.resetRetryCount !== false) {
+        authRetryCountRef.current = 0;
+      }
+
+      // Create new sync promise
+      const syncPromise = (async () => {
+        // Atomic check-and-set
+        const wasInFlight = syncInFlightRef.current;
+        syncInFlightRef.current = true;
+
+        if (wasInFlight && !options?.force) {
+          console.log("[Auth] Sync already in flight (race detected), skipping");
           return;
         }
-      }
 
-      if (!options?.force && lastSyncedPrivyIdRef.current === user.id && apiKey) {
-        setStatus("authenticated");
-        return;
-      }
+        // Check if max retries exceeded before incrementing
+        if (authRetryCountRef.current >= MAX_AUTH_RETRIES && !options?.resetRetryCount) {
+          console.log(`[Auth] Max retries (${MAX_AUTH_RETRIES}) exceeded, aborting sync`);
+          syncInFlightRef.current = false;
+          return;
+        }
 
-      syncInFlightRef.current = true;
-      setStatus("authenticating");
-      setError(null);
+        // Increment retry count
+        authRetryCountRef.current += 1;
+        console.log(`[Auth] Sync attempt ${authRetryCountRef.current}/${MAX_AUTH_RETRIES}`);
+
+        setAuthStatus("authenticating", `attempt ${authRetryCountRef.current}`);
+        setError(null);
+
+        // Set timeout guard for stuck authenticating state
+        setAuthTimeout();
+
+        // Add breadcrumb for auth sync start
+        Sentry.addBreadcrumb({
+          category: 'auth',
+          message: 'Starting backend authentication sync',
+          level: 'debug',
+          data: {
+            force: options?.force ?? false,
+            retry_attempt: authRetryCountRef.current,
+          },
+        });
 
       try {
-        const token = await getAccessToken();
+        // Ensure Privy is actually ready before attempting token retrieval
+        if (!privyReady || !authenticated || !user) {
+          console.warn("[Auth] Privy state invalid for token retrieval - aborting sync attempt");
+          console.warn("[Auth] State: privyReady=", privyReady, "authenticated=", authenticated, "user=", !!user);
+
+          Sentry.captureMessage("Invalid Privy state during token retrieval attempt", {
+            level: 'warning',
+            tags: {
+              auth_error: 'invalid_privy_state_for_token',
+            },
+            extra: {
+              privy_ready: privyReady,
+              privy_authenticated: authenticated,
+              has_user: !!user,
+            },
+          });
+
+          syncInFlightRef.current = false;
+          syncPromiseRef.current = null;
+          setAuthStatus("unauthenticated", "privy state invalid");
+          return;
+        }
+
+        // Get token with adaptive timeout to prevent hanging
+        const tokenPromise = getAccessToken();
+        let token: string | null = null;
+
+        try {
+          // Adaptive timeout: 8-15 seconds based on network conditions
+          const tokenTimeoutMs = getAdaptiveTimeout(TOKEN_TIMEOUT_BASE_MS, {
+            maxMs: 15000, // Up to 15 seconds
+            mobileMultiplier: 1.8,
+            slowNetworkMultiplier: 2,
+          });
+
+          console.log(`[Auth] Attempting token retrieval with ${tokenTimeoutMs}ms timeout`);
+
+          token = await Promise.race([
+            tokenPromise,
+            new Promise<null>((_, reject) =>
+              setTimeout(() => reject(new Error("Token retrieval timeout")), tokenTimeoutMs)
+            )
+          ]);
+
+          if (!token) {
+            console.warn("[Auth] Token retrieval returned null/empty token");
+          }
+        } catch (tokenErr) {
+          console.warn("[Auth] Failed to get token:", tokenErr);
+
+          // Capture token retrieval error to Sentry (but as warning since we can continue)
+          const tokenErrMsg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
+          if (tokenErrMsg.includes("timeout")) {
+            console.warn("[Auth] Token timeout - proceeding with null token");
+            Sentry.captureMessage("Token retrieval timeout during authentication", {
+              level: 'warning',
+              tags: {
+                auth_error: 'token_timeout',
+              },
+            });
+          } else {
+            console.warn("[Auth] Token retrieval error:", tokenErrMsg);
+            Sentry.captureException(
+              tokenErr instanceof Error ? tokenErr : new Error(String(tokenErr)),
+              {
+                tags: {
+                  auth_error: 'token_retrieval_failed',
+                },
+                level: 'warning',
+              }
+            );
+          }
+
+          token = null; // Continue without token, let backend decide
+        }
+
         console.log("[Auth] Token retrieved:", token ? `${token.substring(0, 20)}...` : "null");
 
-        const authBody = buildAuthRequestBody(user, token, userData);
-        console.log("Sending auth body to backend:", authBody);
+        // Preserve existing live key before auth refresh
+        // If backend returns a temp key, we'll restore this
+        const existingLiveKey = userData?.api_key && !userData.api_key.startsWith(TEMP_API_KEY_PREFIX)
+          ? userData.api_key
+          : null;
 
-        const response = await fetch("/api/auth", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(authBody),
+        if (existingLiveKey) {
+          console.log("[Auth] Preserving existing live key for potential restore");
+        }
+
+        const authBody = buildAuthRequestBody(user, token, userData);
+        console.log("[Auth] Sending auth body to backend:", {
+          has_privy_user_id: !!authBody.privy_user_id,
+          has_token: !!authBody.token,
+          is_new_user: authBody.is_new_user,
+          auto_create_api_key: authBody.auto_create_api_key,
+          });
+
+        // Use fetch with timeout for backend call (minimum aligned with proxy retries)
+        const controller = new AbortController();
+        const baseTimeout = 10000;
+        const adaptiveTimeout = getAdaptiveTimeout(baseTimeout, {
+          maxMs: 25000,
+          mobileMultiplier: 2.2,
+          slowNetworkMultiplier: 3,
         });
+        const timeoutMs = Math.max(adaptiveTimeout, MIN_AUTH_SYNC_TIMEOUT_MS);
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // Network-aware timeout
+
+        let response: Response;
+        try {
+          response = await retryFetch(
+            () =>
+              fetch("/api/auth", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(authBody),
+                signal: controller.signal,
+              }),
+            {
+              maxRetries: 3,
+              initialDelayMs: 500,
+              maxDelayMs: 5000,
+              backoffMultiplier: 2,
+              retryableStatuses: [500, 502, 503, 504], // Include 500 errors for retry
+            }
+          );
+        } finally {
+          clearTimeout(timeoutId);
+        }
 
         const rawResponseText = await response.text();
 
         if (!response.ok) {
-          console.log("[Auth] Backend auth failed:", response.status, rawResponseText);
-          clearStoredCredentials();
-          setStatus("error");
+          console.error("[Auth] Backend auth failed with status", response.status);
+          console.error("[Auth] Response text:", rawResponseText.substring(0, 500));
+
+          // For 5xx errors, check if we have cached credentials we can keep using
+          const is5xxError = response.status >= 500 && response.status < 600;
+          const cachedKey = getApiKey();
+          const cachedUser = getUserData();
+
+          if (is5xxError && cachedKey && cachedUser && cachedUser.user_id && cachedUser.email) {
+            // Keep using cached credentials for server errors
+            console.warn("[Auth] Backend 5xx error but valid cached credentials found - maintaining session");
+            setAuthStatus("authenticated", "cached credentials after 5xx");
+            clearAuthTimeout();
+
+            Sentry.captureMessage(`Authentication backend ${response.status} - using cached credentials`, {
+              level: 'warning',
+              tags: {
+                auth_error: 'backend_5xx_cached_fallback',
+                http_status: response.status,
+              },
+              extra: {
+                response_status: response.status,
+                retry_attempt: authRetryCountRef.current,
+                using_cached: true,
+              },
+            });
+            return;
+          }
+
+          // CRITICAL: Check if we should retry BEFORE clearing credentials
+          // clearStoredCredentials() resets authRetryCountRef.current to 0 by default
+          // which would cause infinite retry loops
+          let shouldRetry = false;
+          let userMessage: string;
+
+          if (response.status === 504) {
+            userMessage = "Gateway timeout - our servers are taking too long to respond. Retrying...";
+            shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
+          } else if (is5xxError) {
+            userMessage = "Our servers are experiencing issues. Please try again in a moment.";
+            shouldRetry = authRetryCountRef.current < MAX_AUTH_RETRIES;
+          } else if (response.status === 401 || response.status === 403) {
+            userMessage = "Authentication failed. Please try logging in again.";
+          } else if (response.status === 429) {
+            userMessage = "Too many login attempts. Please wait a moment and try again.";
+          } else {
+            userMessage = `Authentication failed (${response.status}). Please try again.`;
+          }
+
+          // Clear credentials after determining shouldRetry
+          // For retryable errors, preserve retry counter; otherwise reset it
+          clearStoredCredentials(!shouldRetry);
+          setAuthStatus("error", `backend status ${response.status}`);
+
           const authError: AuthError = { status: response.status, message: rawResponseText };
-          setError(authError.message ?? "Authentication failed");
+          setError(userMessage);
+
+          // Capture auth failure to Sentry
+          Sentry.captureException(
+            new Error(`Authentication failed: ${response.status}`),
+            {
+              tags: {
+                auth_error: 'backend_auth_failed',
+                http_status: response.status,
+                is_gateway_timeout: response.status === 504 ? 'true' : 'false',
+              },
+              extra: {
+                response_status: response.status,
+                response_text: rawResponseText.substring(0, 500),
+                auth_method: (authBody as { auth_method?: string }).auth_method,
+                retry_attempt: authRetryCountRef.current,
+                will_retry: shouldRetry,
+              },
+              level: is5xxError ? 'error' : 'warning',
+            }
+          );
+
+          // Auto-retry for 504 Gateway Timeout and 5xx errors
+          if (shouldRetry) {
+            console.log(`[Auth] Retrying authentication after ${response.status} error (attempt ${authRetryCountRef.current + 1}/${MAX_AUTH_RETRIES})`);
+
+            // NOTE: Do NOT increment authRetryCountRef here!
+            // syncWithBackend will increment it when handling the AUTH_REFRESH_EVENT
+            // Incrementing twice would cause retries to exhaust prematurely
+
+            // Wait 2 seconds before retrying to give backend time to recover
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Dispatch refresh event to trigger retry
+            // syncWithBackend will increment authRetryCountRef.current
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+            }
+          }
+
           onAuthError?.(authError);
           return;
         }
@@ -464,10 +1072,29 @@ export function GatewayzAuthProvider({
         try {
           authData = JSON.parse(rawResponseText) as AuthResponse;
         } catch (parseError) {
-          console.error("[Auth] Failed to parse auth response JSON:", parseError, rawResponseText);
+          console.error("[Auth] Failed to parse auth response JSON");
+          console.error("[Auth] Parse error:", parseError instanceof Error ? parseError.message : String(parseError));
+          console.error("[Auth] Response was:", rawResponseText.substring(0, 500));
           clearStoredCredentials();
-          setStatus("error");
-          setError("Authentication failed");
+          setAuthStatus("error", "parse error");
+          setError("Authentication failed: Invalid response format");
+
+          // Capture JSON parse error to Sentry
+          Sentry.captureException(
+            parseError instanceof Error ? parseError : new Error(String(parseError)),
+            {
+              tags: {
+                auth_error: 'response_parse_failed',
+              },
+              extra: {
+                response_text: rawResponseText.substring(0, 500),
+                response_length: rawResponseText.length,
+                retry_attempt: authRetryCountRef.current,
+              },
+              level: 'error',
+            }
+          );
+
           onAuthError?.({ raw: parseError });
           return;
         }
@@ -476,34 +1103,311 @@ export function GatewayzAuthProvider({
           const fallbackApiKey =
             (authData as unknown as { data?: { api_key?: string } })?.data?.api_key ??
             (authData as unknown as { apiKey?: string }).apiKey ??
+            existingLiveKey ??
             null;
 
           if (fallbackApiKey) {
+            const fallbackSource = fallbackApiKey === existingLiveKey
+              ? "cached live key"
+              : "alternative response field";
+            console.warn(`[Auth] Backend response missing api_key; using ${fallbackSource}`);
             authData = { ...authData, api_key: fallbackApiKey };
           } else {
-            console.warn("[Auth] Backend auth response missing api_key field:", authData);
+            console.error("[Auth] Backend auth response missing api_key field");
+            console.error("[Auth] Response data was:", JSON.stringify(authData, null, 2).substring(0, 500));
             clearStoredCredentials();
-            setStatus("error");
-            setError("Authentication failed");
+            setAuthStatus("error", "missing api key");
+            setError("Authentication failed: No API key in response");
+
+            // Capture missing API key error to Sentry
+            Sentry.captureException(
+              new Error("Authentication failed: No API key in response"),
+              {
+                tags: {
+                  auth_error: 'missing_api_key',
+                },
+                extra: {
+                  response_data: JSON.stringify(authData, null, 2).substring(0, 500),
+                  response_keys: Object.keys(authData).join(', '),
+                  retry_attempt: authRetryCountRef.current,
+                },
+                level: 'error',
+              }
+            );
+
             onAuthError?.({ message: "Missing API key in auth response" });
             return;
           }
         }
 
         console.log("[Auth] Backend authentication successful:", authData);
+
+        // Check if we got a temporary API key
+        if (authData.api_key?.startsWith(TEMP_API_KEY_PREFIX)) {
+          console.warn("[Auth] Received temporary API key, will need to upgrade");
+          console.warn("[Auth] Temp key details:", {
+            user_id: authData.user_id,
+            credits: authData.credits,
+            is_new_user: authData.is_new_user,
+            tier: authData.tier,
+            key_prefix: authData.api_key.substring(0, 15) + "...",
+            had_existing_live_key: !!existingLiveKey,
+          });
+
+          // Log to Sentry for tracking temp key issuance
+          Sentry.captureMessage("Temporary API key received during authentication", {
+            level: 'warning',
+            tags: {
+              auth_issue: 'temp_key_received',
+            },
+            extra: {
+              user_id: authData.user_id,
+              credits: authData.credits,
+              is_new_user: authData.is_new_user,
+              tier: authData.tier,
+              had_existing_live_key: !!existingLiveKey,
+              key_prefix: authData.api_key.substring(0, 15),
+            },
+          });
+
+          // CRITICAL FIX: If we had a live key before and backend returned a temp key,
+          // restore the live key instead of using the temp key
+          if (existingLiveKey) {
+            console.log("[Auth] Backend returned temp key but we have existing live key - restoring live key");
+            authData = { ...authData, api_key: existingLiveKey };
+          }
+        } else {
+          console.log("[Auth] Received permanent API key");
+          console.log("[Auth] Permanent key details:", {
+            user_id: authData.user_id,
+            credits: authData.credits,
+            tier: authData.tier,
+            key_prefix: authData.api_key.substring(0, 15) + "...",
+          });
+        }
+
+        // Clear timeout guard and reset retry count on success
+        clearAuthTimeout();
+        authRetryCountRef.current = 0;
+
         await handleAuthSuccessAsync(
           authData,
           (authBody as { is_new_user?: boolean }).is_new_user ?? false
         );
-      } catch (err) {
-        console.error("[Auth] Error during backend sync:", err);
-        clearStoredCredentials();
-        setStatus("error");
-        setError(err instanceof Error ? err.message : "Authentication failed");
-        onAuthError?.({ raw: err });
-      } finally {
-        syncInFlightRef.current = false;
-      }
+        } catch (err) {
+          console.error("[Auth] Error during backend sync:", err);
+
+          const isAbortError =
+            err instanceof DOMException && err.name === "AbortError";
+
+          if (isAbortError) {
+            console.warn(
+              "[Auth] Backend sync aborted after exceeding timeout (frontend safeguard)"
+            );
+            setStatus("error");
+            setError("Authentication request timed out. Please try again.");
+
+            rateLimitedCaptureMessage("Authentication sync aborted by client timeout", {
+              level: "warning",
+              tags: {
+                auth_error: "frontend_timeout",
+              },
+            });
+
+            onAuthError?.({ message: "Authentication request timed out", raw: err });
+            return;
+          }
+
+          // Check if this is a non-blocking wallet extension error
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          const isWalletExtensionError = errorMsg.includes("chrome.runtime.sendMessage") ||
+                                        errorMsg.includes("runtime.sendMessage") ||
+                                        errorMsg.includes("Extension ID") ||
+                                        errorMsg.includes("from a webpage");
+
+          // If it's just a wallet extension error, don't treat it as auth failure
+          // The user can still authenticate with other methods (email, Google, GitHub)
+          if (isWalletExtensionError) {
+            console.warn("[Auth] Wallet extension error (non-blocking), maintaining current auth state");
+
+            // Log wallet error to Sentry but as a warning (non-blocking)
+            Sentry.captureMessage(`Wallet extension error during auth: ${errorMsg}`, {
+              level: 'warning',
+              tags: {
+                auth_error: 'wallet_extension_error',
+                blocking: 'false',
+              },
+            });
+
+            // Don't change status or clear credentials - just ignore the wallet error
+            // The authentication may have already succeeded before the wallet error occurred
+            // If user has valid cached credentials, keep them authenticated
+            const storedKey = getApiKey();
+            const storedUser = getUserData();
+            if (storedKey && storedUser && storedUser.user_id && storedUser.email) {
+              console.log("[Auth] Valid credentials found despite wallet error - keeping authenticated");
+              setAuthStatus("authenticated", "wallet error non-blocking");
+              clearAuthTimeout(); // Clear timeout if we're staying authenticated
+              authRetryCountRef.current = 0; // Reset retry count
+            } else {
+              // Show user-friendly error if we can't maintain auth
+              setError("Wallet extension error - please sign in with email or social login");
+            }
+            return;
+          }
+
+          // Check if this is an AbortError (user cancelled or timeout)
+          const isAuthAbortError = err instanceof Error &&
+            (err.name === 'AbortError' ||
+             errorMsg.includes('aborted') ||
+             errorMsg.includes('signal is aborted'));
+
+          if (isAuthAbortError) {
+            console.warn("[Auth] Request aborted:", errorMsg);
+
+            // Check if we have cached credentials we can keep using
+            const cachedKey = getApiKey();
+            const cachedUser = getUserData();
+
+            if (cachedKey && cachedUser && cachedUser.user_id && cachedUser.email) {
+              // Keep using cached credentials for abort errors
+              console.warn("[Auth] Request aborted but valid cached credentials found - maintaining session");
+              setAuthStatus("authenticated", "cached credentials after abort");
+              clearAuthTimeout();
+
+              Sentry.captureMessage(`Authentication sync aborted by client timeout`, {
+                level: 'warning',
+                tags: {
+                  auth_error: 'auth_sync_aborted',
+                },
+                extra: {
+                  error_message: errorMsg,
+                  retry_attempt: authRetryCountRef.current,
+                  using_cached: true,
+                },
+              });
+              return;
+            }
+
+            // No cached credentials - treat as timeout
+            setAuthStatus("error", "auth aborted");
+            setError("Authentication timed out. Please try again.");
+
+            Sentry.captureMessage(`Authentication sync aborted by client timeout`, {
+              level: 'warning',
+              tags: {
+                auth_error: 'auth_sync_aborted',
+              },
+              extra: {
+                error_message: errorMsg,
+                retry_attempt: authRetryCountRef.current,
+                using_cached: false,
+              },
+            });
+
+            onAuthError?.({ message: "Authentication aborted", raw: err });
+            return;
+          }
+
+          // Check if this is a network/fetch error
+          const isNetworkError = errorMsg.includes("Failed to fetch") ||
+                                errorMsg.includes("NetworkError") ||
+                                errorMsg.includes("Network request failed") ||
+                                errorMsg.includes("net::ERR_") ||
+                                errorMsg.includes("ECONNREFUSED") ||
+                                errorMsg.includes("ENOTFOUND") ||
+                                errorMsg.includes("CORS");
+
+          if (isNetworkError) {
+            console.warn("[Auth] Network error during authentication:", errorMsg);
+
+            // Check if we have cached credentials we can keep using
+            const cachedKey = getApiKey();
+            const cachedUser = getUserData();
+
+            if (cachedKey && cachedUser && cachedUser.user_id && cachedUser.email) {
+              // Keep using cached credentials for network errors
+              console.warn("[Auth] Network error but valid cached credentials found - maintaining session");
+              setAuthStatus("authenticated", "cached credentials after network error");
+              clearAuthTimeout();
+
+              Sentry.captureMessage(`Authentication network error - using cached credentials: ${errorMsg}`, {
+                level: 'warning',
+                tags: {
+                  auth_error: 'network_error_cached_fallback',
+                },
+                extra: {
+                  error_message: errorMsg,
+                  retry_attempt: authRetryCountRef.current,
+                  using_cached: true,
+                },
+              });
+              return;
+            }
+
+            // No cached credentials - show user-friendly network error
+            setAuthStatus("error", "network error");
+            setError("Unable to connect. Please check your internet connection and try again.");
+
+            Sentry.captureException(
+              err instanceof Error ? err : new Error(String(err)),
+              {
+                tags: {
+                  auth_error: 'network_error',
+                },
+                extra: {
+                  error_message: errorMsg,
+                  retry_attempt: authRetryCountRef.current,
+                },
+                level: 'warning',
+              }
+            );
+
+            onAuthError?.({ message: "Network error during authentication", raw: err });
+            return;
+          }
+
+          clearStoredCredentials();
+          setAuthStatus("error", "backend sync exception");
+
+          // Provide user-friendly error message
+          let userFriendlyError = "Authentication failed. Please try again.";
+          if (errorMsg.includes("timeout")) {
+            userFriendlyError = "Connection timed out. Please try again.";
+          }
+          setError(userFriendlyError);
+
+          // Capture authentication error to Sentry
+          Sentry.captureException(
+            err instanceof Error ? err : new Error(String(err)),
+            {
+              tags: {
+                auth_error: 'backend_sync_error',
+              },
+              extra: {
+                error_message: errorMsg,
+                retry_attempt: authRetryCountRef.current,
+              },
+              level: 'error',
+            }
+          );
+
+          onAuthError?.({ raw: err });
+        } finally {
+          syncInFlightRef.current = false;
+          syncPromiseRef.current = null;
+          // Note: Don't clear timeout here - it's cleared on success or kept on error
+
+          // Signal that auth refresh is complete (success or failure)
+          // This allows requestAuthRefresh() promise to resolve/reject
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event(AUTH_REFRESH_COMPLETE_EVENT));
+          }
+        }
+      })();
+
+      syncPromiseRef.current = syncPromise;
+      return syncPromise;
     },
     [
       apiKey,
@@ -520,24 +1424,51 @@ export function GatewayzAuthProvider({
   );
 
   useEffect(() => {
+    // Only proceed with sync when Privy is ready
     if (!privyReady) {
-      setStatus("idle");
       return;
     }
 
+    // If Privy user is authenticated, always sync with backend
+    if (authenticated && user) {
+      // Reset retry counter on new login (when user changes)
+      // This allows users to retry after hitting max retries
+      const currentUserId = lastSyncedPrivyIdRef.current;
+      const newUserId = user.id;
+      if (currentUserId !== newUserId) {
+        console.log("[Auth] New Privy user detected, resetting retry counter");
+        authRetryCountRef.current = 0;
+      }
+
+      syncWithBackend();
+      return;
+    }
+
+    // If Privy session is not authenticated, but we have cached credentials,
+    // keep them - don't clear. The user may have a valid gatewayz session
+    // even if their Privy session expired.
     if (!authenticated || !user) {
-      clearStoredCredentials();
-      setStatus("unauthenticated");
+      const storedKey = getApiKey();
+      const storedUser = getUserData();
+
+      // If we have valid cached credentials, stay authenticated
+      if (storedKey && storedUser && storedUser.user_id && storedUser.email) {
+        console.log("[Auth] Privy not authenticated but cached credentials found - maintaining session");
+        setAuthStatus("authenticated", "cached credentials");
+      } else {
+        // Only clear if we truly have no session
+        clearStoredCredentials();
+        setAuthStatus("unauthenticated", "no privy or cached session");
+      }
       return;
     }
-
-    syncWithBackend();
-  }, [authenticated, clearStoredCredentials, privyReady, syncWithBackend, user]);
+  }, [authenticated, clearStoredCredentials, privyReady, setAuthStatus, syncWithBackend, user]);
 
   useEffect(() => {
     const handler = () => {
       console.log("[Auth] Received refresh event");
-      syncWithBackend({ force: true }).catch((err) => {
+      // Use force but don't reset retry counter to prevent infinite loops
+      syncWithBackend({ force: true, resetRetryCount: false }).catch((err) => {
         console.error("[Auth] Error refreshing auth:", err);
       });
     };
@@ -553,6 +1484,74 @@ export function GatewayzAuthProvider({
     };
   }, [syncWithBackend]);
 
+  // Track elapsed time during authentication for progressive UI feedback
+  useEffect(() => {
+    if (status === "authenticating") {
+      // Always start fresh timing when entering authenticating state
+      // This handles quick re-attempts where previous timeout was cancelled
+      const startTime = Date.now();
+      setAuthStartTime(startTime);
+      setAuthElapsedMs(0);
+      setAuthPhase("connecting");
+
+      // Update elapsed time every 500ms for smooth progress display
+      // Use the local startTime variable to avoid stale closure issues
+      const interval = setInterval(() => {
+        const elapsed = Date.now() - startTime!;
+        setAuthElapsedMs(elapsed);
+
+        // Update phase based on elapsed time and retry count
+        if (authRetryCountRef.current > 1) {
+          setAuthPhase("retrying");
+        } else if (elapsed > AUTH_VERY_SLOW_THRESHOLD_MS) {
+          setAuthPhase("syncing"); // Backend sync phase
+        } else if (elapsed > AUTH_SLOW_THRESHOLD_MS) {
+          setAuthPhase("verifying"); // Token verification phase
+        }
+      }, 500);
+
+      return () => clearInterval(interval);
+    } else {
+      // Reset timing when auth completes or fails
+      if (status === "authenticated") {
+        setAuthPhase("complete");
+      } else if (status === "error") {
+        setAuthPhase("error");
+      } else {
+        setAuthPhase("idle");
+      }
+      // Keep startTime and elapsedMs for a moment so UI can show completion
+      const resetTimeout = setTimeout(() => {
+        setAuthStartTime(null);
+        setAuthElapsedMs(0);
+      }, 1000);
+      return () => clearTimeout(resetTimeout);
+    }
+  }, [status]);
+
+  // Compute auth timing info for consumers
+  const authTiming = useMemo<AuthTimingInfo>(() => ({
+    startTime: authStartTime,
+    elapsedMs: authElapsedMs,
+    retryCount: authRetryCountRef.current,
+    maxRetries: MAX_AUTH_RETRIES,
+    isSlowAuth: authElapsedMs > AUTH_SLOW_THRESHOLD_MS,
+    phase: authPhase,
+  }), [authStartTime, authElapsedMs, authPhase]);
+
+  // Memoize login/logout to avoid inline function recreation
+  const login = useCallback(async () => {
+    // Let Privy handle its own login flow - don't intercept errors here
+    // Wallet errors during Privy's flow are handled by Privy itself
+    // Wallet errors during backend sync are handled in syncWithBackend()
+    await privyLogin();
+  }, [privyLogin]);
+  const logout = useCallback(async () => {
+    clearStoredCredentials();
+    await privyLogout();
+    setAuthStatus("unauthenticated", "logout");
+  }, [clearStoredCredentials, privyLogout, setAuthStatus]);
+
   const contextValue = useMemo<GatewayzAuthContextValue>(
     () => ({
       status,
@@ -562,23 +1561,20 @@ export function GatewayzAuthProvider({
       privyReady,
       privyAuthenticated: authenticated,
       error,
-      login: () => privyLogin(),
-      logout: async () => {
-        clearStoredCredentials();
-        await privyLogout();
-        setStatus("unauthenticated");
-      },
+      authTiming,
+      login,
+      logout,
       refresh: (options) => syncWithBackend(options),
       redirectToBeta: enableBetaRedirect ? redirectToBetaIfEnabled : undefined,
     }),
     [
       apiKey,
       authenticated,
-      clearStoredCredentials,
+      authTiming,
       enableBetaRedirect,
       error,
-      privyLogin,
-      privyLogout,
+      login,
+      logout,
       privyReady,
       redirectToBetaIfEnabled,
       status,

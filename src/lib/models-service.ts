@@ -1,16 +1,79 @@
 import { models } from '@/lib/models-data';
+import { getErrorMessage, isAbortOrNetworkError } from '@/lib/network-error';
+import { cacheAside, cacheStaleWhileRevalidate, cacheKey, CACHE_PREFIX, TTL, cacheInvalidate } from '@/lib/cache-strategies';
+import {
+  VALID_GATEWAYS,
+  PRIORITY_GATEWAYS,
+  buildGatewayHeaders,
+  normalizeGatewayId,
+  isValidGateway,
+  autoRegisterGatewaysFromModels,
+  getAllActiveGatewayIds,
+} from '@/lib/gateway-registry';
+import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
-// In-memory cache for models to reduce API calls
+// In-memory cache for models to reduce API calls (fallback if Redis unavailable)
 let modelsCache: { data: any[], timestamp: number } | null = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+/**
+ * Helper to sleep/delay execution
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Calculate retry delay for rate limit errors with exponential backoff
+ */
+function calculateRetryDelay(
+  retryCount: number,
+  retryAfterHeader: string | null
+): number {
+  // Base delay with exponential backoff
+  const baseDelay = 1000; // 1 second
+  const maxDelay = 30000; // 30 seconds
+  let waitTime = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+
+  // Parse Retry-After header if present
+  if (retryAfterHeader) {
+    const numericRetry = Number(retryAfterHeader);
+    if (!Number.isNaN(numericRetry) && numericRetry > 0) {
+      // Retry-After is in seconds
+      waitTime = Math.max(waitTime, numericRetry * 1000);
+    } else {
+      // Try parsing as HTTP date
+      const retryDate = Date.parse(retryAfterHeader);
+      if (!Number.isNaN(retryDate)) {
+        const headerWait = retryDate - Date.now();
+        if (headerWait > 0) {
+          waitTime = Math.max(waitTime, headerWait);
+        }
+      }
+    }
+  }
+
+  // Add jitter to prevent thundering herd
+  const jitter = Math.floor(Math.random() * 500);
+  waitTime += jitter;
+
+  return waitTime;
+}
 
 // Transform static models data to backend format
 function transformModel(model: any, gateway: string) {
   const resolvedGateway = gateway === 'all' ? 'openrouter' : gateway;
+
+  // Normalize model name for URL-safe ID
+  // Extract actual model name by removing provider prefix (e.g., "Anthropic: " from "Anthropic: Claude 3.5 Sonnet")
+  const nameParts = model.name.split(':');
+  const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : model.name;
+  const normalizedName = modelNamePart.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
   return {
-    id: `${model.developer}/${model.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+    id: `${model.developer}/${normalizedName}`,
     name: model.name,
     description: model.description,
     context_length: model.context * 1000, // Convert K to actual number
@@ -31,184 +94,88 @@ function transformModel(model: any, gateway: string) {
   };
 }
 
-export async function getModelsForGateway(gateway: string, limit?: number) {
-  // Check cache first
-  if (modelsCache && gateway === 'all') {
+export async function getModelsForGateway(gateway: string, limit?: number, search?: string) {
+  // Use Redis cache with stale-while-revalidate pattern for instant page loads
+  // Skip caching for search queries to ensure fresh results
+  const cacheKeyStr = search ? null : cacheKey(
+    CACHE_PREFIX.MODELS,
+    gateway,
+    limit ? `limit:${limit}` : 'all'
+  );
+
+  // If there's a search query, skip cache and fetch directly
+  if (search) {
+    return await fetchModelsLogic(gateway, limit, search);
+  }
+
+  // Stale-while-revalidate:
+  // - Fresh for 4 hours (TTL.MODELS_ALL)
+  // - Serve stale for up to 12 additional hours (3x TTL)
+  // - Revalidate in background when stale
+  return await cacheStaleWhileRevalidate(
+    cacheKeyStr!,
+    async () => {
+      // Fetch logic (extracted below)
+      return await fetchModelsLogic(gateway, limit);
+    },
+    TTL.MODELS_ALL, // Fresh TTL: 4 hours
+    TTL.MODELS_ALL * 3, // Stale TTL: 12 hours (total cache lifetime: 16 hours)
+    'models' // Metrics category
+  );
+}
+
+// Extracted fetch logic for reuse
+async function fetchModelsLogic(gateway: string, limit?: number, search?: string) {
+  // Check in-memory cache as fallback (only if no search query)
+  if (modelsCache && gateway === 'all' && !search) {
     const now = Date.now();
     if (now - modelsCache.timestamp < CACHE_DURATION) {
-      console.log(`[Models] Returning cached models (${modelsCache.data.length} models)`);
+      console.log(`[Models] Returning in-memory cached models (${modelsCache.data.length} models)`);
       return { data: modelsCache.data };
     }
   }
 
-  // Validate gateway
-  // Note: 'portkey' is deprecated; use individual providers instead (google, cerebras, nebius, xai, novita, huggingface)
-  const validGateways = [
-    'openrouter',
-    'portkey', // Kept for backward compatibility
-    'featherless',
-    'chutes',
-    'fireworks',
-    'together',
-    'groq',
-    'deepinfra',
-    // New Portkey SDK providers
-    'google',
-    'cerebras',
-    'nebius',
-    'xai',
-    'novita',
-    'huggingface',
-    'aimo',
-    'near',
-    'fal',
-    'vercel-ai-gateway', // Vercel AI Gateway
-    'helicone', // Helicone AI Gateway - will be skipped if backend unavailable
-    'alpaca', // Alpaca Network
-    'all'
-  ];
-  if (!validGateways.includes(gateway)) {
+  // Validate gateway using centralized registry
+  if (!isValidGateway(gateway)) {
     throw new Error('Invalid gateway');
   }
 
-  // Special handling for 'all' gateway - fetch from all individual gateways in parallel
-  // This ensures models are properly assigned to their respective gateways for filtering
+  // FIX: Use single backend call with gateway=all instead of N+1 individual gateway calls
+  // The backend already handles aggregation and deduplication across all gateways efficiently
+  // This eliminates ~20+ individual API calls and improves root load performance significantly
   if (gateway === 'all') {
-    console.log('[Models] Fetching from all gateways in parallel');
+    console.log('[Models] Fetching all models from backend with gateway=all (single request)');
     try {
-      // Fetch from all known gateways (excluding deprecated 'portkey' and 'all' itself)
-      const gatewaysToFetch = [
-        'openrouter',
-        'featherless',
-        'groq',
-        'together',
-        'fireworks',
-        'chutes',
-        'deepinfra',
-        'google',
-        'cerebras',
-        'nebius',
-        'xai',
-        'novita',
-        'huggingface',
-        'aimo',
-        'near',
-        'fal',
-        'vercel-ai-gateway',
-        'helicone',
-        'alpaca'
-      ];
+      // Make a single API call to the backend with gateway=all
+      // The backend handles fetching from all gateways and deduplication internally
+      const models = await fetchModelsFromGateway('all', limit, search);
 
-      const results = await Promise.all(
-        gatewaysToFetch.map(gw => fetchModelsFromGateway(gw, limit))
-      );
+      if (models.length > 0) {
+        // Auto-register any new gateways discovered from the API response
+        // This allows new gateways to appear in the UI without code changes
+        autoRegisterGatewaysFromModels(models);
 
-      // Combine and deduplicate models intelligently
-      const combinedModels = results.flat();
+        console.log(`[Models] Fetched ${models.length} models from backend with gateway=all`);
 
-      // Create a normalized key for deduplication
-      // This handles cases where the same model has different IDs from different gateways/providers
-      const modelMap = new Map<string, any>();
-
-      for (const model of combinedModels) {
-        // Normalize the model name: remove prefixes, lowercase, remove special chars, handle versioning
-        let normalizedName = (model.name || '')
-          .toLowerCase()
-          .replace(/^(google:|openai:|meta:|anthropic:|models\/)/i, '') // Remove provider prefixes
-          .replace(/\s+/g, '-') // Replace spaces with hyphens
-          .replace(/[^\w-]/g, ''); // Remove special characters except hyphens
-
-        // Also normalize based on canonical_slug or id if available, as a fallback
-        // This handles cases where the model name differs slightly but they're the same model
-        // The backend returns inconsistent canonical_slugs (e.g., "gemini-2.5-pro" vs "google/gemini-2.5-pro")
-        // We normalize by removing ALL provider prefixes to ensure proper deduplication
-        let canonicalSlug = (model.canonical_slug || model.id || '').toLowerCase();
-
-        // Remove provider prefixes (some models have them, others don't)
-        canonicalSlug = canonicalSlug
-          .replace(/^(aimo\/|google\/|openai\/|meta\/|anthropic\/|models\/|mistralai\/|xai\/)/i, '')
-          .replace(/\s+/g, '-')
-          .replace(/[^\w-]/g, '');
-
-        // Use canonical slug if it's more specific, otherwise use normalized name
-        // Prefer canonical_slug as it's designed to be a unique identifier
-        const dedupKey = canonicalSlug || normalizedName;
-
-        // Merge models from multiple gateways AND providers
-        if (modelMap.has(dedupKey)) {
-          const existing = modelMap.get(dedupKey);
-
-          // Merge source_gateways arrays
-          const existingGateways = Array.isArray(existing.source_gateways)
-            ? existing.source_gateways
-            : (existing.source_gateway ? [existing.source_gateway] : []);
-
-          const newGateways = Array.isArray(model.source_gateways)
-            ? model.source_gateways
-            : (model.source_gateway ? [model.source_gateway] : []);
-
-          // Combine and deduplicate gateways
-          const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
-
-          // NEW: Track multiple providers for the same model
-          const existingProviders = Array.isArray(existing.provider_slugs)
-            ? existing.provider_slugs
-            : (existing.provider_slug ? [existing.provider_slug] : []);
-
-          const newProviders = model.provider_slug ? [model.provider_slug] : [];
-          const combinedProviders = Array.from(new Set([...existingProviders, ...newProviders]));
-
-          // Calculate data completeness score (models with more metadata are preferred)
-          const existingScore = (existing.description ? 1 : 0) +
-                                (existing.pricing?.prompt ? 1 : 0) +
-                                (existing.context_length > 0 ? 1 : 0) +
-                                (existing.architecture?.input_modalities?.length || 0);
-
-          const newScore = (model.description ? 1 : 0) +
-                           (model.pricing?.prompt ? 1 : 0) +
-                           (model.context_length > 0 ? 1 : 0) +
-                           (model.architecture?.input_modalities?.length || 0);
-
-          // Keep the model with more complete data, but always preserve all gateways and providers
-          const mergedModel = newScore > existingScore ? model : existing;
-          mergedModel.source_gateways = combinedGateways;
-          mergedModel.provider_slugs = combinedProviders;
-
-          modelMap.set(dedupKey, mergedModel);
-        } else {
-          // First occurrence - ensure source_gateways is an array
-          if (!Array.isArray(model.source_gateways) && model.source_gateway) {
-            model.source_gateways = [model.source_gateway];
-          } else if (!model.source_gateways) {
-            model.source_gateways = [];
-          }
-
-          // NEW: Initialize provider_slugs array
-          model.provider_slugs = model.provider_slug ? [model.provider_slug] : [];
-
-          modelMap.set(dedupKey, model);
+        // Cache the result for 'all' gateway (only if not searching)
+        if (!search) {
+          modelsCache = {
+            data: models,
+            timestamp: Date.now()
+          };
         }
+
+        return { data: models };
       }
-
-      const uniqueModels = Array.from(modelMap.values());
-
-      console.log(`[Models] Combined ${combinedModels.length} total (${uniqueModels.length} unique) from ${gatewaysToFetch.length} gateways`);
-
-      // Cache the result for 'all' gateway
-      modelsCache = {
-        data: uniqueModels,
-        timestamp: Date.now()
-      };
-
-      return { data: uniqueModels };
+      // If no models returned, fall through to static fallback
     } catch (error) {
-      console.error('[Models] Error fetching from multiple gateways:', error);
+      console.error('[Models] Error fetching from backend with gateway=all:', error);
       // Fall through to static fallback
     }
   }
 
   // For specific gateways, use the existing fetch logic
-  const models = await fetchModelsFromGateway(gateway, limit);
+  const models = await fetchModelsFromGateway(gateway, limit, search);
   if (models.length > 0) {
     return { data: models };
   }
@@ -217,131 +184,229 @@ export async function getModelsForGateway(gateway: string, limit?: number) {
   return { data: getStaticFallbackModels(gateway) };
 }
 
-// Helper function to build request headers
+// Helper function to build request headers (uses centralized gateway registry)
 function buildHeaders(gateway: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
-  };
-
-  const hfApiKey = process.env.NEXT_PUBLIC_HF_API_KEY || process.env.HF_API_KEY;
-  if (gateway === 'huggingface' && hfApiKey) {
-    headers['Authorization'] = `Bearer ${hfApiKey}`;
-  }
-
-  const nearApiKey = process.env.NEXT_PUBLIC_NEAR_API_KEY || process.env.NEAR_API_KEY;
-  if (gateway === 'near' && nearApiKey) {
-    headers['Authorization'] = `Bearer ${nearApiKey}`;
-  }
-
-  return headers;
+  return buildGatewayHeaders(gateway);
 }
 
 // Helper function to normalize model fields for consistent tag display
 function normalizeModel(model: any, gateway: string): any {
+  // Normalize gateway values using centralized registry
+  const normalizeGatewayValue = (gw: string) => normalizeGatewayId(gw);
+
+  // Get normalized gateway from source_gateway or use the provided gateway parameter
+  const primaryGateway = normalizeGatewayValue(model.source_gateway || gateway);
+
   return {
     ...model,
-    // Ensure source_gateways is always an array
+    // Ensure source_gateways is always an array with normalized values
     source_gateways: Array.isArray(model.source_gateways)
-      ? model.source_gateways
-      : (model.source_gateway ? [model.source_gateway] : [gateway]),
+      ? model.source_gateways.map(normalizeGatewayValue)
+      : (model.source_gateway ? [primaryGateway] : [normalizeGatewayValue(gateway)]),
     // Ensure provider_slugs is always an array
     provider_slugs: Array.isArray(model.provider_slugs)
       ? model.provider_slugs
       : (model.provider_slug ? [model.provider_slug] : []),
     // Keep singular fields for backwards compatibility
-    source_gateway: model.source_gateway || gateway,
+    source_gateway: primaryGateway,
     provider_slug: model.provider_slug || 'unknown'
   };
 }
 
+// Helper function to determine the base URL for API requests
+// On client-side (browser), use Next.js API route to avoid CORS issues
+// On server-side, use direct backend URL for better performance
+function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    // Client-side: use Next.js API route to proxy requests (avoids CORS)
+    return '';
+  }
+  // Server-side: use direct backend URL
+  return API_BASE_URL;
+}
+
 // Helper function to fetch models from a specific gateway
-async function fetchModelsFromGateway(gateway: string, limit?: number): Promise<any[]> {
+async function fetchModelsFromGateway(gateway: string, limit?: number, search?: string): Promise<any[]> {
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
-  const FAST_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
-  // Optimized timeouts: reduce from 5000ms to 3500ms for slow gateways to speed up parallel requests
-  const timeoutMs = FAST_GATEWAYS.includes(gateway) ? 2500 : 3500;
+  // Use centralized PRIORITY_GATEWAYS for fast gateway detection
+  // Increased timeouts to handle slow gateways: 5000ms for fast, 30000ms for slow (HuggingFace needs more time)
+  const timeoutMs = PRIORITY_GATEWAYS.includes(gateway) ? 5000 : 30000;
 
   let offset = 0;
   let hasMore = true;
   let pageCount = 0;
 
-  while (hasMore && pageCount < 10) {
+  // Determine base URL based on runtime environment
+  const baseUrl = getApiBaseUrl();
+  const isClientSide = typeof window !== 'undefined';
+
+  // On client-side, pagination is handled by the server (via /api/models route)
+  // so we only make a single request without offset. The server-side getModelsForGateway
+  // handles all pagination internally before returning results.
+  const maxPages = isClientSide ? 1 : 10;
+
+  while (hasMore && pageCount < maxPages) {
     pageCount++;
-    const offsetParam = offset > 0 ? `&offset=${offset}` : '';
-    const limitParam = `limit=${requestLimit}${offsetParam}`;
+    // Only include offset for server-side requests (client requests don't paginate)
+    const offsetParam = (!isClientSide && offset > 0) ? `&offset=${offset}` : '';
+    const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
+    const limitParam = `limit=${requestLimit}${offsetParam}${searchParam}`;
 
-    // Try both v1/models and /models endpoints using Promise.race for fast fallback
-    const urls = [
-      `${API_BASE_URL}/v1/models?gateway=${gateway}&${limitParam}`,
-      `${API_BASE_URL}/models?gateway=${gateway}&${limitParam}`
-    ];
+    // Build URLs based on environment
+    // Client-side: use Next.js API route (/api/models) to avoid CORS - single request, no pagination
+    // Server-side: try both v1/models and /models endpoints using Promise.race for fast fallback
+    const urls = isClientSide
+      ? [`/api/models?gateway=${gateway}&${limitParam}`]
+      : [
+          `${baseUrl}/v1/models?gateway=${gateway}&${limitParam}`,
+          `${baseUrl}/models?gateway=${gateway}&${limitParam}`
+        ];
 
-    try {
-      const headers = buildHeaders(gateway);
+    const maxRetries = 3;
+    let retryCount = 0;
+    let lastError: { status: number; retryAfter: string | null } | null = null;
 
-      // Try both endpoints in parallel, use first successful response
-      const response = await Promise.race(
-        urls.map(url =>
-fetch(url, {
-             method: 'GET',
-             headers,
-             next: {
-               revalidate: 300,
-               tags: [`models:gateway:${gateway}`, 'models:all']
-             },
-             signal: AbortSignal.timeout(timeoutMs)
-           })
-        )
-      );
+    while (retryCount <= maxRetries) {
+      try {
+        // Add delay for retries
+        if (retryCount > 0 && lastError) {
+          const waitTime = calculateRetryDelay(retryCount - 1, lastError.retryAfter);
+          console.log(`[Models] Rate limited on ${gateway}, retry ${retryCount}/${maxRetries} after ${waitTime}ms`);
+          await sleep(waitTime);
+        }
 
-      if (response.ok) {
-        const data = await response.json();
+        const headers = buildHeaders(gateway);
 
-        if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-          // Normalize each model to ensure provider_slugs and source_gateways are arrays
-          const normalizedModels = data.data.map((model: any) => normalizeModel(model, gateway));
-          allModels.push(...normalizedModels);
-          console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
+        // Build fetch options - include Next.js caching only on server-side
+        const fetchOptions: RequestInit = {
+          method: 'GET',
+          headers,
+          signal: AbortSignal.timeout(timeoutMs)
+        };
 
-          const isFiveHundred = data.data.length === 500 && gateway === 'huggingface';
-          const hasReachedLimit = limit && allModels.length >= limit;
-          const gotFewerThanRequested = data.data.length < requestLimit && !isFiveHundred;
+        // Add Next.js specific caching options only on server-side
+        if (!isClientSide) {
+          (fetchOptions as any).next = {
+            revalidate: 300,
+            tags: [`models:gateway:${gateway}`, 'models:all']
+          };
+        }
 
-          if (gotFewerThanRequested || hasReachedLimit) {
-            hasMore = false;
+        // Try endpoints in parallel (server-side) or single endpoint (client-side)
+        const response = await Promise.race(
+          urls.map((url) => fetch(url, fetchOptions))
+        );
+
+        // Handle rate limit errors with retry
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('retry-after');
+
+          if (retryCount < maxRetries) {
+            lastError = { status: 429, retryAfter };
+            retryCount++;
+            continue; // Retry
           } else {
-            offset += requestLimit;
+            // Max retries exceeded, log and skip this page
+            console.error(`[Models] Rate limit exceeded for ${gateway} after ${maxRetries} retries, skipping page`);
+            hasMore = false;
+            break;
+          }
+        }
+
+        if (response.ok) {
+          const data = await response.json();
+
+          if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+            // Normalize each model to ensure provider_slugs and source_gateways are arrays
+            const normalizedModels = data.data.map((model: any) => normalizeModel(model, gateway));
+            allModels.push(...normalizedModels);
+            console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
+
+            const isFiveHundred = data.data.length === 500 && (gateway === 'huggingface' || gateway === 'featherless');
+            const hasReachedLimit = limit && allModels.length >= limit;
+            const gotFewerThanRequested = data.data.length < requestLimit && !isFiveHundred;
+
+            if (gotFewerThanRequested || hasReachedLimit) {
+              hasMore = false;
+            } else {
+              offset += requestLimit;
+            }
+          } else {
+            hasMore = false;
+          }
+          break; // Success, exit retry loop
+        } else {
+          // Track non-OK responses from backend API
+          await trackBadBackendResponse(response, {
+            endpoint: urls[0], // Use first URL for logging
+            method: 'GET',
+            gateway,
+            retryCount,
+          });
+          hasMore = false;
+          break;
+        }
+      } catch (error: any) {
+        const message = getErrorMessage(error);
+        if (isAbortOrNetworkError(error)) {
+          // Track network/timeout errors to backend API
+          trackBackendNetworkError(error, {
+            endpoint: urls[0],
+            method: 'GET',
+            gateway,
+            timeoutMs,
+          });
+          // Only log timeouts in development mode to reduce console noise
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
           }
         } else {
-          hasMore = false;
+          // Track non-network errors (e.g., JSON parsing, validation, etc.)
+          trackBackendProcessingError(error, {
+            endpoint: urls[0],
+            method: 'GET',
+            gateway,
+          });
+          console.error(`[Models] Failed to fetch ${gateway}:`, message);
         }
-      } else {
         hasMore = false;
+        break;
       }
-    } catch (error: any) {
-      console.error(`[Models] Failed to fetch ${gateway}:`, error.message || error);
-      hasMore = false;
     }
   }
 
-  console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
+  // Only log fetch results in development or when models were actually fetched
+  if (process.env.NODE_ENV === 'development' || allModels.length > 0) {
+    console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
+  }
   return allModels;
 }
 
 // Helper function to get static fallback models
 function getStaticFallbackModels(gateway: string): any[] {
-  console.warn(`[Models] No models fetched from API for ${gateway}, falling back to static data (${models.length} models)`);
+  // Only log fallback usage in development to reduce console noise in production
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(`[Models] No models fetched from API for ${gateway}, using static fallback (${models.length} models)`);
+  }
   let transformedModels;
+
+  // Normalize gateway to canonical ID (e.g., 'hug' -> 'huggingface')
+  // This ensures aliases are resolved before any lookups
+  const normalizedGateway = normalizeGatewayId(gateway);
 
   // Map developers to their preferred gateways
   const developerToGateway: Record<string, string> = {
     'alpaca-network': 'alpaca',
     'near': 'near',
+    'alibaba': 'alibaba',
+    'google': 'google',
+    'clarifai': 'clarifai',
+    'onerouter': 'onerouter',
     // Add more mappings as needed
   };
 
-  if (gateway === 'all') {
+  if (normalizedGateway === 'all') {
     // Assign models to gateways based on their developer field if possible
     transformedModels = models.map((model) => {
       // Check if this developer has a specific gateway mapping
@@ -354,42 +419,27 @@ function getStaticFallbackModels(gateway: string): any[] {
     const gatewayToDeveloper: Record<string, string> = {
       'alpaca': 'alpaca-network',
       'near': 'near',
+      'alibaba': 'alibaba',
+      'google': 'google',
+      'clarifai': 'clarifai',
+      'onerouter': 'onerouter',
       // Add more mappings as needed for other gateways
     };
 
     let gatewayModels;
 
     // If we have a specific developer mapping, filter by developer field
-    if (gatewayToDeveloper[gateway]) {
-      const developerName = gatewayToDeveloper[gateway];
+    if (gatewayToDeveloper[normalizedGateway]) {
+      const developerName = gatewayToDeveloper[normalizedGateway];
       gatewayModels = models.filter(m => m.developer === developerName);
     } else {
       // For gateways without specific mappings, distribute models evenly as before
-      const allGateways = [
-        'openrouter',
-        'portkey',
-        'featherless',
-        'chutes',
-        'fireworks',
-        'together',
-        'groq',
-        'deepinfra',
-        'google',
-        'cerebras',
-        'nebius',
-        'xai',
-        'novita',
-        'huggingface',
-        'aimo',
-        'near',
-        'fal',
-        'vercel-ai-gateway',
-        'helicone',
-        'alpaca'
-      ];
+      // Uses dynamic function to include runtime-registered gateways
+      const allGateways = getAllActiveGatewayIds();
       const modelsPerGateway = Math.ceil(models.length / allGateways.length);
 
-      const gatewayIndex = allGateways.indexOf(gateway);
+      // Use normalized gateway for lookup to handle aliases correctly
+      const gatewayIndex = allGateways.indexOf(normalizedGateway);
       if (gatewayIndex !== -1) {
         const startIndex = gatewayIndex * modelsPerGateway;
         const endIndex = gatewayIndex === allGateways.length - 1 ? models.length : (gatewayIndex + 1) * modelsPerGateway;
@@ -399,8 +449,41 @@ function getStaticFallbackModels(gateway: string): any[] {
       }
     }
 
-    transformedModels = gatewayModels.map(m => transformModel(m, gateway));
+    transformedModels = gatewayModels.map(m => transformModel(m, normalizedGateway));
   }
 
   return transformedModels;
+}
+
+/**
+ * Invalidate models cache for a specific gateway or all gateways
+ *
+ * @param gateway - Gateway to invalidate, or 'all' for all caches
+ * @returns Number of cache keys invalidated
+ */
+export async function invalidateModelsCache(gateway?: string): Promise<number> {
+  try {
+    if (gateway) {
+      // Invalidate specific gateway cache
+      const pattern = cacheKey(CACHE_PREFIX.MODELS, gateway, '*');
+      const deleted = await cacheInvalidate(pattern);
+      console.log(`[Models] Invalidated ${deleted} cache entries for gateway: ${gateway}`);
+      return deleted;
+    } else {
+      // Invalidate all models caches
+      const pattern = cacheKey(CACHE_PREFIX.MODELS, '*');
+      const deleted = await cacheInvalidate(pattern);
+      console.log(`[Models] Invalidated ${deleted} cache entries for all gateways`);
+
+      // Also clear in-memory cache
+      modelsCache = null;
+
+      return deleted;
+    }
+  } catch (error) {
+    console.error('[Models] Error invalidating cache:', error);
+    // Clear in-memory cache as fallback
+    modelsCache = null;
+    return 0;
+  }
 }

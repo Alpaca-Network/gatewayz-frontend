@@ -10,10 +10,48 @@ on:
     branches:
       - '**'
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
+  # Check for merge conflicts first
+  check-merge-conflicts:
+    name: Check Merge Conflicts
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    outputs:
+      has-conflicts: ${{ steps.check.outputs.has-conflicts }}
+      conflicted-files: ${{ steps.check.outputs.conflicted-files }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect merge conflicts
+        id: check
+        run: |
+          set +e
+          bash scripts/check-merge-conflicts.sh
+          EXIT_CODE=$?
+          set -e
+
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "has-conflicts=false" >> $GITHUB_OUTPUT
+          else
+            echo "has-conflicts=true" >> $GITHUB_OUTPUT
+            # Get list of conflicted files for JSON output
+            CONFLICTED_FILES=$(git diff --diff-filter=U --name-only 2>/dev/null || git grep -l '<<<<<<< HEAD|=======|>>>>>>> ' 2>/dev/null || echo "")
+            FILES_JSON=$(echo "$CONFLICTED_FILES" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            echo "conflicted-files=$FILES_JSON" >> $GITHUB_OUTPUT
+          fi
+
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
     steps:
       - name: Checkout code
@@ -29,18 +67,39 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Run tests
-        run: pnpm test
+        run: pnpm exec jest --coverage
         env:
           CI: true
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true
+
+
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
     steps:
       - name: Checkout code
@@ -56,6 +115,14 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -65,7 +132,9 @@ jobs:
 
   typecheck:
     name: Type Check
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
     steps:
       - name: Checkout code
@@ -81,6 +150,14 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -90,7 +167,9 @@ jobs:
 
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'false'
 
     steps:
       - name: Checkout code
@@ -106,6 +185,24 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Cache Next.js build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            .next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml', 'src/**/*.ts', 'src/**/*.tsx') }}-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/pnpm-lock.yaml') }}-
+            ${{ runner.os }}-nextjs-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -120,9 +217,11 @@ jobs:
 
   e2e:
     name: E2E Tests (Playwright)
-    runs-on: ubuntu-latest
-    # Only run E2E tests on main branches and PRs to avoid excessive test runs
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [check-merge-conflicts]
+    # Only run E2E tests on main branches and PRs to avoid excessive test runs, and if no merge conflicts
+    if: (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop') && needs.check-merge-conflicts.outputs.has-conflicts == 'false'
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
@@ -139,19 +238,76 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
 
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Cache Next.js build output for E2E
+        uses: actions/cache@v4
+        with:
+          path: |
+            .next/cache
+          key: ${{ runner.os }}-nextjs-e2e-${{ hashFiles('**/pnpm-lock.yaml', 'src/**/*.ts', 'src/**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-e2e-
+            ${{ runner.os }}-nextjs-
+
+      - name: Build application for E2E tests
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_dummy' }}
+
+      - name: Start application for E2E tests
+        run: pnpm start > /tmp/server.log 2>&1 &
+        env:
+          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_dummy' }}
+
+      - name: Wait for server to be ready
+        run: |
+          set +e
+          npx wait-on http://localhost:3000 --timeout 60000
+          WAIT_RESULT=$?
+          set -e
+
+          if [ $WAIT_RESULT -ne 0 ]; then
+            echo "❌ Server failed to start. Checking logs..."
+            if [ -f /tmp/server.log ]; then
+              echo "=== Last 50 lines of server log ==="
+              tail -50 /tmp/server.log
+            fi
+            echo "=== Process list ==="
+            ps aux | grep -E 'node|pnpm|next' || true
+            exit 1
+          fi
+          echo "✅ Server is ready"
+
       - name: Run Playwright tests
         run: pnpm exec playwright test
         env:
           CI: true
-          NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
-          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
-          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_dummy' }}
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
 
       - name: Upload Playwright report
         if: always()
@@ -161,21 +317,108 @@ jobs:
           path: playwright-report/
           retention-days: 30
 
+      - name: Upload Playwright test videos (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-videos
+          path: test-results/
+          retention-days: 7
+
+      - name: Collect server logs on E2E failure
+        if: failure()
+        run: |
+          if [ -f /tmp/server.log ]; then
+            echo "=== Server Logs ===" >> $GITHUB_STEP_SUMMARY
+            tail -100 /tmp/server.log >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Cleanup processes
+        if: always()
+        run: |
+          # Kill any lingering node/next processes
+          pkill -f "node.*next" || true
+          pkill -f "pnpm start" || true
+          sleep 2
+
+  # Placeholder for future conflict resolution automation
+  # Note: Automatic conflict resolution is disabled as it requires a working
+  # AI-powered tool. Manual resolution is required when conflicts are detected.
+  resolve-conflicts:
+    name: Resolve Merge Conflicts
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [check-merge-conflicts]
+    if: needs.check-merge-conflicts.outputs.has-conflicts == 'true'
+
+    steps:
+      - name: Report conflicts
+        run: |
+          echo "⚠️ Merge conflicts detected!"
+          echo "Please resolve conflicts manually before this PR can be merged."
+          echo ""
+          echo "Conflicted files: ${{ needs.check-merge-conflicts.outputs.conflicted-files }}"
+          exit 1
+
+  # Placeholder for future CI fix automation
+  # Note: Automatic CI fixes are disabled as they require a working
+  # AI-powered tool. Manual fixes are required when CI fails.
+  # This job is kept as a placeholder and does not run.
+
+  # Note: Automatic retry of failed jobs has been removed.
+  # The previous implementation caused "This workflow is already running" errors
+  # because the retry job itself was part of the same workflow run.
+  #
+  # GitHub Actions does not support re-running failed jobs from within
+  # the same workflow run. To retry failed jobs:
+  # 1. Use the GitHub UI "Re-run failed jobs" button
+  # 2. Or configure branch protection to require passing checks before merge
+
   # Summary job that all other jobs depend on - useful for branch protection rules
   ci-success:
     name: CI Success
-    runs-on: ubuntu-latest
-    needs: [test, lint, typecheck, build]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [check-merge-conflicts, resolve-conflicts, test, lint, typecheck, build, e2e]
     if: always()
 
     steps:
       - name: Check all jobs
         run: |
-          if [[ "${{ needs.test.result }}" == "failure" ]] || \
-             [[ "${{ needs.lint.result }}" == "failure" ]] || \
-             [[ "${{ needs.typecheck.result }}" == "failure" ]] || \
-             [[ "${{ needs.build.result }}" == "failure" ]]; then
-            echo "One or more CI jobs failed"
+          # Check merge conflict detection and resolution
+          if [[ "${{ needs.check-merge-conflicts.result }}" == "failure" ]]; then
+            echo "Merge conflict check failed"
             exit 1
           fi
-          echo "All CI jobs passed successfully"
+
+          # resolve-conflicts job is optional (skipped if no conflicts)
+          if [[ "${{ needs.resolve-conflicts.result }}" == "failure" ]]; then
+            echo "Merge conflict resolution failed"
+            exit 1
+          fi
+
+          # Test jobs are skipped if conflicts exist, otherwise must pass
+          if [[ "${{ needs.test.result }}" != "skipped" ]] && [[ "${{ needs.test.result }}" == "failure" ]]; then
+            echo "Test job failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.lint.result }}" != "skipped" ]] && [[ "${{ needs.lint.result }}" == "failure" ]]; then
+            echo "Lint job failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.typecheck.result }}" != "skipped" ]] && [[ "${{ needs.typecheck.result }}" == "failure" ]]; then
+            echo "Typecheck job failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.build.result }}" != "skipped" ]] && [[ "${{ needs.build.result }}" == "failure" ]]; then
+            echo "Build job failed"
+            exit 1
+          fi
+
+          if [[ "${{ needs.e2e.result }}" != "skipped" ]] && [[ "${{ needs.e2e.result }}" == "failure" ]]; then
+            echo "E2E tests failed"
+            exit 1
+          fi
+
+          echo "All CI checks passed successfully"

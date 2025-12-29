@@ -6,10 +6,10 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Send, Loader2 } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
-import { streamChatResponse } from '@/lib/streaming';
+// Using modular streaming - the old streaming.ts is deprecated
+import { streamChatResponse } from '@/lib/streaming/index';
 import { normalizeModelId } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { ReasoningDisplay } from '@/components/chat/reasoning-display';
 
@@ -56,10 +56,16 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     }
 
     if (!apiKey) {
-      console.log('[InlineChat] No API key found in localStorage');
+      console.warn('[InlineChat] No API key found - triggering auth refresh');
       console.log('[InlineChat] localStorage gatewayz_api_key:', localStorage.getItem('gatewayz_api_key'));
       console.log('[InlineChat] localStorage gatewayz_user_data:', localStorage.getItem('gatewayz_user_data'));
-      setError('Authentication required. Please refresh the page or sign in again.');
+
+      // Trigger auth refresh to attempt re-authentication
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+      }
+
+      setError('Your session has expired. Please sign in again to continue chatting.');
       return;
     }
 
@@ -225,9 +231,16 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
       // Mark streaming as complete and collapse thinking
       setMessages(prev => {
         const newMessages = [...prev];
+
+        // If no content was received, show a helpful error message
+        let finalContent = accumulatedContent;
+        if (!accumulatedContent || accumulatedContent.trim().length === 0) {
+          finalContent = `[Error: No response received from model. The model may be unavailable, misconfigured, or not support this operation. Try selecting a different model.]`;
+        }
+
         newMessages[streamingMessageIndex] = {
           role: 'assistant',
-          content: accumulatedContent || 'No response received',
+          content: finalContent,
           thinking: accumulatedThinking,
           isStreaming: false
         };
@@ -298,7 +311,7 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
                   ) : (
                     <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
                       <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkMath]}
+                        remarkPlugins={[remarkMath]}
                         components={{
                           p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
                           ul: ({node, ...props}) => <ul className="list-disc list-inside mb-2" {...props} />,
@@ -306,11 +319,11 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
                           li: ({node, ...props}) => <li className="mb-1" {...props} />,
                           code: ({node, inline, ...props}: any) =>
                             inline ? (
-                              <code className="bg-black/20 dark:bg-white/20 px-1.5 py-0.5 rounded text-xs font-mono" {...props} />
+                              <code className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-1.5 py-0.5 rounded text-xs font-mono" {...props} />
                             ) : (
-                              <code className="block bg-black/20 dark:bg-white/20 p-3 rounded-lg text-xs font-mono overflow-x-auto mb-2" {...props} />
+                              <code className="block bg-slate-800 dark:bg-slate-900 text-slate-100 p-3 rounded-lg text-xs font-mono overflow-x-auto mb-2" {...props} />
                             ),
-                          pre: ({node, ...props}) => <pre className="block bg-black/20 dark:bg-white/20 p-3 rounded-lg overflow-x-auto mb-2" {...props} />,
+                          pre: ({node, ...props}) => <pre className="block bg-slate-800 dark:bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto mb-2" {...props} />,
                           a: ({node, ...props}) => <a className="text-blue-600 dark:text-blue-400 underline hover:opacity-80" {...props} />,
                           blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-muted-foreground/50 pl-4 italic mb-2" {...props} />,
                           h1: ({node, ...props}) => <h1 className="text-xl font-bold mb-2" {...props} />,

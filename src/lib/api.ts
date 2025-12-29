@@ -3,7 +3,35 @@
 const API_KEY_STORAGE_KEY = 'gatewayz_api_key';
 const USER_DATA_STORAGE_KEY = 'gatewayz_user_data';
 
+let hasLoggedStorageAccessError = false;
+
+const logStorageAccessIssue = (error: unknown): void => {
+  if (hasLoggedStorageAccessError) {
+    return;
+  }
+
+  hasLoggedStorageAccessError = true;
+  console.warn(
+    '[storage] localStorage is not accessible in this environment. Falling back to safe defaults.',
+    error
+  );
+};
+
+const getLocalStorageSafe = (): Storage | null => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    return window.localStorage;
+  } catch (error) {
+    logStorageAccessIssue(error);
+    return null;
+  }
+};
+
 export const AUTH_REFRESH_EVENT = 'gatewayz:refresh-auth';
+export const AUTH_REFRESH_COMPLETE_EVENT = 'gatewayz:refresh-complete';
 export const NEW_USER_WELCOME_EVENT = 'gatewayz:new-user-welcome';
 
 export type UserTier = 'basic' | 'pro' | 'max';
@@ -43,45 +71,146 @@ export interface UserData {
 
 // API Key Management
 export const saveApiKey = (apiKey: string): void => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(API_KEY_STORAGE_KEY, apiKey);
+  } catch (error) {
+    logStorageAccessIssue(error);
   }
 };
 
 export const getApiKey = (): string | null => {
-  if (typeof window !== 'undefined') {
-    const apiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-    return apiKey;
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return null;
   }
+
+  try {
+    const apiKey = storage.getItem(API_KEY_STORAGE_KEY);
+    return apiKey && apiKey.trim().length > 0 ? apiKey : null;
+  } catch (error) {
+    logStorageAccessIssue(error);
+    return null;
+  }
+};
+
+/**
+ * Get API key with retry logic for cases where localStorage hasn't synced yet
+ * Useful during rapid auth transitions
+ */
+export const getApiKeyWithRetry = async (maxRetries: number = 3): Promise<string | null> => {
+  for (let i = 0; i < maxRetries; i++) {
+    const key = getApiKey();
+    if (key) {
+      console.log(`[getApiKeyWithRetry] Found API key on attempt ${i + 1}`);
+      return key;
+    }
+
+    // Wait before retrying (exponential backoff)
+    if (i < maxRetries - 1) {
+      const delayMs = 100 * Math.pow(2, i);
+      console.log(`[getApiKeyWithRetry] Retrying in ${delayMs}ms (attempt ${i + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+
+  console.warn('[getApiKeyWithRetry] Failed to retrieve API key after', maxRetries, 'attempts');
   return null;
 };
 
 export const removeApiKey = (): void => {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem(API_KEY_STORAGE_KEY);
-    localStorage.removeItem(USER_DATA_STORAGE_KEY);
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.removeItem(API_KEY_STORAGE_KEY);
+    storage.removeItem(USER_DATA_STORAGE_KEY);
+  } catch (error) {
+    logStorageAccessIssue(error);
   }
 };
 
-export const requestAuthRefresh = (): void => {
-  if (typeof window !== 'undefined') {
+/**
+ * Request an auth refresh and wait for completion
+ * Returns a promise that resolves when the refresh is complete
+ * Rejects if refresh times out (30 seconds)
+ */
+export const requestAuthRefresh = (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined') {
+      reject(new Error('requestAuthRefresh called in non-browser environment'));
+      return;
+    }
+
+    // Handler for completion event
+    const handleCompletion = () => {
+      window.removeEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleCompletion);
+      clearTimeout(timeoutId);
+      resolve();
+    };
+
+    // Set timeout to prevent hanging if completion event never fires
+    const timeoutId = setTimeout(() => {
+      window.removeEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleCompletion);
+      console.error('[Auth] Auth refresh timed out after 30 seconds');
+      reject(new Error('Auth refresh timeout'));
+    }, 30000);
+
+    // Listen for completion event
+    window.addEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleCompletion);
+
+    // Dispatch refresh event to trigger auth context sync
     window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
-  }
+  });
 };
 
 // User Data Management
 export const saveUserData = (userData: UserData): void => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(USER_DATA_STORAGE_KEY, JSON.stringify(userData));
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(USER_DATA_STORAGE_KEY, JSON.stringify(userData));
+  } catch (error) {
+    logStorageAccessIssue(error);
   }
 };
 
 export const getUserData = (): UserData | null => {
-  if (typeof window !== 'undefined') {
-    const data = localStorage.getItem(USER_DATA_STORAGE_KEY);
-    return data ? JSON.parse(data) : null;
+  const storage = getLocalStorageSafe();
+  if (!storage) {
+    return null;
   }
-  return null;
+
+  try {
+    const data = storage.getItem(USER_DATA_STORAGE_KEY);
+    if (!data) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(data);
+    } catch (parseError) {
+      console.warn('[storage] Failed to parse user data from localStorage. Clearing corrupted value.', parseError);
+      try {
+        storage.removeItem(USER_DATA_STORAGE_KEY);
+      } catch (error) {
+        logStorageAccessIssue(error);
+      }
+      return null;
+    }
+  } catch (error) {
+    logStorageAccessIssue(error);
+    return null;
+  }
 };
 
 // Authenticated API Request Helper
@@ -110,10 +239,15 @@ export const makeAuthenticatedRequest = async (
 
   const response = await fetch(endpoint, requestOptions);
 
-  // If we get a 401, the API key is invalid - clear it
+  // If we get a 401, DO NOT immediately clear the API key
+  // The 401 could be a temporary backend issue, not an actual session expiry
+  // Let the calling code decide whether to refresh or logout
   if (response.status === 401) {
-    console.warn('API key is invalid (401), clearing stored credentials');
-    removeApiKey();
+    console.warn('API key may be invalid (401 received), dispatching refresh event');
+    // Dispatch refresh event to let auth context handle re-authentication
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+    }
   }
 
   return response;
@@ -128,6 +262,12 @@ export const processAuthResponse = (response: AuthResponse): void => {
     credits_raw: response.credits,
     credits_type: typeof response.credits,
   });
+
+  // Validate API key is not empty or invalid
+  if (!response.api_key || typeof response.api_key !== 'string' || response.api_key.trim().length === 0) {
+    console.warn('[Auth] Missing or invalid API key in auth response, not storing credentials');
+    return;
+  }
 
   if (response.api_key) {
     saveApiKey(response.api_key);

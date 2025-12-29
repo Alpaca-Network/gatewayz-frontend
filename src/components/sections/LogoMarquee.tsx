@@ -1,3 +1,7 @@
+'use client';
+
+import Image from 'next/image';
+
 interface LogoMarqueeProps {
   compact?: boolean;
   className?: string;
@@ -11,10 +15,6 @@ export default function LogoMarquee({ compact = false, className = "" }: LogoMar
     { original: "/Meta_Logo-black.svg", name: "Meta" },
     { original: "/deepseek-icon.svg", name: "DeepSeek" },
     { original: "/xai-logo.svg", name: "xAI" },
-    { original: "/OpenAI_Logo-black.svg", name: "OpenAI" },
-    { original: "/Google_Logo-black.svg", name: "Google" },
-    { original: "/anthropic-logo.svg", name: "Anthropic" },
-    { original: "/Meta_Logo-black.svg", name: "Meta" }
   ] as const;
 
   return (
@@ -32,11 +32,12 @@ export default function LogoMarquee({ compact = false, className = "" }: LogoMar
                 aria-label={idx < logos.length ? `logo ${idx + 1}` : undefined}
                 title={idx < logos.length ? `logo ${(idx % logos.length) + 1}` : undefined}
               >
-                <img
+                <Image
                   src={logo.original}
                   alt={idx < logos.length ? logo.name : ""}
+                  width={80}
+                  height={80}
                   loading="lazy"
-                  decoding="async"
                   className="h-12 sm:h-16 md:h-20 w-auto object-contain grayscale contrast-75 opacity-70 dark:invert dark:opacity-90 dark:contrast-125"
                 />
               </div>

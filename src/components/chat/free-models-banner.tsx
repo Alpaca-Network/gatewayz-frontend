@@ -61,7 +61,9 @@ export function FreeModelsBanner() {
                   {credits === 0 ? "Trial Credits Used Up" : `Low Credits (${credits} remaining)`}
                 </h3>
                 <p className="text-sm text-green-800 dark:text-green-200 mt-1">
-                  You can still use <strong>FREE models</strong>! Look for the <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-600/10 dark:bg-green-400/10 text-green-700 dark:text-green-300 font-semibold"><Sparkles className="h-3 w-3" />FREE</span> badge in the model selector. Add credits to unlock premium models.
+                  You can still use <strong className="font-semibold">FREE models</strong>! Look for the{' '}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-600/10 dark:bg-green-400/10 text-green-700 dark:text-green-300 font-semibold"><Sparkles className="h-3 w-3" />FREE</span>
+                  {' '}badge in the model selector. Add credits to unlock premium models.
                 </p>
               </div>
 

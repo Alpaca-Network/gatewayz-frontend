@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/safe-storage"
 
 type Theme = "dark" | "light" | "system"
 
@@ -28,12 +29,18 @@ export function ThemeProvider({
   storageKey = "ui-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = React.useState<Theme>(() => {
-    if (typeof localStorage !== 'undefined') {
-      return (localStorage.getItem(storageKey) as Theme) || defaultTheme;
+  // Always use defaultTheme during SSR and initial render to prevent hydration mismatch
+  const [theme, setThemeState] = React.useState<Theme>(defaultTheme)
+  const [isHydrated, setIsHydrated] = React.useState(false)
+
+  // Read from localStorage after hydration to prevent mismatch
+  React.useEffect(() => {
+    const storedTheme = safeLocalStorageGet(storageKey) as Theme | null
+    if (storedTheme) {
+      setThemeState(storedTheme)
     }
-    return defaultTheme;
-  });
+    setIsHydrated(true)
+  }, [storageKey])
 
   React.useEffect(() => {
     const root = window.document.documentElement
@@ -63,16 +70,29 @@ export function ThemeProvider({
     }
 
     mediaQuery.addEventListener("change", handleChange)
-    return () => mediaQuery.removeEventListener("change", handleChange)
+    return () => {
+      // Guard against mediaQuery being undefined during cleanup
+      if (mediaQuery && typeof mediaQuery.removeEventListener === 'function') {
+        mediaQuery.removeEventListener("change", handleChange)
+      }
+    }
   }, [theme])
 
-  const value = {
-    theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme)
-      setTheme(theme)
+  const handleSetTheme = React.useCallback(
+    (newTheme: Theme) => {
+      safeLocalStorageSet(storageKey, newTheme)
+      setThemeState(newTheme)
     },
-  }
+    [storageKey]
+  )
+
+  const value = React.useMemo(
+    () => ({
+      theme,
+      setTheme: handleSetTheme,
+    }),
+    [theme, handleSetTheme]
+  )
 
   return (
     <ThemeProviderContext.Provider {...props} value={value}>

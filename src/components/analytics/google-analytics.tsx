@@ -2,20 +2,36 @@
 
 import Script from 'next/script';
 
+// Primary GA4 ID (managed by GTM, but keep for direct initialization if GTM fails)
 const GA_MEASUREMENT_ID = 'G-NCWGNQ7981';
+// Beta-specific GA4 measurement ID for beta.gatewayz.ai
+const GA_BETA_MEASUREMENT_ID = 'G-TE0EZ0C0SX';
 const GOOGLE_ADS_ID = 'AW-17515449277';
+const GTM_ID = 'GTM-5VPXMFRW';
 
 export function GoogleAnalytics() {
   return (
     <>
-      {/* Google tag (gtag.js) */}
+      {/* Google Tag Manager Container - loads GTM, which manages GA via tags */}
       <Script
+        id="gtm-container"
         strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${GTM_ID}');`,
+        }}
+      />
+      {/* Google tag (gtag.js) - for direct GA measurements and cross-domain linking */}
+      <Script
+        strategy="lazyOnload"
         src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
       />
       <Script
         id="google-analytics"
-        strategy="afterInteractive"
+        strategy="lazyOnload"
         dangerouslySetInnerHTML={{
           __html: `
             window.dataLayer = window.dataLayer || [];
@@ -27,9 +43,17 @@ export function GoogleAnalytics() {
             });
 
             gtag('js', new Date());
+
+            // Configure primary GA4 property
             gtag('config', '${GA_MEASUREMENT_ID}', {
               page_path: window.location.pathname,
             });
+
+            // Configure beta GA4 property
+            gtag('config', '${GA_BETA_MEASUREMENT_ID}', {
+              page_path: window.location.pathname,
+            });
+
             gtag('config', '${GOOGLE_ADS_ID}');
           `,
         }}
@@ -51,7 +75,11 @@ export const trackEvent = (
 // Helper function to track page views
 export const trackPageView = (url: string) => {
   if (typeof window !== 'undefined' && (window as any).gtag) {
+    // Send to both GA4 properties
     (window as any).gtag('config', GA_MEASUREMENT_ID, {
+      page_path: url,
+    });
+    (window as any).gtag('config', GA_BETA_MEASUREMENT_ID, {
       page_path: url,
     });
   }

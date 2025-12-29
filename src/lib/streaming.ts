@@ -1,25 +1,45 @@
 /**
- * Utility for handling streaming responses from chat API
+ * Streaming Utilities
+ *
+ * @deprecated This file is deprecated and will be removed in a future version.
+ * Import from '@/lib/streaming/index' instead, or preferably use the AI SDK route
+ * (/api/chat/ai-sdk-completions) which now handles all provider formats.
+ *
+ * Migration guide:
+ * - For new code: Use the AI SDK route which handles Fireworks, DeepSeek, and all other formats
+ * - For existing imports: Change `import { streamChatResponse } from '@/lib/streaming'`
+ *   to `import { streamChatResponse } from '@/lib/streaming/index'`
+ *
+ * The modular streaming implementation is now in:
+ * - @/lib/streaming/types.ts - Type definitions
+ * - @/lib/streaming/errors.ts - Error classes
+ * - @/lib/streaming/sse-parser.ts - SSE parsing logic
+ * - @/lib/streaming/stream-chat.ts - Main streaming function
  */
 
-import { removeApiKey, requestAuthRefresh } from '@/lib/api';
+import * as Sentry from '@sentry/nextjs';
+import { requestAuthRefresh, getApiKey } from '@/lib/api';
+import { StreamCoordinator } from '@/lib/stream-coordinator';
 
-// OPTIMIZATION: Dev-only logging helpers to remove console logs from production
+// Logging helpers - enabled in development OR when NEXT_PUBLIC_DEBUG_STREAMING is set
+// To enable in production for debugging, set NEXT_PUBLIC_DEBUG_STREAMING=true in Vercel
+const isDebugEnabled = process.env.NODE_ENV === 'development' ||
+                       process.env.NEXT_PUBLIC_DEBUG_STREAMING === 'true';
+
 const devLog = (...args: any[]) => {
-    if (process.env.NODE_ENV === 'development') {
-        console.log(...args);
+    if (isDebugEnabled) {
+        console.log('[Streaming]', ...args);
     }
 };
 
 const devError = (...args: any[]) => {
-    if (process.env.NODE_ENV === 'development') {
-        console.error(...args);
-    }
+    // Always log errors, but add prefix for streaming errors
+    console.error('[Streaming ERROR]', ...args);
 };
 
 const devWarn = (...args: any[]) => {
-    if (process.env.NODE_ENV === 'development') {
-        console.warn(...args);
+    if (isDebugEnabled) {
+        console.warn('[Streaming WARN]', ...args);
     }
 };
 
@@ -27,8 +47,15 @@ export interface StreamChunk {
   content?: string;
   reasoning?: string;
   done?: boolean;
-  status?: 'rate_limit_retry';
+  status?: 'rate_limit_retry' | 'first_token' | 'timing_info';
   retryAfterMs?: number;
+
+  // Performance timing metadata
+  timingMetadata?: {
+    backendTimeMs?: number;
+    networkTimeMs?: number;
+    totalTimeMs?: number;
+  };
 }
 
 const toPlainText = (input: unknown): string => {
@@ -93,22 +120,31 @@ const toPlainText = (input: unknown): string => {
 // Helper function to wait/sleep
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Custom error class for intentional errors that should be re-thrown
+// This distinguishes backend/API errors from JSON parsing errors
+class StreamingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StreamingError';
+  }
+}
+
 export async function* streamChatResponse(
   url: string,
   apiKey: string,
   requestBody: Record<string, unknown>,
   retryCount = 0,
-  maxRetries = 5
+  maxRetries = 7  // Increased from 5 for better 429 handling
 ): AsyncGenerator<StreamChunk> {
-  // Client-side timeout for the fetch request (5 minutes for streaming)
-  // Increased from 2 minutes to accommodate reasoning models and slower providers
+  // Client-side timeout for the fetch request (1 minute max)
+  // If a model doesn't respond within 1 minute, it's likely unavailable or experiencing issues
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 300000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
     devLog('[Streaming] Request body:', requestBody);
-    devLog('[Streaming] API Key prefix:', apiKey.substring(0, 20) + '...');
+    devLog('[Streaming] API Key prefix:', apiKey ? apiKey.substring(0, 20) + '...' : 'none');
 
     let response: Response;
     try {
@@ -211,10 +247,93 @@ export async function* streamChatResponse(
       );
     }
 
-    if (response.status === 403) {
+    // Handle 401 Unauthorized - trigger auth refresh and retry
+    if (response.status === 401) {
+      const errorMessage = errorData.detail || errorData.error?.message || 'Authentication required';
+      const errorCode = errorData.code;
+      devError('401 Unauthorized - triggering auth refresh');
+
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error(`Chat 401 Unauthorized: ${errorMessage}`),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 401,
+            error_code: errorCode || 'unknown',
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+            retryCount,
+          },
+          level: 'warning',
+        }
+      );
+
+      // Check if this is a guest user who needs to sign up
+      if (errorCode === 'GUEST_NOT_CONFIGURED') {
+        throw new Error(
+          'Please sign in to use the chat feature. Create a free account to get started!'
+        );
+      }
+
+      // Only retry auth refresh once to prevent infinite loops
+      if (retryCount === 0 && typeof window !== 'undefined') {
+        devLog('Attempting auth refresh for 401 error...');
+
+        try {
+          // Wait for auth refresh to complete (with 30s timeout)
+          await requestAuthRefresh();
+          devLog('Auth refresh completed, checking for new API key...');
+
+          // Get the new API key after refresh
+          const newApiKey = getApiKey();
+
+          if (newApiKey && newApiKey !== apiKey) {
+            devLog('Got new API key after refresh, retrying request...');
+
+            // Retry with the new API key (mark as retry to prevent infinite loop)
+            yield* streamChatResponse(url, newApiKey, requestBody, 1, maxRetries);
+            return;
+          } else {
+            devLog('No new API key after refresh, or key unchanged');
+          }
+        } catch (refreshError) {
+          devError('Auth refresh failed:', refreshError);
+          // Continue to throw the original 401 error
+        }
+      }
+
       throw new Error(
-        errorData.detail || errorData.error?.message ||
-        'API key validation failed. Your session may need to refresh. Please try logging out and back in.'
+        errorMessage + '. Your session has expired. Please sign in again to continue.'
+      );
+    }
+
+    // Handle 403 Forbidden - invalid or expired API key
+    if (response.status === 403) {
+      devError('403 Forbidden details:', errorData);
+
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error('Chat 403 Forbidden - session expired'),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 403,
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+          },
+          level: 'warning',
+        }
+      );
+
+      throw new Error(
+        'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.'
       );
     }
 
@@ -227,12 +346,54 @@ export async function* streamChatResponse(
       );
     }
 
+    // Handle 502 Bad Gateway, 503 Service Unavailable and 504 Gateway Timeout with retry logic
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      const statusText = response.status === 504 ? 'Gateway Timeout'
+        : response.status === 502 ? 'Bad Gateway'
+        : 'Service Unavailable';
+      const errorMessage = errorData.detail || errorData.error?.message || errorData.message || statusText;
+
+      if (retryCount < maxRetries) {
+        // Use exponential backoff with longer delays for server errors
+        // 503/504 often indicate temporary overload, so give the server time to recover
+        const baseDelay = 2000; // Start with 2 seconds
+        const maxDelay = 30000; // Up to 30 seconds
+        const waitTime = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
+        const jitter = Math.floor(Math.random() * 1000);
+        const totalWaitTime = waitTime + jitter;
+
+        devLog(`${statusText} (${response.status}) detected, retrying in ${totalWaitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+        devError(`${statusText} error details:`, errorData);
+
+        await sleep(totalWaitTime);
+
+        // Recursive retry
+        yield* streamChatResponse(url, apiKey, requestBody, retryCount + 1, maxRetries);
+        return;
+      }
+
+      // Max retries exceeded
+      devError(`Max retries exceeded for ${statusText}`);
+      throw new Error(
+        `${statusText} error: ${errorMessage}. The backend service appears to be temporarily unavailable. Please try again in a moment.`
+      );
+    }
+
     // Handle 404 Model Not Found
     if (response.status === 404) {
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Model not found';
       devError('404 Model Not Found details:', errorData);
       throw new Error(
         `Model not found: ${errorMessage}`
+      );
+    }
+
+    // Handle 413 Payload Too Large
+    if (response.status === 413) {
+      const errorMessage = errorData.detail || errorData.error?.message || errorData.message || 'Request payload too large';
+      devError('413 Payload Too Large details:', errorData);
+      throw new Error(
+        `Image or request too large: ${errorMessage}. Please try with a smaller image or reduce image quality.`
       );
     }
 
@@ -247,8 +408,11 @@ export async function* streamChatResponse(
       if (retryCount < maxRetries) {
         const retryAfterHeader = response.headers.get('retry-after');
         const isConcurrencyLimit = detailMessage.toLowerCase().includes('concurrency');
-        const baseDelay = isConcurrencyLimit ? 4000 : 1000;
-        const maxDelay = isConcurrencyLimit ? 20000 : 8000;
+        const isBurstLimit = detailMessage.toLowerCase().includes('burst');
+
+        // Use longer delays for burst/concurrency limits as they need more time to recover
+        const baseDelay = (isConcurrencyLimit || isBurstLimit) ? 3000 : 1500;
+        const maxDelay = (isConcurrencyLimit || isBurstLimit) ? 30000 : 15000;
 
         let waitTime = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
 
@@ -267,11 +431,11 @@ export async function* streamChatResponse(
           }
         }
 
-        waitTime = Math.max(waitTime, 1000); // Ensure a minimum delay
-        const jitter = Math.floor(Math.random() * 250);
+        waitTime = Math.max(waitTime, 1500); // Ensure a minimum delay of 1.5s
+        const jitter = Math.floor(Math.random() * 500); // Increased jitter
         waitTime += jitter;
 
-        devLog(`Rate limit hit, retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
+        devLog(`Rate limit hit (${isBurstLimit ? 'burst' : isConcurrencyLimit ? 'concurrency' : 'standard'}), retrying in ${waitTime}ms (attempt ${retryCount + 1}/${maxRetries})...`);
         if (detailMessage) {
           devLog('Rate limit detail:', detailMessage);
         }
@@ -289,8 +453,6 @@ export async function* streamChatResponse(
         return;
       }
 
-      removeApiKey();
-      requestAuthRefresh();
       throw new Error(
         detailMessage ||
         'Rate limit exceeded. Please wait a moment and try again.'
@@ -298,11 +460,67 @@ export async function* streamChatResponse(
     }
 
     if (response.status === 401) {
-      removeApiKey();
-      requestAuthRefresh();
-      throw new Error(
-        'Authentication failed. Please check your API key or log in again.'
-      );
+      // Handle 401 authentication error with potential recovery
+      // 1. Attempt to refresh authentication
+      // 2. Retry with new API key if available
+      // 3. If retry fails or no new key, throw error to user
+
+      try {
+        if (retryCount === 0) {
+          devLog('[Streaming] 401 Authentication error - attempting refresh');
+
+          // Wait for auth refresh to complete
+          await StreamCoordinator.handleAuthError();
+        } else {
+          devLog(`[Streaming] 401 Authentication error on retry ${retryCount} - skipping refresh, checking key`);
+        }
+
+        // Try to get the new API key after refresh
+        const newApiKey = StreamCoordinator.getApiKey();
+
+        if (newApiKey) {
+          if (newApiKey !== apiKey) {
+            devLog('[Streaming] New API key obtained after refresh, retrying stream');
+          } else {
+            devLog('[Streaming] API key refreshed (same key returned), retrying stream');
+          }
+
+          // Check if we have exceeded max retries to prevent infinite loops
+          if (retryCount >= maxRetries) {
+            throw new Error('Max retries exceeded after refresh');
+          }
+
+          // Add a backoff delay to allow backend state to propagate
+          // Exponential backoff: 1s, 2s, 4s, 8s, 10s (capped)
+          const authWaitTime = Math.min(1000 * Math.pow(2, retryCount), 10000);
+          devLog(`[Streaming] Waiting ${authWaitTime}ms before retrying with refreshed credentials...`);
+          await sleep(authWaitTime);
+
+          // Retry the stream with the new API key (even if it's the same)
+          // Increment retryCount to ensure we eventually give up if the server keeps rejecting it
+          yield* streamChatResponse(url, newApiKey, requestBody, retryCount + 1, maxRetries);
+          return;
+        } else {
+          devLog('[Streaming] No new API key available after refresh');
+          throw new Error('No new credentials available after refresh');
+        }
+      } catch (refreshError) {
+        devError('[Streaming] Auth refresh failed:', refreshError);
+
+        // If it's already a wrapped authentication error (from recursive calls), re-throw it as is
+        if (refreshError instanceof Error && refreshError.message.startsWith('Authentication failed:')) {
+          throw refreshError;
+        }
+
+        // If refresh fails, provide user-friendly error
+        const refreshErrorMsg = refreshError instanceof Error
+          ? refreshError.message
+          : 'Unknown error during refresh';
+
+        throw new Error(
+          `Authentication failed: ${refreshErrorMsg}. Please log in again.`
+        );
+      }
     }
 
     // Generic error with the response message
@@ -311,6 +529,23 @@ export async function* streamChatResponse(
       errorData.detail ||
       `Request failed with status ${response.status}`
     );
+  }
+
+  // Extract timing headers for performance tracking
+  const backendTimeStr = response.headers.get('X-Backend-Time');
+  const networkTimeStr = response.headers.get('X-Network-Time');
+  const totalTimeStr = response.headers.get('X-Response-Time');
+
+  if (backendTimeStr || networkTimeStr || totalTimeStr) {
+    // Yield timing metadata as first chunk (doesn't affect UI, just for tracking)
+    yield {
+      status: 'timing_info',
+      timingMetadata: {
+        backendTimeMs: backendTimeStr ? parseFloat(backendTimeStr) : undefined,
+        networkTimeMs: networkTimeStr ? parseFloat(networkTimeStr) : undefined,
+        totalTimeMs: totalTimeStr ? parseFloat(totalTimeStr) : undefined,
+      }
+    };
   }
 
   const reader = response.body?.getReader();
@@ -322,15 +557,68 @@ export async function* streamChatResponse(
   const decoder = new TextDecoder();
   let buffer = '';
   let chunkCount = 0;
+  let contentChunkCount = 0;  // Track chunks with actual content
   let receivedDoneSignal = false;
+  let yieldedDoneSignal = false;  // Track if we've already yielded a done signal
+  let firstChunkReceived = false;
+  let isFirstContentChunk = true; // Track first content token for TTFT
+
+  // Extract resolved model name from headers for better error messages
+  const resolvedModelId = response.headers.get('X-Model') || requestBody.model;
+  const requestedModelId = response.headers.get('X-Requested-Model');
 
   devLog('[Streaming] Stream reader obtained successfully');
   devLog('[Streaming] Starting to read stream...');
+  if (requestedModelId && requestedModelId !== resolvedModelId) {
+    devLog(`[Streaming] Router model "${requestedModelId}" was resolved to "${resolvedModelId}"`);
+  }
+
+  // Per-chunk timeout to detect stalled streams (30 seconds)
+  // This resets on each chunk and prevents hanging if backend stops sending
+  const chunkTimeoutMs = 30000;
+  const firstChunkTimeoutMs = 10000; // First chunk must arrive within 10 seconds
+  let chunkTimeoutId: NodeJS.Timeout | null = null;
+
+  const resetChunkTimeout = () => {
+    if (chunkTimeoutId) {
+      clearTimeout(chunkTimeoutId);
+    }
+    // Use shorter timeout for first chunk, longer for subsequent chunks
+    const timeoutMs = firstChunkReceived ? chunkTimeoutMs : firstChunkTimeoutMs;
+    chunkTimeoutId = setTimeout(() => {
+      const timeoutMsg = firstChunkReceived
+        ? 'Stream chunk timeout - no data received for 30 seconds'
+        : 'First chunk timeout - backend did not start streaming within 10 seconds. This usually means the model is unavailable, overloaded, or the backend is not responding properly.';
+      devError('[Streaming]', timeoutMsg);
+      console.error('[Streaming] Timeout Details:', {
+        firstChunkReceived,
+        chunkCount,
+        url: requestBody?.model,
+        gateway: requestBody?.gateway
+      });
+      reader.cancel(`Stream timeout: ${timeoutMsg}`);
+    }, timeoutMs);
+  };
 
   try {
     while (true) {
       devLog(`[Streaming] About to read chunk ${chunkCount + 1}...`);
+      resetChunkTimeout(); // Start chunk timeout before reading
+
       const { done, value } = await reader.read();
+
+      // Mark first chunk as received for timeout adjustment
+      if (!firstChunkReceived && value) {
+        firstChunkReceived = true;
+        devLog('[Streaming] First chunk received - adjusting timeout to 30 seconds for subsequent chunks');
+      }
+
+      // Clear the chunk timeout when we receive data
+      if (chunkTimeoutId) {
+        clearTimeout(chunkTimeoutId);
+        chunkTimeoutId = null;
+      }
+
       devLog(`[Streaming] Read completed. Done: ${done}, Has value: ${!!value}, Value length: ${value?.length || 0}`);
 
       if (done) {
@@ -386,17 +674,22 @@ export async function* streamChatResponse(
 
             let chunk: StreamChunk | null = null;
 
-            // Handle backend response format with "output" array
+            // Handle backend response format with "output" array (Fireworks, etc.)
             const output = data.output?.[0];
             if (output && typeof output === 'object') {
               const outputRecord = output as Record<string, unknown>;
-              const contentText = toPlainText(outputRecord.content ?? outputRecord.output_text);
+
+              // Fireworks may nest content in a "delta" object within output
+              const deltaInOutput = outputRecord.delta as Record<string, unknown> | undefined;
+              const contentSource = deltaInOutput || outputRecord;
+
+              const contentText = toPlainText(contentSource.content ?? contentSource.output_text ?? contentSource.text);
               const reasoningText =
-                toPlainText(outputRecord.reasoning_content) ||
-                toPlainText(outputRecord.reasoning) ||
-                toPlainText(outputRecord.thinking) ||
-                toPlainText(outputRecord.analysis);
-              const finishReason = outputRecord.finish_reason;
+                toPlainText(contentSource.reasoning_content) ||
+                toPlainText(contentSource.reasoning) ||
+                toPlainText(contentSource.thinking) ||
+                toPlainText(contentSource.analysis);
+              const finishReason = outputRecord.finish_reason || (deltaInOutput as Record<string, unknown>)?.finish_reason;
 
               // Log when reasoning fields are present
               if (outputRecord.reasoning || outputRecord.thinking || outputRecord.analysis) {
@@ -476,34 +769,102 @@ export async function* streamChatResponse(
                   }
                 }
               } else if (choice?.finish_reason) {
-                chunk = { done: true };
+                // Check if finish_reason indicates an error
+                if (choice.finish_reason === 'error') {
+                  // Error finish reason should be handled by the error check below
+                  devLog('[Streaming] Received finish_reason: error, checking for error object');
+                } else {
+                  chunk = { done: true };
+                }
               }
             }
 
-            // Check for error object in the response
+            // Check for error object in the response (also handles finish_reason: 'error')
             if (data.error && typeof data.error === 'object') {
               const errorObj = data.error as Record<string, unknown>;
-              const errorMessage =
+
+              // Log the full error object for debugging
+              devError('[Streaming] Received error object in stream:', JSON.stringify(errorObj, null, 2));
+
+              // Extract error message from various possible locations
+              // Priority: message > detail > error (string) > text > reason > code/type > nested error > stringified object
+              let errorMessage =
                 (typeof errorObj.message === 'string' && errorObj.message) ||
                 (typeof errorObj.detail === 'string' && errorObj.detail) ||
-                'Stream error occurred';
+                (typeof errorObj.error === 'string' && errorObj.error) ||
+                (typeof errorObj.text === 'string' && errorObj.text) ||
+                (typeof errorObj.reason === 'string' && errorObj.reason) ||
+                // If error has a code/type, include it in the message
+                (errorObj.code && errorObj.type
+                  ? `${errorObj.type}: ${errorObj.code}`
+                  : (typeof errorObj.code === 'string' && `Error code: ${errorObj.code}`)) ||
+                (typeof errorObj.type === 'string' && `Error type: ${errorObj.type}`) ||
+                '';
+
+              // Handle cases where message might be nested or in a different format
+              if (!errorMessage) {
+                // Check for nested error object
+                if (errorObj.error && typeof errorObj.error === 'object') {
+                  const nestedError = errorObj.error as Record<string, unknown>;
+                  errorMessage =
+                    (typeof nestedError.message === 'string' && nestedError.message) ||
+                    (typeof nestedError.detail === 'string' && nestedError.detail) ||
+                    '';
+                }
+                // Check for status code in error object
+                if (!errorMessage && typeof errorObj.status === 'number') {
+                  errorMessage = `HTTP ${errorObj.status} error`;
+                }
+                // Last resort: stringify the error object for debugging
+                if (!errorMessage) {
+                  devError('[Streaming] Error object without extractable message:', errorObj);
+                  errorMessage = `Stream error: ${JSON.stringify(errorObj).slice(0, 200)}`;
+                }
+              }
+
+              // Detect rate limit / 429 errors from error type or message
+              const errorType = String(errorObj.type || '').toLowerCase();
+              const errorCode = String(errorObj.code || '').toLowerCase();
+              const isRateLimitError =
+                errorType.includes('rate_limit') ||
+                errorType.includes('too_many') ||
+                errorCode.includes('rate_limit') ||
+                errorCode === '429' ||
+                errorMessage.toLowerCase().includes('rate limit') ||
+                errorMessage.toLowerCase().includes('too many requests') ||
+                (typeof errorObj.status === 'number' && errorObj.status === 429);
+
+              if (isRateLimitError) {
+                throw new StreamingError(
+                  'Rate limit exceeded. The AI provider is temporarily unavailable due to high demand. Please wait a moment and try again.'
+                );
+              }
 
               // Check if it's a trial expiration error
               if (errorMessage.toLowerCase().includes('trial has expired') ||
                   errorMessage.toLowerCase().includes('insufficient credits')) {
-                throw new Error(
+                throw new StreamingError(
                   'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
                 );
               }
 
               // Handle "upstream rejected" errors with the actual backend message
               if (errorMessage.toLowerCase().includes('upstream rejected')) {
-                throw new Error(
+                throw new StreamingError(
                   `Backend error: ${errorMessage}. This may be a temporary issue with the model provider. Please try again or select a different model.`
                 );
               }
 
-              throw new Error(errorMessage);
+              throw new StreamingError(errorMessage);
+            }
+
+            // Handle finish_reason: 'error' without an error object
+            const choice = data.choices?.[0];
+            if (choice?.finish_reason === 'error' && !data.error) {
+              devError('[Streaming] Received finish_reason: error without error object');
+              throw new StreamingError(
+                `Model error: The model returned an error without details. This may indicate the model is unavailable or misconfigured. Please try a different model.`
+              );
             }
 
             // Handle event-based streaming formats
@@ -551,8 +912,27 @@ export async function* streamChatResponse(
                   const errorMessage =
                     (typeof data.error?.message === 'string' && data.error.message) ||
                     (typeof data.message === 'string' && data.message) ||
+                    (typeof data.error?.type === 'string' && data.error.type) ||
                     'Response stream error';
-                  throw new Error(errorMessage);
+
+                  // Detect rate limit errors in response.error events
+                  const errorType = String(data.error?.type || '').toLowerCase();
+                  const errorCode = String(data.error?.code || '').toLowerCase();
+                  const isRateLimitError =
+                    errorType.includes('rate_limit') ||
+                    errorType.includes('too_many') ||
+                    errorCode.includes('rate_limit') ||
+                    errorCode === '429' ||
+                    errorMessage.toLowerCase().includes('rate limit') ||
+                    errorMessage.toLowerCase().includes('too many requests');
+
+                  if (isRateLimitError) {
+                    throw new StreamingError(
+                      'Rate limit exceeded. The AI provider is temporarily unavailable due to high demand. Please wait a moment and try again.'
+                    );
+                  }
+
+                  throw new StreamingError(errorMessage);
                 }
                 default:
                   break;
@@ -563,28 +943,97 @@ export async function* streamChatResponse(
               // Only yield chunks that have actual content, reasoning, or are the final chunk
               // Skip empty chunks to improve streaming performance
               if (chunk.content || chunk.reasoning || chunk.done) {
+                // Mark first content chunk for TTFT tracking
+                if (isFirstContentChunk && (chunk.content || chunk.reasoning)) {
+                  chunk.status = 'first_token';
+                  isFirstContentChunk = false;
+                }
+
+                // Track actual content chunks (not just metadata or done signals)
+                if (chunk.content || chunk.reasoning) {
+                  contentChunkCount++;
+                }
+
                 devLog('[Streaming] Yielding chunk:', {
                   hasContent: !!chunk.content,
                   contentLength: chunk.content?.length || 0,
                   hasReasoning: !!chunk.reasoning,
-                  isDone: !!chunk.done
+                  isDone: !!chunk.done,
+                  isFirstToken: chunk.status === 'first_token',
+                  contentChunkCount
                 });
+
+                // Track if we've yielded a done signal to avoid duplicates at stream end
+                if (chunk.done) {
+                  yieldedDoneSignal = true;
+                }
                 yield chunk;
               } else {
                 devLog('[Streaming] Skipping empty chunk');
               }
             } else {
-              // Check if the data has error indicators
+              // Check if the data has error indicators at the top level
+              // Some APIs return errors directly without a nested error object
               if (data.error || data.detail || data.message) {
-                const errorMsg = data.error?.message || data.detail || data.message;
-                devError('[Streaming] Possible error in SSE data:', errorMsg);
-                console.error('[Streaming] Backend may have returned an error:', data);
+                let errorMsg: string;
+
+                if (typeof data.error === 'object' && data.error !== null) {
+                  // Use the same comprehensive error extraction logic as the nested error handler above
+                  const errorObj = data.error as Record<string, unknown>;
+                  devError('[Streaming] Top-level error object in SSE data:', JSON.stringify(errorObj, null, 2));
+                  errorMsg =
+                    (typeof errorObj.message === 'string' && errorObj.message) ||
+                    (typeof errorObj.detail === 'string' && errorObj.detail) ||
+                    (typeof errorObj.error === 'string' && errorObj.error) ||
+                    (typeof errorObj.text === 'string' && errorObj.text) ||
+                    (typeof errorObj.reason === 'string' && errorObj.reason) ||
+                    // If error has a code/type, include it in the message
+                    (errorObj.code && errorObj.type
+                      ? `${errorObj.type}: ${errorObj.code}`
+                      : (typeof errorObj.code === 'string' && `Error code: ${errorObj.code}`)) ||
+                    (typeof errorObj.type === 'string' && `Error type: ${errorObj.type}`) ||
+                    // Last resort: stringify the entire error object so we can see what it contains
+                    JSON.stringify(errorObj);
+                } else {
+                  // Handle string error or top-level detail/message fields
+                  errorMsg =
+                    (typeof data.error === 'string' && data.error) ||
+                    (typeof data.detail === 'string' && data.detail) ||
+                    (typeof data.message === 'string' && data.message) ||
+                    JSON.stringify(data.error || data.detail || data.message);
+                }
+
+                devError('[Streaming] Error in SSE data:', errorMsg);
+                console.error('[Streaming] Backend returned an error:', JSON.stringify(data, null, 2));
+
+                // Check if it's a trial expiration error
+                if (errorMsg.toLowerCase().includes('trial has expired') ||
+                    errorMsg.toLowerCase().includes('insufficient credits')) {
+                  throw new StreamingError(
+                    'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge in the model selector, or add credits to use premium models.'
+                  );
+                }
+
+                // Handle "upstream rejected" errors with the actual backend message
+                if (errorMsg.toLowerCase().includes('upstream rejected')) {
+                  throw new StreamingError(
+                    `Backend error: ${errorMsg}. This may be a temporary issue with the model provider. Please try again or select a different model.`
+                  );
+                }
+
+                // Throw the error so it's properly handled instead of silently ignored
+                throw new StreamingError(`Stream error: ${errorMsg}`);
               }
               devWarn('[Streaming] No chunk created from SSE data. This may indicate an unsupported response format or an error from the backend.');
               devWarn('[Streaming] Unrecognized data structure:', data);
               devWarn('[Streaming] Data as JSON:', JSON.stringify(data, null, 2));
             }
           } catch (error) {
+            // Re-throw intentional errors (StreamingError) vs JSON parsing errors (SyntaxError)
+            if (error instanceof StreamingError) {
+              throw error;
+            }
+            // Log parsing errors but continue processing other lines
             devError('[Streaming] Error parsing SSE data:', error, trimmedLine);
           }
         } else {
@@ -595,49 +1044,62 @@ export async function* streamChatResponse(
       // Break out of the outer while loop if we received [DONE] signal
       if (receivedDoneSignal) {
         devLog('[Streaming] Breaking out of read loop due to [DONE] signal');
-        // Yield a final done chunk to signal completion to the UI
-        yield { done: true };
         break;
       }
     }
 
-    // If we exited the loop normally (stream closed by server), also yield done
-    devLog('[Streaming] Stream ended normally, yielding final done signal');
-
-    // Important: Log if we received any content at all
-    if (chunkCount === 0) {
-      const errorMsg = `No response received from model "${requestBody.model}". This model may not be properly configured, may be unavailable, or may not support the requested features. Please try a different model or check the model's availability status.`;
+    // Check if we received any content at all (applies to both [DONE] and natural stream end)
+    if (contentChunkCount === 0) {
+      // Use resolved model name in error message for clarity
+      const modelDisplayName = requestedModelId && requestedModelId !== resolvedModelId
+        ? `${requestedModelId} (resolved to ${resolvedModelId})`
+        : resolvedModelId;
+      const errorMsg = `No response received from model "${modelDisplayName}". This model may not be properly configured, may be unavailable, or may not support the requested features. Please try a different model or check the model's availability status.`;
       console.error('[Streaming] ERROR:', errorMsg);
-      console.error('[Streaming] Model:', requestBody.model);
+      console.error('[Streaming] Requested Model:', requestBody.model);
+      console.error('[Streaming] Resolved Model:', resolvedModelId);
       console.error('[Streaming] API Base URL:', url);
+      console.error('[Streaming] Total SSE lines processed:', chunkCount);
       // Throw an error so the UI can show a proper error message
       throw new Error(errorMsg);
     }
 
-    yield { done: true };
+    // Yield final done signal only if we haven't already yielded one
+    // This can happen from: finish_reason, [DONE] signal, or event-based done types
+    devLog('[Streaming] Stream completed', receivedDoneSignal ? 'via [DONE] signal' : 'naturally', 'with', contentChunkCount, 'content chunks from', chunkCount, 'total SSE lines');
+    if (!yieldedDoneSignal) {
+      devLog('[Streaming] Yielding final done signal');
+      yield { done: true };
+    } else {
+      devLog('[Streaming] Skipping final done signal - already yielded');
+    }
   } catch (error) {
     clearTimeout(timeoutId);
 
     // Handle abort/timeout errors
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 5 minutes. The model may be overloaded or unavailable. Please try again.');
+        throw new Error('Request timed out after 1 minute. The model may be overloaded or unavailable. Please try again or select a different model.');
       }
     }
 
     // Re-throw other errors
     throw error;
   } finally {
+    // Clean up chunk timeout
+    if (chunkTimeoutId) {
+      clearTimeout(chunkTimeoutId);
+    }
     devLog('[Streaming] Stream reader released');
     reader.releaseLock();
   }
   } catch (error) {
     clearTimeout(timeoutId);
 
-    // Handle abort/timeout errors from main try
+    // Handle abort/timeout errors from outer try block
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 5 minutes. The model may be overloaded or unavailable. Please try again.');
+        throw new Error('Request timed out after 1 minute. The model may be overloaded or unavailable. Please try again or select a different model.');
       }
     }
 

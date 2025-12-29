@@ -7,6 +7,11 @@ import {
   clearSessionTransferToken,
   isSessionTransferTokenValid,
 } from '../auth-session-transfer';
+import {
+  runInSSRContext,
+  testSSRFunctions,
+} from '@/__tests__/utils/ssr-test-helper';
+import { TEST_USER, TEST_TIMESTAMPS } from '@/__tests__/utils/test-constants';
 
 // Mock console methods (stored but not used for assertions due to implementation details)
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -32,12 +37,46 @@ describe('auth-session-transfer', () => {
     window.history.replaceState = jest.fn();
 
     // Mock Date.now for consistent testing
-    jest.spyOn(Date, 'now').mockReturnValue(1000000);
+    jest.spyOn(Date, 'now').mockReturnValue(TEST_TIMESTAMPS.NOW);
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
   });
+
+  // Consolidated SSR tests - replaces 5 individual SSR tests scattered throughout
+  testSSRFunctions([
+    {
+      name: 'getSessionTransferParams',
+      fn: () => getSessionTransferParams(),
+      expected: { token: null, userId: null, returnUrl: null, action: null },
+    },
+    {
+      name: 'cleanupSessionTransferParams',
+      fn: () => cleanupSessionTransferParams(),
+      expected: undefined,
+    },
+    {
+      name: 'storeSessionTransferToken',
+      fn: () => storeSessionTransferToken('token', '123'),
+      expected: undefined,
+    },
+    {
+      name: 'getStoredSessionTransferToken',
+      fn: () => getStoredSessionTransferToken(),
+      expected: { token: null, userId: null },
+    },
+    {
+      name: 'clearSessionTransferToken',
+      fn: () => clearSessionTransferToken(),
+      expected: undefined,
+    },
+    {
+      name: 'isSessionTransferTokenValid',
+      fn: () => isSessionTransferTokenValid(),
+      expected: false,
+    },
+  ]);
 
   describe('redirectToBetaWithSession', () => {
     it.skip('should redirect to beta domain with token and userId (jsdom limitation)', () => {
@@ -163,21 +202,7 @@ describe('auth-session-transfer', () => {
       expect(params.returnUrl).toBe('/path?query=value');
     });
 
-    it('should return null values in SSR environment', () => {
-      const originalWindow = global.window;
-      (global as any).window = undefined;
-
-      const params = getSessionTransferParams();
-
-      expect(params).toEqual({
-        token: null,
-        userId: null,
-        returnUrl: null,
-        action: null,
-      });
-
-      global.window = originalWindow;
-    });
+    // SSR behavior tested in consolidated testSSRFunctions block above
 
     it('should handle duplicate parameters (first one wins in URLSearchParams)', () => {
       mockLocation({
@@ -222,21 +247,7 @@ describe('auth-session-transfer', () => {
       );
     });
 
-    it('should do nothing in SSR environment', () => {
-      const originalWindow = global.window;
-      const mockReplaceState = window.history.replaceState;
-
-      (global as any).window = undefined;
-
-      cleanupSessionTransferParams();
-
-      // In SSR, the function returns early and doesn't call replaceState
-      // We can't check the mock since window is undefined
-      expect(true).toBe(true); // Function didn't throw
-
-      global.window = originalWindow;
-      window.history.replaceState = mockReplaceState;
-    });
+    // SSR behavior tested in consolidated testSSRFunctions block above
   });
 
   describe('storeSessionTransferToken', () => {
@@ -244,11 +255,18 @@ describe('auth-session-transfer', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
+      jest.spyOn(Date, 'now').mockReturnValue(1000000);
       storeSessionTransferToken(token, userId);
 
-      expect(sessionStorage.getItem('gatewayz_session_transfer_token')).toBe(token);
-      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBe(userId);
-      expect(sessionStorage.getItem('gatewayz_session_transfer_timestamp')).toBe('1000000');
+      const stored = sessionStorage.getItem('gatewayz_session_transfer_token');
+      expect(stored).toBeTruthy();
+
+      const sessionData = JSON.parse(stored!);
+      expect(sessionData.token).toBe(token);
+      expect(sessionData.userId).toBe(userId);
+      expect(sessionData.timestamp).toBe(1000000);
+      expect(sessionData.origin).toBe('http://localhost');
+      expect(sessionData.fingerprint).toBeTruthy();
     });
 
     it('should convert numeric userId to string', () => {
@@ -257,28 +275,26 @@ describe('auth-session-transfer', () => {
 
       storeSessionTransferToken(token, userId);
 
-      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBe('12345');
+      const stored = sessionStorage.getItem('gatewayz_session_transfer_token');
+      expect(stored).toBeTruthy();
+
+      const sessionData = JSON.parse(stored!);
+      expect(sessionData.userId).toBe('12345');
     });
 
     it('should overwrite existing values', () => {
       storeSessionTransferToken('old-token', '111');
       storeSessionTransferToken('new-token', '222');
 
-      expect(sessionStorage.getItem('gatewayz_session_transfer_token')).toBe('new-token');
-      expect(sessionStorage.getItem('gatewayz_session_transfer_user_id')).toBe('222');
+      const stored = sessionStorage.getItem('gatewayz_session_transfer_token');
+      expect(stored).toBeTruthy();
+
+      const sessionData = JSON.parse(stored!);
+      expect(sessionData.token).toBe('new-token');
+      expect(sessionData.userId).toBe('222');
     });
 
-    it('should do nothing in SSR environment', () => {
-      const originalWindow = global.window;
-      (global as any).window = undefined;
-
-      storeSessionTransferToken('token', '123');
-
-      // Should not throw error
-      expect(true).toBe(true);
-
-      global.window = originalWindow;
-    });
+    // SSR behavior tested in consolidated testSSRFunctions block above
   });
 
   describe('getStoredSessionTransferToken', () => {
@@ -286,9 +302,15 @@ describe('auth-session-transfer', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token,
+        userId,
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // Mock current time as 2 minutes later (within 10-minute expiry)
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 2 * 60 * 1000);
@@ -302,9 +324,15 @@ describe('auth-session-transfer', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token,
+        userId,
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // Mock current time as 11 minutes later (past 10-minute expiry)
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 11 * 60 * 1000);
@@ -320,7 +348,13 @@ describe('auth-session-transfer', () => {
     });
 
     it('should return null when token is missing', () => {
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', '12345');
+      // Store invalid JSON without token
+      const sessionData = {
+        userId: '12345',
+        timestamp: Date.now(),
+        origin: 'http://localhost'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       const result = getStoredSessionTransferToken();
 
@@ -328,44 +362,53 @@ describe('auth-session-transfer', () => {
     });
 
     it('should return null when userId is missing', () => {
-      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
+      // Store invalid JSON without userId
+      const sessionData = {
+        token: 'test-token',
+        timestamp: Date.now(),
+        origin: 'http://localhost'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       const result = getStoredSessionTransferToken();
 
       expect(result).toEqual({ token: null, userId: null });
     });
 
-    it('should return token when timestamp is missing (no expiry check)', () => {
+    it('should return null when origin mismatches', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      // No timestamp stored
-
-      const result = getStoredSessionTransferToken();
-
-      expect(result).toEqual({ token, userId });
-    });
-
-    it('should return null in SSR environment', () => {
-      const originalWindow = global.window;
-      (global as any).window = undefined;
+      // Store with different origin
+      const sessionData = {
+        token,
+        userId,
+        timestamp: Date.now(),
+        origin: 'http://different-origin.com',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       const result = getStoredSessionTransferToken();
 
       expect(result).toEqual({ token: null, userId: null });
-
-      global.window = originalWindow;
     });
+
+    // SSR behavior tested in consolidated testSSRFunctions block above
 
     it('should handle exactly 10 minutes (boundary case)', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token,
+        userId,
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // Exactly 10 minutes later
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 10 * 60 * 1000);
@@ -380,9 +423,15 @@ describe('auth-session-transfer', () => {
       const token = 'test-api-key-123';
       const userId = '12345';
 
-      sessionStorage.setItem('gatewayz_session_transfer_token', token);
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', userId);
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token,
+        userId,
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // 10 minutes + 1ms later
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 10 * 60 * 1000 + 1);
@@ -417,24 +466,20 @@ describe('auth-session-transfer', () => {
       expect(sessionStorage.getItem('other_item')).toBe('other-value');
     });
 
-    it('should do nothing in SSR environment', () => {
-      const originalWindow = global.window;
-      (global as any).window = undefined;
-
-      clearSessionTransferToken();
-
-      // Should not throw error
-      expect(true).toBe(true);
-
-      global.window = originalWindow;
-    });
+    // SSR behavior tested in consolidated testSSRFunctions block above
   });
 
   describe('isSessionTransferTokenValid', () => {
     it('should return true when valid token exists', () => {
-      sessionStorage.setItem('gatewayz_session_transfer_token', 'test-token');
-      sessionStorage.setItem('gatewayz_session_transfer_user_id', '12345');
-      sessionStorage.setItem('gatewayz_session_transfer_timestamp', '1000000');
+      // Store in new JSON format
+      const sessionData = {
+        token: 'test-token',
+        userId: '12345',
+        timestamp: 1000000,
+        origin: 'http://localhost',
+        fingerprint: 'test-fingerprint'
+      };
+      sessionStorage.setItem('gatewayz_session_transfer_token', JSON.stringify(sessionData));
 
       // Mock current time within expiry
       jest.spyOn(Date, 'now').mockReturnValue(1000000 + 5 * 60 * 1000);
@@ -463,16 +508,7 @@ describe('auth-session-transfer', () => {
       expect(isValid).toBe(false);
     });
 
-    it('should return false in SSR environment', () => {
-      const originalWindow = global.window;
-      (global as any).window = undefined;
-
-      const isValid = isSessionTransferTokenValid();
-
-      expect(isValid).toBe(false);
-
-      global.window = originalWindow;
-    });
+    // SSR behavior tested in consolidated testSSRFunctions block above
   });
 
   describe('Integration Scenarios', () => {
@@ -480,8 +516,8 @@ describe('auth-session-transfer', () => {
       // Step 1: Store token
       storeSessionTransferToken('my-api-key', '99999');
 
-      // Step 2: Retrieve token within expiry
-      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 1 * 60 * 1000);
+      // Step 2: Retrieve token within expiry (1 minute after NOW)
+      jest.spyOn(Date, 'now').mockReturnValue(TEST_TIMESTAMPS.NOW + 1 * 60 * 1000);
       const result = getStoredSessionTransferToken();
       expect(result).toEqual({ token: 'my-api-key', userId: '99999' });
 
@@ -496,16 +532,16 @@ describe('auth-session-transfer', () => {
     });
 
     it('should handle token expiry during session', () => {
-      // Store token
+      // Store token (uses TEST_TIMESTAMPS.NOW from beforeEach)
       storeSessionTransferToken('my-api-key', '99999');
 
-      // First retrieval within expiry
-      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 5 * 60 * 1000);
+      // First retrieval within expiry (5 minutes after NOW)
+      jest.spyOn(Date, 'now').mockReturnValue(TEST_TIMESTAMPS.NOW + 5 * 60 * 1000);
       let result = getStoredSessionTransferToken();
       expect(result.token).toBe('my-api-key');
 
-      // Second retrieval past expiry
-      jest.spyOn(Date, 'now').mockReturnValue(1000000 + 15 * 60 * 1000);
+      // Second retrieval past expiry (15 minutes after NOW, beyond 10-min expiry)
+      jest.spyOn(Date, 'now').mockReturnValue(TEST_TIMESTAMPS.NOW + 15 * 60 * 1000);
       result = getStoredSessionTransferToken();
       expect(result.token).toBeNull();
 

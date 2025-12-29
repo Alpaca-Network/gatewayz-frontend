@@ -45,3 +45,15 @@ next-env.d.ts
 firebase-debug.log
 firestore-debug.log.env.local
 .claude/settings.local.json
+
+# PM2 logs
+/logs
+*.log
+
+# Cypress
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+cypress/results/
+cypress.env.json
+.cypress-cache/

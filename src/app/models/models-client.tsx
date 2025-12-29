@@ -27,8 +27,9 @@ import { Slider } from "@/components/ui/slider";
 import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { stringToColor } from '@/lib/utils';
-import ReactMarkdown from "react-markdown";
+import { stringToColor, getModelUrl } from '@/lib/utils';
+import { safeParseJson } from '@/lib/http';
+import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, getAllActiveGatewayIds } from '@/lib/gateway-registry';
 
 
 interface Model {
@@ -53,31 +54,19 @@ interface Model {
   is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
 }
 
-// Gateway display configuration
-const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React.ReactNode }> = {
-  openrouter: { name: 'OpenRouter', color: 'bg-blue-500' },
-  portkey: { name: 'Portkey', color: 'bg-purple-500' },
-  featherless: { name: 'Featherless', color: 'bg-green-500' },
-  groq: { name: 'Groq', color: 'bg-orange-500', icon: <Zap className="w-3 h-3" /> },
-  together: { name: 'Together', color: 'bg-indigo-500' },
-  fireworks: { name: 'Fireworks', color: 'bg-red-500' },
-  chutes: { name: 'Chutes', color: 'bg-yellow-500' },
-  deepinfra: { name: 'DeepInfra', color: 'bg-cyan-500' },
-  // New Portkey SDK providers
-  google: { name: 'Google', color: 'bg-blue-600' },
-  cerebras: { name: 'Cerebras', color: 'bg-amber-600' },
-  nebius: { name: 'Nebius', color: 'bg-slate-600' },
-  xai: { name: 'xAI', color: 'bg-black' },
-  novita: { name: 'Novita', color: 'bg-violet-600' },
-  huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
-  hug: { name: 'Hugging Face', color: 'bg-yellow-600' }, // Backend uses 'hug' abbreviation
-  aimo: { name: 'AiMo', color: 'bg-pink-600' },
-  near: { name: 'NEAR', color: 'bg-teal-600' },
-  fal: { name: 'Fal', color: 'bg-emerald-600' },
-  'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
-  helicone: { name: 'Helicone', color: 'bg-indigo-600' },
-  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' }
-};
+// Gateway display configuration - now uses centralized gateway registry
+// To add a new gateway, simply add it to src/lib/gateway-registry.ts
+// Icon components need to be resolved here since the registry stores string identifiers
+const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React.ReactNode }> = Object.fromEntries(
+  Object.entries(REGISTRY_GATEWAY_CONFIG).map(([id, config]) => [
+    id,
+    {
+      name: config.name,
+      color: config.color,
+      icon: config.icon === 'zap' ? <Zap className="w-3 h-3" /> : undefined,
+    },
+  ])
+);
 
 // Provider display configuration (for providers that differ from gateway names)
 const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
@@ -140,22 +129,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   });
   const allSources = Array.from(sourcesByName.values());
 
-  // Generate clean URLs:
-  // - For AIMO models (providerId:model-name), extract just the model name after the colon
-  // - For regular models with slashes (provider/model-name), encode the entire ID to preserve it correctly
-  // - Otherwise, use the full ID
-  let modelUrl: string;
-  if (model.id.includes(':')) {
-    // AIMO model - extract model name after the colon
-    const modelName = model.id.split(':')[1] || model.id;
-    modelUrl = `/models/${encodeURIComponent(modelName)}`;
-  } else if (model.id.includes('/')) {
-    // Regular provider/model format - encode the entire ID to handle special characters like parentheses
-    modelUrl = `/models/${encodeURIComponent(model.id)}`;
-  } else {
-    // Single-part ID - encode it
-    modelUrl = `/models/${encodeURIComponent(model.id)}`;
-  }
+  // Generate clean URLs in format /models/[developer]/[model]
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
 
   return (
     <Link href={modelUrl} className="h-full block">
@@ -335,6 +310,7 @@ export default function ModelsClient({
   }, []);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const lastSyncedQueryRef = React.useRef<string>(searchParams.toString());
 
   // Client-side model fetching state
   const [models, setModels] = useState<Model[]>(initialModels);
@@ -357,22 +333,40 @@ export default function ModelsClient({
   useEffect(() => {
     if (initialModels.length < 50) {
       console.log('[Models] Only got', initialModels.length, 'models from server, fetching from client...');
-      setIsLoadingModels(true);
+      const controller = new AbortController();
+      let isActive = true;
 
-      fetch('/api/models?gateway=all&limit=50000')
-        .then(res => res.json())
-        .then(data => {
-          if (data.data && data.data.length > 0) {
-            console.log(`[Models] Fetched ${data.data.length} models from client`);
-            setModels(data.data);
+      const fetchAllModels = async () => {
+        setIsLoadingModels(true);
+        try {
+          const response = await fetch('/api/models?gateway=all&limit=50000', {
+            signal: controller.signal
+          });
+          const payload = await safeParseJson<{ data?: Model[] }>(
+            response,
+            '[Models] client bootstrap'
+          );
+          if (isActive && payload?.data && payload.data.length > 0) {
+            console.log(`[Models] Fetched ${payload.data.length} models from client`);
+            setModels(payload.data);
           }
-        })
-        .catch(err => {
-          console.error('[Models] Client fetch failed:', err);
-        })
-        .finally(() => {
-          setIsLoadingModels(false);
-        });
+        } catch (err) {
+          if (!controller.signal.aborted) {
+            console.error('[Models] Client fetch failed:', err);
+          }
+        } finally {
+          if (isActive) {
+            setIsLoadingModels(false);
+          }
+        }
+      };
+
+      fetchAllModels();
+
+      return () => {
+        isActive = false;
+        controller.abort();
+      };
     }
   }, [initialModels.length]);
 
@@ -396,7 +390,6 @@ export default function ModelsClient({
       }
 
       if (seen.has(model.id)) {
-        console.warn(`Duplicate model ID found: ${model.id}`);
         return false;
       }
       seen.add(model.id);
@@ -440,7 +433,18 @@ export default function ModelsClient({
             taskState.explore = true;
             localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
             console.log('Onboarding - Explore task marked as complete');
+
+            // Dispatch custom event to notify the banner
+            window.dispatchEvent(new Event('onboarding-task-updated'));
           }
+        } else {
+          // Initialize task state if it doesn't exist and mark explore as complete
+          const taskState = { explore: true };
+          localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+          console.log('Onboarding - Explore task initialized and marked as complete');
+
+          // Dispatch custom event to notify the banner
+          window.dispatchEvent(new Event('onboarding-task-updated'));
         }
       } catch (error) {
         console.error('Failed to update onboarding task:', error);
@@ -457,11 +461,11 @@ export default function ModelsClient({
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Update URL parameters when filters change
+  // Update URL parameters when filters change (debounced to avoid excessive router fetches)
   useEffect(() => {
     const params = new URLSearchParams();
 
-    if (searchTerm) params.set('search', searchTerm);
+    if (debouncedSearchTerm) params.set('search', debouncedSearchTerm);
     if (selectedInputFormats.length > 0) params.set('inputFormats', selectedInputFormats.join(','));
     if (selectedOutputFormats.length > 0) params.set('outputFormats', selectedOutputFormats.join(','));
     if (contextLengthRange[0] !== 0) params.set('contextLengthMin', contextLengthRange[0].toString());
@@ -478,8 +482,43 @@ export default function ModelsClient({
     if (releaseDateFilter !== 'all') params.set('releaseDate', releaseDateFilter);
 
     const queryString = params.toString();
-    router.replace(queryString ? `?${queryString}` : '/models', { scroll: false });
-  }, [searchTerm, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter, router]);
+    if (queryString === lastSyncedQueryRef.current) {
+      return;
+    }
+    lastSyncedQueryRef.current = queryString;
+
+    const target = queryString ? `/models?${queryString}` : '/models';
+
+    // Avoid triggering a new RSC fetch if the user is offline or Navigator API reports no connectivity.
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      window.history.replaceState(window.history.state ?? null, '', target);
+      return;
+    }
+
+    try {
+      router.replace(queryString ? `?${queryString}` : '/models', { scroll: false });
+    } catch (error) {
+      console.warn('[Models] router.replace failed, falling back to history.replaceState', error);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(window.history.state ?? null, '', target);
+      }
+    }
+  }, [
+    debouncedSearchTerm,
+    selectedInputFormats,
+    selectedOutputFormats,
+    contextLengthRange,
+    promptPricingRange,
+    selectedParameters,
+    selectedDevelopers,
+    selectedGateways,
+    selectedModelSeries,
+    pricingFilter,
+    privacyFilter,
+    sortBy,
+    releaseDateFilter,
+    router,
+  ]);
 
   const handleCheckboxChange = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (value: string, checked: boolean) => {
     setter(prev => checked ? [...prev, value] : prev.filter(v => v !== value));
@@ -761,10 +800,9 @@ export default function ModelsClient({
       });
     });
 
-    // Define all known gateways that should appear in the filter
-    // This ensures all gateways are visible even if they have 0 models currently
-    // Excludes 'portkey' as it's deprecated (use individual Portkey SDK providers instead)
-    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway', 'helicone'];
+    // Use getAllActiveGatewayIds() to include dynamically registered gateways
+    // To add a new gateway, simply add it to src/lib/gateway-registry.ts
+    const allKnownGateways = getAllActiveGatewayIds();
 
     // Log gateway counts for debugging
     const gatewayStats = allKnownGateways.map(g => ({
@@ -1160,10 +1198,13 @@ export default function ModelsClient({
 
           {/* End of results */}
           {!hasMore && filteredModels.length > 0 && (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex flex-col items-center justify-center py-8 gap-2">
               <div className="text-sm text-muted-foreground">
                 Showing all {filteredModels.length} models
               </div>
+              <Link href="/releases" className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                What's new
+              </Link>
             </div>
           )}
           </div>

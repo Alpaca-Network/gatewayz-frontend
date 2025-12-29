@@ -5,6 +5,7 @@
 
 import { getModelsForGateway } from './models-service';
 import * as Sentry from '@sentry/nextjs';
+import { getErrorMessage, isAbortOrNetworkError } from './network-error';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -30,10 +31,10 @@ interface ModelRecord {
   provider_slug: string;
   source_gateways: string[];
   context_length: number;
-  pricing: {
-    prompt: string;
-    completion: string;
-  };
+  pricing?: {
+    prompt?: string | number | null;
+    completion?: string | number | null;
+  } | null;
   architecture: {
     input_modalities: string[];
     output_modalities: string[];
@@ -184,14 +185,23 @@ class ModelSyncService {
         lastSyncTimestamp: startTime
       };
 
-      // Log to analytics for monitoring
-      await this.logSyncResult(syncResult);
+      // Only log successful syncs in development mode or when there are changes
+      if (process.env.NODE_ENV === 'development' || newModels > 0 || updatedModels > 0 || removedModels > 0) {
+        await this.logSyncResult(syncResult);
+      }
 
       return syncResult;
 
     } catch (error) {
-      console.error(`[ModelSync] Error syncing ${gateway}:`, error);
-      
+      const message = getErrorMessage(error);
+      const isTransient = isAbortOrNetworkError(error);
+
+      if (isTransient) {
+        console.warn(`[ModelSync] ${gateway}: sync aborted or timed out (transient): ${message}`);
+      } else {
+        console.error(`[ModelSync] Error syncing ${gateway}:`, error);
+      }
+
       const result: ModelSyncResult = {
         gateway,
         totalModels: 0,
@@ -199,17 +209,19 @@ class ModelSyncService {
         updatedModels: 0,
         removedModels: 0,
         lastSyncTimestamp: startTime,
-        errors: [error instanceof Error ? error.message : 'Unknown error']
+        errors: [message || 'Unknown error']
       };
 
-Sentry.captureException(error, {
+      if (!isTransient) {
+        Sentry.captureException(error, {
           tags: { gateway, sync_type: 'gateway_sync' },
-          extra: { 
+          extra: {
             gateway: result.gateway,
             totalModels: result.totalModels,
-            errors: result.errors 
+            errors: result.errors
           }
         });
+      }
 
       return result;
     }
@@ -282,11 +294,16 @@ Sentry.captureException(error, {
    * Check if two models are equal (for change detection)
    */
   private modelsEqual(a: ModelRecord, b: ModelRecord): boolean {
+    const pricingPromptA = a.pricing?.prompt ?? null;
+    const pricingPromptB = b.pricing?.prompt ?? null;
+    const pricingCompletionA = a.pricing?.completion ?? null;
+    const pricingCompletionB = b.pricing?.completion ?? null;
+
     return (
       a.name === b.name &&
       a.context_length === b.context_length &&
-      a.pricing.prompt === b.pricing.prompt &&
-      a.pricing.completion === b.pricing.completion &&
+      pricingPromptA === pricingPromptB &&
+      pricingCompletionA === pricingCompletionB &&
       JSON.stringify(a.architecture) === JSON.stringify(b.architecture) &&
       JSON.stringify(a.supported_parameters) === JSON.stringify(b.supported_parameters)
     );
@@ -333,15 +350,19 @@ Sentry.captureException(error, {
    */
   private async logSyncResult(result: ModelSyncResult): Promise<void> {
     try {
-      // Log to your analytics service (Statsig, PostHog, etc.)
-      console.log('[ModelSync] Sync result:', {
-        gateway: result.gateway,
-        total_models: result.totalModels,
-        new_models: result.newModels,
-        updated_models: result.updatedModels,
-        removed_models: result.removedModels,
-        sync_duration: Date.now() - result.lastSyncTimestamp
-      });
+      // Only log in development or when there are meaningful changes
+      const hasChanges = result.newModels > 0 || result.updatedModels > 0 || result.removedModels > 0;
+
+      if (hasChanges) {
+        console.log(`[ModelSync] ${result.gateway}: ${result.totalModels} models (+${result.newModels} ~${result.updatedModels} -${result.removedModels})`);
+      } else if (process.env.NODE_ENV === 'development') {
+        console.log(`[ModelSync] ${result.gateway}: ${result.totalModels} models (no changes)`);
+      }
+
+      // Log to analytics service only for significant changes
+      if (hasChanges) {
+        // Analytics logging can go here (Statsig, PostHog, etc.)
+      }
     } catch (error) {
       console.error('[ModelSync] Failed to log sync result:', error);
     }

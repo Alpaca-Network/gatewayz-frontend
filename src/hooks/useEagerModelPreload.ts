@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { getAdaptiveTimeout } from '@/lib/network-timeouts';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 const PRELOAD_CACHE_KEY = 'gatewayz_models_preload_state';
@@ -51,9 +52,14 @@ async function preloadModels() {
     console.log('[Preload] Starting eager model preload in background...');
     const startTime = performance.now();
 
-    const controller = new AbortController();
-    // Reduced from 8s to 5s for faster background preload
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const controller = new AbortController();
+      const baseTimeout = 8000;
+      const timeoutMs = getAdaptiveTimeout(baseTimeout, {
+        maxMs: 20000,
+        slowNetworkMultiplier: 3,
+        mobileMultiplier: 2,
+      });
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     const response = await fetch(
       `/api/models?gateway=all&limit=50`,
@@ -104,7 +110,7 @@ async function preloadModels() {
     });
 
     // Try to cache the results
-    const CACHE_KEY = 'gatewayz_models_cache_v5_optimized';
+    const CACHE_KEY = 'gatewayz_models_cache_v6_gateway_fix';
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify({
         data: modelOptions,

@@ -17,11 +17,15 @@ export async function GET(request: NextRequest) {
         const searchParams = request.nextUrl.searchParams;
         const gateway = searchParams.get('gateway');
         const limit = searchParams.get('limit');
+        const search = searchParams.get('search');
 
         // Add request parameters as span attributes
         span.setAttribute('gateway', gateway || 'none');
         if (limit) {
           span.setAttribute('limit', parseInt(limit));
+        }
+        if (search) {
+          span.setAttribute('search_query', search);
         }
 
         if (!gateway) {
@@ -32,13 +36,20 @@ export async function GET(request: NextRequest) {
           );
         }
 
-        const data = await getModelsForGateway(gateway, limit ? parseInt(limit) : undefined);
+        const result = await getModelsForGateway(
+          gateway,
+          limit ? parseInt(limit) : undefined,
+          search || undefined
+        );
+
+        // Extract the models array from the result
+        const models = result.data || [];
 
         // Add success metrics to span
-        span.setAttribute('models_count', Array.isArray(data) ? data.length : 0);
+        span.setAttribute('models_count', Array.isArray(models) ? models.length : 0);
         span.setAttribute('status', 'success');
 
-        return NextResponse.json(data);
+        return NextResponse.json({ data: models });
       } catch (error) {
         console.error('Error fetching models:', error);
 

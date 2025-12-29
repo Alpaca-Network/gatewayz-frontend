@@ -201,8 +201,53 @@ export default function ApiKeysPage() {
       );
 
       if (response.ok) {
-        const data = await response.json();
-        setApiKeys(data.keys || []);
+        // Read response text first, then parse to avoid consuming body twice
+        const responseText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(responseText);
+          console.log('[API Keys] Response received:', {
+            type: typeof data,
+            isArray: Array.isArray(data),
+            hasKeys: data && typeof data === 'object' && 'keys' in data,
+            keysCount: data && typeof data === 'object' && 'keys' in data ? data.keys?.length : 'N/A',
+            dataKeys: data && typeof data === 'object' ? Object.keys(data) : 'N/A'
+          });
+        } catch (parseError) {
+          console.error('[API Keys] Failed to parse response as JSON:', parseError);
+          console.error('[API Keys] Response text:', responseText.substring(0, 500));
+          throw new Error('Failed to parse API keys response');
+        }
+        
+        // Handle different response formats from backend
+        let keys: ApiKey[] = [];
+        if (Array.isArray(data)) {
+          // Backend returns array directly
+          keys = data;
+          console.log('[API Keys] Received array format, keys count:', keys.length);
+        } else if (data && typeof data === 'object' && 'keys' in data) {
+          // Backend returns { keys: [...] } or { status: "success", keys: [...] }
+          keys = Array.isArray(data.keys) ? data.keys : [];
+          console.log('[API Keys] Received object with keys property, keys count:', keys.length, 'Raw keys:', data.keys);
+        } else if (data && typeof data === 'object') {
+          // Try to find any array property
+          const arrayProps = Object.values(data).filter(Array.isArray);
+          if (arrayProps.length > 0) {
+            keys = arrayProps[0] as ApiKey[];
+            console.log('[API Keys] Found array in response object, keys count:', keys.length);
+          } else {
+            console.warn('[API Keys] Unexpected response format:', Object.keys(data), 'Response:', JSON.stringify(data).substring(0, 200));
+          }
+        } else {
+          console.warn('[API Keys] Unexpected response type:', typeof data, 'Response:', JSON.stringify(data).substring(0, 200));
+        }
+        
+        console.log('[API Keys] Final keys array length:', keys.length, 'Setting API keys...');
+        setApiKeys(keys);
+        
+        if (keys.length === 0) {
+          console.warn('[API Keys] No keys found in response. Full response:', JSON.stringify(data, null, 2));
+        }
       } else if (response.status === 403) {
         // Permission denied - show primary key from localStorage as fallback
         console.log('Insufficient permissions - showing primary API key from localStorage');
@@ -443,72 +488,72 @@ export default function ApiKeysPage() {
               <DialogTrigger asChild>
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 sm:h-12 px-6 sm:px-10 text-sm sm:text-base w-full sm:w-auto">Generate API Key</Button>
               </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Create a Key</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name" className="flex items-center gap-1">
-                    Name <Info className="h-3 w-3 text-muted-foreground" />
-                  </Label>
-                  <Input
-                    id="name"
-                    placeholder='e.g. "Chatbot Key"'
-                    value={keyName}
-                    onChange={(e) => setKeyName(e.target.value)}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="credit-limit" className="flex items-center gap-1">
-                    Request limit (optional) <Info className="h-3 w-3 text-muted-foreground" />
-                  </Label>
-                  <Input
-                    id="credit-limit"
-                    type="number"
-                    placeholder="Leave blank for unlimited"
-                    value={creditLimit}
-                    onChange={(e) => setCreditLimit(e.target.value)}
-                  />
-                </div>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Create a Key</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="name" className="flex items-center gap-1">
+                      Name <Info className="h-3 w-3 text-muted-foreground" />
+                    </Label>
+                    <Input
+                      id="name"
+                      placeholder='e.g. "Chatbot Key"'
+                      value={keyName}
+                      onChange={(e) => setKeyName(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="credit-limit" className="flex items-center gap-1">
+                      Request limit (optional) <Info className="h-3 w-3 text-muted-foreground" />
+                    </Label>
+                    <Input
+                      id="credit-limit"
+                      type="number"
+                      placeholder="Leave blank for unlimited"
+                      value={creditLimit}
+                      onChange={(e) => setCreditLimit(e.target.value)}
+                    />
+                  </div>
 
-                <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                  <CollapsibleTrigger className="flex justify-between items-center w-full text-sm font-medium">
-                    Advanced Settings
-                    <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="pt-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="byok-usage" className="flex items-center gap-1">
-                        Include BYOK usage in limit <Info className="h-3 w-3 text-muted-foreground" />
-                      </Label>
-                      <Switch
-                        id="byok-usage"
-                        checked={includeBYOK}
-                        onCheckedChange={setIncludeBYOK}
-                      />
-                    </div>
-                     <p className="text-xs text-muted-foreground p-2 bg-muted rounded-md">
-                       If enabled, this key&apos;s limit will apply to the sum of its BYOK usage and GatewayZ usage.
-                     </p>
-                  </CollapsibleContent>
-                </Collapsible>
-              </div>
-              <DialogFooter>
+                  <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+                    <CollapsibleTrigger className="flex justify-between items-center w-full text-sm font-medium">
+                      Advanced Settings
+                      <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pt-4 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="byok-usage" className="flex items-center gap-1">
+                          Include BYOK usage in limit <Info className="h-3 w-3 text-muted-foreground" />
+                        </Label>
+                        <Switch
+                          id="byok-usage"
+                          checked={includeBYOK}
+                          onCheckedChange={setIncludeBYOK}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground p-2 bg-muted rounded-md">
+                        If enabled, this key&apos;s limit will apply to the sum of its BYOK usage and GatewayZ usage.
+                      </p>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+                <DialogFooter>
                   <DialogClose asChild>
                     <Button type="button" variant="secondary" disabled={creating}>
                       Cancel
                     </Button>
                   </DialogClose>
-                <Button
-                  type="submit"
-                  onClick={handleCreateKey}
-                  disabled={creating}
-                >
-                  {creating ? "Creating..." : "Create"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
+                  <Button
+                    type="submit"
+                    onClick={handleCreateKey}
+                    disabled={creating}
+                  >
+                    {creating ? "Creating..." : "Create"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
             </Dialog>
           )}
         </div>

@@ -10,7 +10,12 @@ export const getStripe = () => {
   return stripePromise;
 };
 
-export const redirectToCheckout = async (amount: number, userEmail?: string, userId?: number) => {
+export const redirectToCheckout = async (
+  amount: number,
+  userEmail?: string,
+  userId?: number,
+  creditValue?: number // Optional: credits to add (if different from amount due to discounts)
+) => {
   try {
     // Get API key from localStorage
     const apiKey = getApiKey();
@@ -22,6 +27,7 @@ export const redirectToCheckout = async (amount: number, userEmail?: string, use
 
     console.log('Checkout - API key exists:', !!apiKey);
     console.log('Checkout - Amount:', amount);
+    console.log('Checkout - Credit value:', creditValue || amount);
     console.log('Checkout - User email:', sanitizedEmail || 'not provided');
     console.log('Checkout - User ID:', userId);
 
@@ -37,6 +43,7 @@ export const redirectToCheckout = async (amount: number, userEmail?: string, use
       },
       body: JSON.stringify({
         amount,
+        creditValue: creditValue || amount, // Credits to add to account
         userEmail: sanitizedEmail,
         userId,
         apiKey, // Pass API key to the route handler

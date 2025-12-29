@@ -1,10 +1,12 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, CheckCircle2, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { safeSessionStorage } from '@/lib/safe-session-storage';
+import { getUserData } from '@/lib/api';
 
 interface OnboardingTask {
   id: string;
@@ -19,19 +21,32 @@ export function OnboardingBanner() {
   const [visible, setVisible] = useState(false);
   const pathname = usePathname();
 
-  useEffect(() => {
+  // Function to load and check tasks
+  const loadTasks = useCallback(() => {
+    // Don't show banner for guest users (not authenticated)
+    const userData = getUserData();
+    if (!userData) {
+      setVisible(false);
+      return;
+    }
+
+    // Check if banner was dismissed this session
+    const dismissed = safeSessionStorage.getItem('onboarding_banner_dismissed');
+    if (dismissed) {
+      setVisible(false);
+      return;
+    }
+
     // Check if onboarding is completed
     const completed = localStorage.getItem('gatewayz_onboarding_completed');
     if (completed) {
       setVisible(false);
-      document.documentElement.classList.remove('has-onboarding-banner');
       return;
     }
 
     // Don't show on onboarding page itself or home page
     if (pathname === '/onboarding' || pathname === '/') {
       setVisible(false);
-      document.documentElement.classList.remove('has-onboarding-banner');
       return;
     }
 
@@ -60,7 +75,7 @@ export function OnboardingBanner() {
       },
       {
         id: 'credits',
-        title: 'Add $10 and get a bonus $10 in free credits on your first top up!',
+        title: 'Add $3 and get a bonus $3 in free credits on your first top up!',
         path: '/settings/credits',
         completed: taskState.credits || false,
       },
@@ -75,22 +90,35 @@ export function OnboardingBanner() {
     // Show banner if there are incomplete tasks
     const shouldShow = !!incomplete;
     setVisible(shouldShow);
-    
-    // Add/remove class to document element for CSS targeting
-    if (shouldShow) {
+  }, [pathname]);
+
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  // Handle DOM manipulation after visibility changes (only runs on client after hydration)
+  useEffect(() => {
+    let rafId1: number | null = null;
+    let rafId2: number | null = null;
+
+    if (visible) {
       document.documentElement.classList.add('has-onboarding-banner');
-      document.documentElement.style.setProperty('--sidebar-top', '130px');
-      document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 130px)');
       // Measure banner height after render - use requestAnimationFrame to ensure DOM is ready
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      rafId1 = requestAnimationFrame(() => {
+        rafId2 = requestAnimationFrame(() => {
           const bannerElement = document.querySelector('[data-onboarding-banner]');
           if (bannerElement) {
             const bannerHeight = bannerElement.getBoundingClientRect().height;
             const headerTop = 65 + bannerHeight;
+            document.documentElement.style.setProperty('--sidebar-top', `${headerTop}px`);
+            document.documentElement.style.setProperty('--sidebar-height', `calc(100vh - ${headerTop}px)`);
             document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
+            document.documentElement.style.setProperty('--onboarding-banner-height', `${bannerHeight}px`);
           } else {
-            document.documentElement.style.setProperty('--models-header-top', '115px');
+            document.documentElement.style.setProperty('--sidebar-top', '105px');
+            document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 105px)');
+            document.documentElement.style.setProperty('--models-header-top', '105px');
+            document.documentElement.style.setProperty('--onboarding-banner-height', '40px');
           }
         });
       });
@@ -99,8 +127,47 @@ export function OnboardingBanner() {
       document.documentElement.style.setProperty('--sidebar-top', '65px');
       document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
       document.documentElement.style.setProperty('--models-header-top', '65px');
+      document.documentElement.style.setProperty('--onboarding-banner-height', '0px');
     }
-  }, [pathname]);
+
+    // Cleanup function to prevent stale DOM styles and cancel pending animations
+    return () => {
+      if (rafId1 !== null) {
+        cancelAnimationFrame(rafId1);
+      }
+      if (rafId2 !== null) {
+        cancelAnimationFrame(rafId2);
+      }
+      // Clean up DOM on unmount
+      document.documentElement.classList.remove('has-onboarding-banner');
+      document.documentElement.style.setProperty('--sidebar-top', '65px');
+      document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
+      document.documentElement.style.setProperty('--models-header-top', '65px');
+      document.documentElement.style.setProperty('--onboarding-banner-height', '0px');
+    };
+  }, [visible]);
+
+  // Listen for localStorage changes (from other components marking tasks complete)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'gatewayz_onboarding_tasks' || e.key === 'gatewayz_onboarding_completed') {
+        loadTasks();
+      }
+    };
+
+    // Also listen for custom events for same-tab updates
+    const handleCustomEvent = () => {
+      loadTasks();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('onboarding-task-updated', handleCustomEvent);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('onboarding-task-updated', handleCustomEvent);
+    };
+  }, [loadTasks]);
 
   const handleDismiss = () => {
     setVisible(false);
@@ -108,23 +175,24 @@ export function OnboardingBanner() {
     document.documentElement.style.setProperty('--sidebar-top', '65px');
     document.documentElement.style.setProperty('--sidebar-height', 'calc(100vh - 65px)');
     document.documentElement.style.setProperty('--models-header-top', '65px');
-    
+    document.documentElement.style.setProperty('--onboarding-banner-height', '0px');
+
     // Update spacer height
     const spacer = document.querySelector('[data-header-spacer]');
     if (spacer) {
       (spacer as HTMLElement).style.height = '65px';
     }
-    
+
     // Update page content padding for other pages
     const pageContents = document.querySelectorAll('[data-page-content]');
     pageContents.forEach((content) => {
       (content as HTMLElement).style.paddingTop = '128px'; // pt-32
     });
-    
+
     // Chat will adjust automatically via CSS classes
-    
+
     // Remember dismissal for this session
-    sessionStorage.setItem('onboarding_banner_dismissed', 'true');
+    safeSessionStorage.setItem('onboarding_banner_dismissed', 'true');
   };
 
   const completedCount = tasks.filter(t => t.completed).length;
@@ -136,11 +204,53 @@ export function OnboardingBanner() {
 
   return (
     <div data-onboarding-banner className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md fixed top-[65px] left-0 right-0 z-30">
-      <div className="px-4 py-3 max-w-full overflow-x-hidden">
-        <div className="flex items-center justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+      <div className="px-3 sm:px-4 py-1.5 sm:py-2 w-full">
+        {/* Mobile layout: single row on xs/sm screens */}
+        <div className="md:hidden flex items-center justify-between gap-2">
+          {/* Progress dots and count */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <div className="flex items-center gap-1">
+              {tasks.map((task) => (
+                <div
+                  key={task.id}
+                  className={`h-2 w-2 rounded-full transition-colors ${
+                    task.completed ? 'bg-green-300' : 'bg-white/30'
+                  }`}
+                />
+              ))}
+            </div>
+            <span className="text-xs font-medium whitespace-nowrap">
+              {completedCount}/{totalCount}
+            </span>
+          </div>
+
+          {/* Next task button - compact */}
+          <Link href={nextTask.path} className="flex-1 min-w-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="!bg-white/20 !text-white hover:!bg-white/30 hover:!text-white font-semibold border border-white/30 text-xs h-7 px-2 w-full justify-start"
+            >
+              <span className="truncate flex-1 text-left">{nextTask.title}</span>
+              <ArrowRight className="ml-1 h-3 w-3 flex-shrink-0" />
+            </Button>
+          </Link>
+
+          {/* Dismiss button */}
+          <button
+            onClick={handleDismiss}
+            className="flex-shrink-0 hover:bg-white/20 rounded-full p-1 transition-colors"
+            aria-label="Dismiss banner"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Desktop layout: horizontal on md+ screens */}
+        <div className="hidden md:flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
             {/* Progress indicator */}
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div className="flex items-center gap-1">
                 {tasks.map((task) => (
                   <div
@@ -157,13 +267,13 @@ export function OnboardingBanner() {
             </div>
 
             {/* Next task */}
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0 overflow-hidden">
-              <span className="text-sm whitespace-nowrap hidden sm:inline">Next step:</span>
-              <Link href={nextTask.path} className="min-w-0 overflow-hidden">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <span className="text-sm whitespace-nowrap">Next step:</span>
+              <Link href={nextTask.path} className="min-w-0 flex-1">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="!bg-white/20 !text-white hover:!bg-white/30 hover:!text-white font-semibold border border-white/30 text-xs sm:text-sm truncate max-w-full"
+                  className="!bg-white/20 !text-white hover:!bg-white/30 hover:!text-white font-semibold border border-white/30 text-sm truncate max-w-full w-full justify-start"
                 >
                   <span className="truncate">{nextTask.title}</span>
                   <ArrowRight className="ml-1 h-4 w-4 flex-shrink-0" />
@@ -172,7 +282,7 @@ export function OnboardingBanner() {
             </div>
 
             {/* Back to onboarding link */}
-            <Link href="/onboarding" className="hidden md:block flex-shrink-0">
+            <Link href="/onboarding" className="flex-shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
@@ -186,7 +296,7 @@ export function OnboardingBanner() {
           {/* Dismiss button */}
           <button
             onClick={handleDismiss}
-            className="flex-shrink-0 hover:bg-white/20 rounded-full p-1.5 transition-colors ml-2"
+            className="flex-shrink-0 hover:bg-white/20 rounded-full p-1.5 transition-colors"
             aria-label="Dismiss banner"
           >
             <X className="h-5 w-5" />

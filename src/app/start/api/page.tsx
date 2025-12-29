@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import posthog from 'posthog-js';
 import Link from 'next/link';
 import { API_BASE_URL } from '@/lib/config';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { CodeHighlighter } from '@/components/code-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface ModelData {
@@ -56,7 +56,8 @@ export default function StartApiPage() {
     const fetchModels = async () => {
       try {
         setLoadingModels(true);
-        const response = await fetch(`${API_BASE_URL}/ranking/models`, {
+        // Use Next.js API proxy to avoid CORS issues
+        const response = await fetch('/api/ranking/models', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -268,7 +269,7 @@ console.log(completion.choices[0].message.content);`
 
             {/* Bonus note */}
             <p className="text-sm text-muted-foreground mt-4 text-center">
-              💰 <strong>Add $10 → get +$10 bonus</strong> on your first top-up
+              💰 <strong>Add $3 → get +$3 bonus</strong> on your first top-up
             </p>
           </div>
         </div>
@@ -406,7 +407,7 @@ console.log(completion.choices[0].message.content);`
 
             {/* Code Display */}
             <div className="bg-slate-950/80 overflow-x-auto">
-              <SyntaxHighlighter
+              <CodeHighlighter
                 language={activeTab === 'curl' ? 'bash' : activeTab}
                 style={vscDarkPlus}
                 customStyle={{
@@ -418,7 +419,7 @@ console.log(completion.choices[0].message.content);`
                 }}
               >
                 {codeExamples[activeTab]}
-              </SyntaxHighlighter>
+              </CodeHighlighter>
             </div>
 
             {/* Bottom gradient */}
@@ -440,7 +441,7 @@ console.log(completion.choices[0].message.content);`
               Want to try other models? We support 1000+ models from OpenAI, Anthropic, Google, Meta, and more using the <code className="bg-muted px-2 py-1 rounded">researcher/model</code> format.
             </p>
             <p className="text-sm text-muted-foreground mb-4">
-              💰 <strong>Add $10 in credits and get a bonus $10 on your first top-up</strong>
+              💰 <strong>Add $3 in credits and get a bonus $3 on your first top-up</strong>
             </p>
             <Link href="/models">
               <Button variant="outline" className="w-full sm:w-auto">

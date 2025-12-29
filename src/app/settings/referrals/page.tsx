@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,35 +8,7 @@ import { Copy, UserPlus, Gift, Users, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
-
-// Referral transaction data type
-interface ReferralTransaction {
-  id: number;
-  referee_id: string;
-  referee_email: string;
-  status: 'pending' | 'completed';
-  reward_amount: number;
-  created_at: string;
-  completed_at?: string;
-}
-
-// Flexible referral data type to handle different API response formats
-interface FlexibleReferralData {
-  [key: string]: any;
-}
-
-// Function to normalize referral data from API response
-const normalizeReferralData = (rawData: FlexibleReferralData): ReferralTransaction => {
-  return {
-    id: rawData.id || rawData.ID || 0,
-    referee_id: rawData.referee_id || rawData.refereeId || rawData.user_id || rawData.userId || '',
-    referee_email: rawData.referee_email || rawData.refereeEmail || rawData.email || rawData.user_email || rawData.userEmail || '',
-    status: (rawData.status || rawData.Status || 'pending') as 'pending' | 'completed',
-    reward_amount: Number(rawData.reward_amount || rawData.rewardAmount || rawData.amount || rawData.reward || 0),
-    created_at: rawData.created_at || rawData.createdAt || rawData.date_created || rawData.dateCreated || '',
-    completed_at: rawData.completed_at || rawData.completedAt || rawData.date_completed || rawData.dateCompleted || undefined
-  };
-};
+import { normalizeReferralData, calculateStats, ReferralTransaction } from '@/lib/referral-utils';
 
 // Stats card component
 const StatCard = ({
@@ -123,8 +95,14 @@ function ReferralsPageContent() {
   });
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
+    if (hasInitialized.current) {
+      return;
+    }
+    hasInitialized.current = true;
+
     const fetchReferralData = async () => {
       setLoading(true);
 
@@ -182,6 +160,9 @@ function ReferralsPageContent() {
           console.log('Referral stats data:', statsData);
           console.log('Full API response structure:', JSON.stringify(statsData, null, 2));
 
+          // Normalize referral data first so we can use it for both display and stats
+          let normalizedReferrals: ReferralTransaction[] = [];
+
           // Set referrals from stats response
           if (Array.isArray(statsData.referrals)) {
             console.log('Referrals array:', statsData.referrals);
@@ -192,18 +173,14 @@ function ReferralsPageContent() {
               console.log('Normalized first referral:', normalizeReferralData(statsData.referrals[0]));
             }
             // Normalize the referral data
-            const normalizedReferrals = statsData.referrals.map(normalizeReferralData);
+            normalizedReferrals = statsData.referrals.map(normalizeReferralData);
             setReferrals(normalizedReferrals);
           } else {
             console.log('Referrals is not an array:', typeof statsData.referrals, statsData.referrals);
           }
 
-          // Set stats from response
-          setStats({
-            totalReferrals: Number(statsData.total_uses) || 0,
-            completedReferrals: Array.isArray(statsData.referrals) ? statsData.referrals.filter((r: any) => r.status === 'completed').length : 0,
-            totalEarned: Number(statsData.total_earned) || 0
-          });
+          // Set stats from response - use normalized data for completedReferrals count
+          setStats(calculateStats(statsData, normalizedReferrals));
         } else {
           const errorText = await statsResponse.text();
           console.error('Failed to fetch referral stats:', statsResponse.status, errorText);
@@ -228,7 +205,7 @@ function ReferralsPageContent() {
     };
 
     fetchReferralData();
-  }, [toast]);
+  }, []);
 
   const copyToClipboard = async (text: string, label: string) => {
     try {

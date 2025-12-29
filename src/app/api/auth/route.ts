@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { handleApiError } from "@/app/api/middleware/error-handler";
 import { API_BASE_URL } from "@/lib/config";
 import { proxyFetch } from "@/lib/proxy-fetch";
+import { retryFetch } from "@/lib/retry-utils";
 
 /**
  * POST /api/auth
  * Proxy route for backend authentication
  * Accepts Privy authentication data and forwards to Gatewayz backend API
+ * Includes automatic retry logic for transient errors (502/503/504)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -14,34 +16,75 @@ export async function POST(request: NextRequest) {
 
     console.log("[API /api/auth] Proxying authentication request to backend");
 
-    const response = await proxyFetch(`${API_BASE_URL}/auth`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    // Use timeout to prevent hanging requests
+    // Increased from 15s to 30s to handle backend load and slow network conditions
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout for backend auth
 
-    const responseText = await response.text();
+    try {
+      // Wrap fetch in retry logic for 429/502/503/504 errors
+      // - 429: Rate limiting from backend
+      // - 502/503/504: Transient server errors
+      // Increased retry delay to give backend time to recover under load
+      const response = await retryFetch(
+        () =>
+          proxyFetch(`${API_BASE_URL}/auth`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          }),
+        {
+          maxRetries: 3,
+          initialDelayMs: 1000, // Increased from 500ms to give backend more recovery time
+          maxDelayMs: 10000, // Increased from 5s to 10s
+          backoffMultiplier: 2,
+          retryableStatuses: [429, 502, 503, 504],
+        }
+      );
 
-    if (!response.ok) {
-      console.error("[API /api/auth] Backend auth failed:", response.status, responseText);
+      clearTimeout(timeoutId);
+      const responseText = await response.text();
+
+      if (!response.ok) {
+        console.error("[API /api/auth] Backend auth failed:", response.status, responseText.substring(0, 200));
+        return new NextResponse(responseText, {
+          status: response.status,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+      }
+
+      console.log("[API /api/auth] Backend auth successful");
+
       return new NextResponse(responseText, {
-        status: response.status,
+        status: 200,
         headers: {
           "Content-Type": "application/json",
         },
       });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      // Handle timeout and network errors
+      if (fetchError instanceof Error) {
+        if (fetchError.name === 'AbortError') {
+          console.error("[API /api/auth] Backend request timeout");
+          return new NextResponse(
+            JSON.stringify({ error: "Authentication service timeout" }),
+            {
+              status: 504,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      }
+
+      throw fetchError;
     }
-
-    console.log("[API /api/auth] Backend auth successful");
-
-    return new NextResponse(responseText, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
   } catch (error) {
     return handleApiError(error, "API /api/auth");
   }

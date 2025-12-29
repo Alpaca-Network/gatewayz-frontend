@@ -2,15 +2,50 @@ import { NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 
 /**
+ * Custom error class that preserves HTTP status codes
+ */
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    public statusCode: number,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
+/**
  * Standardized API error handler
  * @param error - The error object
  * @param context - Context string for logging (e.g., "Checkout API", "Chat Sessions")
- * @returns NextResponse with error details and 500 status
+ * @returns NextResponse with error details and appropriate status code
  */
 export function handleApiError(error: unknown, context: string = 'API'): NextResponse {
   console.error(`[${context}] Error:`, error);
 
-  // Capture exception in Sentry with context
+  // Check if this is an HttpError with a specific status code
+  if (error instanceof HttpError) {
+    // Capture in Sentry with appropriate level based on status code
+    Sentry.captureException(error, {
+      tags: {
+        context,
+        error_type: 'api_error',
+        status_code: error.statusCode,
+      },
+      level: error.statusCode >= 500 ? 'error' : 'warning',
+    });
+
+    return NextResponse.json(
+      {
+        error: error.message,
+        details: error.details
+      },
+      { status: error.statusCode }
+    );
+  }
+
+  // Generic error - log as 500
   Sentry.captureException(error, {
     tags: {
       context,

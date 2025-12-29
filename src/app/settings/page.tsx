@@ -16,10 +16,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { useToast } from "@/hooks/use-toast";
-import { makeAuthenticatedRequest, getUserData } from "@/lib/api";
+import { makeAuthenticatedRequest } from "@/lib/api";
+import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { API_BASE_URL } from "@/lib/config";
 import { models } from "@/lib/models-data";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 
 // Get unique providers from models data
 const getUniqueProviders = () => {
@@ -36,9 +37,11 @@ export default function SettingsPage() {
   const router = useRouter();
   const { user } = usePrivy();
   const { toast } = useToast();
+  const { status, apiKey, privyReady, login } = useGatewayzAuth();
 
   // State management
   const [loading, setLoading] = useState(true);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [lowBalanceNotifications, setLowBalanceNotifications] = useState(true);
   const [lowBalanceThreshold, setLowBalanceThreshold] = useState(5.00);
@@ -51,25 +54,51 @@ export default function SettingsPage() {
 
   const availableProviders = getUniqueProviders();
 
+  // Check if auth is still loading
+  const isAuthLoading = !privyReady || status === "idle" || status === "authenticating";
+  const isAuthenticated = status === "authenticated" && apiKey;
+
+  // Get user email from Privy
   useEffect(() => {
+    if (user) {
+      const email = user?.email?.address || user?.google?.email || user?.github?.email || "";
+      setUserEmail(email);
+    }
+  }, [user]);
+
+  // Reset settingsLoaded when user logs out so settings are re-fetched on next login
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setSettingsLoaded(false);
+    }
+  }, [isAuthenticated]);
+
+  // Load settings only after authentication is complete
+  useEffect(() => {
+    // Don't load settings if not authenticated or already loaded
+    if (!isAuthenticated || settingsLoaded) {
+      return;
+    }
+
+    // Use AbortController to cancel in-flight requests on cleanup
+    // This prevents race conditions when user logs out during a fetch
+    const abortController = new AbortController();
+    let isCancelled = false;
+
     const loadSettings = async () => {
       setLoading(true);
 
-      // Get user email from Privy
-      if (user) {
-        const email = user?.email?.address || user?.google?.email || user?.github?.email || "";
-        setUserEmail(email);
-      }
-
-      // Wait for authentication if needed
-      const userData = getUserData();
-      if (!userData) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
       try {
-        // Fetch user settings from backend
-        const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/settings`);
+        // Fetch user settings from backend - now safe because apiKey is available
+        const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/settings`, {
+          signal: abortController.signal,
+        });
+
+        // Check if effect was cleaned up while request was in flight
+        if (isCancelled) {
+          return;
+        }
+
         if (response.ok) {
           const data = await response.json();
 
@@ -81,16 +110,30 @@ export default function SettingsPage() {
           setIgnoredProviders(data.ignored_providers || []);
           setDefaultProviderSort(data.default_provider_sort || "balanced");
           setDefaultModel(data.default_model || "auto-router");
+          // Only mark as loaded on successful API response
+          setSettingsLoaded(true);
         }
       } catch (error) {
+        // Ignore abort errors - they're expected when effect cleans up
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
         console.error("Error loading settings:", error);
       } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          setLoading(false);
+        }
       }
     };
 
     loadSettings();
-  }, [user]);
+
+    // Cleanup: cancel in-flight request when effect re-runs or component unmounts
+    return () => {
+      isCancelled = true;
+      abortController.abort();
+    };
+  }, [isAuthenticated, settingsLoaded]);
 
   const saveSettings = async () => {
     setSaving(true);
@@ -148,11 +191,41 @@ export default function SettingsPage() {
     setIgnoredProviders(ignoredProviders.filter(p => p !== providerId));
   };
 
-  if (loading) {
+  // Show loading state while auth is in progress
+  if (isAuthLoading) {
     return (
       <div className="flex-1 space-y-10">
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-muted-foreground">Loading settings...</p>
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Connecting to your account...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Show sign-in prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="flex-1 space-y-10">
+        <h1 className="text-3xl font-bold">Settings</h1>
+        <div className="flex flex-col items-center gap-4 py-8">
+          <p className="text-muted-foreground">Please sign in to view your settings.</p>
+          <Button onClick={() => login()}>Sign In</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state while settings are being fetched
+  if (loading && !settingsLoaded) {
+    return (
+      <div className="flex-1 space-y-10">
+        <h1 className="text-3xl font-bold">Settings</h1>
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading settings...</span>
+        </div>
       </div>
     );
   }
@@ -332,7 +405,7 @@ export default function SettingsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="auto-router">Alpaca Router</SelectItem>
+            <SelectItem value="auto-router">Gatewayz Router</SelectItem>
             {models.slice(0, 20).map(model => (
               <SelectItem key={model.name} value={model.name}>
                 {model.name}

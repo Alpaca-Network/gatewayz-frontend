@@ -46,7 +46,7 @@ export function ModelTierBadge({ requiredTier, showLocked = true }: ModelTierBad
       )}
     >
       {!hasAccess && <Lock className="h-3 w-3" />}
-      {tierConfig.name} {hasAccess ? 'included' : 'only'}
+      {`${tierConfig.name} ${hasAccess ? 'included' : 'only'}`}
     </Badge>
   );
 }

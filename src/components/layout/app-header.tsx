@@ -1,10 +1,11 @@
 
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Sheet, SheetContent, SheetTrigger, SheetOverlay, SheetPortal, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { UserNav } from "./user-nav";
@@ -15,6 +16,7 @@ import { CreditsDisplay } from "./credits-display";
 import { Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
+import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
 
 const getWalletAddress = (user: any) => {
   try {
@@ -28,11 +30,69 @@ const getWalletAddress = (user: any) => {
 };
 
 export function AppHeader() {
-  const { privyUser: user, login, logout, status } = useGatewayzAuth();
+  const { privyUser: user, login, logout, status, authTiming, error: authError } = useGatewayzAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { toast } = useToast();
+  const pathname = usePathname();
   const walletAddress = useMemo(() => getWalletAddress(user), [user]);
   const isAuthenticating = status === "authenticating";
+  const authToastShownRef = useRef(false);
+  const slowAuthToastShownRef = useRef(false);
+
+  // Show toast when authentication starts and completes
+  // Skip showing toast on chat page to avoid clutter
+  useEffect(() => {
+    // Don't show auth toasts on the chat page
+    if (pathname === "/chat") {
+      return;
+    }
+
+    if (status === "authenticating" && !authToastShownRef.current) {
+      authToastShownRef.current = true;
+      toast({
+        title: "Signing in...",
+        description: "Connecting to your account",
+      });
+    } else if (status === "authenticated") {
+      authToastShownRef.current = false;
+      slowAuthToastShownRef.current = false;
+      toast({
+        title: "Signed in successfully",
+        description: "Welcome back!",
+      });
+    } else if (status === "error") {
+      authToastShownRef.current = false;
+      slowAuthToastShownRef.current = false;
+      toast({
+        title: "Sign in failed",
+        description: authError || "Please try again",
+        variant: "destructive",
+      });
+    } else if (status === "unauthenticated") {
+      // Reset refs when user cancels login or Privy state becomes invalid
+      // This ensures subsequent sign-in attempts will show toasts correctly
+      authToastShownRef.current = false;
+      slowAuthToastShownRef.current = false;
+    }
+  }, [status, toast, pathname, authError]);
+
+  // Show additional toast when auth is taking too long
+  useEffect(() => {
+    if (pathname === "/chat") {
+      return;
+    }
+
+    // Show slow auth warning after 10 seconds
+    if (status === "authenticating" && authTiming.elapsedMs > 10000 && !slowAuthToastShownRef.current) {
+      slowAuthToastShownRef.current = true;
+      toast({
+        title: "Backend is slow",
+        description: authTiming.retryCount > 1
+          ? `Retry attempt ${authTiming.retryCount} of ${authTiming.maxRetries}...`
+          : "Please wait while we connect to our servers...",
+      });
+    }
+  }, [status, authTiming, toast, pathname]);
 
   const formatAddress = (address: string) => {
     if (!address) return '';
@@ -141,6 +201,7 @@ export function AppHeader() {
             <Link href="/chat" className="transition-colors hover:text-foreground/80 ">Chat</Link>
             <Link href="/developers" className="transition-colors hover:text-foreground/80 ">Researchers</Link>
             <Link href="/rankings" className="transition-colors hover:text-foreground/80 ">Ranking</Link>
+            <Link href="https://blog.gatewayz.ai" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground/80 ">Insights</Link>
             <Link href="https://docs.gatewayz.ai/" target="_blank" rel="noopener noreferrer" className="transition-colors hover:text-foreground/80 ">Docs</Link>
           </nav>
 
@@ -156,7 +217,7 @@ export function AppHeader() {
                 <UserNav user={user} />
               </>
             ) : (
-              <Button variant="outline" onClick={() => login()}>Sign In</Button>
+              <Button variant="outline" onClick={() => { trackTwitterSignupClick(); login(); }}>Sign In</Button>
             )}
             <ThemeToggle />
           </div>
@@ -170,7 +231,7 @@ export function AppHeader() {
               </>
             )}
             {!user && (
-              <Button variant="outline" size="sm" onClick={() => login()}>Sign In</Button>
+              <Button variant="outline" size="sm" onClick={() => { trackTwitterSignupClick(); login(); }}>Sign In</Button>
             )}
           </div>
           <div className="lg:hidden shrink-0">
@@ -217,6 +278,15 @@ export function AppHeader() {
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       Ranking
+                    </Link>
+                    <Link
+                      href="https://blog.gatewayz.ai"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Insights
                     </Link>
                     <Link
                       href="https://docs.gatewayz.ai/"
@@ -348,11 +418,18 @@ export function AppHeader() {
                         className="w-full"
                         disabled={isAuthenticating}
                         onClick={() => {
+                          trackTwitterSignupClick();
                           login();
                           setMobileMenuOpen(false);
                         }}
                       >
-                        {isAuthenticating ? "Connecting..." : "Sign In"}
+                        {isAuthenticating
+                          ? authTiming.isSlowAuth
+                            ? authTiming.retryCount > 1
+                              ? `Retrying (${authTiming.retryCount}/${authTiming.maxRetries})...`
+                              : "Backend slow, please wait..."
+                            : "Connecting..."
+                          : "Sign In"}
                       </Button>
                     </>
                   )}

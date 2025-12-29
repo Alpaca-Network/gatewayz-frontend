@@ -1,3 +1,5 @@
+import { safeSessionStorage } from '@/lib/safe-session-storage';
+
 /**
  * Session Transfer Module
  *
@@ -16,12 +18,14 @@ const SESSION_TRANSFER_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
  * @param userId - Gatewayz user ID
  * @param betaDomain - Beta domain URL (default: https://beta.gatewayz.ai)
  * @param returnUrl - Optional URL to return to after auth on beta domain
+ * @param action - Optional action parameter (e.g., 'signin', 'freetrial')
  */
 export function redirectToBetaWithSession(
   token: string,
   userId: string | number,
   betaDomain: string = 'https://beta.gatewayz.ai',
-  returnUrl?: string
+  returnUrl?: string,
+  action?: string
 ): void {
   const params = new URLSearchParams();
   params.append('token', token);
@@ -31,10 +35,15 @@ export function redirectToBetaWithSession(
     params.append('returnUrl', returnUrl);
   }
 
+  if (action) {
+    params.append('action', action);
+  }
+
   const redirectUrl = `${betaDomain}?${params.toString()}`;
   console.log('[SessionTransfer] Redirecting to beta with session:', {
     domain: betaDomain,
     hasReturnUrl: !!returnUrl,
+    action: action || undefined,
   });
 
   // Use location.href for a hard redirect
@@ -76,7 +85,21 @@ export function cleanupSessionTransferParams(): void {
   }
 
   // Replace current history entry to remove transfer params from URL
-  window.history.replaceState({}, document.title, window.location.pathname);
+  // Use replaceState to avoid creating a new history entry
+  try {
+    window.history.replaceState({}, document.title, window.location.pathname);
+    console.log('[SessionTransfer] URL parameters cleaned up from history');
+  } catch (error) {
+    console.warn('[SessionTransfer] Failed to cleanup URL parameters:', error);
+    // Fallback: try again with just pathname
+    try {
+      const url = new URL(window.location.href);
+      url.search = '';
+      window.history.replaceState({}, document.title, url.toString());
+    } catch (fallbackError) {
+      console.error('[SessionTransfer] Failed to cleanup URL even with fallback:', fallbackError);
+    }
+  }
 }
 
 /**
@@ -91,14 +114,49 @@ export function storeSessionTransferToken(token: string, userId: string | number
   }
 
   const timestamp = Date.now();
-  sessionStorage.setItem(SESSION_TRANSFER_TOKEN_KEY, token);
-  sessionStorage.setItem(SESSION_TRANSFER_USER_ID_KEY, String(userId));
-  sessionStorage.setItem(SESSION_TRANSFER_TIMESTAMP_KEY, String(timestamp));
+
+  // Store with additional security metadata
+  const sessionData = {
+    token,
+    userId: String(userId),
+    timestamp,
+    origin: window.location.origin,
+    fingerprint: generateSessionFingerprint(),
+  };
+
+  // Store as a single JSON object for better security
+  safeSessionStorage.setItem(SESSION_TRANSFER_TOKEN_KEY, JSON.stringify(sessionData));
 
   console.log('[SessionTransfer] Stored session transfer token:', {
     userId,
     timestamp,
+    origin: sessionData.origin,
   });
+}
+
+/**
+ * Generate a browser fingerprint for session validation
+ */
+function generateSessionFingerprint(): string {
+  const components = [
+    navigator.userAgent,
+    navigator.language,
+    new Date().getTimezoneOffset().toString(),
+    window.screen.width.toString(),
+    window.screen.height.toString(),
+    window.screen.colorDepth?.toString() || 'unknown',
+  ];
+
+  // Simple hash function for fingerprinting
+  let hash = 0;
+  const str = components.join('|');
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+
+  return hash.toString(36);
 }
 
 /**
@@ -114,33 +172,55 @@ export function getStoredSessionTransferToken(): {
     return { token: null, userId: null };
   }
 
-  const token = sessionStorage.getItem(SESSION_TRANSFER_TOKEN_KEY);
-  const userId = sessionStorage.getItem(SESSION_TRANSFER_USER_ID_KEY);
-  const timestamp = sessionStorage.getItem(SESSION_TRANSFER_TIMESTAMP_KEY);
+  try {
+    const storedData = safeSessionStorage.getItem(SESSION_TRANSFER_TOKEN_KEY);
 
-  // Check if token exists
-  if (!token || !userId) {
-    return { token: null, userId: null };
-  }
+    if (!storedData) {
+      return { token: null, userId: null };
+    }
 
-  // Check if token has expired
-  if (timestamp) {
-    const storedTime = parseInt(timestamp, 10);
-    const elapsed = Date.now() - storedTime;
+    // Parse the stored JSON data
+    const sessionData = JSON.parse(storedData);
 
+    // Validate structure
+    if (!sessionData.token || !sessionData.userId) {
+      clearSessionTransferToken();
+      return { token: null, userId: null };
+    }
+
+    // Check if token has expired
+    const elapsed = Date.now() - sessionData.timestamp;
     if (elapsed > SESSION_TRANSFER_EXPIRY_MS) {
       console.log('[SessionTransfer] Session transfer token expired, clearing');
       clearSessionTransferToken();
       return { token: null, userId: null };
     }
 
+    // Validate fingerprint for additional security
+    const currentFingerprint = generateSessionFingerprint();
+    if (sessionData.fingerprint && sessionData.fingerprint !== currentFingerprint) {
+      console.warn('[SessionTransfer] Session fingerprint mismatch - potential security issue');
+      // Log but don't block - fingerprint can change with browser updates
+    }
+
+    // Validate origin
+    if (sessionData.origin && sessionData.origin !== window.location.origin) {
+      console.error('[SessionTransfer] Origin mismatch - blocking potential CSRF attack');
+      clearSessionTransferToken();
+      return { token: null, userId: null };
+    }
+
     console.log('[SessionTransfer] Retrieved valid session transfer token:', {
-      userId,
+      userId: sessionData.userId,
       expiresIn: SESSION_TRANSFER_EXPIRY_MS - elapsed,
     });
-  }
 
-  return { token, userId };
+    return { token: sessionData.token, userId: sessionData.userId };
+  } catch (error) {
+    console.error('[SessionTransfer] Error retrieving session token:', error);
+    clearSessionTransferToken();
+    return { token: null, userId: null };
+  }
 }
 
 /**
@@ -151,9 +231,12 @@ export function clearSessionTransferToken(): void {
     return;
   }
 
-  sessionStorage.removeItem(SESSION_TRANSFER_TOKEN_KEY);
-  sessionStorage.removeItem(SESSION_TRANSFER_USER_ID_KEY);
-  sessionStorage.removeItem(SESSION_TRANSFER_TIMESTAMP_KEY);
+  // Clear the main token key (now stores JSON)
+  safeSessionStorage.removeItem(SESSION_TRANSFER_TOKEN_KEY);
+
+  // Clear legacy keys if they exist (backward compatibility)
+  safeSessionStorage.removeItem(SESSION_TRANSFER_USER_ID_KEY);
+  safeSessionStorage.removeItem(SESSION_TRANSFER_TIMESTAMP_KEY);
 
   console.log('[SessionTransfer] Cleared session transfer token');
 }

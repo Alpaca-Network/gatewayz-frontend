@@ -12,20 +12,24 @@ Sentry has been successfully integrated into the Gatewayz Beta application for c
 ### Configuration Files Created
 
 1. **`sentry.client.config.ts`** - Client-side Sentry configuration
-   - Session Replay enabled
+   - Automatically loaded by Sentry Next.js plugin
+   - Session Replay enabled (100% on errors, 10% on normal sessions)
    - Console logging integration
-   - Structured logging enabled
+   - Structured logging enabled with `enableLogs: true`
 
 2. **`sentry.server.config.ts`** - Server-side Sentry configuration
+   - Loaded via `instrumentation.ts` for Node.js runtime
    - Console logging integration
-   - Structured logging enabled
+   - Structured logging enabled with `enableLogs: true`
 
 3. **`sentry.edge.config.ts`** - Edge runtime Sentry configuration
+   - Loaded via `instrumentation.ts` for Edge runtime
    - Minimal configuration for edge functions
-   - Structured logging enabled
+   - Structured logging enabled with `enableLogs: true`
 
 4. **`instrumentation.ts`** - Next.js instrumentation file
-   - Automatically loads Sentry based on runtime
+   - Automatically loads server and edge configs based on runtime
+   - Required for server-side Sentry initialization
 
 5. **`.sentryclirc`** - Sentry CLI configuration
    - Organization: alpaca-network

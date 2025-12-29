@@ -133,14 +133,14 @@ export default function DevelopersPage() {
         today: 'Top today',
     };
 
+    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+
     useEffect(() => {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-                
-                // Fetch ranking models
-                const rankingUrl = `${apiBaseUrl}/ranking/models`;
+                // Fetch ranking models using Next.js API proxy to avoid CORS issues
+                const rankingUrl = '/api/ranking/models';
                 console.log('Fetching ranking models from:', rankingUrl);
                 const rankingResponse = await fetch(rankingUrl);
                 console.log('Ranking response status:', rankingResponse.status);
@@ -154,20 +154,43 @@ export default function DevelopersPage() {
                     }
                 }
 
-                // Fetch all models to get complete developer list
-                const modelsUrl = `${apiBaseUrl}/v1/models?limit=5000`;
-                console.log('Fetching models from:', modelsUrl);
-                const modelsResponse = await fetch(modelsUrl);
-                console.log('Models response status:', modelsResponse.status);
+                // Fetch all models with pagination to get complete developer list
+                const allModels: any[] = [];
+                let offset = 0;
+                let hasMore = true;
+                const pageSize = 5000;
 
-                if (modelsResponse.ok) {
-                    const modelsData = await modelsResponse.json();
-                    console.log('Received models data:', modelsData.data?.length);
-                    if (modelsData.data) {
-                        setApiModels(modelsData.data);
-                        console.log('Set API models:', modelsData.data.length);
+                while (hasMore) {
+                    const offsetParam = offset > 0 ? `&offset=${offset}` : '';
+                    const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+                const modelsUrl = `${apiBaseUrl}/v1/models?limit=${pageSize}${offsetParam}`;
+                    console.log('Fetching models from:', modelsUrl);
+                    const modelsResponse = await fetch(modelsUrl);
+                    console.log('Models response status:', modelsResponse.status);
+
+                    if (modelsResponse.ok) {
+                        const modelsData = await modelsResponse.json();
+                        console.log('Received models data:', modelsData.data?.length);
+                        if (modelsData.data && Array.isArray(modelsData.data) && modelsData.data.length > 0) {
+                            allModels.push(...modelsData.data);
+                            console.log('Total models fetched so far:', allModels.length);
+
+                            // If we got fewer models than requested, we've reached the end
+                            if (modelsData.data.length < pageSize) {
+                                hasMore = false;
+                            } else {
+                                offset += pageSize;
+                            }
+                        } else {
+                            hasMore = false;
+                        }
+                    } else {
+                        hasMore = false;
                     }
                 }
+
+                setApiModels(allModels);
+                console.log('Set API models:', allModels.length);
             } catch (error) {
                 console.log('Failed to fetch data:', error);
             } finally {

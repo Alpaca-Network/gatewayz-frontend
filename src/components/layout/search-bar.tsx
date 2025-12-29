@@ -1,12 +1,14 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
-import { Search, Bot } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import Link from 'next/link';
 import { models as staticModels } from '@/lib/models-data';
+import { getModelUrl } from '@/lib/utils';
+import { safeParseJson } from '@/lib/http';
 
 interface Model {
     id: string;
@@ -19,11 +21,21 @@ interface SearchBarProps {
     autoOpenOnFocus?: boolean;
 }
 
+type ModelCache = {
+    data: Model[];
+    timestamp: number;
+};
+
+const MEMORY_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+let inMemoryModelCache: ModelCache | null = null;
+
 export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
     const [open, setOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [allModels, setAllModels] = useState<Model[]>([]);
     const [loading, setLoading] = useState(false);
+    const [shouldFetchModels, setShouldFetchModels] = useState(false);
+    const fetchTriggeredRef = useRef(false);
 
     // Transform static models to the format we need
     const staticModelsList = useMemo(() =>
@@ -36,67 +48,68 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
         []
     );
 
-    // Load models from cache or API
     useEffect(() => {
-        const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
-        const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
-
-        // Start with static models for instant search
         setAllModels(staticModelsList);
+    }, [staticModelsList]);
+
+    useEffect(() => {
+        if (inMemoryModelCache && Date.now() - inMemoryModelCache.timestamp < MEMORY_CACHE_DURATION) {
+            setAllModels(inMemoryModelCache.data);
+        }
+    }, []);
+
+    const enableModelFetch = useCallback(() => {
+        if (fetchTriggeredRef.current) {
+            return;
+        }
+        fetchTriggeredRef.current = true;
+        setShouldFetchModels(true);
+    }, []);
+
+    useEffect(() => {
+        if (open) {
+            enableModelFetch();
+        }
+    }, [open, enableModelFetch]);
+
+    useEffect(() => {
+        if (!shouldFetchModels) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const hydrateFromCache = () => {
+            if (inMemoryModelCache && Date.now() - inMemoryModelCache.timestamp < MEMORY_CACHE_DURATION) {
+                setAllModels(inMemoryModelCache.data);
+                return true;
+            }
+            return false;
+        };
+
+        if (hydrateFromCache()) {
+            return;
+        }
 
         const fetchModels = async () => {
+            setLoading(true);
             try {
-                // Check cache first
-                const cached = localStorage.getItem(CACHE_KEY);
-                if (cached) {
-                    try {
-                        const { data, timestamp } = JSON.parse(cached);
-                        if (Date.now() - timestamp < CACHE_DURATION) {
-                            setAllModels(data);
-                            return;
-                        }
-                    } catch (e) {
-                        console.log('Cache parse error:', e);
-                    }
+                // Single API call to fetch models from all gateways
+                // This replaces 7 individual gateway calls to fix N+1 API performance issue
+                const response = await fetch(`/api/models?gateway=all&limit=1000`);
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch models: ${response.status}`);
                 }
 
-                // Fetch from API in background
-                setLoading(true);
-                const [openrouterRes, portkeyRes, featherlessRes, chutesRes, fireworksRes, togetherRes, groqRes] = await Promise.allSettled([
-                    fetch(`/api/models?gateway=openrouter`),
-                    fetch(`/api/models?gateway=portkey`),
-                    fetch(`/api/models?gateway=featherless`),
-                    fetch(`/api/models?gateway=chutes`),
-                    fetch(`/api/models?gateway=fireworks`),
-                    fetch(`/api/models?gateway=together`),
-                    fetch(`/api/models?gateway=groq`)
-                ]);
+                const payload = await safeParseJson<{ data?: Model[] }>(
+                    response,
+                    '[SearchBar] all-gateways'
+                );
 
-                const getData = async (result: PromiseSettledResult<Response>) => {
-                    if (result.status === 'fulfilled') {
-                        try {
-                            const data = await result.value.json();
-                            return data.data || [];
-                        } catch (e) {
-                            return [];
-                        }
-                    }
-                    return [];
-                };
+                const combinedModels = payload?.data || [];
 
-                const [openrouterData, portkeyData, featherlessData, chutesData, fireworksData, togetherData, groqData] = await Promise.all([
-                    getData(openrouterRes),
-                    getData(portkeyRes),
-                    getData(featherlessRes),
-                    getData(chutesRes),
-                    getData(fireworksRes),
-                    getData(togetherRes),
-                    getData(groqRes)
-                ]);
-
-                const combinedModels = [...openrouterData, ...portkeyData, ...featherlessData, ...chutesData, ...fireworksData, ...togetherData, ...groqData];
-
-                // Deduplicate by ID
+                // Deduplicate models by ID (backend should handle this, but extra safety)
                 const uniqueModelsMap = new Map();
                 combinedModels.forEach((model: any) => {
                     if (!uniqueModelsMap.has(model.id)) {
@@ -105,32 +118,32 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
                 });
                 const models = Array.from(uniqueModelsMap.values());
 
-                setAllModels(models);
-
-                // Cache the results
-                try {
-                    const compactModels = models.map((m: any) => ({
-                        id: m.id,
-                        name: m.name,
-                        description: m.description?.substring(0, 100),
-                        provider_slug: m.provider_slug
-                    }));
-                    localStorage.setItem(CACHE_KEY, JSON.stringify({
-                        data: compactModels,
+                if (!cancelled) {
+                    setAllModels(models);
+                    inMemoryModelCache = {
+                        data: models,
                         timestamp: Date.now()
-                    }));
-                } catch (e) {
-                    console.log('Failed to cache models');
+                    };
                 }
             } catch (error) {
-                console.log('Failed to fetch models:', error);
+                if (!cancelled) {
+                    console.log('Failed to fetch models:', error);
+                    // Fallback to static models on error
+                    setAllModels(staticModelsList);
+                }
             } finally {
-                setLoading(false);
+                if (!cancelled) {
+                    setLoading(false);
+                }
             }
         };
 
         fetchModels();
-    }, [staticModelsList]);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [shouldFetchModels]);
 
     const filteredModels = useMemo(() => {
         if (!searchTerm) return allModels.slice(0, 10);
@@ -150,10 +163,21 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
                     type="search"
                     placeholder="Search Models..."
                     className="pl-3 pr-10 h-[45px] w-full"
-                    onFocus={() => autoOpenOnFocus && setOpen(true)}
-                    onClick={() => setOpen(true)}
+                    onFocus={() => {
+                        if (autoOpenOnFocus) {
+                            setOpen(true);
+                        }
+                        enableModelFetch();
+                    }}
+                    onClick={() => {
+                        setOpen(true);
+                        enableModelFetch();
+                    }}
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e) => {
+                        enableModelFetch();
+                        setSearchTerm(e.target.value);
+                    }}
                 />
                 {/* <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /> */}
                 <img src="/material-symbols_search.svg" alt="Search" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" style={{ width: "24px", height: "24px" }} />
@@ -171,9 +195,9 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
                     <div className="flex flex-col">
                         {filteredModels.length > 0 ? (
                             filteredModels.map(model => {
-                                // Encode model ID to handle special characters like parentheses in model names
-                                const modelUrl = `/models/${encodeURIComponent(model.id)}`;
-                                
+                                // Generate clean URL in format /models/[developer]/[model]
+                                const modelUrl = getModelUrl(model.id, model.provider_slug);
+
                                 return (
                                 <Link
                                     key={model.id}

@@ -4,10 +4,66 @@
 import { POST } from '../route';
 import { NextRequest } from 'next/server';
 import * as proxyFetch from '@/lib/proxy-fetch';
+import {
+  TEST_USER,
+  TEST_NEW_USER,
+  TEST_PRO_USER,
+  TEST_TIMESTAMPS,
+} from '@/__tests__/utils/test-constants';
 
 // Mock the proxy-fetch module
 jest.mock('@/lib/proxy-fetch', () => ({
   proxyFetch: jest.fn(),
+}));
+
+/**
+ * Helper to create a mock Response for proxyFetch
+ * Uses text() method since that's what the route handler expects
+ */
+function createMockProxyResponse(data: unknown, status = 200): object {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(data),
+  };
+}
+
+// Mock retry-utils with instant retries (no delays) for faster tests
+jest.mock('@/lib/retry-utils', () => ({
+  retryFetch: jest.fn(async (
+    fetchFn: () => Promise<any>,
+    options?: {
+      maxRetries?: number;
+      retryableStatuses?: number[];
+    }
+  ) => {
+    const maxRetries = options?.maxRetries ?? 3;
+    const retryableStatuses = options?.retryableStatuses ?? [502, 503, 504];
+
+    let lastError: any;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetchFn();
+
+        // Check if response has a status code that should be retried
+        if (response && typeof response.status === 'number' &&
+            !response.ok && retryableStatuses.includes(response.status) &&
+            attempt < maxRetries) {
+          // Retry on retryable status codes
+          continue;
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        // Continue to retry on errors
+      }
+    }
+    throw lastError;
+  }),
 }));
 
 // Mock the error handler
@@ -83,13 +139,13 @@ describe('POST /api/auth', () => {
 
       expect(mockProxyFetch).toHaveBeenCalledWith(
         'https://api.gatewayz.ai/auth',
-        {
+        expect.objectContaining({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(mockAuthRequest),
-        }
+        })
       );
     });
 
@@ -516,7 +572,7 @@ describe('POST /api/auth', () => {
         success: true,
         message: 'User authenticated successfully',
         user_id: 123456,
-        api_key: 'gw_live_abc123def456',
+        api_key: 'gw_live_test_key_123456', // Test fixture, not a real secret
         auth_method: 'email',
         privy_user_id: 'did:privy:cm5abc123',
         is_new_user: true,
@@ -544,7 +600,7 @@ describe('POST /api/auth', () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       expect(data.is_new_user).toBe(true);
-      expect(data.api_key).toBe('gw_live_abc123def456');
+      expect(data.api_key).toBe('gw_live_test_key_123456');
       expect(data.credits).toBe(500);
       expect(data.tier).toBe('basic');
       // Note: Console logging assertions can be flaky in tests
@@ -562,7 +618,7 @@ describe('POST /api/auth', () => {
         success: true,
         message: 'User authenticated successfully',
         user_id: 789012,
-        api_key: 'gw_live_xyz789abc',
+        api_key: 'gw_live_test_key_789012', // Test fixture, not a real secret
         auth_method: 'google',
         privy_user_id: 'did:privy:google789xyz',
         is_new_user: false,
@@ -595,6 +651,297 @@ describe('POST /api/auth', () => {
       expect(data.tier).toBe('pro');
       expect(data.subscription_status).toBe('active');
       expect(data.credits).toBe(2500);
+      expect(data.api_key).toBe('gw_live_test_key_789012');
+    });
+  });
+
+  describe('502 Bad Gateway - Retry Logic', () => {
+    it('should retry and succeed after initial 502 error', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'privy-123',
+        auth_method: 'email',
+        email: 'test@example.com',
+        display_name: 'Test User',
+      };
+
+      const mockAuthResponse = {
+        success: true,
+        user_id: 12345,
+        api_key: 'gw_test_key_abc123',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        is_new_user: false,
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 500,
+        timestamp: '2025-01-01T00:00:00Z',
+      };
+
+      // Mock 502 error first, then success on retry
+      mockProxyFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 502,
+          text: async () => JSON.stringify({ error: 'Bad Gateway' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(mockAuthResponse),
+        });
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.api_key).toBe('gw_test_key_abc123');
+
+      // Should have been called twice (initial attempt + 1 retry)
+      expect(mockProxyFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry multiple times on consecutive 502 errors and eventually fail', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'privy-123',
+        auth_method: 'email',
+      };
+
+      // Mock consecutive 502 errors (will exhaust retries)
+      mockProxyFetch
+        .mockResolvedValue({
+          ok: false,
+          status: 502,
+          text: async () => JSON.stringify({ error: 'Bad Gateway' }),
+        });
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(502);
+      expect(data.error).toBe('Bad Gateway');
+
+      // Should have retried 3 times (initial + 3 retries = 4 total calls)
+      expect(mockProxyFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('should handle 503 Service Unavailable with retry', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'privy-123',
+        auth_method: 'email',
+        email: 'test@example.com',
+        display_name: 'Test User',
+      };
+
+      const mockAuthResponse = {
+        success: true,
+        user_id: 12345,
+        api_key: 'gw_test_key_abc123',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        is_new_user: false,
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 500,
+      };
+
+      // Mock 503 error, then success on retry
+      mockProxyFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          text: async () => JSON.stringify({ error: 'Service Unavailable' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(mockAuthResponse),
+        });
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(mockProxyFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle 504 Gateway Timeout with retry', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'privy-123',
+        auth_method: 'email',
+        email: 'test@example.com',
+        display_name: 'Test User',
+      };
+
+      const mockAuthResponse = {
+        success: true,
+        user_id: 12345,
+        api_key: 'gw_test_key_abc123',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        is_new_user: false,
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 500,
+      };
+
+      // Mock 504 error, then success on retry
+      mockProxyFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 504,
+          text: async () => JSON.stringify({ error: 'Gateway Timeout' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(mockAuthResponse),
+        });
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(mockProxyFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not retry on client errors like 401', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'invalid-user',
+        auth_method: 'email',
+      };
+
+      const mockErrorResponse = {
+        error: 'Invalid credentials',
+        detail: 'User authentication failed',
+      };
+
+      mockProxyFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify(mockErrorResponse),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.error).toBe('Invalid credentials');
+
+      // Should NOT retry on 401 - called only once
+      expect(mockProxyFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not retry on 500 Internal Server Error', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'privy-123',
+        auth_method: 'email',
+      };
+
+      const mockErrorResponse = {
+        error: 'Internal Server Error',
+        detail: 'Database connection failed',
+      };
+
+      mockProxyFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => JSON.stringify(mockErrorResponse),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.error).toBe('Internal Server Error');
+
+      // Should NOT retry on 500 - called only once
+      expect(mockProxyFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should increment call count for each retry attempt with delays', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'privy-123',
+        auth_method: 'email',
+        email: 'test@example.com',
+        display_name: 'Test User',
+      };
+
+      const mockAuthResponse = {
+        success: true,
+        user_id: 12345,
+        api_key: 'gw_test_key_abc123',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        is_new_user: false,
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 500,
+      };
+
+      // Mock 502, 502, then success (requires 2 retries)
+      mockProxyFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 502,
+          text: async () => JSON.stringify({ error: 'Bad Gateway' }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 502,
+          text: async () => JSON.stringify({ error: 'Bad Gateway' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify(mockAuthResponse),
+        });
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+
+      // Should have called 3 times (initial + 2 retries)
+      expect(mockProxyFetch).toHaveBeenCalledTimes(3);
     });
   });
 });

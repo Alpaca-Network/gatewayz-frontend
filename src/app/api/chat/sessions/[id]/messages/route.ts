@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/app/api/middleware/auth';
 import { handleApiError } from '@/app/api/middleware/error-handler';
 import { CHAT_HISTORY_API_URL } from '@/lib/config';
+import { ChatCacheInvalidation } from '@/lib/chat-cache-invalidation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ export async function POST(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { role, content, model, tokens } = body;
+    const { role, content, model, tokens, reasoning } = body;
 
     // Clean the session ID (remove 'api-' prefix if present)
     const cleanSessionId = id.startsWith('api-') ? id.replace('api-', '') : id;
@@ -29,13 +30,17 @@ export async function POST(
       );
     }
 
-    const messageData = {
+    // Build message data, only include reasoning if present
+    const messageData: Record<string, any> = {
       role: role,
       content: content,
       model: model || '',
       tokens: tokens || 0,
       created_at: new Date().toISOString()
     };
+    if (reasoning) {
+      messageData.reasoning = reasoning;
+    }
 
     const url = `${CHAT_HISTORY_API_URL}/v1/chat/sessions/${cleanSessionId}/messages`;
 
@@ -68,6 +73,13 @@ export async function POST(
     }
 
     const data = await response.json();
+
+    // Invalidate caches when a new message is saved
+    // This updates stats (message count) and search index
+    await ChatCacheInvalidation.onMessageSave(apiKey).catch((err) => {
+      console.warn('[Cache] Failed to invalidate caches:', err);
+    });
+
     return NextResponse.json(data);
   } catch (error) {
     return handleApiError(error, 'Chat Messages API');

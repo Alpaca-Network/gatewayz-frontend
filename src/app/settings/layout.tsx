@@ -16,6 +16,7 @@ const navItems = [
   { href: "/settings/provisioning", label: "Provisioning Keys" },
   { href: "/settings/integrations", label: "Integrations (BYOK)" },
   { href: "/settings/privacy", label: "Privacy" },
+  { href: "/web-vitals", label: "Web Vitals" },
   { href: "/settings", label: "Settings" },
 ];
 
@@ -28,7 +29,7 @@ export default function SettingsLayout({
 
   return (
     <SidebarProvider>
-      <div className="relative flex h-[calc(100vh-130px)]">
+      <div className="relative flex h-[calc(100vh-130px)] overflow-hidden">
         <Sidebar
           variant="sidebar"
           collapsible="icon"

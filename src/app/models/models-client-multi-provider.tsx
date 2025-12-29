@@ -27,9 +27,7 @@ import { Slider } from "@/components/ui/slider";
 import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { stringToColor } from '@/lib/utils';
-import ReactMarkdown from "react-markdown";
-
+import { stringToColor, getModelUrl } from '@/lib/utils';
 interface Model {
   id: string;
   name: string;
@@ -68,7 +66,15 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
   xai: { name: 'xAI', color: 'bg-black' },
   novita: { name: 'Novita', color: 'bg-violet-600' },
   huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
-  near: { name: 'NEAR', color: 'bg-teal-600' }
+  hug: { name: 'Hugging Face', color: 'bg-yellow-600' }, // Backend uses 'hug' abbreviation
+  aimo: { name: 'AiMo', color: 'bg-pink-600' },
+  near: { name: 'NEAR', color: 'bg-teal-600' },
+  fal: { name: 'Fal', color: 'bg-emerald-600' },
+  'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
+  helicone: { name: 'Helicone', color: 'bg-indigo-600' },
+  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
+  alibaba: { name: 'Alibaba', color: 'bg-orange-700' },
+  clarifai: { name: 'Clarifai', color: 'bg-purple-600' }
 };
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
@@ -87,8 +93,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   // Get gateways - support both old and new format
   const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
 
-  // Encode model ID to handle special characters like parentheses in model names
-  const modelUrl = `/models/${encodeURIComponent(model.id)}`;
+  // Generate clean URL in format /models/[developer]/[model]
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
 
   return (
     <Link href={modelUrl} className="h-full block">

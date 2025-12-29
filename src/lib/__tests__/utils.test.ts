@@ -1,4 +1,4 @@
-import { cn, stringToColor, extractTokenValue, normalizeModelId } from '../utils'
+import { cn, stringToColor, extractTokenValue, normalizeModelId, getModelUrl, shortenModelName } from '../utils'
 
 describe('Utils', () => {
   describe('cn', () => {
@@ -93,6 +93,10 @@ describe('Utils', () => {
       expect(normalizeModelId('google/models/gemini-pro')).toBe('google/gemini-pro')
     })
 
+    it('should handle accounts/provider/models/model-name format', () => {
+      expect(normalizeModelId('accounts/fireworks/models/deepseek-r1')).toBe('fireworks/deepseek-r1')
+    })
+
     it('should handle simple model names', () => {
       expect(normalizeModelId('gpt-4')).toBe('gpt-4')
     })
@@ -114,6 +118,79 @@ describe('Utils', () => {
       const normalized = normalizeModelId(modelId)
       const gateway = normalized.split('/')[0]
       expect(gateway).toBe('near')
+    })
+  })
+
+  describe('getModelUrl', () => {
+    it('should handle simple provider/model format', () => {
+      expect(getModelUrl('openai/gpt-4')).toBe('/models/openai/gpt-4')
+    })
+
+    it('should normalize special characters in model names', () => {
+      expect(getModelUrl('openai/gpt-4o')).toBe('/models/openai/gpt-4o')
+    })
+
+    it('should preserve nested paths for NEAR models', () => {
+      expect(getModelUrl('near/deepseek-ai/deepseek-v3-1')).toBe('/models/near/deepseek-ai/deepseek-v3-1')
+    })
+
+    it('should handle NEAR models with multiple path segments', () => {
+      expect(getModelUrl('near/zai-org/GLM-4.6')).toBe('/models/near/zai-org/glm-4-6')
+    })
+
+    it('should handle provider:model format', () => {
+      expect(getModelUrl('aimo:model-name')).toBe('/models/aimo/model-name')
+    })
+
+    it('should handle provider slug fallback', () => {
+      expect(getModelUrl('gpt-4o mini', 'openai')).toBe('/models/openai/gpt-4o-mini')
+    })
+
+    it('should return /models for empty input', () => {
+      expect(getModelUrl('')).toBe('/models')
+    })
+
+    it('should handle FAL models with complex paths', () => {
+      expect(getModelUrl('fal-ai/flux-pro/v1-1-ultra')).toBe('/models/fal-ai/flux-pro/v1-1-ultra')
+    })
+
+    it('should convert provider to lowercase', () => {
+      expect(getModelUrl('OpenAI/GPT-4')).toBe('/models/openai/gpt-4')
+    })
+  })
+
+  describe('shortenModelName', () => {
+    it('should remove gateway prefix from 3-part model names and lowercase', () => {
+      expect(shortenModelName('OpenRouter/deepseek/Deepseek-r1')).toBe('deepseek/deepseek-r1')
+    })
+
+    it('should remove gateway prefix and lowercase', () => {
+      expect(shortenModelName('openrouter/openai/gpt-4o')).toBe('openai/gpt-4o')
+    })
+
+    it('should handle fireworks gateway prefix', () => {
+      expect(shortenModelName('fireworks/meta-llama/llama-3')).toBe('meta-llama/llama-3')
+    })
+
+    it('should lowercase 2-part model names', () => {
+      expect(shortenModelName('deepseek/Deepseek-R1')).toBe('deepseek/deepseek-r1')
+    })
+
+    it('should lowercase single part model names', () => {
+      expect(shortenModelName('GPT-4o')).toBe('gpt-4o')
+    })
+
+    it('should handle 4+ part paths by removing only first part and lowercase', () => {
+      expect(shortenModelName('openrouter/near/deepseek-ai/DeepSeek-V3')).toBe('near/deepseek-ai/deepseek-v3')
+    })
+
+    it('should return empty string as-is', () => {
+      expect(shortenModelName('')).toBe('')
+    })
+
+    it('should handle null/undefined gracefully', () => {
+      expect(shortenModelName(null as unknown as string)).toBe(null)
+      expect(shortenModelName(undefined as unknown as string)).toBe(undefined)
     })
   })
 })

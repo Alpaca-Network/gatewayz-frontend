@@ -95,10 +95,32 @@
         word-wrap: break-word;
         overflow-wrap: break-word;
     }
-    
+
     .mobile-button {
         min-height: 44px; /* iOS touch target size */
         min-width: 44px;
+    }
+
+    /* Ensure all chat content respects mobile width */
+    .prose {
+        max-width: 100% !important;
+        overflow-wrap: break-word;
+        word-wrap: break-word;
+        word-break: break-word;
+    }
+
+    /* Prevent code blocks from overflowing */
+    .prose pre {
+        max-width: 100%;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    /* Ensure images stay within bounds */
+    .prose img {
+        max-width: 100%;
+        height: auto;
     }
 }
 

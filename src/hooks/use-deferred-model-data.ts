@@ -26,7 +26,7 @@ interface DeferredModelData {
   isDeferredDataLoaded: boolean; // Deferred data (providers, related models) is loaded
 }
 
-const CACHE_KEY = 'gatewayz_models_cache_v4_all_gateways';
+const CACHE_KEY = 'gatewayz_models_cache_v6_gateway_fix';
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
 /**
@@ -91,7 +91,7 @@ export function useDeferredModelData(modelId: string, staticModels: Model[]): De
     // PHASE 2: Defer non-critical data (providers, full model list) - load in background
     const loadDeferredData = async () => {
       try {
-        const fetchWithTimeout = (url: string, timeout = 10000) => {
+        const fetchWithTimeout = (url: string, timeout = 30000) => {
           return Promise.race([
             fetch(url),
             new Promise<Response>((_, reject) =>
@@ -100,51 +100,34 @@ export function useDeferredModelData(modelId: string, staticModels: Model[]): De
           ]);
         };
 
-        // Fetch from gateways in parallel (non-blocking for critical render)
-        const gatewayFetches = [
-          fetchWithTimeout(`/api/models?gateway=openrouter`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=portkey`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=featherless`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=chutes`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=fireworks`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=together`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=groq`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=deepinfra`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=google`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=cerebras`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=nebius`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=xai`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=novita`).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=huggingface`, 70000).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=aimo`, 70000).catch(() => null),
-          fetchWithTimeout(`/api/models?gateway=near`, 70000).catch(() => null),
-        ];
+        // Use single gateway=all endpoint instead of N+1 individual gateway calls
+        // This significantly reduces API calls and improves performance
+        let models: Model[] = [];
 
-        const results = await Promise.allSettled(gatewayFetches);
+        try {
+          const response = await fetchWithTimeout(`/api/models?gateway=all`, 60000);
+          if (response.ok) {
+            const data = await response.json();
+            models = data.data || [];
+          }
+        } catch (e) {
+          console.log('Failed to fetch all models, will use cache:', e);
+        }
 
-        const getData = async (result: PromiseSettledResult<Response | null>) => {
-          if (result.status === 'fulfilled' && result.value) {
+        // If gateway=all failed or returned empty, try to use cached data
+        if (models.length === 0) {
+          const cached = localStorage.getItem(CACHE_KEY);
+          if (cached) {
             try {
-              const data = await result.value.json();
-              return data.data || [];
+              const { data } = JSON.parse(cached);
+              if (Array.isArray(data)) {
+                models = data;
+              }
             } catch (e) {
-              return [];
+              console.log('Cache parse error:', e);
             }
           }
-          return [];
-        };
-
-        const allGatewayData = await Promise.all(results.map(getData));
-        const allModelsData = allGatewayData.flat();
-
-        // Deduplicate by ID
-        const uniqueModelsMap = new Map();
-        allModelsData.forEach((model: any) => {
-          if (!uniqueModelsMap.has(model.id)) {
-            uniqueModelsMap.set(model.id, model);
-          }
-        });
-        const models = Array.from(uniqueModelsMap.values());
+        }
 
         // Cache the results
         try {
@@ -187,36 +170,24 @@ export function useDeferredModelData(modelId: string, staticModels: Model[]): De
           }
           setIsLoading(false);
 
-          // Determine which gateways support this model
-          const providers: string[] = [];
-          const modelIdLower = modelId.toLowerCase();
+          // Determine which gateways support this model from the model's source_gateways array
+          // The gateway=all endpoint returns models with source_gateways populated
+          let providers: string[] = [];
 
-          const hasModel = (data: Model[]) => {
-            return data.some((m: Model) => {
-              if (m.id.toLowerCase() === modelIdLower) return true;
-              const modelNamePart = m.id.includes(':') ? m.id.split(':')[1].toLowerCase() : m.id.toLowerCase();
-              if (modelNamePart === modelIdLower) return true;
-              const normalizedModelId = modelIdLower.replace(/[_\-\/]/g, '');
-              const normalizedDataId = m.id.toLowerCase().replace(/[_\-\/]/g, '');
-              if (normalizedModelId === normalizedDataId) return true;
-              if (m.name && m.name.toLowerCase() === model?.name?.toLowerCase()) return true;
-              const lastPart = m.id.split('/').pop()?.toLowerCase();
-              if (lastPart === modelIdLower) return true;
-              return false;
-            });
-          };
+          if (foundModel) {
+            // Models from gateway=all endpoint have source_gateways array
+            const modelWithGateways = foundModel as Model & {
+              source_gateways?: string[];
+              source_gateway?: string;
+            };
 
-          const gatewayNames = [
-            'openrouter', 'portkey', 'featherless', 'chutes', 'fireworks',
-            'together', 'groq', 'deepinfra', 'google', 'cerebras',
-            'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near'
-          ];
-
-          allGatewayData.forEach((data, index) => {
-            if (hasModel(data)) {
-              providers.push(gatewayNames[index]);
+            if (Array.isArray(modelWithGateways.source_gateways) && modelWithGateways.source_gateways.length > 0) {
+              providers = [...modelWithGateways.source_gateways];
+            } else if (modelWithGateways.source_gateway) {
+              // Fallback to single source_gateway if source_gateways not available
+              providers = [modelWithGateways.source_gateway];
             }
-          });
+          }
 
           setModelProviders(providers);
           setIsDeferredDataLoaded(true);

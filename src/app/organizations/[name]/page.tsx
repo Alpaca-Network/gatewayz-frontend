@@ -17,7 +17,7 @@ import { addDays, format, differenceInDays } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import Image from 'next/image';
-import { stringToColor } from '@/lib/utils';
+import { stringToColor, getModelUrl } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
 
 interface ApiModel {
@@ -61,10 +61,8 @@ const ApiModelCard = ({ model }: { model: ApiModel }) => {
   const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
-  // Preserve literal slash in URL (e.g., "provider/model-name")
-  const modelUrl = model.id.includes('/')
-    ? `/models/${model.id}`
-    : `/models/${encodeURIComponent(model.id)}`;
+  // Generate clean URL in format /models/[developer]/[model]
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
 
   return (
     <Link href={modelUrl}>
@@ -167,8 +165,8 @@ export default function OrganizationPage() {
   useEffect(() => {
     const fetchRankingModels = async () => {
         try {
-            const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-            const response = await fetch(`${apiBaseUrl}/ranking/models`);
+            // Use Next.js API proxy to avoid CORS issues
+            const response = await fetch('/api/ranking/models');
             const data = await response.json();
 
             if (data.success && data.data) {

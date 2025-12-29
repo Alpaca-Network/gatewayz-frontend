@@ -1,0 +1,438 @@
+AUTHENTICATION AND SESSION MANAGEMENT ARCHITECTURE - EXECUTIVE SUMMARY
+==========================================================================
+
+CREATED: 2025-11-18
+REPOSITORY: /root/repo (Gatewayz Beta Platform)
+SCOPE: Complete authentication system from login to chat session creation
+
+=======================
+KEY DOCUMENTS CREATED
+=======================
+
+1. /root/repo/AUTH_ARCHITECTURE.md (1,109 lines)
+   - Comprehensive technical reference
+   - Complete file listing with line numbers
+   - Data types and interfaces
+   - Security considerations
+   - Error handling patterns
+   - Testing information
+
+2. /root/repo/AUTH_QUICK_REFERENCE.md
+   - Quick lookup guide
+   - Architecture layers
+   - Core flows (authentication and session transfer)
+   - Storage keys summary
+   - Debugging tips
+   - Deployment checklist
+
+3. /root/repo/AUTH_SUMMARY.txt (this file)
+   - Executive overview
+   - Key file locations
+   - Core concepts
+   - Integration points
+
+=======================
+SYSTEM ARCHITECTURE
+=======================
+
+5 AUTHENTICATION LAYERS:
+
+Layer 1: Browser Storage
+  - localStorage: API key, user data, referral code
+  - sessionStorage: Cross-domain session token (10 min TTL)
+
+Layer 2: React Context (GatewayzAuthContext)
+  - Global state management
+  - Status: idle → unauthenticated → authenticating → authenticated → error
+  - Methods: login(), logout(), refresh()
+
+Layer 3: Privy SDK (usePrivy)
+  - Multi-provider auth (Email, Google, GitHub, Wallet)
+  - Manages user identity and access tokens
+
+Layer 4: Backend API
+  - POST /api/auth - Validates Privy token, creates/retrieves account
+  - GET /api/user/me - User profile
+  - GET/POST /api/user/api-keys - API key management
+
+Layer 5: Application
+  - Chat API calls with Bearer token
+  - Chat session operations
+  - Model management
+
+=======================
+CORE FILES (20 PRIMARY)
+=======================
+
+AUTHENTICATION:
+1. /root/repo/src/context/gatewayz-auth-context.tsx (683 lines)
+   - Global auth state + backend sync logic
+   - API key upgrade for premium users
+   - Referral code handling
+
+2. /root/repo/src/components/providers/privy-provider.tsx (85 lines)
+   - Privy SDK configuration
+   - Email, Google, GitHub, Wallet auth methods
+
+3. /root/repo/src/lib/api.ts (191 lines)
+   - Storage utilities (saveApiKey, getUserData, etc.)
+   - AuthResponse and UserData types
+   - makeAuthenticatedRequest helper
+
+4. /root/repo/src/hooks/use-auth.ts (14 lines)
+   - Simple wrapper around usePrivy
+
+SESSION TRANSFER:
+5. /root/repo/src/integrations/privy/auth-session-transfer.ts (250 lines)
+   - Cross-domain session transfer (main → beta)
+   - Security: origin validation, fingerprint, expiry
+   - Redirect and token storage
+
+6. /root/repo/src/components/SessionInitializer.tsx (266 lines)
+   - Automatic auth on beta domain
+   - URL parameter processing
+   - User data fetching and caching
+   - Fallback to sessionStorage token
+
+7. /root/repo/src/integrations/privy/auth-sync.ts (147 lines)
+   - Reusable Privy sync module
+   - Builds auth request body
+   - Handles new user detection
+
+API ENDPOINTS (Proxies to Backend):
+8. /root/repo/src/app/api/auth/route.ts (75 lines)
+   - POST /api/auth
+   - 15 second timeout
+
+9. /root/repo/src/app/api/user/me/route.ts (56 lines)
+   - GET /api/user/me (user profile)
+
+10. /root/repo/src/app/api/user/api-keys/route.ts (265 lines)
+    - GET/POST /api/user/api-keys
+    - Retry logic for 500 errors
+    - HTML error page detection
+
+MIDDLEWARE:
+11. /root/repo/src/app/api/middleware/auth.ts (35 lines)
+    - validateApiKey() middleware
+    - 401 error handling
+
+12. /root/repo/src/app/api/middleware/error-handler.ts (67 lines)
+    - Standardized API error handling
+    - Sentry integration
+
+CHAT MANAGEMENT:
+13. /root/repo/src/lib/chat-history.ts (379 lines)
+    - ChatHistoryAPI service class
+    - Methods: createSession, getSessions, saveMessage, etc.
+    - Connection pooling
+
+14. /root/repo/src/app/api/chat/sessions/route.ts (87 lines)
+    - GET/POST /api/chat/sessions
+    - Session CRUD operations
+
+15. /root/repo/src/app/api/chat/completions/route.ts (579 lines)
+    - POST /api/chat/completions
+    - Streaming + non-streaming support
+    - Rate limit retry (429 handling)
+    - 120s timeout for streaming, 30s for non-streaming
+
+LAYOUT & COMPONENTS:
+16. /root/repo/src/app/layout.tsx (115 lines)
+    - Root layout with all providers
+    - SessionInitializer integrated
+
+17. /root/repo/src/components/auth-guard.tsx (23 lines)
+    - Protected route guard
+    - Triggers Privy login if not authenticated
+
+TESTING:
+18. /root/repo/src/components/__tests__/SessionInitializer.test.tsx
+    - Session transfer testing
+
+19. /root/repo/src/integrations/privy/__tests__/auth-session-transfer.test.ts
+    - Cross-domain transfer tests
+
+20. /root/repo/src/app/api/auth/__tests__/route.test.ts
+    - Backend auth proxy tests
+
+=======================
+COMPLETE FLOW: LOGIN TO CHAT
+=======================
+
+1. USER CLICKS "SIGN IN"
+   └─ triggers useGatewayzAuth().login()
+
+2. PRIVY MODAL OPENS
+   └─ Email, Google, GitHub, or Wallet auth
+
+3. PRIVY AUTHENTICATES USER
+   └─ usePrivy().authenticated = true
+   └─ Privy user object populated
+
+4. GATEWAYZAUTH PROVIDER DETECTS CHANGE
+   └─ useEffect triggers syncWithBackend()
+
+5. BUILD AUTH REQUEST
+   └─ Privy user ID, linked accounts, etc.
+   └─ Referral code from URL or localStorage
+
+6. POST /api/auth (BACKEND)
+   └─ Validates Privy token
+   └─ Creates or retrieves Gatewayz account
+   └─ Returns AuthResponse with API key
+
+7. PROCESS RESPONSE
+   └─ saveApiKey() → localStorage
+   └─ saveUserData() → localStorage
+   └─ Update context: status = "authenticated"
+
+8. BACKGROUND: API KEY UPGRADE (if needed)
+   └─ Check if temp key (gw_temp_)
+   └─ If credits > 10: fetch upgraded production key
+   └─ Non-blocking operation
+
+9. NEW USERS
+   └─ Show welcome dialog (10 trial credits)
+   └─ Redirect to /onboarding
+
+10. CREATE CHAT SESSION
+    └─ Navigate to /chat
+    └─ ChatHistoryAPI.createSession()
+    └─ POST /api/chat/sessions
+    └─ Returns ChatSession object
+
+11. SEND MESSAGE
+    └─ Save user message
+    └─ POST /api/chat/completions (streaming)
+    └─ Receive response as Server-Sent Events
+    └─ Save assistant message
+    └─ Display in UI
+
+TIME: ~600ms to authenticated state
+
+=======================
+STORAGE KEYS
+=======================
+
+LOCALSTORAGE (Persistent):
+- gatewayz_api_key: Bearer token for API requests
+- gatewayz_user_data: User profile JSON
+- gatewayz_referral_code: Referral code
+- gatewayz_show_referral_bonus: Flag for welcome
+
+SESSIONSTORAGE (Domain-specific, 10 min TTL):
+- gatewayz_session_transfer_token: Cross-domain session with fingerprint
+
+=======================
+SECURITY FEATURES
+=======================
+
+API KEY HANDLING:
+- Stored in localStorage (browser accessible)
+- Transmitted via Bearer token in Authorization header
+- HTTPS only in production
+- 401 response clears credentials automatically
+- Temporary keys upgraded after payment
+
+SESSION TRANSFER:
+- Origin validation (prevents CSRF)
+- Browser fingerprint (detects device changes)
+- 10-minute token expiry
+- URL parameters cleaned from history immediately
+
+AUTHENTICATION STATE:
+- Race condition prevention (deduplication)
+- Request timeouts (10-120 seconds)
+- Automatic retry on 500 errors
+- Exponential backoff on rate limits (429)
+
+=======================
+TIMEOUTS (ALL OPERATIONS)
+=======================
+
+Backend auth: 10 seconds
+User fetch: 3 seconds
+API key fetch: 5 seconds
+Chat session create: 5 seconds
+Save message: 10 seconds
+Chat completions (non-streaming): 30 seconds
+Chat completions (streaming): 120 seconds
+
+=======================
+ERROR HANDLING
+=======================
+
+401 UNAUTHORIZED:
+- Credentials cleared
+- dispatch refresh event
+- User must re-authenticate
+
+429 RATE LIMITED:
+- Retry up to 3 times
+- Exponential backoff with jitter
+- Respects Retry-After header
+
+TIMEOUT:
+- 504 Gateway Timeout (backend timeout)
+- 502 Bad Gateway (network error)
+
+SESSION TRANSFER EXPIRED:
+- 10-minute TTL
+- Falls back to manual login
+
+API KEY UPGRADE FAILED:
+- Non-blocking, keeps temp key
+- Retries next payment
+
+=======================
+ENVIRONMENT VARIABLES
+=======================
+
+REQUIRED:
+- NEXT_PUBLIC_PRIVY_APP_ID: Privy application ID
+- NEXT_PUBLIC_API_BASE_URL: Backend API URL (https://api.gatewayz.ai)
+
+OPTIONAL:
+- NEXT_PUBLIC_CHAT_HISTORY_API_URL: Chat API URL
+- BACKEND_URL: Alias for API_BASE_URL
+
+=======================
+KEY TYPES & INTERFACES
+=======================
+
+AuthResponse (from backend):
+- user_id: number
+- api_key: string ← CRITICAL
+- privy_user_id: string
+- is_new_user: boolean
+- email, display_name, credits
+- tier: 'basic' | 'pro' | 'max'
+- subscription_status, subscription_end_date
+
+UserData (in localStorage):
+- Same as AuthResponse fields
+
+GatewayzAuthContextValue:
+- status: 'idle' | 'unauthenticated' | 'authenticating' | 'authenticated' | 'error'
+- apiKey: string | null
+- userData: UserData | null
+- privyUser, privyReady, privyAuthenticated
+- login(), logout(), refresh(), redirectToBeta()
+
+=======================
+INTEGRATION PATTERNS
+=======================
+
+USE AUTH CONTEXT:
+const { apiKey, userData, status } = useGatewayzAuth();
+
+CHECK AUTHENTICATION:
+if (status !== 'authenticated') return <LoginRequired />;
+
+MAKE API CALLS:
+const response = await fetch('/api/endpoint', {
+  headers: { 'Authorization': `Bearer ${apiKey}` }
+});
+
+CREATE CHAT API:
+const chatAPI = new ChatHistoryAPI(apiKey, baseUrl, userId);
+
+HANDLE 401:
+if (response.status === 401) {
+  // Credentials cleared automatically
+}
+
+=======================
+STATE TRANSITIONS
+=======================
+
+NORMAL PATH:
+idle → unauthenticated → authenticating → authenticated
+
+CACHE PATH (fast):
+idle → authenticated (if cached credentials valid)
+
+ERROR PATH:
+authenticating → error (if backend fails)
+
+LOGOUT:
+authenticated → unauthenticated → idle
+
+=======================
+QUICK DEBUG COMMANDS
+=======================
+
+Check storage in console:
+```javascript
+localStorage.getItem('gatewayz_api_key')
+localStorage.getItem('gatewayz_user_data')
+sessionStorage.getItem('gatewayz_session_transfer_token')
+```
+
+Trigger auth refresh:
+```javascript
+window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+```
+
+Check auth context:
+```typescript
+const auth = useGatewayzAuth();
+console.log({status: auth.status, apiKey: !!auth.apiKey, userId: auth.userData?.user_id});
+```
+
+Test session transfer:
+Add to beta.gatewayz.ai URL: ?token=XXX&userId=123&returnUrl=/chat
+
+=======================
+DEPLOYMENT CHECKLIST
+=======================
+
+- [ ] NEXT_PUBLIC_PRIVY_APP_ID set
+- [ ] NEXT_PUBLIC_API_BASE_URL points to production
+- [ ] HTTPS enforced
+- [ ] localStorage/sessionStorage enabled
+- [ ] CORS configured on backend
+- [ ] Rate limiting configured
+- [ ] Error logging (Sentry) configured
+- [ ] Session transfer domain configured
+- [ ] Referral tracking working
+- [ ] Welcome dialog for new users
+- [ ] API key upgrade after payment
+
+=======================
+RELATED DOCUMENTATION
+=======================
+
+/root/repo/CLAUDE.md - Project overview
+/root/repo/BETA_TEAM_QUICK_START.md - Session transfer quick start
+/root/repo/BETA_AUTH_TRANSFER.md - Session transfer details
+/root/repo/AUTH_ARCHITECTURE.md - Comprehensive reference (THIS REPO)
+/root/repo/AUTH_QUICK_REFERENCE.md - Quick lookup guide
+
+=======================
+TOTAL CODEBASE ANALYSIS
+=======================
+
+Core Authentication Files: 7
+Backend Proxy Files: 5
+Chat Management Files: 3
+Middleware Files: 2
+Layout & Components: 2
+Test Files: 3+
+Total Lines of Code: ~4,000+
+
+Architecture Complexity: MEDIUM-HIGH
+- 5 authentication layers
+- Cross-domain session transfer
+- Race condition prevention
+- Comprehensive error handling
+- Retry logic for resilience
+
+Security Level: HIGH
+- Origin validation
+- Browser fingerprinting
+- Token expiry
+- 401 handling
+- HTTPS enforcement
+
