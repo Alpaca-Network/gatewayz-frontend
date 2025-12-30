@@ -78,9 +78,27 @@ export function PostHogPageView(): null {
       if (searchParams && searchParams.toString()) {
         url = url + `?${searchParams.toString()}`;
       }
-      posthog.capture('$pageview', {
-        $current_url: url,
-      });
+
+      // Only capture if PostHog has been initialized
+      // posthog.__loaded is set to true after successful initialization
+      if (posthog.__loaded) {
+        posthog.capture('$pageview', {
+          $current_url: url,
+        });
+      } else {
+        // Wait for PostHog to initialize before capturing the first pageview
+        const checkInterval = setInterval(() => {
+          if (posthog.__loaded) {
+            clearInterval(checkInterval);
+            posthog.capture('$pageview', {
+              $current_url: url,
+            });
+          }
+        }, 100);
+
+        // Clean up interval after 5 seconds to avoid infinite polling
+        setTimeout(() => clearInterval(checkInterval), 5000);
+      }
     }
   }, [pathname, searchParams]);
 
