@@ -86,7 +86,7 @@ const ApiKeyRow = ({
         <div className="font-medium flex items-center gap-2 min-w-0">
           <span className="font-mono text-xs truncate flex-shrink min-w-0">{maskedKey}</span>
           <TooltipProvider delayDuration={0}>
-            <Tooltip open={showFullKey} onOpenChange={setShowFullKey}>
+            <Tooltip open={showFullKey}>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
@@ -96,6 +96,8 @@ const ApiKeyRow = ({
                     e.stopPropagation();
                     setShowFullKey(!showFullKey);
                   }}
+                  onPointerDown={(e) => e.preventDefault()}
+                  onPointerEnter={(e) => e.preventDefault()}
                 >
                   {showFullKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                 </Button>
