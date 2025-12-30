@@ -113,6 +113,8 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = React.useState<string>('anonymous');
   const [shouldBypassStatsig, setShouldBypassStatsig] = React.useState(false);
   const initTimeoutRef = React.useRef<NodeJS.Timeout>();
+  // Use a ref to track bypass state to avoid stale closures in setTimeout
+  const bypassRef = React.useRef(false);
   // Memoize plugins to prevent re-creation on every render
   // CRITICAL: Only create plugins when SDK key is valid to prevent DOM manipulation conflicts
   const pluginsRef = React.useRef(createPlugins());
@@ -137,6 +139,7 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (!isValidKey) {
       console.warn('[Statsig] SDK key not found or invalid in environment - analytics disabled');
+      bypassRef.current = true;
       setShouldBypassStatsig(true);
     }
   }, [isValidKey]);
@@ -159,10 +162,19 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
 
   // Timeout: if Statsig doesn't initialize within 2 seconds, bypass it
   // This prevents ad blocker/network delays from blocking app rendering
+  // IMPORTANT: Do NOT include shouldBypassStatsig in the dependency array - it would cause an infinite loop
+  // because this effect sets that state. Use bypassRef to check the current bypass status instead.
   React.useEffect(() => {
+    // If already bypassed, don't set up another timeout
+    if (bypassRef.current) {
+      return;
+    }
+
     initTimeoutRef.current = setTimeout(() => {
-      if (!client && !shouldBypassStatsig) {
+      // Use ref to check current bypass status (avoids stale closure issues)
+      if (!client && !bypassRef.current) {
         console.warn('[Statsig] Initialization timeout (likely ad blocker or slow network) - bypassing analytics');
+        bypassRef.current = true;
         setShouldBypassStatsig(true);
       }
     }, 2000);
@@ -172,7 +184,7 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
         clearTimeout(initTimeoutRef.current);
       }
     };
-  }, [client, shouldBypassStatsig]);
+  }, [client]); // Removed shouldBypassStatsig from deps to prevent infinite loop
 
   // Bypass Statsig if SDK key missing/invalid, timeout, client not ready, or initialization failed
   if (!isValidKey || shouldBypassStatsig || !client) {
