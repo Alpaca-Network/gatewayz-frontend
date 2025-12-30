@@ -487,7 +487,7 @@ function CreditsPageContent() {
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8 px-4 sm:px-0">
+    <div className="space-y-6 sm:space-y-8 px-4 sm:px-0 pb-24 lg:pb-0">
       {/* Emoji explosion animation */}
       {showEmojiExplosion && (
         <EmojiExplosion onComplete={() => setShowEmojiExplosion(false)} />
