@@ -265,5 +265,8 @@ Write-Host "  1. Close and reopen your terminal" -ForegroundColor White
 Write-Host "  2. Run: " -NoNewline -ForegroundColor White
 Write-Host "opencode" -ForegroundColor Green
 Write-Host ""
-Write-Host "Press any key to exit..." -ForegroundColor Gray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+# Only prompt for key press in interactive mode
+if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+    Write-Host "Press any key to exit..." -ForegroundColor Gray
+    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+}

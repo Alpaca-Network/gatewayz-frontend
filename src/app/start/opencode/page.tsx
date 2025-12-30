@@ -64,27 +64,43 @@ export default function StartOpencodePage() {
     linux: 'bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-linux.sh)'
   };
 
-  const handleCopyInstaller = () => {
-    navigator.clipboard.writeText(installCommands[selectedOS]);
-    posthog.capture('opencode_installer_copied');
-    toast({
-      title: "Command Copied",
-      description: "Paste it in your terminal to get started.",
-    });
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyInstaller = async () => {
+    try {
+      await navigator.clipboard.writeText(installCommands[selectedOS]);
+      posthog.capture('opencode_installer_copied');
+      toast({
+        title: "Command Copied",
+        description: "Paste it in your terminal to get started.",
+      });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({
+        title: "Failed to copy",
+        description: "Please copy the command manually.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleCopyApiKey = () => {
+  const handleCopyApiKey = async () => {
     if (apiKey) {
-      navigator.clipboard.writeText(apiKey);
-      posthog.capture('opencode_api_key_copied');
-      toast({
-        title: "API Key Copied",
-        description: "Your API key has been copied to clipboard.",
-      });
-      setCopiedApiKey(true);
-      setTimeout(() => setCopiedApiKey(false), 2000);
+      try {
+        await navigator.clipboard.writeText(apiKey);
+        posthog.capture('opencode_api_key_copied');
+        toast({
+          title: "API Key Copied",
+          description: "Your API key has been copied to clipboard.",
+        });
+        setCopiedApiKey(true);
+        setTimeout(() => setCopiedApiKey(false), 2000);
+      } catch {
+        toast({
+          title: "Failed to copy API key",
+          description: "Please copy the key manually.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -265,12 +281,12 @@ export default function StartOpencodePage() {
               </div>
             ) : (
               <div className="bg-muted/50 rounded-lg p-4 font-mono text-sm break-all">
-                Generate your API key from Settings &rarr; Credits
+                Generate your API key from Settings &rarr; Keys
               </div>
             )}
 
             {!apiKey && (
-              <Link href="/settings/credits">
+              <Link href="/settings/keys">
                 <Button variant="outline" className="w-full sm:w-auto">
                   <ExternalLink className="w-4 h-4 mr-2" />
                   Get Your API Key
@@ -312,10 +328,14 @@ export default function StartOpencodePage() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText('opencode');
-                  posthog.capture('opencode_command_copied');
-                  toast({ title: "Copied to clipboard" });
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText('opencode');
+                    posthog.capture('opencode_command_copied');
+                    toast({ title: "Copied to clipboard" });
+                  } catch {
+                    toast({ title: "Failed to copy", variant: "destructive" });
+                  }
                 }}
                 className="text-slate-300 hover:text-white"
               >
@@ -399,14 +419,14 @@ export default function StartOpencodePage() {
             </p>
             <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
               <li>Ensure you have curl (macOS/Linux) or PowerShell 5+ (Windows) installed</li>
-              <li>Check that your API key is valid in Settings &rarr; Credits</li>
+              <li>Check that your API key is valid in Settings &rarr; Keys</li>
               <li>Try restarting your terminal after installation</li>
               <li>For Windows, run PowerShell as Administrator</li>
             </ul>
             <div className="flex gap-3 mt-4 flex-wrap">
-              <Link href="/settings/credits">
+              <Link href="/settings/keys">
                 <Button variant="outline" size="sm">
-                  View Your Plan
+                  View Your API Keys
                 </Button>
               </Link>
               <a href="https://opencode.ai/docs" target="_blank" rel="noopener noreferrer">

@@ -306,11 +306,11 @@ describe('StartOpencodePage', () => {
       expect(chatLink).toHaveAttribute('href', '/chat');
     });
 
-    it('should have link to settings/credits', () => {
+    it('should have link to settings/keys', () => {
       render(<StartOpencodePage />);
 
-      const settingsLinks = screen.getAllByRole('link', { name: /View Your Plan/i });
-      expect(settingsLinks[0]).toHaveAttribute('href', '/settings/credits');
+      const settingsLinks = screen.getAllByRole('link', { name: /View Your API Keys/i });
+      expect(settingsLinks[0]).toHaveAttribute('href', '/settings/keys');
     });
   });
 
@@ -389,6 +389,66 @@ describe('StartOpencodePage', () => {
 
       expect(screen.getByText(/api\.gatewayz\.ai/)).toBeInTheDocument();
     });
+  });
+});
+
+describe('Clipboard Error Handling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUsePrivy.mockReturnValue({
+      user: { id: 'test-user-123' },
+      ready: true,
+      login: mockLogin,
+    });
+  });
+
+  it('should show error toast when clipboard copy fails for installer', async () => {
+    mockClipboard.writeText.mockRejectedValueOnce(new Error('Clipboard access denied'));
+
+    render(<StartOpencodePage />);
+
+    // Find the first Copy button in the installer section
+    const copyButtons = screen.getAllByTestId('button').filter(
+      (btn) => btn.textContent?.includes('Copy')
+    );
+
+    // The first copy button should be the installer copy
+    if (copyButtons.length > 0) {
+      fireEvent.click(copyButtons[0]);
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: 'Failed to copy',
+            variant: 'destructive',
+          })
+        );
+      });
+    }
+  });
+
+  it('should not track analytics when clipboard copy fails', async () => {
+    const posthog = require('posthog-js').default;
+    posthog.capture.mockClear();
+    mockClipboard.writeText.mockRejectedValueOnce(new Error('Clipboard access denied'));
+
+    render(<StartOpencodePage />);
+
+    // Reset posthog call count after the view_start_opencode call
+    posthog.capture.mockClear();
+
+    const copyButtons = screen.getAllByTestId('button').filter(
+      (btn) => btn.textContent?.includes('Copy')
+    );
+
+    if (copyButtons.length > 0) {
+      fireEvent.click(copyButtons[0]);
+
+      await waitFor(() => {
+        // The installer_copied event should NOT be called on failure
+        expect(posthog.capture).not.toHaveBeenCalledWith('opencode_installer_copied');
+      });
+    }
   });
 });
 

@@ -33,6 +33,15 @@ print_error() {
     echo -e "${RED}✗ $1${NC}"
 }
 
+# Escape special characters for JSON strings
+escape_json() {
+    local str="$1"
+    # Escape backslash first, then double quotes
+    str="${str//\\/\\\\}"
+    str="${str//\"/\\\"}"
+    echo "$str"
+}
+
 print_header
 
 # Step 1: Install OpenCode
@@ -179,11 +188,14 @@ CONFIG_FILE="$CONFIG_DIR/config.json"
 
 mkdir -p "$CONFIG_DIR"
 
+# Escape API key for safe JSON embedding
+ESCAPED_API_KEY=$(escape_json "$API_KEY")
+
 cat > "$CONFIG_FILE" <<EOF
 {
   "provider": {
     "type": "openai",
-    "api_key": "$API_KEY",
+    "api_key": "$ESCAPED_API_KEY",
     "base_url": "https://api.gatewayz.ai/v1"
   },
   "model": {
@@ -203,6 +215,9 @@ cat > "$CONFIG_FILE" <<EOF
   }
 }
 EOF
+
+# Secure the config file (contains API key)
+chmod 600 "$CONFIG_FILE"
 
 print_success "Configuration created at: $CONFIG_FILE"
 
@@ -253,11 +268,19 @@ echo -e "  ${WHITE}• grok-3-turbo-preview${NC}"
 echo -e "  ${WHITE}• deepseek-v3.1${NC}"
 echo -e "  ${WHITE}• Plus 1000+ more models...${NC}"
 echo ""
-echo -e "${YELLOW}Note: Restart your terminal or run:${NC}"
-echo -e "${WHITE}source $SHELL_CONFIG${NC}"
+if [ -n "$SHELL_CONFIG" ]; then
+    echo -e "${YELLOW}Note: Restart your terminal or run:${NC}"
+    echo -e "${WHITE}source $SHELL_CONFIG${NC}"
+else
+    echo -e "${YELLOW}Note: Restart your terminal to apply changes${NC}"
+fi
 echo ""
 echo -e "${CYAN}Next Steps:${NC}"
-echo -e "${WHITE}  1. Close and reopen your terminal (or run: source $SHELL_CONFIG)${NC}"
+if [ -n "$SHELL_CONFIG" ]; then
+    echo -e "${WHITE}  1. Close and reopen your terminal (or run: source $SHELL_CONFIG)${NC}"
+else
+    echo -e "${WHITE}  1. Close and reopen your terminal${NC}"
+fi
 echo -e "${WHITE}  2. Run: ${NC}${GREEN}opencode${NC}"
 echo ""
 echo -e "${GRAY}Setup complete! Review the output above for any warnings.${NC}"
