@@ -314,6 +314,7 @@ export default function StartOpencodePage() {
                 size="sm"
                 onClick={() => {
                   navigator.clipboard.writeText('opencode');
+                  posthog.capture('opencode_command_copied');
                   toast({ title: "Copied to clipboard" });
                 }}
                 className="text-slate-300 hover:text-white"
