@@ -96,16 +96,13 @@ const ApiKeyRow = ({
                     e.stopPropagation();
                     setShowFullKey(!showFullKey);
                   }}
-                  onMouseEnter={(e) => e.preventDefault()}
-                  onMouseLeave={(e) => e.preventDefault()}
+                  onPointerDown={(e) => e.preventDefault()}
+                  onPointerEnter={(e) => e.preventDefault()}
                 >
                   {showFullKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent
-                className="max-w-md p-3"
-                onPointerDownOutside={() => setShowFullKey(false)}
-              >
+              <TooltipContent className="max-w-md p-3">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs break-all">{apiKey.api_key}</span>
                   <Button
