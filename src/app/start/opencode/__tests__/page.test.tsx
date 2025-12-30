@@ -516,19 +516,20 @@ describe('Clipboard Error Handling - API Key', () => {
       (btn) => btn.textContent?.includes('Copy')
     );
 
-    // The second copy button should be the API key copy
-    if (copyButtons.length > 1) {
-      fireEvent.click(copyButtons[1]);
+    // Ensure we have at least 2 copy buttons
+    expect(copyButtons.length).toBeGreaterThan(1);
 
-      await waitFor(() => {
-        expect(mockToast).toHaveBeenCalledWith(
-          expect.objectContaining({
-            title: 'Failed to copy API key',
-            variant: 'destructive',
-          })
-        );
-      });
-    }
+    // The second copy button should be the API key copy
+    fireEvent.click(copyButtons[1]);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Failed to copy API key',
+          variant: 'destructive',
+        })
+      );
+    });
   });
 
   it('should show error toast when opencode command copy fails', async () => {
@@ -541,19 +542,20 @@ describe('Clipboard Error Handling - API Key', () => {
       (btn) => btn.textContent?.includes('Copy')
     );
 
-    // The third copy button should be the opencode command copy
-    if (copyButtons.length > 2) {
-      fireEvent.click(copyButtons[2]);
+    // Ensure we have at least 3 copy buttons
+    expect(copyButtons.length).toBeGreaterThan(2);
 
-      await waitFor(() => {
-        expect(mockToast).toHaveBeenCalledWith(
-          expect.objectContaining({
-            title: 'Failed to copy',
-            variant: 'destructive',
-          })
-        );
-      });
-    }
+    // The third copy button should be the opencode command copy
+    fireEvent.click(copyButtons[2]);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Failed to copy',
+          variant: 'destructive',
+        })
+      );
+    });
   });
 
   it('should successfully copy opencode command', async () => {
@@ -696,31 +698,25 @@ describe('No API Key State', () => {
     });
   });
 
-  it('should show get API key link when no API key is available', () => {
-    // Override the getApiKey mock to return null
-    jest.doMock('@/lib/api', () => ({
-      getApiKey: () => null,
-    }));
-
+  it('should render page header correctly', () => {
     render(<StartOpencodePage />);
 
     // The page should render successfully
     expect(screen.getByText('Setup OpenCode with Gatewayz')).toBeInTheDocument();
   });
 
-  it('should handle undefined API key gracefully', () => {
+  it('should render API key section header', () => {
     render(<StartOpencodePage />);
 
-    // Page should render without errors
+    // Page should render the API key section
     expect(screen.getByText('Add Your Gatewayz API Key')).toBeInTheDocument();
   });
 
-  it('should not copy when API key is empty string', async () => {
-    // This is a special case where apiKey is empty string, testing the conditional
+  it('should display API key when available from mock', () => {
     render(<StartOpencodePage />);
 
-    // The page should render successfully with empty apiKey state initially
-    expect(screen.getByText('Setup OpenCode with Gatewayz')).toBeInTheDocument();
+    // The mocked API key should be displayed
+    expect(screen.getByText('test-api-key-12345')).toBeInTheDocument();
   });
 });
 
@@ -747,16 +743,17 @@ describe('Copy State Changes', () => {
       (btn) => btn.textContent?.includes('Copy')
     );
 
-    if (copyButtons.length > 0) {
-      fireEvent.click(copyButtons[0]);
+    // Ensure we have at least 1 copy button
+    expect(copyButtons.length).toBeGreaterThan(0);
 
-      await waitFor(() => {
-        expect(screen.getByText(/Copied!/)).toBeInTheDocument();
-      });
+    fireEvent.click(copyButtons[0]);
 
-      // Fast-forward time to reset state
-      jest.advanceTimersByTime(2000);
-    }
+    await waitFor(() => {
+      expect(screen.getByText(/Copied!/)).toBeInTheDocument();
+    });
+
+    // Fast-forward time to reset state
+    jest.advanceTimersByTime(2000);
   });
 
   it('should show Copied! state temporarily after copying API key', async () => {
@@ -766,20 +763,21 @@ describe('Copy State Changes', () => {
       (btn) => btn.textContent?.includes('Copy')
     );
 
-    if (copyButtons.length > 1) {
-      fireEvent.click(copyButtons[1]);
+    // Ensure we have at least 2 copy buttons
+    expect(copyButtons.length).toBeGreaterThan(1);
 
-      await waitFor(() => {
-        // Should show success toast
-        expect(mockToast).toHaveBeenCalledWith(
-          expect.objectContaining({
-            title: 'API Key Copied',
-          })
-        );
-      });
+    fireEvent.click(copyButtons[1]);
 
-      // Fast-forward time to reset state
-      jest.advanceTimersByTime(2000);
-    }
+    await waitFor(() => {
+      // Should show success toast
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'API Key Copied',
+        })
+      );
+    });
+
+    // Fast-forward time to reset state
+    jest.advanceTimersByTime(2000);
   });
 });
