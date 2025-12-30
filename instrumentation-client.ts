@@ -614,15 +614,16 @@ Sentry.init({
   // Release tracking for associating errors with specific versions
   release: getRelease(),
 
-  // Sample 10% of transactions for performance monitoring
-  tracesSampleRate: 0.1,
+  // Sample 1% of transactions for performance monitoring (reduced from 10% to stay within quota)
+  tracesSampleRate: 0.01,
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
 
-  // Enable session replays for better error debugging
-  replaysOnErrorSampleRate: 1,    // Capture replay for 100% of errors
-  replaysSessionSampleRate: 0.1,  // Capture 10% of sessions (balances cost/privacy with debugging)
+  // Session replays - SIGNIFICANTLY REDUCED to stay within Sentry quota
+  // Previous settings (100% errors + 10% sessions) caused 798% overage on replays quota
+  replaysOnErrorSampleRate: 0.01,   // Capture replay for 1% of errors (reduced from 100%)
+  replaysSessionSampleRate: 0,      // Disable session replays entirely (reduced from 10%)
 
   // Limit breadcrumbs to reduce payload size
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,
