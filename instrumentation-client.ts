@@ -66,6 +66,83 @@ const backoffState = {
   currentBackoffMs: RATE_LIMIT_CONFIG.initialBackoffMs,
 };
 
+// =============================================================================
+// FIRST-SEEN ERROR TRACKING FOR REPLAY SAMPLING
+// Captures 100% replay for first-time errors, then 1% for known errors
+// =============================================================================
+const SEEN_ERRORS_STORAGE_KEY = 'sentry_seen_errors';
+const MAX_SEEN_ERRORS = 500; // Limit stored error signatures to prevent unbounded growth
+
+/**
+ * Get the set of previously seen error signatures from localStorage
+ */
+function getSeenErrors(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+
+  try {
+    const stored = localStorage.getItem(SEEN_ERRORS_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    }
+  } catch {
+    // localStorage not available or corrupted data
+  }
+  return new Set();
+}
+
+/**
+ * Save the set of seen error signatures to localStorage
+ */
+function saveSeenErrors(errors: Set<string>): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    // Trim to max size if needed (keep most recent by converting to array and slicing)
+    const errorsArray = Array.from(errors);
+    const trimmed = errorsArray.length > MAX_SEEN_ERRORS
+      ? errorsArray.slice(-MAX_SEEN_ERRORS)
+      : errorsArray;
+    localStorage.setItem(SEEN_ERRORS_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // localStorage not available or quota exceeded
+  }
+}
+
+/**
+ * Create a unique signature for an error to track "first seen" status
+ */
+function createErrorSignature(event: Sentry.ErrorEvent): string {
+  const type = event.exception?.values?.[0]?.type || 'unknown';
+  const message = event.exception?.values?.[0]?.value || event.message || '';
+  // Include first stack frame for better uniqueness
+  const firstFrame = event.exception?.values?.[0]?.stacktrace?.frames?.[0];
+  const location = firstFrame
+    ? `${firstFrame.filename || ''}:${firstFrame.lineno || ''}:${firstFrame.colno || ''}`
+    : '';
+  return `${type}|${message.slice(0, 100)}|${location}`;
+}
+
+/**
+ * Check if this error has been seen before and mark it as seen
+ * Returns true if this is the FIRST time seeing this error
+ */
+function isFirstSeenError(event: Sentry.ErrorEvent): boolean {
+  const signature = createErrorSignature(event);
+  const seenErrors = getSeenErrors();
+
+  if (seenErrors.has(signature)) {
+    return false; // Already seen
+  }
+
+  // Mark as seen
+  seenErrors.add(signature);
+  saveSeenErrors(seenErrors);
+
+  console.debug('[Sentry] First-seen error detected:', signature.slice(0, 50));
+  return true;
+}
+
 /**
  * Cleanup stale entries from the deduplication map
  * Called periodically to prevent unbounded memory growth
@@ -620,10 +697,11 @@ Sentry.init({
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
 
-  // Session replays - SIGNIFICANTLY REDUCED to stay within Sentry quota
-  // Previous settings (100% errors + 10% sessions) caused 798% overage on replays quota
-  replaysOnErrorSampleRate: 0.01,   // Capture replay for 1% of errors (reduced from 100%)
-  replaysSessionSampleRate: 0,      // Disable session replays entirely (reduced from 10%)
+  // Session replays - Using dynamic sampling based on first-seen status
+  // First-seen errors get 100% replay, known errors get 1% replay
+  // This is configured via beforeSend + manual replay flush, not static rates
+  replaysOnErrorSampleRate: 0,      // Disabled - we handle this dynamically in beforeSend
+  replaysSessionSampleRate: 0,      // Disable session replays entirely
 
   // Limit breadcrumbs to reduce payload size
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,
@@ -702,6 +780,22 @@ Sentry.init({
     // Apply rate limiting only for events that pass filtering
     if (shouldRateLimit(event)) {
       return null;
+    }
+
+    // Dynamic replay sampling: 100% for first-seen errors, 1% for known errors
+    // This ensures we capture full context for new issues while staying within quota
+    const shouldCaptureReplay = isFirstSeenError(event) || Math.random() < 0.01;
+
+    if (shouldCaptureReplay) {
+      // Get the replay integration and flush the current replay buffer
+      const replayIntegration = Sentry.getClient()?.getIntegrationByName('Replay');
+      if (replayIntegration && typeof (replayIntegration as { flush?: () => Promise<void> }).flush === 'function') {
+        // Flush replay asynchronously - don't block the error event
+        (replayIntegration as { flush: () => Promise<void> }).flush().catch(() => {
+          // Ignore flush errors - replay capture is best-effort
+        });
+        console.debug('[Sentry] Capturing replay for error (first-seen or sampled)');
+      }
     }
 
     return event;

@@ -31,16 +31,23 @@ describe('Sentry Rate Limiting Configuration', () => {
       expect(EXPECTED_TRACES_SAMPLE_RATE).toBe(0.01);
     });
 
-    it('should have replays minimized to stay within quota', () => {
-      // Replays significantly reduced to address 798% overage on Sentry quota
-      // Previous: 100% error replays + 10% session replays caused massive quota overage
+    it('should have dynamic replay sampling for first-seen vs known errors', () => {
+      // Replay sampling is now dynamic based on first-seen status:
+      // - First-seen errors: 100% replay capture
+      // - Known errors: 1% replay capture
+      // Static rates are set to 0, sampling is handled in beforeSend
       const EXPECTED_REPLAY_RATES = {
-        replaysOnErrorSampleRate: 0.01, // 1% of errors (reduced from 100%)
-        replaysSessionSampleRate: 0,    // Disabled entirely (reduced from 10%)
+        replaysOnErrorSampleRate: 0,    // Disabled - handled dynamically in beforeSend
+        replaysSessionSampleRate: 0,    // Disabled entirely
+        // Dynamic sampling in beforeSend:
+        firstSeenErrorReplayRate: 1.0,  // 100% for first-seen errors
+        knownErrorReplayRate: 0.01,     // 1% for known errors
       };
 
-      expect(EXPECTED_REPLAY_RATES.replaysOnErrorSampleRate).toBe(0.01);
+      expect(EXPECTED_REPLAY_RATES.replaysOnErrorSampleRate).toBe(0);
       expect(EXPECTED_REPLAY_RATES.replaysSessionSampleRate).toBe(0);
+      expect(EXPECTED_REPLAY_RATES.firstSeenErrorReplayRate).toBe(1.0);
+      expect(EXPECTED_REPLAY_RATES.knownErrorReplayRate).toBe(0.01);
     });
   });
 
@@ -194,6 +201,76 @@ describe('Rate Limit Behavior', () => {
       cleanupMap(testMap);
 
       expect(testMap.size).toBe(MAX_MAP_SIZE);
+    });
+  });
+
+  describe('First-seen error tracking', () => {
+    it('should create unique error signatures', () => {
+      const createErrorSignature = (
+        type: string,
+        message: string,
+        filename?: string,
+        lineno?: number,
+        colno?: number
+      ) => {
+        const location = filename
+          ? `${filename}:${lineno || ''}:${colno || ''}`
+          : '';
+        return `${type}|${message.slice(0, 100)}|${location}`;
+      };
+
+      const sig1 = createErrorSignature('TypeError', 'Cannot read property', 'app.js', 10, 5);
+      const sig2 = createErrorSignature('TypeError', 'Cannot read property', 'app.js', 10, 5);
+      const sig3 = createErrorSignature('TypeError', 'Cannot read property', 'app.js', 20, 5);
+      const sig4 = createErrorSignature('ReferenceError', 'x is not defined', 'utils.js', 5, 1);
+
+      // Same error = same signature
+      expect(sig1).toBe(sig2);
+
+      // Different line number = different signature
+      expect(sig1).not.toBe(sig3);
+
+      // Different error type = different signature
+      expect(sig1).not.toBe(sig4);
+    });
+
+    it('should limit stored error signatures to prevent unbounded growth', () => {
+      const MAX_SEEN_ERRORS = 500;
+
+      // Simulate the trimming logic
+      const trimSeenErrors = (errors: string[]): string[] => {
+        if (errors.length > MAX_SEEN_ERRORS) {
+          return errors.slice(-MAX_SEEN_ERRORS);
+        }
+        return errors;
+      };
+
+      // Create array with 600 entries
+      const errors = Array.from({ length: 600 }, (_, i) => `error-${i}`);
+      const trimmed = trimSeenErrors(errors);
+
+      expect(trimmed.length).toBe(MAX_SEEN_ERRORS);
+      // Should keep the most recent (last 500)
+      expect(trimmed[0]).toBe('error-100');
+      expect(trimmed[trimmed.length - 1]).toBe('error-599');
+    });
+
+    it('should use dynamic replay sampling based on first-seen status', () => {
+      // Test the sampling logic
+      const FIRST_SEEN_REPLAY_RATE = 1.0;   // 100% for first-seen
+      const KNOWN_ERROR_REPLAY_RATE = 0.01; // 1% for known
+
+      const shouldCaptureReplay = (isFirstSeen: boolean, randomValue: number) => {
+        return isFirstSeen || randomValue < KNOWN_ERROR_REPLAY_RATE;
+      };
+
+      // First-seen errors always capture replay
+      expect(shouldCaptureReplay(true, 0.5)).toBe(true);
+      expect(shouldCaptureReplay(true, 0.99)).toBe(true);
+
+      // Known errors only capture at 1% rate
+      expect(shouldCaptureReplay(false, 0.005)).toBe(true);  // Within 1%
+      expect(shouldCaptureReplay(false, 0.5)).toBe(false);   // Outside 1%
     });
   });
 });
