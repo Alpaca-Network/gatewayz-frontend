@@ -39,7 +39,7 @@ export type AuthStateData =
 // =============================================================================
 
 export type UserTier = 'basic' | 'pro' | 'max';
-export type SubscriptionStatus = 'active' | 'cancelled' | 'past_due' | 'inactive';
+export type SubscriptionStatus = 'active' | 'cancelled' | 'past_due' | 'inactive' | 'trial' | 'expired';
 export type AuthMethod = 'email' | 'google' | 'github' | 'wallet' | 'session_transfer';
 
 /**

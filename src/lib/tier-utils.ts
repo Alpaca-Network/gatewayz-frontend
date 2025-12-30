@@ -75,6 +75,30 @@ export const hasActiveSubscription = (userData: UserData | null): boolean => {
 };
 
 /**
+ * Checks if a user is on a trial
+ * @param userData - User data from auth response
+ * @returns true if user is on trial
+ */
+export const isOnTrial = (userData: UserData | null): boolean => {
+  if (!userData) {
+    return false;
+  }
+  return userData.subscription_status === 'trial';
+};
+
+/**
+ * Checks if a user's trial has expired
+ * @param userData - User data from auth response
+ * @returns true if trial has expired
+ */
+export const isTrialExpired = (userData: UserData | null): boolean => {
+  if (!userData) {
+    return false;
+  }
+  return userData.subscription_status === 'expired';
+};
+
+/**
  * Gets the next subscription renewal date
  * @param userData - User data from auth response
  * @returns Date object or null if no subscription
@@ -138,6 +162,45 @@ export const canAccessModel = (modelRequiredTier: UserTier | undefined, userTier
 };
 
 /**
+ * Gets the trial expiration date
+ * @param userData - User data from auth response
+ * @returns Date object or null if not on trial
+ */
+export const getTrialExpirationDate = (userData: UserData | null): Date | null => {
+  if (!userData?.trial_expires_at) {
+    return null;
+  }
+  return new Date(userData.trial_expires_at);
+};
+
+/**
+ * Gets the number of days remaining in trial
+ * @param userData - User data from auth response
+ * @returns Number of days remaining or null if not on trial
+ */
+export const getTrialDaysRemaining = (userData: UserData | null): number | null => {
+  const expirationDate = getTrialExpirationDate(userData);
+  if (!expirationDate) {
+    return null;
+  }
+  const daysRemaining = Math.ceil((expirationDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, daysRemaining);
+};
+
+/**
+ * Checks if trial is expiring soon (within 1 day)
+ * @param userData - User data from auth response
+ * @returns true if trial expires within 1 day
+ */
+export const isTrialExpiringSoon = (userData: UserData | null): boolean => {
+  const daysRemaining = getTrialDaysRemaining(userData);
+  if (daysRemaining === null) {
+    return false;
+  }
+  return daysRemaining <= 1 && daysRemaining > 0;
+};
+
+/**
  * Gets subscription status display text
  * @param status - Subscription status
  * @returns Human-readable status text
@@ -156,6 +219,10 @@ export const formatSubscriptionStatus = (status: SubscriptionStatus | undefined)
       return 'Past due';
     case 'inactive':
       return 'Inactive';
+    case 'trial':
+      return 'Trial';
+    case 'expired':
+      return 'Expired';
     default:
       return 'Unknown';
   }
