@@ -88,8 +88,7 @@ async function preloadModels() {
     const modelOptions = data.data.map((model: any) => {
       const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
       // Only OpenRouter models with :free suffix are legitimately free
-      // Use is_free field from backend, fallback to checking :free suffix for backwards compatibility
-      const isFreeModel = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+      const isFreeModel = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
       const category = sourceGateway === 'portkey' ? 'Portkey' : (isFreeModel ? 'Free' : 'Paid');
 
       return {

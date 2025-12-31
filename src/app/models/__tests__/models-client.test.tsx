@@ -588,8 +588,20 @@ describe('ModelsClient - Filtering Logic', () => {
     });
   });
 
-  describe('Free model detection with is_free field', () => {
-    it('should identify models with is_free=true as free', () => {
+  describe('Free model detection - only OpenRouter :free models', () => {
+    it('should identify OpenRouter models with :free suffix as free', () => {
+      const model = mockModel({
+        id: 'google/gemini-2.0-flash-exp:free',
+        source_gateway: 'openrouter',
+        pricing: { prompt: '0', completion: '0' }
+      });
+
+      const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+      const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
+      expect(isFree).toBe(true);
+    });
+
+    it('should NOT identify models with is_free=true as free (only :free suffix matters)', () => {
       const model = mockModel({
         id: 'openrouter/some-model',
         is_free: true,
@@ -597,42 +609,22 @@ describe('ModelsClient - Filtering Logic', () => {
         pricing: { prompt: '0', completion: '0' }
       });
 
-      const isFree = model.is_free === true;
-      expect(isFree).toBe(true);
-    });
-
-    it('should identify models with is_free=false as not free', () => {
-      const model = mockModel({
-        id: 'openrouter/some-model',
-        is_free: false,
-        source_gateway: 'openrouter',
-        pricing: { prompt: '0', completion: '0' }
-      });
-
-      const isFree = model.is_free === true;
+      const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+      // is_free field is ignored - only :free suffix matters
+      const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
       expect(isFree).toBe(false);
     });
 
-    it('should fall back to :free suffix check for OpenRouter models without is_free field', () => {
-      const freeModel = mockModel({
-        id: 'google/gemini-2.0-flash-exp:free',
-        source_gateway: 'openrouter',
-        pricing: { prompt: '0', completion: '0' }
-      });
-
-      const paidModel = mockModel({
+    it('should identify OpenRouter models without :free suffix as not free', () => {
+      const model = mockModel({
         id: 'openai/gpt-4o',
         source_gateway: 'openrouter',
         pricing: { prompt: '2.50', completion: '10.00' }
       });
 
-      const sourceGateway1 = freeModel.source_gateway || (freeModel.source_gateways?.[0]) || '';
-      const isFree1 = freeModel.is_free === true || (sourceGateway1 === 'openrouter' && freeModel.id?.endsWith(':free'));
-      expect(isFree1).toBe(true);
-
-      const sourceGateway2 = paidModel.source_gateway || (paidModel.source_gateways?.[0]) || '';
-      const isFree2 = paidModel.is_free === true || (sourceGateway2 === 'openrouter' && paidModel.id?.endsWith(':free'));
-      expect(isFree2).toBe(false);
+      const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+      const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
+      expect(isFree).toBe(false);
     });
 
     it('should not mark non-OpenRouter models as free even if id ends with :free', () => {
@@ -643,7 +635,7 @@ describe('ModelsClient - Filtering Logic', () => {
       });
 
       const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
-      const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+      const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
       expect(isFree).toBe(false);
     });
 
@@ -656,7 +648,7 @@ describe('ModelsClient - Filtering Logic', () => {
       });
 
       const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
-      const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+      const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
       expect(isFree).toBe(true);
     });
 
@@ -671,7 +663,7 @@ describe('ModelsClient - Filtering Logic', () => {
       const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
       expect(sourceGateway).toBe('');
 
-      const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+      const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
       expect(isFree).toBe(false);
     });
   });

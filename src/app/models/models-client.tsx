@@ -95,9 +95,8 @@ const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
   // Only OpenRouter models with :free suffix are legitimately free
-  // Use is_free field from backend, fallback to checking :free suffix for backwards compatibility
   const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
-  const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+  const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
   const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
   const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
@@ -599,7 +598,7 @@ export default function ModelsClient({
         (model.context_length >= contextLengthRange[0] * 1000 && model.context_length <= contextLengthRange[1] * 1000);
       // Only OpenRouter models with :free suffix are legitimately free
       const modelSourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
-      const isFree = model.is_free === true || (modelSourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+      const isFree = modelSourceGateway === 'openrouter' && model.id?.endsWith(':free');
       const avgPrice = (parseFloat(model.pricing?.prompt || '0') + parseFloat(model.pricing?.completion || '0')) / 2;
       const priceMatch = (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
         isFree ||
@@ -728,7 +727,7 @@ export default function ModelsClient({
     deduplicatedModels.forEach(m => {
       // Only OpenRouter models with :free suffix are legitimately free
       const modelSourceGateway = m.source_gateway || (m.source_gateways?.[0]) || '';
-      const isFree = m.is_free === true || (modelSourceGateway === 'openrouter' && m.id?.endsWith(':free'));
+      const isFree = modelSourceGateway === 'openrouter' && m.id?.endsWith(':free');
       if (isFree) {
         freeCount++;
       } else {

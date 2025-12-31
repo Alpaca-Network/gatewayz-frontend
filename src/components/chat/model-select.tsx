@@ -370,8 +370,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
         const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
           const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
           // Only OpenRouter models with :free suffix are legitimately free
-          // Use is_free field from backend, fallback to checking :free suffix for backwards compatibility
-          const isFreeModel = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+          const isFreeModel = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
           const category = sourceGateway === 'portkey' ? 'Portkey' : (isFreeModel ? 'Free' : 'Paid');
           const developer = getDeveloper(model.id);
 
@@ -847,8 +846,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
             const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
             // Only OpenRouter models with :free suffix are legitimately free
-            // Use is_free field from backend, fallback to checking :free suffix for backwards compatibility
-            const isFreeModel = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+            const isFreeModel = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
             const category = sourceGateway === 'portkey' ? 'Portkey' : (isFreeModel ? 'Free' : 'Paid');
             const developer = getDeveloper(model.id);
             const modalities = model.architecture?.input_modalities?.map((m: string) =>
