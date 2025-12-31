@@ -92,12 +92,13 @@ describe('Provider Error Handling', () => {
       cy.window().then((win) => {
         // Either Statsig initialized or timeout occurred
         // Both are valid outcomes
-        const bypassMessage = win.console.log.getCalls().some((call: any) =>
+        const consoleLog = win.console.log as any;
+        const bypassMessage = consoleLog.getCalls ? consoleLog.getCalls().some((call: any) =>
           call.args.some((arg: any) =>
             typeof arg === 'string' &&
             (arg.includes('bypassing') || arg.includes('timeout'))
           )
-        );
+        ) : false;
 
         // Should have logged something about the state
         expect(bypassMessage || (win as any).statsigAvailable).to.exist;
@@ -180,11 +181,11 @@ describe('Provider Error Handling', () => {
           // Track component render order
           const originalCreateElement = win.React?.createElement;
           if (originalCreateElement) {
-            cy.stub(win.React, 'createElement').callsFake((...args) => {
+            cy.stub(win.React, 'createElement').callsFake((...args: any[]) => {
               if (args[0]?.name?.includes('Provider')) {
                 renderOrder.push(args[0].name);
               }
-              return originalCreateElement.apply(win.React, args);
+              return (originalCreateElement as any).apply(win.React, args);
             });
           }
         },
@@ -281,7 +282,8 @@ describe('Provider Error Handling', () => {
 
       cy.window().then((win) => {
         // Verify some form of event tracking occurred
-        const consoleLogs = win.console.log.getCalls().map((c: any) => c.args.join(' '));
+        const consoleLog = win.console.log as any;
+        const consoleLogs = consoleLog.getCalls ? consoleLog.getCalls().map((c: any) => c.args.join(' ')) : [];
         const hasEventLog = consoleLogs.some((log: string) =>
           log.includes('event') || log.includes('track')
         );

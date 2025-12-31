@@ -162,11 +162,11 @@ describe('Authentication Error Flows', () => {
           // Spy on React.createElement to detect provider rendering
           const originalCreateElement = win.React?.createElement;
           if (originalCreateElement) {
-            cy.stub(win.React, 'createElement').callsFake((...args) => {
+            cy.stub(win.React, 'createElement').callsFake((...args: any[]) => {
               if (args[0]?.name === 'PrivyProviderNoSSR') {
                 providerRendered = true;
               }
-              return originalCreateElement.apply(win.React, args);
+              return (originalCreateElement as any).apply(win.React, args);
             });
           }
         },
