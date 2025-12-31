@@ -177,4 +177,38 @@ describe('privy.ts - Configuration File', () => {
       expect(config.appearance).toBeDefined();
     });
   });
+
+  describe('Phone Authentication (SMS) Configuration', () => {
+    it('should have sms login method enabled', () => {
+      expect(privyConfig.config.loginMethods).toContain('sms');
+    });
+
+    it('should have sms positioned after email for optimal UX', () => {
+      const loginMethods = privyConfig.config.loginMethods;
+      const emailIndex = loginMethods.indexOf('email');
+      const smsIndex = loginMethods.indexOf('sms');
+      expect(emailIndex).toBe(0); // Email should be first
+      expect(smsIndex).toBe(1); // SMS should be second
+    });
+
+    it('should support phone authentication alongside other methods', () => {
+      const loginMethods = privyConfig.config.loginMethods;
+      // All 4 methods should be present
+      expect(loginMethods).toContain('email');
+      expect(loginMethods).toContain('sms');
+      expect(loginMethods).toContain('google');
+      expect(loginMethods).toContain('github');
+    });
+
+    it('should not accidentally remove phone auth in the future', () => {
+      // Regression test to ensure SMS is not removed
+      const hasSms = privyConfig.config.loginMethods.includes('sms');
+      expect(hasSms).toBe(true);
+    });
+
+    it('should maintain correct order: email, sms, google, github', () => {
+      // This ensures the login modal displays options in the expected order
+      expect(privyConfig.config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
+    });
+  });
 });

@@ -400,6 +400,21 @@ describe('PrivyProviderWrapper', () => {
       expect(hasEmail).toBe(true);
     });
 
+    it('should not have removed sms from loginMethods', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      // This test prevents accidental removal of phone authentication
+      const hasSms = config.loginMethods.includes('sms');
+      expect(hasSms).toBe(true);
+    });
+
     it('should maintain all required authentication settings', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 
@@ -416,6 +431,56 @@ describe('PrivyProviderWrapper', () => {
       expect(config.appearance).toBeDefined();
       expect(config.embeddedWallets).toBeDefined();
       expect(config.defaultChain).toBeDefined();
+    });
+
+    it('should have all 4 authentication methods configured', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      // Ensure all expected authentication methods are present
+      expect(config.loginMethods).toContain('email');
+      expect(config.loginMethods).toContain('sms');
+      expect(config.loginMethods).toContain('google');
+      expect(config.loginMethods).toContain('github');
+      expect(config.loginMethods).toHaveLength(4);
+    });
+  });
+
+  describe('Phone Authentication Configuration', () => {
+    it('should have sms in correct position (after email)', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      const emailIndex = config.loginMethods.indexOf('email');
+      const smsIndex = config.loginMethods.indexOf('sms');
+      // SMS should come right after email for best UX
+      expect(smsIndex).toBe(emailIndex + 1);
+    });
+
+    it('should have login methods in expected order for optimal UX', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      // Order: email (most common), sms (phone auth), google, github
+      expect(config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
     });
   });
 
