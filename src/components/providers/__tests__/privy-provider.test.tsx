@@ -127,7 +127,7 @@ describe('PrivyProviderWrapper', () => {
   });
 
   describe('Login Methods Configuration', () => {
-    it('should include email, google, and github login methods', () => {
+    it('should include email, sms, google, and github login methods', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 
       render(
@@ -138,11 +138,11 @@ describe('PrivyProviderWrapper', () => {
 
       const config = (global as any).__PRIVY_CONFIG__;
       expect(config.loginMethods).toEqual(
-        expect.arrayContaining(['email', 'google', 'github'])
+        expect.arrayContaining(['email', 'sms', 'google', 'github'])
       );
     });
 
-    it('should have exactly 3 login methods', () => {
+    it('should have exactly 4 login methods', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 
       render(
@@ -152,7 +152,20 @@ describe('PrivyProviderWrapper', () => {
       );
 
       const config = (global as any).__PRIVY_CONFIG__;
-      expect(config.loginMethods).toHaveLength(3);
+      expect(config.loginMethods).toHaveLength(4);
+    });
+
+    it('should include sms login method for phone authentication', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      expect(config.loginMethods).toContain('sms');
     });
   });
 

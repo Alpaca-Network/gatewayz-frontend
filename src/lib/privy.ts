@@ -9,7 +9,8 @@ export const privyConfig = {
       logo: '/logo_black.svg',
     },
     // Configure login methods - email verification is handled automatically by Privy
-    loginMethods: ['email', 'google', 'github'],
+    // SMS enables phone number authentication via OTP
+    loginMethods: ['email', 'sms', 'google', 'github'],
   },
 };
 

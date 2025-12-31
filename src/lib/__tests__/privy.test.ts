@@ -42,6 +42,10 @@ describe('privy.ts - Configuration File', () => {
       expect(privyConfig.config.loginMethods).toContain('email');
     });
 
+    it('should include sms login method for phone authentication', () => {
+      expect(privyConfig.config.loginMethods).toContain('sms');
+    });
+
     it('should include google login method', () => {
       expect(privyConfig.config.loginMethods).toContain('google');
     });
@@ -50,12 +54,12 @@ describe('privy.ts - Configuration File', () => {
       expect(privyConfig.config.loginMethods).toContain('github');
     });
 
-    it('should have exactly 3 login methods', () => {
-      expect(privyConfig.config.loginMethods).toHaveLength(3);
+    it('should have exactly 4 login methods', () => {
+      expect(privyConfig.config.loginMethods).toHaveLength(4);
     });
 
     it('should have login methods in expected order', () => {
-      expect(privyConfig.config.loginMethods).toEqual(['email', 'google', 'github']);
+      expect(privyConfig.config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
     });
   });
 
@@ -88,7 +92,7 @@ describe('privy.ts - Configuration File', () => {
 
     it('should prevent accidental modification of loginMethods', () => {
       // This test catches if someone accidentally modifies the login methods
-      expect(privyConfig.config.loginMethods).toEqual(['email', 'google', 'github']);
+      expect(privyConfig.config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
     });
 
     it('should always have at least email as a login method', () => {
@@ -146,7 +150,7 @@ describe('privy.ts - Configuration File', () => {
     it('should match login methods with PrivyProviderWrapper', () => {
       // This ensures the backup config in privy.ts matches the config in privy-provider.tsx
       // Both should have the same login methods
-      expect(privyConfig.config.loginMethods).toEqual(['email', 'google', 'github']);
+      expect(privyConfig.config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
     });
 
     it('should match appearance configuration with PrivyProviderWrapper', () => {
