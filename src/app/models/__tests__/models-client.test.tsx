@@ -587,4 +587,92 @@ describe('ModelsClient - Filtering Logic', () => {
       expect(filtered[0].id).toBe('2');
     });
   });
+
+  describe('Free model detection with is_free field', () => {
+    it('should identify models with is_free=true as free', () => {
+      const model = mockModel({
+        id: 'openrouter/some-model',
+        is_free: true,
+        source_gateway: 'openrouter',
+        pricing: { prompt: '0', completion: '0' }
+      });
+
+      const isFree = model.is_free === true;
+      expect(isFree).toBe(true);
+    });
+
+    it('should identify models with is_free=false as not free', () => {
+      const model = mockModel({
+        id: 'openrouter/some-model',
+        is_free: false,
+        source_gateway: 'openrouter',
+        pricing: { prompt: '0', completion: '0' }
+      });
+
+      const isFree = model.is_free === true;
+      expect(isFree).toBe(false);
+    });
+
+    it('should fall back to :free suffix check for OpenRouter models without is_free field', () => {
+      const freeModel = mockModel({
+        id: 'google/gemini-2.0-flash-exp:free',
+        source_gateway: 'openrouter',
+        pricing: { prompt: '0', completion: '0' }
+      });
+
+      const paidModel = mockModel({
+        id: 'openai/gpt-4o',
+        source_gateway: 'openrouter',
+        pricing: { prompt: '2.50', completion: '10.00' }
+      });
+
+      const sourceGateway1 = freeModel.source_gateway || (freeModel.source_gateways?.[0]) || '';
+      const isFree1 = freeModel.is_free === true || (sourceGateway1 === 'openrouter' && freeModel.id?.endsWith(':free'));
+      expect(isFree1).toBe(true);
+
+      const sourceGateway2 = paidModel.source_gateway || (paidModel.source_gateways?.[0]) || '';
+      const isFree2 = paidModel.is_free === true || (sourceGateway2 === 'openrouter' && paidModel.id?.endsWith(':free'));
+      expect(isFree2).toBe(false);
+    });
+
+    it('should not mark non-OpenRouter models as free even if id ends with :free', () => {
+      const model = mockModel({
+        id: 'some-model:free',
+        source_gateway: 'groq',
+        pricing: { prompt: '0', completion: '0' }
+      });
+
+      const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+      const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+      expect(isFree).toBe(false);
+    });
+
+    it('should use source_gateways array when source_gateway is not set', () => {
+      const model = mockModel({
+        id: 'google/gemini-2.0-flash-exp:free',
+        source_gateways: ['openrouter'],
+        source_gateway: undefined,
+        pricing: { prompt: '0', completion: '0' }
+      });
+
+      const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+      const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+      expect(isFree).toBe(true);
+    });
+
+    it('should default to empty string when no gateway info is available', () => {
+      const model = mockModel({
+        id: 'some-model:free',
+        source_gateway: undefined,
+        source_gateways: undefined,
+        pricing: { prompt: '0', completion: '0' }
+      });
+
+      const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+      expect(sourceGateway).toBe('');
+
+      const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+      expect(isFree).toBe(false);
+    });
+  });
 });
