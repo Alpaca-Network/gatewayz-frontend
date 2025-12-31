@@ -52,6 +52,7 @@ interface Model {
   source_gateway?: string; // Keep for backwards compatibility
   created?: number;
   is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
+  is_free?: boolean; // Only true for OpenRouter models with :free suffix
 }
 
 // Gateway display configuration - now uses centralized gateway registry
@@ -93,7 +94,10 @@ const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
-  const isFree = hasPricing && parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
+  // Only OpenRouter models with :free suffix are legitimately free
+  // Use is_free field from backend, fallback to checking :free suffix for backwards compatibility
+  const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+  const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
   const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
   const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
@@ -593,7 +597,9 @@ export default function ModelsClient({
       const contextMatch = model.context_length === 0 ||
         (contextLengthRange[0] === 0 && contextLengthRange[1] === 1024) || // No filter applied
         (model.context_length >= contextLengthRange[0] * 1000 && model.context_length <= contextLengthRange[1] * 1000);
-      const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
+      // Only OpenRouter models with :free suffix are legitimately free
+      const modelSourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+      const isFree = model.is_free === true || (modelSourceGateway === 'openrouter' && model.id?.endsWith(':free'));
       const avgPrice = (parseFloat(model.pricing?.prompt || '0') + parseFloat(model.pricing?.completion || '0')) / 2;
       const priceMatch = (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
         isFree ||
@@ -720,7 +726,9 @@ export default function ModelsClient({
     let freeCount = 0;
     let paidCount = 0;
     deduplicatedModels.forEach(m => {
-      const isFree = parseFloat(m.pricing?.prompt || '0') === 0 && parseFloat(m.pricing?.completion || '0') === 0;
+      // Only OpenRouter models with :free suffix are legitimately free
+      const modelSourceGateway = m.source_gateway || (m.source_gateways?.[0]) || '';
+      const isFree = m.is_free === true || (modelSourceGateway === 'openrouter' && m.id?.endsWith(':free'));
       if (isFree) {
         freeCount++;
       } else {
