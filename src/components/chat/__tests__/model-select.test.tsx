@@ -1146,48 +1146,43 @@ describe('ModelSelect server-side search', () => {
   });
 });
 
-// Test free model detection logic using is_free field
-describe('ModelSelect free model detection with is_free field', () => {
+// Test free model detection logic - only OpenRouter :free models are free
+describe('ModelSelect free model detection with OpenRouter :free suffix', () => {
   // Helper to determine if a model is free (mirrors the component logic)
+  // Only OpenRouter models with :free suffix are considered free
   const isFreeModel = (model: { id?: string; is_free?: boolean; source_gateway?: string; source_gateways?: string[] }): boolean => {
     const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
-    return model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free') === true);
+    return sourceGateway === 'openrouter' && model.id?.endsWith(':free') === true;
   };
 
-  describe('is_free field detection', () => {
-    it('should identify models with is_free=true as free', () => {
+  describe('OpenRouter :free suffix detection', () => {
+    it('should identify OpenRouter models with :free suffix as free', () => {
       const model = {
-        id: 'openrouter/some-model',
-        is_free: true,
+        id: 'google/gemini-2.0-flash-exp:free',
         source_gateway: 'openrouter'
       };
 
       expect(isFreeModel(model)).toBe(true);
     });
 
-    it('should identify models with is_free=false as not free', () => {
+    it('should NOT identify models with is_free=true as free (only :free suffix matters)', () => {
       const model = {
         id: 'openrouter/some-model',
-        is_free: false,
+        is_free: true,
         source_gateway: 'openrouter'
       };
 
+      // is_free field is ignored - only :free suffix matters
       expect(isFreeModel(model)).toBe(false);
     });
 
-    it('should identify models without is_free field using :free suffix', () => {
-      const freeModel = {
-        id: 'google/gemini-2.0-flash-exp:free',
-        source_gateway: 'openrouter'
-      };
-
-      const paidModel = {
+    it('should identify OpenRouter models without :free suffix as not free', () => {
+      const model = {
         id: 'openai/gpt-4o',
         source_gateway: 'openrouter'
       };
 
-      expect(isFreeModel(freeModel)).toBe(true);
-      expect(isFreeModel(paidModel)).toBe(false);
+      expect(isFreeModel(model)).toBe(false);
     });
   });
 
@@ -1230,44 +1225,43 @@ describe('ModelSelect free model detection with is_free field', () => {
     });
   });
 
-  describe('category assignment based on is_free', () => {
+  describe('category assignment based on :free suffix', () => {
     const getCategoryForModel = (model: { id?: string; is_free?: boolean; source_gateway?: string; source_gateways?: string[] }): string => {
       const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
-      const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free') === true);
+      const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free') === true;
       return sourceGateway === 'portkey' ? 'Portkey' : (isFree ? 'Free' : 'Paid');
     };
 
-    it('should assign Free category to models with is_free=true', () => {
+    it('should assign Free category to OpenRouter models with :free suffix', () => {
       const model = {
         id: 'google/gemini-2.0-flash-exp:free',
-        is_free: true,
         source_gateway: 'openrouter'
       };
 
       expect(getCategoryForModel(model)).toBe('Free');
     });
 
-    it('should assign Paid category to models with is_free=false', () => {
+    it('should assign Paid category to OpenRouter models without :free suffix (even if is_free=true)', () => {
       const model = {
         id: 'openai/gpt-4o',
-        is_free: false,
+        is_free: true,
         source_gateway: 'openrouter'
       };
 
+      // is_free field is ignored - only :free suffix matters
       expect(getCategoryForModel(model)).toBe('Paid');
     });
 
-    it('should assign Portkey category for portkey models regardless of is_free', () => {
+    it('should assign Portkey category for portkey models regardless of :free suffix', () => {
       const model = {
-        id: 'portkey/model',
-        is_free: true,
+        id: 'portkey/model:free',
         source_gateway: 'portkey'
       };
 
       expect(getCategoryForModel(model)).toBe('Portkey');
     });
 
-    it('should correctly categorize models with :free suffix when is_free is not set', () => {
+    it('should correctly categorize models with :free suffix', () => {
       const freeModel = {
         id: 'google/gemini-2.0-flash-exp:free',
         source_gateway: 'openrouter'

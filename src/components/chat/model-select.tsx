@@ -6,6 +6,7 @@ import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkl
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
+import { isFreeModel, getModelPricingCategory } from "@/lib/model-pricing-utils"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -370,9 +371,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
         const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
           const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
           // Only OpenRouter models with :free suffix are legitimately free
-          // Use is_free field from backend, fallback to checking :free suffix for backwards compatibility
-          const isFreeModel = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
-          const category = sourceGateway === 'portkey' ? 'Portkey' : (isFreeModel ? 'Free' : 'Paid');
+          const category = getModelPricingCategory(model);
           const developer = getDeveloper(model.id);
 
           // Extract modalities from architecture.input_modalities
@@ -847,9 +846,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
             const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
             // Only OpenRouter models with :free suffix are legitimately free
-            // Use is_free field from backend, fallback to checking :free suffix for backwards compatibility
-            const isFreeModel = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
-            const category = sourceGateway === 'portkey' ? 'Portkey' : (isFreeModel ? 'Free' : 'Paid');
+            const category = getModelPricingCategory(model);
             const developer = getDeveloper(model.id);
             const modalities = model.architecture?.input_modalities?.map((m: string) =>
               m.charAt(0).toUpperCase() + m.slice(1)

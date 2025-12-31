@@ -30,6 +30,7 @@ import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
 import { safeParseJson } from '@/lib/http';
 import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, getAllActiveGatewayIds } from '@/lib/gateway-registry';
+import { isFreeModel as checkIsFreeModel, getSourceGateway } from '@/lib/model-pricing-utils';
 
 
 interface Model {
@@ -95,9 +96,7 @@ const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
   // Only OpenRouter models with :free suffix are legitimately free
-  // Use is_free field from backend, fallback to checking :free suffix for backwards compatibility
-  const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
-  const isFree = model.is_free === true || (sourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+  const isFree = checkIsFreeModel(model);
   const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
   const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
@@ -109,7 +108,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
                           model.description?.toLowerCase().includes('multi-lingual'));
 
   // Get gateways - support both old and new format
-  const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (model.source_gateway ? [model.source_gateway] : []);
+  const sourceGateway = getSourceGateway(model);
+  const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (sourceGateway ? [sourceGateway] : []);
 
   // NEW: Get providers - support both old and new format
   const providers = (model.provider_slugs && model.provider_slugs.length > 0) ? model.provider_slugs : (model.provider_slug ? [model.provider_slug] : []);
@@ -598,8 +598,7 @@ export default function ModelsClient({
         (contextLengthRange[0] === 0 && contextLengthRange[1] === 1024) || // No filter applied
         (model.context_length >= contextLengthRange[0] * 1000 && model.context_length <= contextLengthRange[1] * 1000);
       // Only OpenRouter models with :free suffix are legitimately free
-      const modelSourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
-      const isFree = model.is_free === true || (modelSourceGateway === 'openrouter' && model.id?.endsWith(':free'));
+      const isFree = checkIsFreeModel(model);
       const avgPrice = (parseFloat(model.pricing?.prompt || '0') + parseFloat(model.pricing?.completion || '0')) / 2;
       const priceMatch = (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
         isFree ||
@@ -727,9 +726,7 @@ export default function ModelsClient({
     let paidCount = 0;
     deduplicatedModels.forEach(m => {
       // Only OpenRouter models with :free suffix are legitimately free
-      const modelSourceGateway = m.source_gateway || (m.source_gateways?.[0]) || '';
-      const isFree = m.is_free === true || (modelSourceGateway === 'openrouter' && m.id?.endsWith(':free'));
-      if (isFree) {
+      if (checkIsFreeModel(m)) {
         freeCount++;
       } else {
         paidCount++;
