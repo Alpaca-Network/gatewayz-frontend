@@ -233,7 +233,7 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
 
   const privyConfig = useMemo<PrivyClientConfig>(() => {
     const config: PrivyClientConfig = {
-      loginMethods: ["email", "google", "github"],
+      loginMethods: ["email", "sms", "google", "github"],
       appearance: {
         theme: "light",
         accentColor: "#000000",

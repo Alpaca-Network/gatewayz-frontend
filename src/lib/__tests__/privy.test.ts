@@ -42,6 +42,10 @@ describe('privy.ts - Configuration File', () => {
       expect(privyConfig.config.loginMethods).toContain('email');
     });
 
+    it('should include sms login method for phone authentication', () => {
+      expect(privyConfig.config.loginMethods).toContain('sms');
+    });
+
     it('should include google login method', () => {
       expect(privyConfig.config.loginMethods).toContain('google');
     });
@@ -50,12 +54,12 @@ describe('privy.ts - Configuration File', () => {
       expect(privyConfig.config.loginMethods).toContain('github');
     });
 
-    it('should have exactly 3 login methods', () => {
-      expect(privyConfig.config.loginMethods).toHaveLength(3);
+    it('should have exactly 4 login methods', () => {
+      expect(privyConfig.config.loginMethods).toHaveLength(4);
     });
 
     it('should have login methods in expected order', () => {
-      expect(privyConfig.config.loginMethods).toEqual(['email', 'google', 'github']);
+      expect(privyConfig.config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
     });
   });
 
@@ -88,7 +92,7 @@ describe('privy.ts - Configuration File', () => {
 
     it('should prevent accidental modification of loginMethods', () => {
       // This test catches if someone accidentally modifies the login methods
-      expect(privyConfig.config.loginMethods).toEqual(['email', 'google', 'github']);
+      expect(privyConfig.config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
     });
 
     it('should always have at least email as a login method', () => {
@@ -146,7 +150,7 @@ describe('privy.ts - Configuration File', () => {
     it('should match login methods with PrivyProviderWrapper', () => {
       // This ensures the backup config in privy.ts matches the config in privy-provider.tsx
       // Both should have the same login methods
-      expect(privyConfig.config.loginMethods).toEqual(['email', 'google', 'github']);
+      expect(privyConfig.config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
     });
 
     it('should match appearance configuration with PrivyProviderWrapper', () => {
@@ -171,6 +175,40 @@ describe('privy.ts - Configuration File', () => {
       const config = privyConfig.config;
       expect(config.loginMethods).toBeDefined();
       expect(config.appearance).toBeDefined();
+    });
+  });
+
+  describe('Phone Authentication (SMS) Configuration', () => {
+    it('should have sms login method enabled', () => {
+      expect(privyConfig.config.loginMethods).toContain('sms');
+    });
+
+    it('should have sms positioned after email for optimal UX', () => {
+      const loginMethods = privyConfig.config.loginMethods;
+      const emailIndex = loginMethods.indexOf('email');
+      const smsIndex = loginMethods.indexOf('sms');
+      expect(emailIndex).toBe(0); // Email should be first
+      expect(smsIndex).toBe(1); // SMS should be second
+    });
+
+    it('should support phone authentication alongside other methods', () => {
+      const loginMethods = privyConfig.config.loginMethods;
+      // All 4 methods should be present
+      expect(loginMethods).toContain('email');
+      expect(loginMethods).toContain('sms');
+      expect(loginMethods).toContain('google');
+      expect(loginMethods).toContain('github');
+    });
+
+    it('should not accidentally remove phone auth in the future', () => {
+      // Regression test to ensure SMS is not removed
+      const hasSms = privyConfig.config.loginMethods.includes('sms');
+      expect(hasSms).toBe(true);
+    });
+
+    it('should maintain correct order: email, sms, google, github', () => {
+      // This ensures the login modal displays options in the expected order
+      expect(privyConfig.config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
     });
   });
 });
