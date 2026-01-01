@@ -9,6 +9,7 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import type { PrivyClientConfig } from "@privy-io/react-auth";
 import { base } from "viem/chains";
 import { RateLimitHandler } from "@/components/auth/rate-limit-handler";
+import { OriginErrorHandler } from "@/components/auth/origin-error-handler";
 import { GatewayzAuthProvider } from "@/context/gatewayz-auth-context";
 import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-interceptor";
 import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
@@ -36,7 +37,9 @@ interface PrivyProviderWrapperInnerProps extends PrivyProviderWrapperProps {
 function PrivyProviderWrapperInner({ children, className, storageStatus }: PrivyProviderWrapperInnerProps) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "clxxxxxxxxxxxxxxxxxxx";
   const [showRateLimit, setShowRateLimit] = useState(false);
+  const [showOriginError, setShowOriginError] = useState(false);
   const hasLoggedWalletConnectRelayErrorRef = useRef(false);
+  const hasLoggedOriginErrorRef = useRef(false);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams?.toString() ?? "";
@@ -98,6 +101,28 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
       }
 
       return null;
+    };
+
+    // Detect "Must specify origin" error - this requires Privy dashboard configuration
+    const isOriginConfigurationError = (errorStr?: string): boolean => {
+      if (!errorStr) {
+        return false;
+      }
+
+      const normalized = errorStr.toLowerCase();
+
+      // Check for the specific "Must specify origin" error message
+      // This occurs when the domain is not in Privy's allowed origins list
+      if (normalized.includes("must specify origin")) {
+        return true;
+      }
+
+      // Also check for 403 errors during OAuth init which typically indicate origin issues
+      if (normalized.includes("403") && normalized.includes("oauth/init")) {
+        return true;
+      }
+
+      return false;
     };
 
     // Classify IndexedDB-related errors from embedded wallet initialization
@@ -201,6 +226,34 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
         return;
       }
 
+      // Handle "Must specify origin" error - Privy dashboard configuration issue
+      if (isOriginConfigurationError(reasonStr)) {
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+        console.warn(`[Auth] Origin configuration error detected. Add "${origin}" to Privy allowed origins.`);
+
+        // Only show the error once and log to Sentry once
+        if (!hasLoggedOriginErrorRef.current) {
+          hasLoggedOriginErrorRef.current = true;
+          setShowOriginError(true);
+
+          Sentry.captureMessage("Privy OAuth origin not configured", {
+            level: 'error',
+            tags: {
+              auth_error: 'origin_not_configured',
+              origin: origin,
+            },
+            extra: {
+              errorMessage: reasonStr,
+              currentUrl: typeof window !== 'undefined' ? window.location.href : 'unknown',
+              fix: `Add "${origin}" to Privy dashboard → Settings → Allowed Origins`,
+            },
+          });
+        }
+
+        event.preventDefault();
+        return;
+      }
+
       // Handle Privy-specific errors (iframe not initialized, Java object gone)
       const privyErrorType = classifyPrivyError(reasonStr);
       if (privyErrorType) {
@@ -237,6 +290,31 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
     // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
     // which is loaded earlier in the component tree (layout.tsx) to avoid duplicate handling
     const errorListener = (event: ErrorEvent) => {
+      // Handle "Must specify origin" error
+      if (isOriginConfigurationError(event.message)) {
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+        console.warn(`[Auth] Origin configuration error detected. Add "${origin}" to Privy allowed origins.`);
+
+        if (!hasLoggedOriginErrorRef.current) {
+          hasLoggedOriginErrorRef.current = true;
+          setShowOriginError(true);
+
+          Sentry.captureMessage("Privy OAuth origin not configured", {
+            level: 'error',
+            tags: {
+              auth_error: 'origin_not_configured',
+              origin: origin,
+            },
+            extra: {
+              errorMessage: event.message,
+              currentUrl: typeof window !== 'undefined' ? window.location.href : 'unknown',
+              fix: `Add "${origin}" to Privy dashboard → Settings → Allowed Origins`,
+            },
+          });
+        }
+        return;
+      }
+
       // Handle Privy-specific errors
       const privyErrorType = classifyPrivyError(event.message);
       if (privyErrorType) {
@@ -276,9 +354,40 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
   const handleAuthError = useMemo(
     () => (error?: { status?: number; message?: string }) => {
       if (!error) return;
+
+      const errorMessage = error.message || '';
+
+      // Handle "Must specify origin" error
+      if (
+        errorMessage.toLowerCase().includes("must specify origin") ||
+        (error.status === 403 && errorMessage.toLowerCase().includes("oauth"))
+      ) {
+        const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+        console.warn(`[Auth] Origin configuration error detected. Add "${origin}" to Privy allowed origins.`);
+
+        if (!hasLoggedOriginErrorRef.current) {
+          hasLoggedOriginErrorRef.current = true;
+          setShowOriginError(true);
+
+          Sentry.captureMessage("Privy OAuth origin not configured", {
+            level: 'error',
+            tags: {
+              auth_error: 'origin_not_configured',
+              origin: origin,
+            },
+            extra: {
+              errorMessage: errorMessage,
+              currentUrl: typeof window !== 'undefined' ? window.location.href : 'unknown',
+              fix: `Add "${origin}" to Privy dashboard → Settings → Allowed Origins`,
+            },
+          });
+        }
+        return;
+      }
+
       // Handle rate limit errors gracefully with UI - no Sentry logging needed
       // as these are expected during high traffic and handled by RateLimitHandler
-      if (error.status === 429 || error.message?.includes("429")) {
+      if (error.status === 429 || errorMessage.includes("429")) {
         console.warn("[Auth] Rate limit (429) from Privy - showing user notification");
         setShowRateLimit(true);
       }
@@ -344,6 +453,7 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
   return (
     <StorageStatusContext.Provider value={storageStatus}>
       <RateLimitHandler show={showRateLimit} onDismiss={() => setShowRateLimit(false)} />
+      <OriginErrorHandler show={showOriginError} onDismiss={() => setShowOriginError(false)} />
       <PrivyProvider
         appId={appId}
         config={privyConfig}
