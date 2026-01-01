@@ -554,9 +554,135 @@ describe('POST /api/auth', () => {
     });
   });
 
-  describe.skip('Logging', () => {
-    // Skipping console logging tests as they can be flaky in Jest
-    // The actual logging functionality is verified manually
+  describe('Logging', () => {
+    // Create fresh spy instances for each test in this describe block
+    let localLogSpy: jest.SpyInstance;
+    let localErrorSpy: jest.SpyInstance;
+
+    beforeEach(() => {
+      localLogSpy = jest.spyOn(console, 'log');
+      localErrorSpy = jest.spyOn(console, 'error');
+    });
+
+    afterEach(() => {
+      localLogSpy.mockRestore();
+      localErrorSpy.mockRestore();
+    });
+
+    it('should log request details including timing on success', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'privy-123',
+        token: 'test-token',
+        is_new_user: false,
+        auth_method: 'email',
+      };
+
+      mockProxyFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ success: true }),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      await POST(request);
+
+      // Verify logging was called with expected structure
+      expect(localLogSpy).toHaveBeenCalledWith(
+        '[API /api/auth] Proxying authentication request to backend',
+        expect.objectContaining({
+          has_privy_user_id: true,
+          has_token: true,
+          is_new_user: false,
+          timestamp: expect.any(String),
+        })
+      );
+
+      expect(localLogSpy).toHaveBeenCalledWith(
+        '[API /api/auth] Backend auth successful',
+        expect.objectContaining({
+          status: 200,
+          durationMs: expect.any(Number),
+        })
+      );
+    });
+
+    it('should log error details including timing on failure', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'privy-123',
+        token: 'test-token',
+        is_new_user: false,
+      };
+
+      mockProxyFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        text: async () => JSON.stringify({ error: 'Invalid credentials' }),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      await POST(request);
+
+      expect(localErrorSpy).toHaveBeenCalledWith(
+        '[API /api/auth] Backend auth failed',
+        expect.objectContaining({
+          status: 401,
+          statusText: 'Unauthorized',
+          durationMs: expect.any(Number),
+        })
+      );
+    });
+
+    it('should log network error details', async () => {
+      const mockAuthRequest = {
+        privy_user_id: 'privy-123',
+      };
+
+      const networkError = new Error('ECONNREFUSED');
+      networkError.name = 'FetchError';
+      mockProxyFetch.mockRejectedValue(networkError);
+
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: JSON.stringify(mockAuthRequest),
+      });
+
+      await POST(request);
+
+      expect(localErrorSpy).toHaveBeenCalledWith(
+        '[API /api/auth] Backend request failed',
+        expect.objectContaining({
+          errorName: 'FetchError',
+          errorMessage: 'ECONNREFUSED',
+          durationMs: expect.any(Number),
+        })
+      );
+    });
+
+    it('should log unhandled errors with duration', async () => {
+      // Simulate JSON parse error
+      const request = new NextRequest('http://localhost:3000/api/auth', {
+        method: 'POST',
+        body: 'invalid json{',
+      });
+
+      await POST(request);
+
+      expect(localErrorSpy).toHaveBeenCalledWith(
+        '[API /api/auth] Unhandled error',
+        expect.objectContaining({
+          durationMs: expect.any(Number),
+        })
+      );
+    });
   });
 
   describe('Integration Scenarios', () => {
