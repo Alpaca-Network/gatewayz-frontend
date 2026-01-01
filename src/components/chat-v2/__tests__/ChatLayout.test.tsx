@@ -40,7 +40,7 @@ jest.mock('@/lib/utils', () => ({
   cn: (...args: any[]) => args.filter(Boolean).join(' '),
 }));
 
-// Mock lucide-react icons
+// Mock lucide-react icons (including icons used by sub-components)
 jest.mock('lucide-react', () => ({
   Menu: () => <span data-testid="menu-icon">Menu</span>,
   Pencil: () => <span data-testid="pencil-icon">Pencil</span>,
@@ -48,6 +48,33 @@ jest.mock('lucide-react', () => ({
   Unlock: () => <span data-testid="unlock-icon">Unlock</span>,
   Shield: () => <span data-testid="shield-icon">Shield</span>,
   Plus: () => <span data-testid="plus-icon">Plus</span>,
+  ImageIcon: () => <span data-testid="image-icon">Image</span>,
+  BarChart3: () => <span data-testid="bar-chart-icon">BarChart</span>,
+  Code2: () => <span data-testid="code-icon">Code</span>,
+  Lightbulb: () => <span data-testid="lightbulb-icon">Lightbulb</span>,
+  MoreHorizontal: () => <span data-testid="more-icon">More</span>,
+  // Icons used by ConnectionStatus
+  WifiOff: () => <span data-testid="wifi-off-icon">WifiOff</span>,
+  Wifi: () => <span data-testid="wifi-icon">Wifi</span>,
+  RefreshCw: () => <span data-testid="refresh-icon">RefreshCw</span>,
+  AlertCircle: () => <span data-testid="alert-circle-icon">AlertCircle</span>,
+  // Icons used by GuestChatCounter
+  MessageSquare: () => <span data-testid="message-square-icon">MessageSquare</span>,
+}));
+
+// Mock ConnectionStatus to avoid its dependencies
+jest.mock('../ConnectionStatus', () => ({
+  ConnectionStatus: () => <div data-testid="connection-status">ConnectionStatus</div>,
+}));
+
+// Mock GuestChatCounter to avoid its dependencies
+jest.mock('@/components/chat/guest-chat-counter', () => ({
+  GuestChatCounter: () => <div data-testid="guest-chat-counter">GuestChatCounter</div>,
+}));
+
+// Mock use-network-status hook
+jest.mock('@/hooks/use-network-status', () => ({
+  useNetworkStatus: () => ({ isOnline: true, isChecking: false }),
 }));
 
 // Mock the stores and hooks
@@ -193,8 +220,8 @@ describe('ChatLayout', () => {
     it('should render 4 prompt cards on welcome screen', () => {
       render(<ChatLayout />);
 
-      // Welcome screen should show "What's On Your Mind?"
-      expect(screen.getByText("What's On Your Mind?")).toBeInTheDocument();
+      // Welcome screen should show "What can I help with?"
+      expect(screen.getByText("What can I help with?")).toBeInTheDocument();
 
       // Should have exactly 4 prompt cards
       const cards = screen.getAllByTestId('card');
@@ -508,7 +535,7 @@ describe('Feedback handlers', () => {
 
     // Component renders successfully with feedback handlers defined internally
     // The handlers are passed to MessageList when there's an active session
-    expect(screen.getByText("What's On Your Mind?")).toBeInTheDocument();
+    expect(screen.getByText("What can I help with?")).toBeInTheDocument();
   });
 });
 
@@ -542,7 +569,7 @@ describe('handleShare', () => {
     render(<ChatLayout />);
 
     // Component renders without errors, handler is defined internally
-    expect(screen.getByText("What's On Your Mind?")).toBeInTheDocument();
+    expect(screen.getByText("What can I help with?")).toBeInTheDocument();
   });
 });
 

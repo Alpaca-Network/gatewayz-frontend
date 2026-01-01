@@ -1,0 +1,265 @@
+{
+  "title": "Frontend Error Monitoring Dashboard",
+  "description": "Comprehensive dashboard for monitoring frontend errors, tracking PR fixes, and measuring error resolution impact",
+  "widgets": [
+    {
+      "title": "Error Rate Trend (Last 7 Days)",
+      "displayType": "line",
+      "queries": [
+        {
+          "name": "Total Errors",
+          "fields": ["count()"],
+          "conditions": "!error.handled:true",
+          "orderby": "-time"
+        },
+        {
+          "name": "Critical Errors",
+          "fields": ["count()"],
+          "conditions": "!error.handled:true level:error",
+          "orderby": "-time"
+        }
+      ],
+      "description": "Track overall error rate and critical errors over time. Should trend downward after merging PRs."
+    },
+    {
+      "title": "Authentication Error Rate",
+      "displayType": "line",
+      "queries": [
+        {
+          "name": "Auth Errors",
+          "fields": ["count()"],
+          "conditions": "message:*auth* OR message:*privy* OR message:*sign-in* OR message:*login*",
+          "orderby": "-time"
+        }
+      ],
+      "description": "Monitor authentication-related errors (PRs #650, #652, #653, #659)"
+    },
+    {
+      "title": "Provider Initialization Errors",
+      "displayType": "line",
+      "queries": [
+        {
+          "name": "Statsig Errors",
+          "fields": ["count()"],
+          "conditions": "message:*statsig* OR message:*session replay*",
+          "orderby": "-time"
+        },
+        {
+          "name": "Privy Errors",
+          "fields": ["count()"],
+          "conditions": "message:*privy* OR message:*iframe*",
+          "orderby": "-time"
+        }
+      ],
+      "description": "Track provider initialization errors (PRs #651, #648)"
+    },
+    {
+      "title": "Mobile Browser Errors",
+      "displayType": "line",
+      "queries": [
+        {
+          "name": "iOS IndexedDB",
+          "fields": ["count()"],
+          "conditions": "message:*indexeddb* OR message:*database deleted* browser.name:*Safari* OR browser.name:*Mobile*",
+          "orderby": "-time"
+        },
+        {
+          "name": "iOS In-App Browsers",
+          "fields": ["count()"],
+          "conditions": "tags[is_ios_in_app_browser]:true",
+          "orderby": "-time"
+        }
+      ],
+      "description": "Monitor iOS-specific errors (PR #649)"
+    },
+    {
+      "title": "Error Distribution by Type",
+      "displayType": "table",
+      "queries": [
+        {
+          "name": "Error Types",
+          "fields": ["error.type", "count()", "count_unique(user)"],
+          "conditions": "!error.handled:true",
+          "orderby": "-count()"
+        }
+      ],
+      "description": "Top error types and affected users"
+    },
+    {
+      "title": "Filtered vs Captured Errors",
+      "displayType": "big_number",
+      "queries": [
+        {
+          "name": "Filtered (Non-Blocking)",
+          "fields": ["count()"],
+          "conditions": "error.handled:true"
+        },
+        {
+          "name": "Captured (Action Needed)",
+          "fields": ["count()"],
+          "conditions": "!error.handled:true"
+        },
+        {
+          "name": "Filter Rate %",
+          "fields": ["equation|count(error.handled:true) / (count(error.handled:true) + count(!error.handled:true)) * 100"]
+        }
+      ],
+      "description": "Effectiveness of error filtering (should be >90%)"
+    },
+    {
+      "title": "Sentry Quota Usage",
+      "displayType": "line",
+      "queries": [
+        {
+          "name": "Events Sent",
+          "fields": ["count()"],
+          "orderby": "-time"
+        },
+        {
+          "name": "Rate Limited",
+          "fields": ["count()"],
+          "conditions": "message:*rate limit* OR message:*429*",
+          "orderby": "-time"
+        }
+      ],
+      "description": "Monitor Sentry quota usage to prevent 429 errors"
+    },
+    {
+      "title": "Error Resolution Impact (PR Tracking)",
+      "displayType": "table",
+      "queries": [
+        {
+          "name": "PR Impact",
+          "fields": [
+            "tags[pr_number]",
+            "error.type",
+            "count()",
+            "equation|count(release:before) - count(release:after)"
+          ],
+          "conditions": "tags[pr_number]:*",
+          "orderby": "-equation"
+        }
+      ],
+      "description": "Track error reduction after PR merges"
+    },
+    {
+      "title": "Browser Extension Interference",
+      "displayType": "line",
+      "queries": [
+        {
+          "name": "Extension Errors",
+          "fields": ["count()"],
+          "conditions": "message:*chrome.runtime* OR message:*extension* OR message:*message port*",
+          "orderby": "-time"
+        }
+      ],
+      "description": "Track browser extension-related errors (should be filtered, PRs #646, #647)"
+    },
+    {
+      "title": "Storage Access Errors",
+      "displayType": "line",
+      "queries": [
+        {
+          "name": "localStorage Denied",
+          "fields": ["count()"],
+          "conditions": "message:*localStorage* AND message:*denied*",
+          "orderby": "-time"
+        },
+        {
+          "name": "IndexedDB Errors",
+          "fields": ["count()"],
+          "conditions": "message:*indexeddb* OR tags[error_type]:database_deleted OR tags[error_type]:connector_timeout",
+          "orderby": "-time"
+        }
+      ],
+      "description": "Monitor storage-related errors (should be filtered)"
+    },
+    {
+      "title": "Hydration & DOM Errors",
+      "displayType": "line",
+      "queries": [
+        {
+          "name": "Hydration Errors",
+          "fields": ["count()"],
+          "conditions": "message:*hydration* OR message:*text content does not match*",
+          "orderby": "-time"
+        },
+        {
+          "name": "DOM Manipulation",
+          "fields": ["count()"],
+          "conditions": "message:*removeChild* OR message:*insertBefore*",
+          "orderby": "-time"
+        }
+      ],
+      "description": "Monitor React/Next.js errors (should be filtered)"
+    },
+    {
+      "title": "Critical Auth Flow Errors",
+      "displayType": "table",
+      "queries": [
+        {
+          "name": "Auth Flow Errors",
+          "fields": ["message", "count()", "count_unique(user)", "last_seen()"],
+          "conditions": "message:*auth* !error.handled:true level:error",
+          "orderby": "-count()"
+        }
+      ],
+      "description": "Critical authentication errors requiring immediate attention"
+    },
+    {
+      "title": "Network Error Breakdown",
+      "displayType": "table",
+      "queries": [
+        {
+          "name": "Network Errors",
+          "fields": ["message", "count()", "http.status_code"],
+          "conditions": "message:*failed to fetch* OR message:*network error* OR message:*timeout*",
+          "orderby": "-count()"
+        }
+      ],
+      "description": "Network-related errors by status code"
+    },
+    {
+      "title": "Error Recovery Success Rate",
+      "displayType": "big_number",
+      "queries": [
+        {
+          "name": "Total Errors",
+          "fields": ["count()"],
+          "conditions": "!error.handled:true"
+        },
+        {
+          "name": "Recovered",
+          "fields": ["count()"],
+          "conditions": "tags[recovered]:true"
+        },
+        {
+          "name": "Recovery Rate %",
+          "fields": ["equation|count(tags[recovered]:true) / count() * 100"]
+        }
+      ],
+      "description": "Percentage of errors that were automatically recovered"
+    },
+    {
+      "title": "User Impact by Error",
+      "displayType": "table",
+      "queries": [
+        {
+          "name": "High Impact Errors",
+          "fields": ["error.type", "count_unique(user)", "count()", "p75(measurements.ttfb)"],
+          "conditions": "!error.handled:true",
+          "orderby": "-count_unique(user)"
+        }
+      ],
+      "description": "Errors affecting the most users (prioritization guide)"
+    }
+  ],
+  "filters": {
+    "environment": ["production"],
+    "project": ["gatewayz-frontend"]
+  },
+  "period": "7d",
+  "start": null,
+  "end": null,
+  "utc": false
+}

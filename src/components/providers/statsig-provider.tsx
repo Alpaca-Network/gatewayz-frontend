@@ -7,6 +7,24 @@ import { StatsigSessionReplayPlugin } from '@statsig/session-replay';
 import { usePrivy } from '@privy-io/react-auth';
 import { getUserData } from '@/lib/api';
 
+// Check if SDK key is valid (exists and is not a placeholder)
+const hasValidSdkKey = (): boolean => {
+  const key = process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
+  return !!key && key !== 'disabled' && key.length > 10;
+};
+
+// Create plugins only when SDK key is valid
+// This prevents DOM manipulation from session replay when analytics is disabled
+const createPlugins = () => {
+  if (!hasValidSdkKey()) {
+    return []; // No plugins when SDK key is invalid - prevents DOM conflicts
+  }
+  return [
+    new StatsigSessionReplayPlugin(), // Captures user sessions for debugging and analysis
+    new StatsigAutoCapturePlugin(),   // Automatically captures clicks, scrolls, and navigation events
+  ];
+};
+
 // Suppress Statsig SDK warnings when SDK key is missing
 // This prevents console spam from the Statsig SDK initialization
 const suppressStatsigWarnings = () => {
@@ -16,7 +34,7 @@ const suppressStatsigWarnings = () => {
   const originalError = console.error;
 
   // Only suppress if SDK key is not configured
-  const hasSDKKey = !!process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
+  const hasSDKKey = hasValidSdkKey();
 
   if (!hasSDKKey) {
     console.warn = (...args: any[]) => {
@@ -95,6 +113,11 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
   const [userId, setUserId] = React.useState<string>('anonymous');
   const [shouldBypassStatsig, setShouldBypassStatsig] = React.useState(false);
   const initTimeoutRef = React.useRef<NodeJS.Timeout>();
+  // Use a ref to track bypass state to avoid stale closures in setTimeout
+  const bypassRef = React.useRef(false);
+  // Memoize plugins to prevent re-creation on every render
+  // CRITICAL: Only create plugins when SDK key is valid to prevent DOM manipulation conflicts
+  const pluginsRef = React.useRef(createPlugins());
 
   // Get user ID from Privy or backend user data
   React.useEffect(() => {
@@ -109,19 +132,22 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
   }, [authenticated, user]);
 
   const sdkKey = process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
+  const isValidKey = hasValidSdkKey();
 
-  // Early exit: bypass Statsig entirely if SDK key is missing
+  // Early exit: bypass Statsig entirely if SDK key is missing or invalid
   // This prevents Statsig from trying to initialize and emitting warnings
   React.useEffect(() => {
-    if (!sdkKey) {
-      console.warn('[Statsig] SDK key not found in environment - analytics disabled');
+    if (!isValidKey) {
+      console.warn('[Statsig] SDK key not found or invalid in environment - analytics disabled');
+      bypassRef.current = true;
       setShouldBypassStatsig(true);
     }
-  }, [sdkKey]);
+  }, [isValidKey]);
 
   // Initialize Statsig client with enhanced error handling and caching
-  // Includes auto-capture and session replay plugins for automatic event tracking
-  // Only initialize if SDK key is present
+  // CRITICAL: Plugins are only created when SDK key is valid (see pluginsRef above)
+  // This prevents StatsigSessionReplayPlugin from manipulating the DOM when analytics is disabled,
+  // which was causing React VDOM desynchronization and removeChild errors.
   // disableStorage: false enables localStorage caching which persists feature flags across sessions
   // Note: The 429 rate limit errors on /monitoring endpoint are from Statsig's servers
   // and are handled gracefully by the SDK - they don't affect application functionality
@@ -129,20 +155,26 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
     sdkKey || 'disabled',
     { userID: userId },
     {
-      plugins: [
-        new StatsigSessionReplayPlugin(), // Captures user sessions for debugging and analysis
-        new StatsigAutoCapturePlugin(),   // Automatically captures clicks, scrolls, and navigation events
-      ],
+      plugins: pluginsRef.current, // Only contains plugins when SDK key is valid
       disableStorage: false, // Enable localStorage caching for feature flags (reduces API calls by ~50%)
     },
   );
 
   // Timeout: if Statsig doesn't initialize within 2 seconds, bypass it
   // This prevents ad blocker/network delays from blocking app rendering
+  // IMPORTANT: Do NOT include shouldBypassStatsig in the dependency array - it would cause an infinite loop
+  // because this effect sets that state. Use bypassRef to check the current bypass status instead.
   React.useEffect(() => {
+    // If already bypassed, don't set up another timeout
+    if (bypassRef.current) {
+      return;
+    }
+
     initTimeoutRef.current = setTimeout(() => {
-      if (!client && !shouldBypassStatsig) {
+      // Use ref to check current bypass status (avoids stale closure issues)
+      if (!client && !bypassRef.current) {
         console.warn('[Statsig] Initialization timeout (likely ad blocker or slow network) - bypassing analytics');
+        bypassRef.current = true;
         setShouldBypassStatsig(true);
       }
     }, 2000);
@@ -152,10 +184,10 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
         clearTimeout(initTimeoutRef.current);
       }
     };
-  }, [client, shouldBypassStatsig]);
+  }, [client]); // Removed shouldBypassStatsig from deps to prevent infinite loop
 
-  // Bypass Statsig if SDK key missing, timeout, client not ready, or initialization failed
-  if (!sdkKey || shouldBypassStatsig || !client) {
+  // Bypass Statsig if SDK key missing/invalid, timeout, client not ready, or initialization failed
+  if (!isValidKey || shouldBypassStatsig || !client) {
     // Mark analytics as unavailable
     if (typeof window !== 'undefined') {
       window.statsigAvailable = false;

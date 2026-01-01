@@ -32,8 +32,8 @@ const FALLBACK_POPULAR_MODELS: PopularModel[] = [
   { id: 'google/gemini-2.0-flash-001', name: 'Gemini 2.0 Flash', developer: 'Google', category: 'Paid' },
   { id: 'openrouter/deepseek/deepseek-r1', name: 'DeepSeek R1', developer: 'DeepSeek', category: 'Paid', sourceGateway: 'openrouter' },
   { id: 'deepseek/deepseek-chat', name: 'DeepSeek Chat', developer: 'DeepSeek', category: 'Paid' },
-  { id: 'openrouter/meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', developer: 'Meta', category: 'Free', sourceGateway: 'openrouter' },
-  { id: 'openrouter/qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B', developer: 'Qwen', category: 'Free', sourceGateway: 'openrouter' },
+  { id: 'openrouter/meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B', developer: 'Meta', category: 'Paid', sourceGateway: 'openrouter' },
+  { id: 'openrouter/qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B', developer: 'Qwen', category: 'Paid', sourceGateway: 'openrouter' },
   { id: 'x-ai/grok-2-1212', name: 'Grok 2', developer: 'xAI', category: 'Paid' },
   { id: 'mistralai/mistral-large-2411', name: 'Mistral Large', developer: 'Mistral AI', category: 'Paid' },
 ];

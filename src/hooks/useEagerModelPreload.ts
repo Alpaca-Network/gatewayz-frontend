@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { getAdaptiveTimeout } from '@/lib/network-timeouts';
+import { getModelPricingCategory, getSourceGateway } from '@/lib/model-pricing-utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 const PRELOAD_CACHE_KEY = 'gatewayz_models_preload_state';
@@ -86,11 +87,9 @@ async function preloadModels() {
 
     // Convert to ModelOption format and cache
     const modelOptions = data.data.map((model: any) => {
-      const sourceGateway = model.source_gateway || 'openrouter';
-      const promptPrice = Number(model.pricing?.prompt ?? 0);
-      const completionPrice = Number(model.pricing?.completion ?? 0);
-      const isPaid = promptPrice > 0 || completionPrice > 0;
-      const category = sourceGateway === 'portkey' ? 'Portkey' : (isPaid ? 'Paid' : 'Free');
+      const sourceGateway = getSourceGateway(model);
+      // Only OpenRouter models with :free suffix are legitimately free
+      const category = getModelPricingCategory(model);
 
       return {
         value: model.id,

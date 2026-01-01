@@ -16,6 +16,14 @@ jest.mock('next/link', () => {
   );
 });
 
+// Mock lucide-react icons
+jest.mock('lucide-react', () => ({
+  Coins: () => <span data-testid="coins-icon">Coins</span>,
+  Crown: () => <span data-testid="crown-icon">Crown</span>,
+  Sparkles: () => <span data-testid="sparkles-icon">Sparkles</span>,
+  AlertCircle: () => <span data-testid="alert-icon">AlertCircle</span>,
+}));
+
 describe('CreditsDisplay', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -63,6 +71,7 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
+      // Should show 0 credits
       expect(screen.getByText('0')).toBeInTheDocument();
     });
 
@@ -81,6 +90,7 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
+      // Should show 500 credits
       expect(screen.getByText('500')).toBeInTheDocument();
     });
   });
@@ -177,6 +187,110 @@ describe('CreditsDisplay', () => {
     });
   });
 
+  describe('Trial Users', () => {
+    it('should display trial badge with days remaining', () => {
+      // Set trial to expire in 5 days
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 5);
+
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Trial User',
+        email: 'trial@example.com',
+        credits: 1000,
+        tier: 'pro',
+        subscription_status: 'trial',
+        trial_expires_at: futureDate.toISOString(),
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show trial badge with days remaining
+      expect(screen.getByText(/Trial.*\(5d\)/)).toBeInTheDocument();
+      // Should not show PRO badge or credits
+      expect(screen.queryByText('PRO')).not.toBeInTheDocument();
+      expect(screen.queryByText('1,000')).not.toBeInTheDocument();
+    });
+
+    it('should display "Trial ending" when trial expires within 1 day', () => {
+      // Set trial to expire in 12 hours (less than 1 day)
+      const futureDate = new Date();
+      futureDate.setHours(futureDate.getHours() + 12);
+
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Trial User',
+        email: 'trial@example.com',
+        credits: 1000,
+        tier: 'pro',
+        subscription_status: 'trial',
+        trial_expires_at: futureDate.toISOString(),
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show "Trial ending" text
+      expect(screen.getByText('Trial ending')).toBeInTheDocument();
+    });
+
+    it('should display trial without days when trial_expires_at is not set', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Trial User',
+        email: 'trial@example.com',
+        credits: 1000,
+        tier: 'pro',
+        subscription_status: 'trial',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show just "Trial" without days
+      expect(screen.getByText('Trial')).toBeInTheDocument();
+    });
+  });
+
+  describe('Expired Trial Users', () => {
+    it('should display upgrade prompt for expired trial', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Expired User',
+        email: 'expired@example.com',
+        credits: 0,
+        tier: 'basic',
+        subscription_status: 'expired',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show upgrade prompt
+      expect(screen.getByText('Upgrade')).toBeInTheDocument();
+      // Should not show credits or tier badges
+      expect(screen.queryByText('0')).not.toBeInTheDocument();
+      expect(screen.queryByText('PRO')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should not render when credits is null', () => {
       (getUserData as jest.Mock).mockReturnValue(null);
@@ -242,6 +356,7 @@ describe('CreditsDisplay', () => {
 
       const { rerender } = render(<CreditsDisplay />);
 
+      // Should show credit count
       expect(screen.getByText('1,000')).toBeInTheDocument();
 
       // Simulate upgrade to PRO

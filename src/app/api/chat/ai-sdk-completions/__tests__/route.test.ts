@@ -821,4 +821,182 @@ describe('AI SDK Completions Route', () => {
       }
     });
   });
+
+  describe('Message Format Conversion', () => {
+    it('should convert OpenAI format messages with image_url to AI SDK format', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'I see the image' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What is in this image?' },
+              { type: 'image_url', image_url: { url: 'https://example.com/image.jpg' } }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Verify streamText was called with converted messages
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      expect(callArgs.messages).toBeDefined();
+      expect(callArgs.messages.length).toBe(1);
+      expect(callArgs.messages[0].role).toBe('user');
+      expect(Array.isArray(callArgs.messages[0].content)).toBe(true);
+
+      const content = callArgs.messages[0].content;
+      expect(content[0].type).toBe('text');
+      expect(content[0].text).toBe('What is in this image?');
+      expect(content[1].type).toBe('image');
+      expect(content[1].image).toBeInstanceOf(URL);
+      expect(content[1].image.toString()).toBe('https://example.com/image.jpg');
+    });
+
+    it('should handle string content without modification', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Hello!' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hi there!' },
+            { role: 'user', content: 'How are you?' }
+          ],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      expect(callArgs.messages).toEqual([
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there!' },
+        { role: 'user', content: 'How are you?' }
+      ]);
+    });
+
+    it('should handle system messages with array content', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{
+            role: 'system',
+            content: [
+              { type: 'text', text: 'You are a helpful assistant.' },
+              { type: 'text', text: 'Be concise.' }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      expect(callArgs.messages[0].role).toBe('system');
+      expect(callArgs.messages[0].content).toBe('You are a helpful assistant.\nBe concise.');
+    });
+
+    it('should convert multiple text parts to single string for simpler format', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Single text part' }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      // Single text part should be converted to string
+      expect(callArgs.messages[0].content).toBe('Single text part');
+    });
+
+    it('should skip unsupported media types gracefully', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Check this video' },
+              { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+              { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+      // Video and audio should be skipped, only text remains
+      expect(callArgs.messages[0].content).toBe('Check this video');
+    });
+  });
 });
