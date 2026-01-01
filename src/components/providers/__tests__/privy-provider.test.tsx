@@ -68,10 +68,15 @@ jest.mock('@sentry/nextjs', () => ({
 
 const mockCanUseLocalStorage = jest.fn(() => true);
 const mockWaitForLocalStorageAccess = jest.fn(() => Promise.resolve(true));
+const mockShouldDisableEmbeddedWallets = jest.fn(() => false);
 
 jest.mock('@/lib/safe-storage', () => ({
   canUseLocalStorage: () => mockCanUseLocalStorage(),
   waitForLocalStorageAccess: () => mockWaitForLocalStorageAccess(),
+}));
+
+jest.mock('@/lib/browser-detection', () => ({
+  shouldDisableEmbeddedWallets: () => mockShouldDisableEmbeddedWallets(),
 }));
 
 describe('PrivyProviderWrapper', () => {
@@ -83,6 +88,7 @@ describe('PrivyProviderWrapper', () => {
     delete process.env.NEXT_PUBLIC_PRIVY_OAUTH_REDIRECT_ORIGIN;
     mockCanUseLocalStorage.mockReturnValue(true);
     mockWaitForLocalStorageAccess.mockResolvedValue(true);
+    mockShouldDisableEmbeddedWallets.mockReturnValue(false);
     mockIsVercelPreviewDeployment.mockReturnValue(false);
     mockUsePathname.mockReturnValue('/');
     mockUseSearchParams.mockReturnValue({
@@ -213,6 +219,7 @@ describe('PrivyProviderWrapper', () => {
     describe('Embedded Wallets Configuration', () => {
       it('should enable ethereum embedded wallets for users without wallets', () => {
         process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+        mockShouldDisableEmbeddedWallets.mockReturnValue(false);
 
         render(
           <PrivyProviderWrapper>
@@ -224,6 +231,26 @@ describe('PrivyProviderWrapper', () => {
         expect(config.embeddedWallets).toBeDefined();
         expect(config.embeddedWallets.ethereum).toBeDefined();
         expect(config.embeddedWallets.ethereum.createOnLogin).toBe('users-without-wallets');
+      });
+
+      it('should disable embedded wallets on iOS in-app browsers', () => {
+        process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+        mockShouldDisableEmbeddedWallets.mockReturnValue(true);
+        const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+        render(
+          <PrivyProviderWrapper>
+            <div>Test Child</div>
+          </PrivyProviderWrapper>
+        );
+
+        const config = (global as any).__PRIVY_CONFIG__;
+        expect(config.embeddedWallets).toBeUndefined();
+        expect(consoleSpy).toHaveBeenCalledWith(
+          '[Auth] Embedded wallets disabled due to iOS in-app browser environment'
+        );
+
+        consoleSpy.mockRestore();
       });
     });
 
@@ -417,6 +444,7 @@ describe('PrivyProviderWrapper', () => {
 
     it('should maintain all required authentication settings', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+      mockShouldDisableEmbeddedWallets.mockReturnValue(false);
 
       render(
         <PrivyProviderWrapper>
@@ -429,6 +457,7 @@ describe('PrivyProviderWrapper', () => {
       // Check all critical settings are present
       expect(config.loginMethods).toBeDefined();
       expect(config.appearance).toBeDefined();
+      // embeddedWallets is only defined when not in problematic environment
       expect(config.embeddedWallets).toBeDefined();
       expect(config.defaultChain).toBeDefined();
     });
