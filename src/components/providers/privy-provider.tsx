@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
@@ -20,7 +20,19 @@ interface PrivyProviderWrapperProps {
   className?: string;
 }
 
-function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapperProps) {
+// Context to track storage readiness - used by useAuth to provide safe fallback
+type StorageStatus = "checking" | "ready" | "blocked";
+const StorageStatusContext = createContext<StorageStatus>("checking");
+
+export function useStorageStatus() {
+  return useContext(StorageStatusContext);
+}
+
+interface PrivyProviderWrapperInnerProps extends PrivyProviderWrapperProps {
+  storageStatus: StorageStatus;
+}
+
+function PrivyProviderWrapperInner({ children, className, storageStatus }: PrivyProviderWrapperInnerProps) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID || "clxxxxxxxxxxxxxxxxxxx";
   const [showRateLimit, setShowRateLimit] = useState(false);
   const hasLoggedWalletConnectRelayErrorRef = useRef(false);
@@ -254,23 +266,21 @@ function PrivyProviderWrapperInner({ children, className }: PrivyProviderWrapper
     return config;
   }, [previewSafeOAuthRedirectUrl]);
 
-  const renderChildren = children;
-
   return (
-    <>
+    <StorageStatusContext.Provider value={storageStatus}>
       <RateLimitHandler show={showRateLimit} onDismiss={() => setShowRateLimit(false)} />
       <PrivyProvider
         appId={appId}
         config={privyConfig}
       >
         <PreviewHostnameInterceptor />
-        <GatewayzAuthProvider onAuthError={handleAuthError}>{renderChildren}</GatewayzAuthProvider>
+        <GatewayzAuthProvider onAuthError={handleAuthError}>{children}</GatewayzAuthProvider>
       </PrivyProvider>
-    </>
+    </StorageStatusContext.Provider>
   );
 }
 
-const PrivyProviderNoSSR = dynamic(
+const PrivyProviderNoSSR = dynamic<PrivyProviderWrapperInnerProps>(
   () => Promise.resolve(PrivyProviderWrapperInner),
   { ssr: false }
 );
@@ -292,7 +302,7 @@ function StorageDisabledNotice() {
 export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
   // Always start with "checking" during SSR to ensure consistent hydration
   // This prevents server/client mismatch since canUseLocalStorage() returns false on server
-  const [status, setStatus] = useState<"checking" | "ready" | "blocked">("checking");
+  const [status, setStatus] = useState<StorageStatus>("checking");
 
   useEffect(() => {
     // Check localStorage availability after mount (client-side only)
@@ -313,15 +323,23 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
     };
   }, []);
 
-  if (status === "checking") {
-    // Return empty fragment instead of null for consistent hydration
-    return <></>;
-  }
-
+  // Always render the provider to ensure the context chain is never broken.
+  // This fixes the "Invalid hook call" error that occurred when hooks like usePrivy
+  // were called while the provider was conditionally unmounted during "checking" state.
+  // The storageStatus prop allows child components to know the current state and
+  // render appropriate loading/blocked UI as needed.
+  
+  // When storage is blocked, show the notice instead of children
   if (status === "blocked") {
-    return <StorageDisabledNotice />;
+    return (
+      <PrivyProviderNoSSR {...props} storageStatus={status}>
+        <StorageDisabledNotice />
+      </PrivyProviderNoSSR>
+    );
   }
 
-  return <PrivyProviderNoSSR {...props} />;
+  // For "checking" and "ready" states, always render the provider with children
+  // Children can use useStorageStatus() to show loading states if needed
+  return <PrivyProviderNoSSR {...props} storageStatus={status} />;
 }
 
