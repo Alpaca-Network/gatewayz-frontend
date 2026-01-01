@@ -735,7 +735,7 @@ export function GatewayzAuthProvider({
       if (isNewUser) {
         return {
           ...authRequestBody,
-          trial_credits: 10,
+          trial_credits: 3,
         };
       }
 
@@ -942,6 +942,13 @@ export function GatewayzAuthProvider({
         const timeoutMs = Math.max(adaptiveTimeout, MIN_AUTH_SYNC_TIMEOUT_MS);
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // Network-aware timeout
 
+        const fetchStartTime = performance.now();
+        console.log("[Auth] Starting backend auth request", {
+          timeoutMs,
+          adaptiveTimeout,
+          timestamp: new Date().toISOString(),
+        });
+
         let response: Response;
         try {
           response = await retryFetch(
@@ -962,9 +969,27 @@ export function GatewayzAuthProvider({
               retryableStatuses: [500, 502, 503, 504], // Include 500 errors for retry
             }
           );
+        } catch (fetchError) {
+          const fetchDuration = performance.now() - fetchStartTime;
+          console.error("[Auth] Backend auth fetch failed", {
+            error: fetchError instanceof Error ? fetchError.message : String(fetchError),
+            errorName: fetchError instanceof Error ? fetchError.name : 'Unknown',
+            durationMs: Math.round(fetchDuration),
+            wasAborted: fetchError instanceof DOMException && fetchError.name === 'AbortError',
+          });
+          clearTimeout(timeoutId);
+          throw fetchError;
         } finally {
           clearTimeout(timeoutId);
         }
+
+        const fetchDuration = performance.now() - fetchStartTime;
+        console.log("[Auth] Backend auth response received", {
+          status: response.status,
+          statusText: response.statusText,
+          durationMs: Math.round(fetchDuration),
+          ok: response.ok,
+        });
 
         const rawResponseText = await response.text();
 

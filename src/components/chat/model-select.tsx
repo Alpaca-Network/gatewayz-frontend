@@ -6,6 +6,7 @@ import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkl
 
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
+import { isFreeModel, getModelPricingCategory } from "@/lib/model-pricing-utils"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -368,11 +369,9 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
         const uniqueModels = Array.from(uniqueModelsMap.values());
 
         const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
-          const sourceGateway = model.source_gateway || 'openrouter';
-          const promptPrice = Number(model.pricing?.prompt ?? 0);
-          const completionPrice = Number(model.pricing?.completion ?? 0);
-          const isPaid = promptPrice > 0 || completionPrice > 0;
-          const category = sourceGateway === 'portkey' ? 'Portkey' : (isPaid ? 'Paid' : 'Free');
+          const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
+          // Only OpenRouter models with :free suffix are legitimately free
+          const category = getModelPricingCategory(model);
           const developer = getDeveloper(model.id);
 
           // Extract modalities from architecture.input_modalities
@@ -845,11 +844,9 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           const uniqueModels = Array.from(uniqueModelsMap.values());
 
           const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
-            const sourceGateway = model.source_gateway || 'openrouter';
-            const promptPrice = Number(model.pricing?.prompt ?? 0);
-            const completionPrice = Number(model.pricing?.completion ?? 0);
-            const isPaid = promptPrice > 0 || completionPrice > 0;
-            const category = sourceGateway === 'portkey' ? 'Portkey' : (isPaid ? 'Paid' : 'Free');
+            const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
+            // Only OpenRouter models with :free suffix are legitimately free
+            const category = getModelPricingCategory(model);
             const developer = getDeveloper(model.id);
             const modalities = model.architecture?.input_modalities?.map((m: string) =>
               m.charAt(0).toUpperCase() + m.slice(1)

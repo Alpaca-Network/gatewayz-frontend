@@ -207,8 +207,47 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
-  // NOTE: Next.js hydration errors are now captured (not filtered)
-  // These are important for debugging SSR/hydration mismatches
+  // Filter out Next.js hydration errors from Google Ads parameters and dynamic content
+  // These errors occur when SSR HTML doesn't match CSR due to:
+  // - Google Ads query parameters (gad_source, gad_campaignid, gclid)
+  // - Dynamic timestamps, user-specific content, A/B testing, etc.
+  // These are benign and non-blocking - the page still functions correctly
+  // The mismatch gets resolved on the client side automatically
+  const isHydrationError =
+    errorMessageLower.includes('hydration') ||
+    eventMessageLower.includes('hydration') ||
+    errorMessageLower.includes("text content does not match server-rendered") ||
+    errorMessageLower.includes("text content does not match") ||
+    errorMessageLower.includes("there was an error while hydrating") ||
+    errorMessageLower.includes("hydration error") ||
+    eventMessageLower.includes("text content does not match server-rendered") ||
+    eventMessageLower.includes("text content does not match") ||
+    eventMessageLower.includes("there was an error while hydrating") ||
+    eventMessageLower.includes("hydration error");
+
+  if (isHydrationError) {
+    console.debug('[Sentry] Filtered out hydration error (benign SSR/CSR mismatch from dynamic content)');
+    return true;
+  }
+
+  // Filter out DOM manipulation race condition errors (removeChild, insertBefore)
+  // These occur during React concurrent updates or when third-party scripts
+  // (like Statsig, analytics, browser extensions) manipulate the DOM simultaneously with React
+  // These are benign timing issues that don't affect functionality - React recovers automatically
+  const isDOMManipulationError =
+    (errorMessageLower.includes('removechild') ||
+     errorMessageLower.includes('insertbefore') ||
+     eventMessageLower.includes('removechild') ||
+     eventMessageLower.includes('insertbefore')) &&
+    (errorMessageLower.includes('not a child of this node') ||
+     errorMessageLower.includes('failed to execute') ||
+     eventMessageLower.includes('not a child of this node') ||
+     eventMessageLower.includes('failed to execute'));
+
+  if (isDOMManipulationError) {
+    console.debug('[Sentry] Filtered out DOM manipulation race condition error (benign timing issue)');
+    return true;
+  }
 
   // Filter out 429 rate limit errors from monitoring/telemetry endpoints
   // These create a cascade: Sentry tries to report 429 errors, which causes more 429s
@@ -267,13 +306,18 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   // These are triggered by our intentional parallel model prefetch optimization
   // The prefetch hook makes 6 parallel requests to different gateways for performance
   // This is NOT a bug - it's a deliberate optimization pattern
+  // Filter regardless of level since these can appear as info, warning, or unset
   if (
-    event.level === 'info' &&
-    (errorMessageLower.includes('n+1 api call') ||
-     eventMessageLower.includes('n+1 api call') ||
-     (event.message?.toLowerCase() || '').includes('n+1 api call'))
+    errorMessageLower.includes('n+1') ||
+    errorMessageLower.includes('n + 1') ||
+    errorMessageLower.includes('n plus 1') ||
+    eventMessageLower.includes('n+1') ||
+    eventMessageLower.includes('n + 1') ||
+    eventMessageLower.includes('n plus 1') ||
+    (event.message?.toLowerCase() || '').includes('n+1') ||
+    (event.message?.toLowerCase() || '').includes('n + 1')
   ) {
-    console.debug('[Sentry] Filtered out N+1 API Call info event (intentional parallel prefetch optimization)');
+    console.debug('[Sentry] Filtered out N+1 API Call event (intentional parallel prefetch optimization)');
     return true;
   }
 
@@ -349,6 +393,50 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
      (event.message?.toLowerCase() || '').includes('large http payload'))
   ) {
     console.debug('[Sentry] Filtered out Large HTTP payload info event (monitoring only)');
+    return true;
+  }
+
+  // Filter out generic "Load failed" TypeError from resource loading (but keep API errors)
+  // These are usually from:
+  // - CDN failures (temporary)
+  // - Network issues (transient)
+  // - Ad blockers (third-party)
+  // - Browser extensions blocking resources
+  // The browser automatically retries these, so they're not actionable
+  // We KEEP API-related load failures as those indicate backend issues
+  const isGenericLoadFailed =
+    (errorMessage === 'Load failed' || eventMessage === 'Load failed') &&
+    (event.exception?.values?.[0]?.type === 'TypeError' || !event.exception?.values?.[0]?.type);
+
+  if (isGenericLoadFailed) {
+    // Check if it's an API call - if so, don't filter (we want to see API failures)
+    const isAPIError =
+      errorMessageLower.includes('api') ||
+      errorMessageLower.includes('/api/') ||
+      eventMessageLower.includes('api') ||
+      eventMessageLower.includes('/api/') ||
+      stackFrames?.some(frame =>
+        frame.filename?.includes('/api/') ||
+        frame.filename?.includes('api.')
+      );
+
+    if (!isAPIError) {
+      console.debug('[Sentry] Filtered out generic resource Load failed error (CDN/network/ad blocker)');
+      return true;
+    }
+  }
+
+  // Filter out cross-origin "Script error." messages
+  // These occur when third-party scripts (Google Analytics, ads, etc.) loaded from
+  // different origins throw errors without proper CORS headers
+  // We cannot debug these as we don't have stack traces or error details
+  const isScriptError =
+    (errorMessage === 'Script error.' || errorMessage === 'Script error' ||
+     eventMessage === 'Script error.' || eventMessage === 'Script error') &&
+    (!stackFrames || stackFrames.length === 0);
+
+  if (isScriptError) {
+    console.debug('[Sentry] Filtered out cross-origin Script error (third-party script without CORS)');
     return true;
   }
 
@@ -526,18 +614,62 @@ Sentry.init({
   // Release tracking for associating errors with specific versions
   release: getRelease(),
 
-  // Sample 10% of transactions for performance monitoring
-  tracesSampleRate: 0.1,
+  // Sample 1% of transactions for performance monitoring (reduced from 10% to stay within quota)
+  tracesSampleRate: 0.01,
 
   // Setting this option to true will print useful information to the console while you're setting up Sentry.
   debug: false,
 
-  // Enable session replays for better error debugging
-  replaysOnErrorSampleRate: 1,    // Capture replay for 100% of errors
-  replaysSessionSampleRate: 0.1,  // Capture 10% of sessions (balances cost/privacy with debugging)
+  // Session replays - SIGNIFICANTLY REDUCED to stay within Sentry quota
+  // Previous settings (100% errors + 10% sessions) caused 798% overage on replays quota
+  replaysOnErrorSampleRate: 0.01,   // Capture replay for 1% of errors (reduced from 100%)
+  replaysSessionSampleRate: 0,      // Disable session replays entirely (reduced from 10%)
 
   // Limit breadcrumbs to reduce payload size
   maxBreadcrumbs: RATE_LIMIT_CONFIG.maxBreadcrumbs,
+
+  // Ignore errors from third-party scripts and browser extensions
+  // NOTE: 'Script error' and 'Load failed' are NOT in this list because we have
+  // nuanced filtering logic in beforeSend() that preserves important errors:
+  // - Script errors WITH stack traces (may be from our code)
+  // - Load failed errors related to API calls (backend issues we need to see)
+  ignoreErrors: [
+    // Chrome extensions
+    'Extension context invalidated',
+    'Extension ID',
+    // Wallet extensions
+    'removeListener',
+    'stopListeners',
+  ],
+
+  // Deny URLs from third-party domains and browser extensions
+  denyUrls: [
+    // Browser extensions
+    /^chrome-extension:\/\//i,
+    /^moz-extension:\/\//i,
+    /^safari-extension:\/\//i,
+    /extensions\//i,
+    /^chrome:\/\//i,
+    // Wallet extensions
+    /inpage\.js/i,
+    /contentscript\.js/i,
+    /evmAsk\.js/i,
+    // Google Analytics and Ads
+    /google-analytics\.com/i,
+    /googletagmanager\.com/i,
+    /doubleclick\.net/i,
+    /googleads\.g\.doubleclick\.net/i,
+    /stats\.g\.doubleclick\.net/i,
+    /pagead\/js/i,
+    // Other third-party analytics (specific CDN patterns to avoid filtering local integration files)
+    /cdn\.statsig\.com/i,
+    /statsig-sdk/i,
+    /app\.posthog\.com/i,
+    /posthog-js/i,
+    // WalletConnect
+    /walletconnect\.com/i,
+    /walletconnect\.org/i,
+  ],
 
   // Enable replay integration for session recordings
   integrations: [

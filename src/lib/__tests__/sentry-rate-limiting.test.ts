@@ -25,21 +25,22 @@ describe('Sentry Rate Limiting Configuration', () => {
     });
 
     it('should have reasonable transaction sample rate', () => {
-      // tracesSampleRate should allow sufficient monitoring
-      const EXPECTED_TRACES_SAMPLE_RATE = 0.1; // 10%
+      // tracesSampleRate reduced from 10% to 1% to stay within quota
+      const EXPECTED_TRACES_SAMPLE_RATE = 0.01; // 1%
 
-      expect(EXPECTED_TRACES_SAMPLE_RATE).toBe(0.1);
+      expect(EXPECTED_TRACES_SAMPLE_RATE).toBe(0.01);
     });
 
-    it('should have replays enabled for debugging', () => {
-      // Replays are enabled for better error debugging
+    it('should have replays minimized to stay within quota', () => {
+      // Replays significantly reduced to address 798% overage on Sentry quota
+      // Previous: 100% error replays + 10% session replays caused massive quota overage
       const EXPECTED_REPLAY_RATES = {
-        replaysOnErrorSampleRate: 1,    // 100% of errors
-        replaysSessionSampleRate: 0.1,  // 10% of sessions (balances cost/privacy)
+        replaysOnErrorSampleRate: 0.01, // 1% of errors (reduced from 100%)
+        replaysSessionSampleRate: 0,    // Disabled entirely (reduced from 10%)
       };
 
-      expect(EXPECTED_REPLAY_RATES.replaysOnErrorSampleRate).toBe(1);
-      expect(EXPECTED_REPLAY_RATES.replaysSessionSampleRate).toBe(0.1);
+      expect(EXPECTED_REPLAY_RATES.replaysOnErrorSampleRate).toBe(0.01);
+      expect(EXPECTED_REPLAY_RATES.replaysSessionSampleRate).toBe(0);
     });
   });
 

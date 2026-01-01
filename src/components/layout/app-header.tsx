@@ -16,6 +16,7 @@ import { CreditsDisplay } from "./credits-display";
 import { Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
+import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
 
 const getWalletAddress = (user: any) => {
   try {
@@ -216,7 +217,7 @@ export function AppHeader() {
                 <UserNav user={user} />
               </>
             ) : (
-              <Button variant="outline" onClick={() => login()}>Sign In</Button>
+              <Button variant="outline" onClick={() => { trackTwitterSignupClick(); login(); }}>Sign In</Button>
             )}
             <ThemeToggle />
           </div>
@@ -230,7 +231,7 @@ export function AppHeader() {
               </>
             )}
             {!user && (
-              <Button variant="outline" size="sm" onClick={() => login()}>Sign In</Button>
+              <Button variant="outline" size="sm" onClick={() => { trackTwitterSignupClick(); login(); }}>Sign In</Button>
             )}
           </div>
           <div className="lg:hidden shrink-0">
@@ -417,6 +418,7 @@ export function AppHeader() {
                         className="w-full"
                         disabled={isAuthenticating}
                         onClick={() => {
+                          trackTwitterSignupClick();
                           login();
                           setMobileMenuOpen(false);
                         }}

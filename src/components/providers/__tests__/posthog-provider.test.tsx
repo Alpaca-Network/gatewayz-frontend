@@ -1,5 +1,5 @@
 import { render, waitFor, act } from '@testing-library/react';
-import { PostHogProvider } from '../posthog-provider';
+import { PostHogProvider, PostHogPageView } from '../posthog-provider';
 import posthog from 'posthog-js';
 
 // Mock posthog
@@ -7,6 +7,7 @@ jest.mock('posthog-js', () => ({
   init: jest.fn(),
   startSessionRecording: jest.fn(),
   capture: jest.fn(),
+  __loaded: false,
 }));
 
 // Mock next/navigation
@@ -258,5 +259,88 @@ describe('PostHogProvider', () => {
     expect(posthog.init).not.toHaveBeenCalled();
 
     jest.useRealTimers();
+  });
+});
+
+describe('PostHogPageView', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    // Reset __loaded state
+    (posthog as any).__loaded = false;
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('should capture pageview immediately when PostHog is already loaded', () => {
+    // Set PostHog as loaded
+    (posthog as any).__loaded = true;
+
+    render(<PostHogPageView />);
+
+    expect(posthog.capture).toHaveBeenCalledWith('$pageview', {
+      $current_url: expect.stringContaining('/test'),
+    });
+  });
+
+  it('should wait for PostHog to load before capturing pageview', () => {
+    // PostHog not loaded initially
+    (posthog as any).__loaded = false;
+
+    render(<PostHogPageView />);
+
+    // Should not capture immediately
+    expect(posthog.capture).not.toHaveBeenCalled();
+
+    // Simulate PostHog loading after 200ms
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+
+    // Still not loaded
+    expect(posthog.capture).not.toHaveBeenCalled();
+
+    // Now PostHog loads
+    (posthog as any).__loaded = true;
+
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+
+    // Should have captured the pageview
+    expect(posthog.capture).toHaveBeenCalledWith('$pageview', {
+      $current_url: expect.stringContaining('/test'),
+    });
+  });
+
+  it('should stop polling after 5 seconds if PostHog never loads', () => {
+    // PostHog never loads
+    (posthog as any).__loaded = false;
+
+    render(<PostHogPageView />);
+
+    // Advance past the 5 second timeout
+    act(() => {
+      jest.advanceTimersByTime(6000);
+    });
+
+    // Should not have captured anything
+    expect(posthog.capture).not.toHaveBeenCalled();
+  });
+
+  it('should include search params in the URL', () => {
+    // Mock search params
+    const mockSearchParams = new URLSearchParams('foo=bar&baz=qux');
+    jest.requireMock('next/navigation').useSearchParams.mockReturnValue(mockSearchParams);
+
+    (posthog as any).__loaded = true;
+
+    render(<PostHogPageView />);
+
+    expect(posthog.capture).toHaveBeenCalledWith('$pageview', {
+      $current_url: expect.stringContaining('?foo=bar&baz=qux'),
+    });
   });
 });

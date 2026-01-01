@@ -7,6 +7,11 @@ import {
   formatTierInfo,
   canAccessModel,
   formatSubscriptionStatus,
+  isOnTrial,
+  isTrialExpired,
+  getTrialExpirationDate,
+  getTrialDaysRemaining,
+  isTrialExpiringSoon,
   TIER_CONFIG,
 } from '@/lib/tier-utils';
 import type { UserTier } from '@/lib/api';
@@ -25,6 +30,13 @@ export const useTier = () => {
     const isExpiringSoon = isSubscriptionExpiringsoon(userData);
     const status = userData?.subscription_status;
 
+    // Trial info
+    const isTrial = isOnTrial(userData);
+    const trialExpired = isTrialExpired(userData);
+    const trialExpirationDate = getTrialExpirationDate(userData);
+    const trialDaysRemaining = getTrialDaysRemaining(userData);
+    const trialExpiringSoon = isTrialExpiringSoon(userData);
+
     return {
       // Tier info
       tier,
@@ -37,6 +49,13 @@ export const useTier = () => {
       subscriptionStatusText: formatSubscriptionStatus(status),
       renewalDate,
       isExpiringSoon,
+
+      // Trial info
+      isTrial,
+      trialExpired,
+      trialExpirationDate,
+      trialDaysRemaining,
+      trialExpiringSoon,
 
       // Access control
       canAccessModel: (requiredTier: UserTier | undefined) => canAccessModel(requiredTier, tier),
