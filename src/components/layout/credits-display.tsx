@@ -3,17 +3,18 @@
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { getUserData } from '@/lib/api';
-import type { UserTier, SubscriptionStatus } from '@/lib/api';
+import type { UserTier } from '@/lib/api';
 import { Coins, Crown, Sparkles, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
-import { getTrialDaysRemaining } from '@/lib/tier-utils';
+import { getTrialDaysRemaining, isOnTrial as checkIsOnTrial, isTrialExpired as checkIsTrialExpired } from '@/lib/tier-utils';
 
 export function CreditsDisplay() {
   const [credits, setCredits] = useState<number | null>(null);
   const [tier, setTier] = useState<UserTier | undefined>(undefined);
   const [tierDisplayName, setTierDisplayName] = useState<string | undefined>(undefined);
-  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | undefined>(undefined);
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
+  const [isTrial, setIsTrial] = useState<boolean>(false);
+  const [isTrialExpiredState, setIsTrialExpiredState] = useState<boolean>(false);
 
   useEffect(() => {
     const updateCredits = () => {
@@ -60,13 +61,10 @@ export function CreditsDisplay() {
           return prevDisplayName;
         });
 
-        // Update subscription status
-        setSubscriptionStatus(prevStatus => {
-          if (prevStatus !== userData.subscription_status) {
-            return userData.subscription_status;
-          }
-          return prevStatus;
-        });
+        // Update trial status using utility functions that check tier first
+        // This prevents showing trial/expired status for pro/max users with stale subscription_status
+        setIsTrial(checkIsOnTrial(userData));
+        setIsTrialExpiredState(checkIsTrialExpired(userData));
 
         // Update trial days remaining
         const daysRemaining = getTrialDaysRemaining(userData);
@@ -101,9 +99,7 @@ export function CreditsDisplay() {
     return null;
   }
 
-  // Determine display mode based on subscription status and tier
-  const isTrial = subscriptionStatus === 'trial';
-  const isTrialExpired = subscriptionStatus === 'expired';
+  // Determine display mode based on tier (pro/max users show plan name)
   const showPlanName = tier === 'pro' || tier === 'max';
 
   // Use tier_display_name from backend, fallback to uppercase tier
@@ -132,7 +128,7 @@ export function CreditsDisplay() {
   }
 
   // Expired trial - show upgrade prompt
-  if (isTrialExpired) {
+  if (isTrialExpiredState) {
     return (
       <Link href="/settings/credits">
         <Button
