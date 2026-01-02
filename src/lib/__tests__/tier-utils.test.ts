@@ -556,6 +556,56 @@ describe('tier-utils', () => {
 
       expect(isOnTrial(userData)).toBe(false);
     });
+
+    it('should return false when user has max tier even if subscription_status is trial', () => {
+      // This handles the edge case where subscription_status hasn't been updated after upgrade
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'max',
+        subscription_status: 'trial',
+      };
+
+      expect(isOnTrial(userData)).toBe(false);
+    });
+
+    it('should return false when user has pro tier even if subscription_status is trial', () => {
+      // This handles the edge case where subscription_status hasn't been updated after upgrade
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'pro',
+        subscription_status: 'trial',
+      };
+
+      expect(isOnTrial(userData)).toBe(false);
+    });
+
+    it('should return true when user has basic tier and subscription_status is trial', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 5,
+        tier: 'basic',
+        subscription_status: 'trial',
+      };
+
+      expect(isOnTrial(userData)).toBe(true);
+    });
   });
 
   describe('isTrialExpired', () => {
@@ -591,6 +641,56 @@ describe('tier-utils', () => {
       };
 
       expect(isTrialExpired(userData)).toBe(false);
+    });
+
+    it('should return false when user has max tier even if subscription_status is expired', () => {
+      // This handles the edge case where subscription_status hasn't been updated after upgrade
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'max',
+        subscription_status: 'expired',
+      };
+
+      expect(isTrialExpired(userData)).toBe(false);
+    });
+
+    it('should return false when user has pro tier even if subscription_status is expired', () => {
+      // This handles the edge case where subscription_status hasn't been updated after upgrade
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'pro',
+        subscription_status: 'expired',
+      };
+
+      expect(isTrialExpired(userData)).toBe(false);
+    });
+
+    it('should return true when user has basic tier and subscription_status is expired', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 0,
+        tier: 'basic',
+        subscription_status: 'expired',
+      };
+
+      expect(isTrialExpired(userData)).toBe(true);
     });
   });
 
@@ -911,6 +1011,53 @@ describe('tier-utils', () => {
       expect(isTrialExpired(expiringSoonUser)).toBe(false);
       expect(getTrialDaysRemaining(expiringSoonUser)).toBe(1);
       expect(isTrialExpiringSoon(expiringSoonUser)).toBe(true);
+    });
+
+    it('should correctly handle max tier user with stale trial subscription_status (bug fix)', () => {
+      // This is the specific bug scenario: user has max tier but subscription_status
+      // wasn't updated from 'trial' to 'active' due to webhook timing or database sync issues
+      const oneDayFromNow = new Date(Date.now() + 86400 * 1000).toISOString();
+      const maxUserWithStaleTrialStatus: UserData = {
+        user_id: 444,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-444',
+        display_name: 'Max User with Stale Trial',
+        email: 'vaughn.dimarco@gmail.com',
+        credits: 15000,
+        tier: 'max',
+        subscription_status: 'trial', // Stale - should have been updated to 'active'
+        trial_expires_at: oneDayFromNow, // Stale trial expiration
+      };
+
+      // The key assertion: user with max tier should NOT appear as on trial
+      expect(getUserTier(maxUserWithStaleTrialStatus)).toBe('max');
+      expect(isOnTrial(maxUserWithStaleTrialStatus)).toBe(false);
+      expect(isTrialExpired(maxUserWithStaleTrialStatus)).toBe(false);
+      // Tier takes precedence - max tier user should be treated as paid subscriber
+      expect(canAccessModel('max', getUserTier(maxUserWithStaleTrialStatus))).toBe(true);
+    });
+
+    it('should correctly handle pro tier user with stale expired subscription_status (bug fix)', () => {
+      // Another bug scenario: user upgraded to pro but subscription_status is stale 'expired'
+      const proUserWithStaleExpiredStatus: UserData = {
+        user_id: 555,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-555',
+        display_name: 'Pro User with Stale Expired',
+        email: 'pro@example.com',
+        credits: 5000,
+        tier: 'pro',
+        subscription_status: 'expired', // Stale - should have been updated to 'active'
+      };
+
+      // The key assertion: user with pro tier should NOT appear as expired
+      expect(getUserTier(proUserWithStaleExpiredStatus)).toBe('pro');
+      expect(isOnTrial(proUserWithStaleExpiredStatus)).toBe(false);
+      expect(isTrialExpired(proUserWithStaleExpiredStatus)).toBe(false);
+      // Pro tier user should have access to pro features
+      expect(canAccessModel('pro', getUserTier(proUserWithStaleExpiredStatus))).toBe(true);
     });
   });
 });

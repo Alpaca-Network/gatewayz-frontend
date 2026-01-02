@@ -83,6 +83,12 @@ export const isOnTrial = (userData: UserData | null): boolean => {
   if (!userData) {
     return false;
   }
+  // Users with pro or max tier are never on trial, even if subscription_status
+  // hasn't been updated yet (e.g., due to webhook timing or database sync issues)
+  const tier = userData.tier?.toLowerCase();
+  if (tier === 'pro' || tier === 'max') {
+    return false;
+  }
   return userData.subscription_status === 'trial';
 };
 
@@ -93,6 +99,12 @@ export const isOnTrial = (userData: UserData | null): boolean => {
  */
 export const isTrialExpired = (userData: UserData | null): boolean => {
   if (!userData) {
+    return false;
+  }
+  // Users with pro or max tier never have expired trials, even if subscription_status
+  // hasn't been updated yet (e.g., due to webhook timing or database sync issues)
+  const tier = userData.tier?.toLowerCase();
+  if (tier === 'pro' || tier === 'max') {
     return false;
   }
   return userData.subscription_status === 'expired';
