@@ -25,11 +25,7 @@ jest.mock('@/components/ui/button', () => ({
   ),
 }));
 
-jest.mock('@/components/ui/input', () => ({
-  Input: React.forwardRef(({ disabled, enterKeyHint, ...props }: any, ref: any) => (
-    <input ref={ref} disabled={disabled} enterKeyHint={enterKeyHint} data-testid="input" {...props} />
-  )),
-}));
+// Input mock removed - ChatInput now uses native textarea with data-testid="chat-textarea"
 
 // Mock DropdownMenu components
 jest.mock('@/components/ui/dropdown-menu', () => ({
@@ -253,8 +249,8 @@ describe('ChatInput', () => {
     it('should have input with enterKeyHint="send"', () => {
       render(<ChatInput />);
 
-      const input = screen.getByTestId('input');
-      expect(input).toHaveAttribute('enterKeyHint', 'send');
+      const textarea = screen.getByTestId('chat-textarea');
+      expect(textarea).toHaveAttribute('enterKeyHint', 'send');
     });
   });
 });
@@ -1379,8 +1375,8 @@ describe('ChatInput stop streaming button', () => {
 
     render(<ChatInput />);
 
-    const input = screen.getByTestId('input');
-    expect(input).toBeDisabled();
+    const textarea = screen.getByTestId('chat-textarea');
+    expect(textarea).toBeDisabled();
   });
 
   it('should enable input field when not streaming', () => {
@@ -1388,8 +1384,8 @@ describe('ChatInput stop streaming button', () => {
 
     render(<ChatInput />);
 
-    const input = screen.getByTestId('input');
-    expect(input).not.toBeDisabled();
+    const textarea = screen.getByTestId('chat-textarea');
+    expect(textarea).not.toBeDisabled();
   });
 
   it('should have destructive variant on stop button', () => {
