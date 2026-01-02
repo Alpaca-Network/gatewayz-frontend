@@ -42,7 +42,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -168,12 +167,14 @@ export function ChatInput() {
   const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
   const [interimTranscript, setInterimTranscript] = useState<string>('');
   const [transcriptBeforeRecording, setTranscriptBeforeRecording] = useState<string>('');
+  // Track final transcript accumulated during recording session (separate from inputValue)
+  const [finalTranscriptDuringRecording, setFinalTranscriptDuringRecording] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Ref for synchronous recording state check to prevent race conditions on rapid clicks
   const isRecordingRef = useRef(false);
@@ -183,7 +184,19 @@ export function ChatInput() {
 
   // Expose focus method for external use (e.g., welcome screen prompt selection)
   const focusInput = useCallback(() => {
-    inputRef.current?.focus();
+    textareaRef.current?.focus();
+  }, []);
+
+  // Auto-resize textarea based on content
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    // Reset height to auto to get the correct scrollHeight
+    textarea.style.height = 'auto';
+    // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
+    const newHeight = Math.min(Math.max(textarea.scrollHeight, 48), 150);
+    textarea.style.height = `${newHeight}px`;
   }, []);
 
   // Store focus function in window for access from ChatLayout
@@ -198,14 +211,19 @@ export function ChatInput() {
     };
   }, [focusInput]);
 
+  // Auto-adjust textarea height when inputValue changes
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [inputValue, adjustTextareaHeight]);
+
   const handleSend = useCallback(async () => {
     // IMPORTANT: Use fresh state from Zustand store to avoid stale closures
     // This is critical for preloaded message clicks where inputValue and selectedModel were just set
     const storeState = useChatUIStore.getState();
     const freshInputValue = storeState.inputValue;
     const freshSelectedModel = storeState.selectedModel;
-    // Also check the actual input field as a fallback for typing scenarios
-    const currentInputValue = freshInputValue || inputRef.current?.value || inputValue;
+    // Also check the actual textarea field as a fallback for typing scenarios
+    const currentInputValue = freshInputValue || textareaRef.current?.value || inputValue;
 
     if ((!currentInputValue.trim() && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument) || isStreaming) return;
     if (!freshSelectedModel) {
@@ -236,9 +254,9 @@ export function ChatInput() {
 
     // Clear input immediately for better UX
     setInputValue("");
-    // Also clear the actual input element to ensure it's in sync
-    if (inputRef.current) {
-      inputRef.current.value = "";
+    // Also clear the actual textarea element to ensure it's in sync
+    if (textareaRef.current) {
+      textareaRef.current.value = "";
     }
     setSelectedImage(null);
     setSelectedVideo(null);
@@ -557,6 +575,7 @@ export function ChatInput() {
     // Reset tracking state for new recording session
     lastProcessedIndexRef.current = -1;
     setInterimTranscript('');
+    setFinalTranscriptDuringRecording('');
     // Save the current input value before recording starts
     setTranscriptBeforeRecording(useChatUIStore.getState().inputValue);
 
@@ -606,6 +625,11 @@ export function ChatInput() {
         const currentValue = useChatUIStore.getState().inputValue;
         const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
         setInputValue(currentValue + separator + newFinalTranscript);
+        // Also track final transcript separately for display (avoid doubling from inputValue slice)
+        setFinalTranscriptDuringRecording(prev => {
+          const prevSeparator = prev && !prev.endsWith(' ') ? ' ' : '';
+          return prev + prevSeparator + newFinalTranscript;
+        });
       }
     };
 
@@ -676,6 +700,7 @@ export function ChatInput() {
       isRecordingRef.current = false;
       setIsRecording(false);
       setInterimTranscript('');
+      setFinalTranscriptDuringRecording('');
       lastProcessedIndexRef.current = -1;
     }
   }, [speechRecognition]);
@@ -728,10 +753,10 @@ export function ChatInput() {
                   {transcriptBeforeRecording}{' '}
                 </span>
               )}
-              {/* Show newly captured text (already added to input) */}
-              {inputValue.slice(transcriptBeforeRecording.length).trim() && (
+              {/* Show newly captured text (tracked separately to avoid doubling) */}
+              {finalTranscriptDuringRecording && (
                 <span className="recording-transcript-final">
-                  {inputValue.slice(transcriptBeforeRecording.length).trim()}{' '}
+                  {finalTranscriptDuringRecording}{' '}
                 </span>
               )}
               {/* Show interim (in-progress) text */}
@@ -741,7 +766,7 @@ export function ChatInput() {
                 </span>
               )}
               {/* Show placeholder if nothing captured yet */}
-              {!inputValue.slice(transcriptBeforeRecording.length).trim() && !interimTranscript && (
+              {!finalTranscriptDuringRecording && !interimTranscript && (
                 <span className="recording-transcript-placeholder">
                   Listening...
                 </span>
@@ -895,8 +920,8 @@ export function ChatInput() {
                 </Button>
             </div>
 
-            <Input
-                ref={inputRef}
+            <textarea
+                ref={textareaRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => {
@@ -906,9 +931,11 @@ export function ChatInput() {
                     }
                 }}
                 placeholder="Ask Gatewayz"
-                className="flex-1 border-0 bg-background focus-visible:ring-0 h-12 text-base"
+                className="flex-1 border-0 bg-background focus-visible:ring-0 min-h-[48px] max-h-[150px] py-3 px-3 text-base resize-none overflow-y-auto rounded-xl"
                 disabled={isStreaming}
                 enterKeyHint="send"
+                rows={1}
+                data-testid="chat-textarea"
             />
 
             {isStreaming ? (
