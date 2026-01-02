@@ -4,7 +4,7 @@
  * This module provides comprehensive error filtering for Sentry to reduce noise
  * from third-party errors, browser extension conflicts, and known non-blocking issues.
  *
- * Usage: Import and apply filters in sentry.client.config.ts and sentry.server.config.ts
+ * Usage: Import and apply filters in instrumentation-client.ts and sentry.server.config.ts
  */
 
 import type * as Sentry from '@sentry/nextjs';
