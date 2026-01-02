@@ -2,6 +2,7 @@ import {
   TIER_CONFIG,
   getUserTier,
   hasActiveSubscription,
+  hasPurchasedCredits,
   getSubscriptionRenewalDate,
   isSubscriptionExpiringsoon,
   formatTierInfo,
@@ -222,6 +223,81 @@ describe('tier-utils', () => {
       };
 
       expect(hasActiveSubscription(userData)).toBe(false);
+    });
+  });
+
+  describe('hasPurchasedCredits', () => {
+    it('should return false when userData is null', () => {
+      expect(hasPurchasedCredits(null)).toBe(false);
+    });
+
+    it('should return false when credits is 0', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 0,
+      };
+
+      expect(hasPurchasedCredits(userData)).toBe(false);
+    });
+
+    it('should return false when credits is at trial threshold (3)', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 3, // Exactly at trial threshold
+      };
+
+      expect(hasPurchasedCredits(userData)).toBe(false);
+    });
+
+    it('should return true when credits is above trial threshold', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 4, // Just above trial threshold
+      };
+
+      expect(hasPurchasedCredits(userData)).toBe(true);
+    });
+
+    it('should return true when user has substantial purchased credits', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+      };
+
+      expect(hasPurchasedCredits(userData)).toBe(true);
+    });
+
+    it('should return false when credits is undefined', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+      };
+
+      expect(hasPurchasedCredits(userData)).toBe(false);
     });
   });
 
@@ -513,7 +589,7 @@ describe('tier-utils', () => {
       expect(isOnTrial(null)).toBe(false);
     });
 
-    it('should return true when subscription status is trial', () => {
+    it('should return true when subscription status is trial and credits <= 3 (trial amount)', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -521,7 +597,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 5,
+        credits: 3, // Trial amount (users start with 3 credits)
         subscription_status: 'trial',
       };
 
@@ -591,7 +667,7 @@ describe('tier-utils', () => {
       expect(isOnTrial(userData)).toBe(false);
     });
 
-    it('should return true when user has basic tier and subscription_status is trial', () => {
+    it('should return true when user has basic tier and subscription_status is trial with trial credits', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -599,12 +675,45 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 5,
+        credits: 2, // Below trial threshold
         tier: 'basic',
         subscription_status: 'trial',
       };
 
       expect(isOnTrial(userData)).toBe(true);
+    });
+
+    it('should return false when user has purchased credits even with trial subscription_status', () => {
+      // This handles the case where a user has added credits but subscription_status wasn't updated
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 10, // More than trial threshold (3), indicating they've purchased credits
+        tier: 'basic',
+        subscription_status: 'trial',
+      };
+
+      expect(isOnTrial(userData)).toBe(false);
+    });
+
+    it('should return false when user has exactly at threshold with purchased credits', () => {
+      // 4 credits = 3 trial + purchased, so they've paid
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 4, // Just above trial threshold
+        subscription_status: 'trial',
+      };
+
+      expect(isOnTrial(userData)).toBe(false);
     });
   });
 
@@ -636,7 +745,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 5,
+        credits: 2, // Trial credits
         subscription_status: 'trial',
       };
 
@@ -691,6 +800,23 @@ describe('tier-utils', () => {
       };
 
       expect(isTrialExpired(userData)).toBe(true);
+    });
+
+    it('should return false when user has purchased credits even with expired subscription_status', () => {
+      // This handles the case where a user has added credits but subscription_status wasn't updated
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 15, // More than trial threshold (3), indicating they've purchased credits
+        tier: 'basic',
+        subscription_status: 'expired',
+      };
+
+      expect(isTrialExpired(userData)).toBe(false);
     });
   });
 
@@ -953,7 +1079,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-111',
         display_name: 'Trial User',
         email: 'trial@example.com',
-        credits: 5,
+        credits: 3, // Trial users start with 3 credits
         tier: 'basic',
         subscription_status: 'trial',
         trial_expires_at: threeDaysFromNow,
@@ -963,6 +1089,7 @@ describe('tier-utils', () => {
       expect(hasActiveSubscription(trialUser)).toBe(false);
       expect(isOnTrial(trialUser)).toBe(true);
       expect(isTrialExpired(trialUser)).toBe(false);
+      expect(hasPurchasedCredits(trialUser)).toBe(false);
       expect(getTrialDaysRemaining(trialUser)).toBe(3);
       expect(isTrialExpiringSoon(trialUser)).toBe(false);
       expect(formatSubscriptionStatus(trialUser.subscription_status)).toBe('Trial');
@@ -1058,6 +1185,48 @@ describe('tier-utils', () => {
       expect(isTrialExpired(proUserWithStaleExpiredStatus)).toBe(false);
       // Pro tier user should have access to pro features
       expect(canAccessModel('pro', getUserTier(proUserWithStaleExpiredStatus))).toBe(true);
+    });
+
+    it('should correctly handle basic user who purchased credits with stale trial status (bug fix)', () => {
+      // Scenario: basic tier user purchased credits but subscription_status still shows 'trial'
+      const basicUserWithPurchasedCredits: UserData = {
+        user_id: 666,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-666',
+        display_name: 'Basic User with Purchased Credits',
+        email: 'basic@example.com',
+        credits: 25, // More than 3 trial credits = purchased
+        tier: 'basic',
+        subscription_status: 'trial', // Stale - should have been updated after payment
+      };
+
+      // The key assertion: user who has purchased credits should NOT appear as on trial
+      expect(getUserTier(basicUserWithPurchasedCredits)).toBe('basic');
+      expect(hasPurchasedCredits(basicUserWithPurchasedCredits)).toBe(true);
+      expect(isOnTrial(basicUserWithPurchasedCredits)).toBe(false);
+      expect(isTrialExpired(basicUserWithPurchasedCredits)).toBe(false);
+    });
+
+    it('should correctly handle basic user who purchased credits with stale expired status (bug fix)', () => {
+      // Scenario: basic tier user purchased credits but subscription_status still shows 'expired'
+      const basicUserWithPurchasedCreditsExpired: UserData = {
+        user_id: 777,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-777',
+        display_name: 'Basic User with Purchased Credits',
+        email: 'basic-expired@example.com',
+        credits: 50, // More than 3 trial credits = purchased
+        tier: 'basic',
+        subscription_status: 'expired', // Stale - user has paid for credits
+      };
+
+      // The key assertion: user who has purchased credits should NOT appear as expired
+      expect(getUserTier(basicUserWithPurchasedCreditsExpired)).toBe('basic');
+      expect(hasPurchasedCredits(basicUserWithPurchasedCreditsExpired)).toBe(true);
+      expect(isOnTrial(basicUserWithPurchasedCreditsExpired)).toBe(false);
+      expect(isTrialExpired(basicUserWithPurchasedCreditsExpired)).toBe(false);
     });
   });
 });

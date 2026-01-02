@@ -200,7 +200,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Trial User',
         email: 'trial@example.com',
-        credits: 1000,
+        credits: 3, // Trial users start with 3 credits
         tier: 'basic', // Trial only applies to basic tier
         subscription_status: 'trial',
         trial_expires_at: futureDate.toISOString(),
@@ -213,7 +213,7 @@ describe('CreditsDisplay', () => {
       // Should show trial badge with days remaining
       expect(screen.getByText(/Trial.*\(5d\)/)).toBeInTheDocument();
       // Should not show credits
-      expect(screen.queryByText('1,000')).not.toBeInTheDocument();
+      expect(screen.queryByText('3')).not.toBeInTheDocument();
     });
 
     it('should display "Trial ending" when trial expires within 1 day for basic tier user', () => {
@@ -228,7 +228,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Trial User',
         email: 'trial@example.com',
-        credits: 1000,
+        credits: 2, // Trial credits (less than or equal to 3)
         tier: 'basic', // Trial only applies to basic tier
         subscription_status: 'trial',
         trial_expires_at: futureDate.toISOString(),
@@ -250,7 +250,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Trial User',
         email: 'trial@example.com',
-        credits: 1000,
+        credits: 1, // Trial credits (less than or equal to 3)
         tier: 'basic', // Trial only applies to basic tier
         subscription_status: 'trial',
       };
@@ -274,7 +274,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Trial User',
         email: 'trial@example.com',
-        credits: 1000,
+        credits: 3, // Trial credits (3 is the trial amount)
         // tier is undefined - should default to basic behavior
         subscription_status: 'trial',
         trial_expires_at: futureDate.toISOString(),
@@ -429,6 +429,52 @@ describe('CreditsDisplay', () => {
       // Should show MAX badge after normalization, not trial
       expect(screen.getByText('MAX')).toBeInTheDocument();
       expect(screen.queryByText(/Trial/)).not.toBeInTheDocument();
+    });
+
+    it('should show credits (not trial) when basic user has purchased credits with stale trial status', () => {
+      // User has added credits beyond initial trial amount, but subscription_status is still trial
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Basic User with Credits',
+        email: 'basic@example.com',
+        credits: 25, // More than 3 trial credits = purchased credits
+        tier: 'basic',
+        subscription_status: 'trial', // Stale status - should be ignored due to purchased credits
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show credits, not trial badge
+      expect(screen.getByText('25')).toBeInTheDocument();
+      expect(screen.queryByText(/Trial/)).not.toBeInTheDocument();
+    });
+
+    it('should show credits (not upgrade) when basic user has purchased credits with stale expired status', () => {
+      // User has added credits but subscription_status is still expired
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Basic User with Credits',
+        email: 'basic@example.com',
+        credits: 50, // More than 3 trial credits = purchased credits
+        tier: 'basic',
+        subscription_status: 'expired', // Stale status - should be ignored due to purchased credits
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show credits, not upgrade prompt
+      expect(screen.getByText('50')).toBeInTheDocument();
+      expect(screen.queryByText('Upgrade')).not.toBeInTheDocument();
     });
   });
 
