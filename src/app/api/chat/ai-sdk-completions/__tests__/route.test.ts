@@ -998,5 +998,280 @@ describe('AI SDK Completions Route', () => {
       // Video and audio should be skipped, only text remains
       expect(callArgs.messages[0].content).toBe('Check this video');
     });
+
+    it('should handle malformed JSON in tool call arguments gracefully', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Tool call processed' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      // Spy on console.warn to verify warning is logged
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{
+            role: 'assistant',
+            content: 'Using a tool',
+            tool_calls: [{
+              id: 'call_123',
+              type: 'function',
+              function: {
+                name: 'get_weather',
+                arguments: '{invalid json}' // Malformed JSON
+              }
+            }]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+
+      // Tool call should still be included with empty object as fallback
+      const assistantMessage = callArgs.messages[0];
+      expect(assistantMessage.role).toBe('assistant');
+      expect(Array.isArray(assistantMessage.content)).toBe(true);
+
+      const toolCallPart = assistantMessage.content.find((p: { type: string }) => p.type === 'tool-call');
+      expect(toolCallPart).toBeDefined();
+      expect(toolCallPart.toolName).toBe('get_weather');
+      expect(toolCallPart.input).toEqual({}); // Empty object fallback
+
+      // Verify warning was logged
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to parse tool call arguments for get_weather')
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should log warning when all content parts are filtered out', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      // Spy on console.warn to verify warning is logged
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{
+            role: 'user',
+            content: [
+              // Only unsupported media types
+              { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
+              { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+
+      // Message should have empty content since all parts were filtered
+      expect(callArgs.messages[0].content).toBe('');
+
+      // Verify warning was logged
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('had all content parts filtered out')
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should filter out image_url parts from assistant messages', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      // Spy on console.warn to verify warning is logged
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{
+            role: 'assistant',
+            content: [
+              { type: 'text', text: 'Here is the image' },
+              { type: 'image_url', image_url: { url: 'https://example.com/image.jpg' } }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+
+      // Assistant message should only have text content (image filtered out)
+      const assistantMessage = callArgs.messages[0];
+      expect(assistantMessage.role).toBe('assistant');
+      // Since there's only one text part, it should be converted to string
+      expect(assistantMessage.content).toBe('Here is the image');
+
+      // Verify warning was logged for skipped image
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[AI SDK Route] Skipping image_url in assistant message - not supported by AI SDK'
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should filter out file_url parts from assistant messages', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      // Spy on console.warn to verify warning is logged
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{
+            role: 'assistant',
+            content: [
+              { type: 'text', text: 'Here is the file' },
+              { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf', mime_type: 'application/pdf' } }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+
+      // Assistant message should only have text content (file filtered out)
+      const assistantMessage = callArgs.messages[0];
+      expect(assistantMessage.role).toBe('assistant');
+      // Since there's only one text part, it should be converted to string
+      expect(assistantMessage.content).toBe('Here is the file');
+
+      // Verify warning was logged for skipped file
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        '[AI SDK Route] Skipping file_url in assistant message - not supported by AI SDK'
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should return empty content for assistant messages with only image/file parts', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Response' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      // Spy on console.warn to verify warning is logged
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4',
+          messages: [{
+            role: 'assistant',
+            content: [
+              { type: 'image_url', image_url: { url: 'https://example.com/image.jpg' } },
+              { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf' } }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+
+      // Assistant message should have empty content since all parts were filtered
+      const assistantMessage = callArgs.messages[0];
+      expect(assistantMessage.role).toBe('assistant');
+      expect(assistantMessage.content).toBe('');
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should allow image_url parts in user messages', async () => {
+      const { streamText } = require('ai');
+      streamText.mockReturnValue({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'I see the image' };
+          yield { type: 'finish', finishReason: 'stop' };
+        })(),
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What is in this image?' },
+              { type: 'image_url', image_url: { url: 'data:image/png;base64,ABC123' } }
+            ]
+          }],
+          apiKey: 'test-key',
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      expect(streamText).toHaveBeenCalled();
+      const callArgs = streamText.mock.calls[0][0];
+
+      // User message should include both text and image parts
+      const userMessage = callArgs.messages[0];
+      expect(userMessage.role).toBe('user');
+      expect(Array.isArray(userMessage.content)).toBe(true);
+      expect(userMessage.content.length).toBe(2);
+      expect(userMessage.content[0].type).toBe('text');
+      expect(userMessage.content[1].type).toBe('image');
+    });
   });
 });
