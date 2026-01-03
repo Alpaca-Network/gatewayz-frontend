@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Check, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { getUserData } from "@/lib/api";
+import { navigateTo } from "@/lib/utils";
 
 interface PricingTier {
   id: 'starter' | 'pro' | 'max' | 'enterprise';
@@ -101,7 +102,7 @@ export function PricingSection() {
     try {
       if (tier.id === 'starter') {
         // Redirect to signup or show auth modal
-        window.location.href = '/signup';
+        navigateTo('/signup');
         return;
       }
 
@@ -116,7 +117,7 @@ export function PricingSection() {
 
       if (!userData || !userData.api_key) {
         alert('Please sign in to subscribe');
-        window.location.href = '/signup';
+        navigateTo('/signup');
         return;
       }
 
@@ -126,7 +127,7 @@ export function PricingSection() {
       }
 
       // Redirect to checkout page with tier info
-      window.location.href = `/checkout?tier=${tier.id}&mode=subscription`;
+      navigateTo(`/checkout?tier=${tier.id}&mode=subscription`);
     } catch (error) {
       console.error('Subscription error:', error);
       alert(error instanceof Error ? error.message : 'Failed to start subscription. Please try again.');

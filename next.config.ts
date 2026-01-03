@@ -18,6 +18,10 @@ try {
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Deploy to /agent subpath
+  basePath: '/agent',
+  // Ensure assets are served from the correct path
+  assetPrefix: '/agent',
   typescript: {
     ignoreBuildErrors: true,
   },

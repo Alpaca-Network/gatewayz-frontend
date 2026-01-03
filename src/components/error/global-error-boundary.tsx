@@ -11,6 +11,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import * as Sentry from '@sentry/nextjs';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Home, RefreshCw } from 'lucide-react';
+import { navigateTo } from '@/lib/utils';
 
 // =============================================================================
 // TYPES
@@ -87,7 +88,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
   };
 
   handleGoHome = (): void => {
-    window.location.href = '/';
+    navigateTo('/');
   };
 
   handleReportFeedback = (): void => {

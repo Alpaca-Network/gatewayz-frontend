@@ -48,6 +48,7 @@ import {
   redirectToBetaWithSession,
   storeSessionTransferToken,
 } from "@/integrations/privy/auth-session-transfer";
+import { navigateTo } from "@/lib/utils";
 
 // =============================================================================
 // TYPES (backward compatible with v1)
@@ -300,7 +301,7 @@ export function GatewayzAuthProvider({
             if (enableBetaRedirect) {
               handleBetaRedirect("/onboarding");
             } else {
-              window.location.href = "/onboarding";
+              navigateTo("/onboarding");
             }
           }
         } else {

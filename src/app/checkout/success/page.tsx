@@ -9,6 +9,7 @@ import { Copy, Gift, CheckCircle, Share2, Users, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
+import { navigateTo } from '@/lib/utils';
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
@@ -124,7 +125,7 @@ function CheckoutSuccessContent() {
                   Please log in to view your purchase details
                 </p>
               </div>
-              <Button onClick={() => window.location.href = '/signup'}>
+              <Button onClick={() => navigateTo('/signup')}>
                 Sign In
               </Button>
             </div>
@@ -270,12 +271,12 @@ function CheckoutSuccessContent() {
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button
             variant="outline"
-            onClick={() => window.location.href = '/settings/referrals'}
+            onClick={() => navigateTo('/settings/referrals')}
           >
             View Referral Dashboard
           </Button>
           <Button
-            onClick={() => window.location.href = '/chat'}
+            onClick={() => navigateTo('/chat')}
           >
             Start Using Gatewayz
           </Button>

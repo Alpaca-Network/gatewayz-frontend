@@ -5,6 +5,31 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/**
+ * Get the application base path for navigation
+ * Uses Next.js basePath configuration
+ */
+export function getBasePath(): string {
+  // Access the basePath from Next.js config at runtime
+  // This is set during build time and available via __NEXT_DATA__
+  if (typeof window !== 'undefined' && (window as any).__NEXT_DATA__?.basePath) {
+    return (window as any).__NEXT_DATA__.basePath;
+  }
+  // Fallback to hardcoded value for SSR or when not available
+  return '/agent';
+}
+
+/**
+ * Navigate to a path using window.location.href with basePath prefix
+ * Use this instead of direct window.location.href assignments for internal navigation
+ */
+export function navigateTo(path: string): void {
+  const basePath = getBasePath();
+  // Ensure path starts with /
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  window.location.href = `${basePath}${normalizedPath}`;
+}
+
 export const stringToColor = (str: string | null | undefined) => {
   if (!str) return 'hsl(0, 0%, 85%)'; // Default gray for null/undefined
   let hash = 0;
