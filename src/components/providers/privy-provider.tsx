@@ -299,15 +299,6 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
         return;
       }
 
-      // Handle IndexedDB errors (iOS storage eviction, connector timeout)
-      const indexedDBErrorType = classifyIndexedDBError(reasonStr);
-      if (indexedDBErrorType) {
-        logIndexedDBError(indexedDBErrorType, reasonStr, "unhandledrejection");
-        // Prevent the error from appearing in console as unhandled
-        event.preventDefault();
-        return;
-      }
-
       const walletErrorType = classifyWalletError(reasonStr);
 
       // Log wallet extension and WalletConnect relay errors
