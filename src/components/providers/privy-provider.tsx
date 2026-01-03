@@ -15,6 +15,7 @@ import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-i
 import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
 import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
 import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
+import { isIndexedDBError } from "@/lib/indexeddb-check";
 import { shouldDisableEmbeddedWallets } from "@/lib/browser-detection";
 
 interface PrivyProviderWrapperProps {
@@ -125,37 +126,56 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
       return false;
     };
 
-    // Classify IndexedDB-related errors from embedded wallet initialization
-    const classifyIndexedDBError = (errorStr?: string): IndexedDBErrorType | null => {
+    // Classify IndexedDB errors (database deleted, quota exceeded, etc.)
+    // Enhanced version from PR 659 with more comprehensive error detection
+    const classifyIndexedDBErrorType = (errorStr?: string, errorName?: string): 'deleted' | 'quota' | 'blocked' | 'connector_timeout' | null => {
       if (!errorStr) {
         return null;
       }
 
       const normalized = errorStr.toLowerCase();
 
-      // "Database deleted by request of the user" - iOS WebKit storage eviction
+      // "Database deleted by request of the user" - User cleared site data / iOS WebKit storage eviction
       if (normalized.includes("database deleted") || normalized.includes("deleted by request")) {
-        return "database_deleted";
+        return 'deleted';
       }
 
       // "Unable to initialize all expected connectors before timeout" - connector timeout
       if (normalized.includes("unable to initialize") && normalized.includes("connectors")) {
-        return "connector_timeout";
+        return 'connector_timeout';
+      }
+
+      // Quota exceeded errors
+      if (normalized.includes("quota") || normalized.includes("disk space")) {
+        return 'quota';
+      }
+
+      // Security/permission errors
+      if (normalized.includes("security") && normalized.includes("database")) {
+        return 'blocked';
+      }
+
+      // UnknownError with database context (common on Mobile Safari)
+      if (errorName === 'UnknownError' && normalized.includes("database")) {
+        return 'deleted';
       }
 
       return null;
     };
 
-    const logIndexedDBError = (type: IndexedDBErrorType, message: string, source: "unhandledrejection" | "error") => {
-      const labels: Record<IndexedDBErrorType, string> = {
-        database_deleted: "IndexedDB database deleted (iOS storage eviction)",
+    // Log IndexedDB errors with appropriate handling
+    const logIndexedDBError = (type: 'deleted' | 'quota' | 'blocked' | 'connector_timeout', message: string, source: "unhandledrejection" | "error") => {
+      const labels: Record<'deleted' | 'quota' | 'blocked' | 'connector_timeout', string> = {
+        deleted: "IndexedDB database deleted (iOS storage eviction / user cleared data)",
+        quota: "IndexedDB quota exceeded",
+        blocked: "IndexedDB access blocked",
         connector_timeout: "Wallet connector initialization timeout",
       };
       const label = labels[type];
 
       console.warn(`[Auth] ${label} detected (non-blocking via ${source}):`, message);
 
-      // Log to Sentry as warning - this is a known iOS issue
+      // Log to Sentry as warning - this may affect embedded wallet functionality
       Sentry.captureMessage(`${label}: ${message}`, {
         level: "warning",
         tags: {
@@ -163,6 +183,11 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
           blocking: "false",
           event_source: source,
           is_ios_in_app_browser: String(shouldDisableEmbeddedWallets()),
+        },
+        extra: {
+          recovery_hint: type === 'deleted'
+            ? 'User may have cleared browser data. Embedded wallet features may be limited.'
+            : 'IndexedDB storage issue. Embedded wallet features may be limited.',
         },
       });
     };
@@ -211,8 +236,9 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
     };
 
     const rateLimitListener = (event: PromiseRejectionEvent) => {
-      const reason = event.reason as { status?: number; message?: string } | undefined;
+      const reason = event.reason as { status?: number; message?: string; name?: string } | undefined;
       const reasonStr = reason?.message ?? String(reason);
+      const reasonName = reason?.name ?? (reason instanceof Error ? reason.name : undefined);
 
       // Handle rate limit errors
       // Note: We intentionally do NOT send 429s to Sentry because:
@@ -254,20 +280,22 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
         return;
       }
 
+      // Handle IndexedDB errors (database deleted, quota exceeded, etc.)
+      // This commonly occurs on Mobile Safari when user clears site data
+      const indexedDBErrorType = classifyIndexedDBErrorType(reasonStr, reasonName);
+      if (indexedDBErrorType || isIndexedDBError(reason)) {
+        logIndexedDBError(indexedDBErrorType || 'deleted', reasonStr, "unhandledrejection");
+        // Prevent the error from bubbling up and crashing the app
+        // The app can continue without embedded wallet features
+        event.preventDefault();
+        return;
+      }
+
       // Handle Privy-specific errors (iframe not initialized, Java object gone)
       const privyErrorType = classifyPrivyError(reasonStr);
       if (privyErrorType) {
         logPrivyError(privyErrorType, reasonStr, "unhandledrejection");
         // Don't preventDefault - let Privy handle recovery
-        return;
-      }
-
-      // Handle IndexedDB errors (iOS storage eviction, connector timeout)
-      const indexedDBErrorType = classifyIndexedDBError(reasonStr);
-      if (indexedDBErrorType) {
-        logIndexedDBError(indexedDBErrorType, reasonStr, "unhandledrejection");
-        // Prevent the error from appearing in console as unhandled
-        event.preventDefault();
         return;
       }
 
@@ -290,6 +318,8 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
     // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
     // which is loaded earlier in the component tree (layout.tsx) to avoid duplicate handling
     const errorListener = (event: ErrorEvent) => {
+      const errorName = event.error?.name;
+
       // Handle "Must specify origin" error
       if (isOriginConfigurationError(event.message)) {
         const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
@@ -323,11 +353,14 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
         return;
       }
 
-      // Handle IndexedDB errors
-      const indexedDBErrorType = classifyIndexedDBError(event.message);
-      if (indexedDBErrorType) {
-        logIndexedDBError(indexedDBErrorType, event.message, "error");
-        // Prevent the error from appearing in console
+      // Handle IndexedDB errors (database deleted, quota exceeded, etc.)
+      // This commonly occurs on Mobile Safari when user clears site data
+      // Enhanced detection using both message classification and error object check
+      const indexedDBErrorType = classifyIndexedDBErrorType(event.message, errorName);
+      if (indexedDBErrorType || isIndexedDBError(event.error)) {
+        logIndexedDBError(indexedDBErrorType || 'deleted', event.message, "error");
+        // Prevent the error from bubbling up and crashing the app
+        // The app can continue without embedded wallet features
         event.preventDefault();
         return;
       }
