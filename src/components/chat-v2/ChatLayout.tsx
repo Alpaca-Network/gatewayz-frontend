@@ -21,6 +21,7 @@ import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateSession } from "@/lib/hooks/use-chat-queries";
 import { useToast } from "@/hooks/use-toast";
+import { getImageGenerationModel } from "@/lib/hooks/use-auto-model-switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,11 +54,12 @@ const ALL_PROMPTS = [
 ];
 
 // Quick action prompt chips
+// useImageModel: if true, switches to the default image generation model when clicked
 const PROMPT_CHIPS = [
-    { label: "Create image", icon: ImageIcon, prompt: "Create an image of " },
-    { label: "Analyze data", icon: BarChart3, prompt: "Analyze the following data: " },
-    { label: "Code", icon: Code2, prompt: "Write code to " },
-    { label: "Brainstorm", icon: Lightbulb, prompt: "Brainstorm ideas for " },
+    { label: "Create image", icon: ImageIcon, prompt: "Create an image of ", useImageModel: true },
+    { label: "Analyze data", icon: BarChart3, prompt: "Analyze the following data: ", useImageModel: false },
+    { label: "Code", icon: Code2, prompt: "Write code to ", useImageModel: false },
+    { label: "Brainstorm", icon: Lightbulb, prompt: "Brainstorm ideas for ", useImageModel: false },
 ];
 
 // Fisher-Yates shuffle algorithm
@@ -70,7 +72,7 @@ function shuffleArray<T>(array: T[]): T[] {
     return shuffled;
 }
 
-function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect: (txt: string) => void; onPromptChipSelect?: (prompt: string) => void }) {
+function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect: (txt: string) => void; onPromptChipSelect?: (prompt: string, useImageModel?: boolean) => void }) {
     // Select 4 random prompts on mount (useMemo ensures consistency during render)
     const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
 
@@ -85,7 +87,7 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect:
                  {PROMPT_CHIPS.map((chip) => (
                      <button
                         key={chip.label}
-                        onClick={() => onPromptChipSelect?.(chip.prompt)}
+                        onClick={() => onPromptChipSelect?.(chip.prompt, chip.useImageModel)}
                         className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
                      >
                          <chip.icon className="h-4 w-4" />
@@ -301,7 +303,14 @@ export function ChatLayout() {
    };
 
    // Handle prompt chip selection - just sets input value without sending, allows user to complete the prompt
-   const handlePromptChipSelect = (prompt: string) => {
+   // If useImageModel is true, switches to the default image generation model
+   const handlePromptChipSelect = (prompt: string, useImageModel?: boolean) => {
+       // Switch to image generation model if requested
+       if (useImageModel) {
+           const imageModel = getImageGenerationModel();
+           setSelectedModel(imageModel);
+       }
+
        setInputValue(prompt);
        // Focus the input field so user can continue typing
        if (typeof window !== 'undefined' && (window as any).__chatInputFocus) {

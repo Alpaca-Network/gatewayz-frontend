@@ -1,5 +1,5 @@
 import { renderHook, act } from '@testing-library/react';
-import { useAutoModelSwitch, modelSupportsModality, getMultimodalModel } from '../use-auto-model-switch';
+import { useAutoModelSwitch, modelSupportsModality, getMultimodalModel, getImageGenerationModel, DEFAULT_IMAGE_GENERATION_MODEL } from '../use-auto-model-switch';
 import { ModelOption } from '@/components/chat/model-select';
 
 // Mock the toast hook
@@ -75,6 +75,54 @@ describe('getMultimodalModel', () => {
     const model = getMultimodalModel('image');
     expect(model.value).toBe('openrouter/auto');
     expect(model.label).toBe('Gatewayz Router');
+  });
+});
+
+describe('getImageGenerationModel', () => {
+  it('should return the default image generation model', () => {
+    const model = getImageGenerationModel();
+    expect(model).toBeDefined();
+    expect(model.value).toBe('openrouter/auto');
+    expect(model.label).toBe('Gatewayz Router');
+  });
+
+  it('should return a model that supports image generation', () => {
+    const model = getImageGenerationModel();
+    // Image generation models should support the Image modality for routing
+    expect(modelSupportsModality(model.modalities, 'image')).toBe(true);
+  });
+
+  it('should return the same model as DEFAULT_IMAGE_GENERATION_MODEL', () => {
+    const model = getImageGenerationModel();
+    expect(model).toEqual(DEFAULT_IMAGE_GENERATION_MODEL);
+  });
+
+  it('should have all required ModelOption fields', () => {
+    const model = getImageGenerationModel();
+    expect(model.value).toBeDefined();
+    expect(model.label).toBeDefined();
+    expect(model.category).toBeDefined();
+    expect(model.sourceGateway).toBeDefined();
+    expect(model.developer).toBeDefined();
+    expect(model.modalities).toBeDefined();
+    expect(Array.isArray(model.modalities)).toBe(true);
+  });
+});
+
+describe('DEFAULT_IMAGE_GENERATION_MODEL', () => {
+  it('should be the Gatewayz Router', () => {
+    expect(DEFAULT_IMAGE_GENERATION_MODEL.value).toBe('openrouter/auto');
+    expect(DEFAULT_IMAGE_GENERATION_MODEL.label).toBe('Gatewayz Router');
+    expect(DEFAULT_IMAGE_GENERATION_MODEL.category).toBe('Router');
+  });
+
+  it('should support all major modalities', () => {
+    const modalities = DEFAULT_IMAGE_GENERATION_MODEL.modalities;
+    expect(modalities).toContain('Text');
+    expect(modalities).toContain('Image');
+    expect(modalities).toContain('File');
+    expect(modalities).toContain('Audio');
+    expect(modalities).toContain('Video');
   });
 });
 
