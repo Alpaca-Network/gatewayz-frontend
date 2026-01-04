@@ -60,10 +60,7 @@ const releaseNotes: ReleaseWeek[] = [
       "Added CI notification workflows for enhanced visibility and automated alerting",
       "Gateway pricing cross-reference from OpenRouter to prevent credit drain",
     ],
-    documentation: [
-      "Added Backend Error Review documentation for January 2-4, 2026",
-      "Added ERROR_REPORT_2026-01-04 with streaming middleware analysis and fix tracking",
-    ],
+    documentation: [],
   },
   {
     date: "December 28, 2025",
@@ -126,10 +123,7 @@ const releaseNotes: ReleaseWeek[] = [
       "Improved API alignment with OpenAI docs for /messages and /responses endpoints",
       "Added Statsig integration for frontend",
     ],
-    documentation: [
-      "Added Visual Regression Testing guide with baseline steps",
-      "Added pending migrations documentation for missing rate limit tables",
-    ],
+    documentation: [],
   },
   {
     date: "December 21, 2025",
@@ -206,11 +200,7 @@ const releaseNotes: ReleaseWeek[] = [
       "Multiple submodule updates to keep frontend and backend in sync",
       "Improved pricing enrichment validation and logging",
     ],
-    documentation: [
-      "Added visibility debugging guide for FloatingNewChatButton",
-      "Added comprehensive pricing audit documentation",
-      "Fixed documentation paths and removed time-based estimates",
-    ],
+    documentation: [],
   },
   {
     date: "December 14, 2025",
@@ -366,10 +356,7 @@ const releaseNotes: ReleaseWeek[] = [
       "Multiple submodule updates to keep frontend and backend in sync",
       "Reasoning persistence improvements in frontend",
     ],
-    documentation: [
-      "Added streaming standardization plan documentation",
-      "Addressed review feedback in streaming-standardization-plan",
-    ],
+    documentation: [],
   },
 ];
 
