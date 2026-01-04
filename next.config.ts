@@ -71,23 +71,11 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  async rewrites() {
-    return [
-      {
-        source: '/agents',
-        destination: 'https://vibe-kanban-staging.up.railway.app/',
-      },
-      {
-        source: '/agents/:path*',
-        destination: 'https://vibe-kanban-staging.up.railway.app/:path*',
-      },
-    ];
-  },
   async headers() {
     return [
       {
-        // Apply security headers to all routes
-        source: '/:path*',
+        // Apply security headers to all routes except /agents (which embeds external iframe)
+        source: '/((?!agents).*)',
         headers: [
           {
             key: 'Strict-Transport-Security',
@@ -112,6 +100,32 @@ const nextConfig: NextConfig = {
           {
             // Allow microphone for speech recognition on /chat, block geolocation and camera
             // microphone=(self) allows same-origin access needed for Web Speech API
+            key: 'Permissions-Policy',
+            value: 'geolocation=(), camera=(), microphone=(self)',
+          },
+        ],
+      },
+      {
+        // Security headers for /agents route (allows embedding vibe-kanban iframe)
+        source: '/agents/:path*',
+        headers: [
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
             key: 'Permissions-Policy',
             value: 'geolocation=(), camera=(), microphone=(self)',
           },
