@@ -4,6 +4,11 @@
   },
   "redirects": [
     {
+      "source": "/",
+      "destination": "/agent",
+      "permanent": false
+    },
+    {
       "source": "/deck",
       "destination": "https://www.canva.com/design/DAG2Dc4lQvI/P2ws7cdUnYAjdFxXpsKvUw/view?utm_content=DAG2Dc4lQvI&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h20484be5f9",
       "permanent": false
@@ -11,7 +16,7 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/warm-cache",
+      "path": "/agent/api/cron/warm-cache",
       "schedule": "0 */3 * * *"
     }
   ]

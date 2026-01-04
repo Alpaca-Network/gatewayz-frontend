@@ -28,6 +28,7 @@ import {
 import { getReferralCode, clearReferralCode } from "@/lib/referral";
 import { resetGuestMessageCount } from "@/lib/guest-chat";
 import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
+import { navigateTo } from "@/lib/utils";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -609,7 +610,7 @@ export function GatewayzAuthProvider({
         } else {
           console.log("[Auth] Redirecting new user to onboarding");
           // Redirect immediately - localStorage writes are synchronous
-          window.location.href = "/onboarding";
+          navigateTo("/onboarding");
         }
       }
     },

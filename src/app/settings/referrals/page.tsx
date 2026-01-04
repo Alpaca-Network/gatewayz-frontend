@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
 import { normalizeReferralData, calculateStats, ReferralTransaction } from '@/lib/referral-utils';
+import { navigateTo } from '@/lib/utils';
 
 // Stats card component
 const StatCard = ({
@@ -236,7 +237,7 @@ function ReferralsPageContent() {
                   Please log in to view your referral information
                 </p>
               </div>
-              <Button onClick={() => window.location.href = '/chat'}>
+              <Button onClick={() => navigateTo('/chat')}>
                 Go to Login
               </Button>
             </div>

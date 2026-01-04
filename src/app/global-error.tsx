@@ -3,6 +3,7 @@
 import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { navigateTo } from '@/lib/utils';
 
 /**
  * Global Error Handler for Next.js App Router
@@ -100,7 +101,7 @@ export default function GlobalError({
               Try again
             </Button>
             <Button
-              onClick={() => (window.location.href = '/')}
+              onClick={() => navigateTo('/')}
               variant="outline"
               className="min-w-[140px]"
             >
