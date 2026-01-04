@@ -52,7 +52,7 @@ jest.mock('lucide-react', () => ({
   BarChart3: () => <span data-testid="bar-chart-icon">BarChart</span>,
   Code2: () => <span data-testid="code-icon">Code</span>,
   Lightbulb: () => <span data-testid="lightbulb-icon">Lightbulb</span>,
-  MoreHorizontal: () => <span data-testid="more-icon">More</span>,
+  Sparkles: () => <span data-testid="sparkles-icon">Sparkles</span>,
   // Icons used by ConnectionStatus
   WifiOff: () => <span data-testid="wifi-off-icon">WifiOff</span>,
   Wifi: () => <span data-testid="wifi-icon">Wifi</span>,
@@ -1169,7 +1169,7 @@ describe('Prompt chips', () => {
     // "Code" may appear in multiple elements, use getAllByText
     expect(screen.getAllByText('Code').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Brainstorm')).toBeInTheDocument();
-    expect(screen.getByText('More')).toBeInTheDocument();
+    expect(screen.getByText('Surprise me')).toBeInTheDocument();
   });
 
   it('should set input value when a prompt chip is clicked', () => {
@@ -1231,6 +1231,100 @@ describe('Prompt chips', () => {
 
     // Should still set input value
     expect(mockSetInputValue).toHaveBeenCalledWith('Analyze the following data: ');
+  });
+});
+
+describe('Surprise me functionality', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    delete (window as any).__chatInputSend;
+  });
+
+  afterEach(() => {
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should render "Surprise me" button with Sparkles icon', () => {
+    render(<ChatLayout />);
+
+    // Should have "Surprise me" button
+    expect(screen.getByText('Surprise me')).toBeInTheDocument();
+
+    // Should have Sparkles icon
+    expect(screen.getByTestId('sparkles-icon')).toBeInTheDocument();
+  });
+
+  it('should set input value with a random prompt when "Surprise me" is clicked', async () => {
+    const mockSend = jest.fn();
+    (window as any).__chatInputSend = mockSend;
+
+    // Mock requestAnimationFrame for testing
+    const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    render(<ChatLayout />);
+
+    // Click the "Surprise me" button
+    const surpriseMeButton = screen.getByText('Surprise me');
+    fireEvent.click(surpriseMeButton);
+
+    // Should set input value with some prompt (we can't predict which one due to randomness)
+    expect(mockSetInputValue).toHaveBeenCalled();
+    const calledValue = mockSetInputValue.mock.calls[0][0];
+    expect(typeof calledValue).toBe('string');
+    expect(calledValue.length).toBeGreaterThan(0);
+
+    rafSpy.mockRestore();
+  });
+
+  it('should trigger __chatInputSend when "Surprise me" is clicked', async () => {
+    const mockSend = jest.fn();
+    (window as any).__chatInputSend = mockSend;
+
+    // Mock requestAnimationFrame for testing
+    const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    render(<ChatLayout />);
+
+    // Click the "Surprise me" button
+    const surpriseMeButton = screen.getByText('Surprise me');
+    fireEvent.click(surpriseMeButton);
+
+    // Should trigger send via requestAnimationFrame
+    await waitFor(() => {
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    rafSpy.mockRestore();
+  });
+
+  it('should send the message immediately without requiring user input', async () => {
+    const mockSend = jest.fn();
+    (window as any).__chatInputSend = mockSend;
+
+    // Mock requestAnimationFrame for testing
+    const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    render(<ChatLayout />);
+
+    const surpriseMeButton = screen.getByText('Surprise me');
+    fireEvent.click(surpriseMeButton);
+
+    // Both setInputValue and __chatInputSend should be called (like handlePromptSelect)
+    await waitFor(() => {
+      expect(mockSetInputValue).toHaveBeenCalled();
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    rafSpy.mockRestore();
   });
 });
 
