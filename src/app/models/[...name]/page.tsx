@@ -1040,6 +1040,8 @@ console.log(response.choices[0].message.content);`
                                 {modelProviders.map(provider => {
                                     const isRecommended = provider === selectedProvider;
                                     const providerNames: Record<string, string> = {
+                                        openai: 'OpenAI',
+                                        anthropic: 'Anthropic',
                                         openrouter: 'OpenRouter',
                                         portkey: 'Portkey',
                                         featherless: 'Featherless',
@@ -1059,6 +1061,8 @@ console.log(response.choices[0].message.content);`
                                         fal: 'FAL AI'
                                     };
                                     const providerLogos: Record<string, string> = {
+                                        openai: '/openai-logo.svg',
+                                        anthropic: '/anthropic-logo.svg',
                                         openrouter: '/openrouter-logo.svg',
                                         portkey: '/portkey-logo.svg',
                                         featherless: '/featherless-logo.svg',
