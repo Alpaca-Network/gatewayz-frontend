@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, Pencil, Lock, Unlock, Shield, Plus, ImageIcon, BarChart3, Code2, Lightbulb, MoreHorizontal } from "lucide-react";
+import { Menu, Pencil, Lock, Unlock, Shield, Plus, ImageIcon, BarChart3, Code2, Lightbulb, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { ChatSidebar } from "./ChatSidebar";
@@ -21,6 +21,7 @@ import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateSession } from "@/lib/hooks/use-chat-queries";
 import { useToast } from "@/hooks/use-toast";
+import { getImageGenerationModel } from "@/lib/hooks/use-auto-model-switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,11 +54,36 @@ const ALL_PROMPTS = [
 ];
 
 // Quick action prompt chips
+// useImageModel: if true, switches to the default image generation model when clicked
 const PROMPT_CHIPS = [
-    { label: "Create image", icon: ImageIcon, prompt: "Create an image of " },
-    { label: "Analyze data", icon: BarChart3, prompt: "Analyze the following data: " },
-    { label: "Code", icon: Code2, prompt: "Write code to " },
-    { label: "Brainstorm", icon: Lightbulb, prompt: "Brainstorm ideas for " },
+    { label: "Create image", icon: ImageIcon, prompt: "Create an image of ", useImageModel: true },
+    { label: "Analyze data", icon: BarChart3, prompt: "Analyze the following data: ", useImageModel: false },
+    { label: "Code", icon: Code2, prompt: "Write code to ", useImageModel: false },
+    { label: "Brainstorm", icon: Lightbulb, prompt: "Brainstorm ideas for ", useImageModel: false },
+];
+
+// Fun and interesting prompts for "Surprise Me" feature
+const SURPRISE_PROMPTS = [
+    "Tell me a fascinating fact about the universe that will blow my mind",
+    "Write a short story about a time-traveling cat",
+    "Explain what would happen if gravity suddenly reversed for 10 seconds",
+    "Create a recipe using only ingredients that start with the letter 'P'",
+    "Describe what a day in the life of a medieval knight would actually look like",
+    "Write a haiku about artificial intelligence",
+    "What's the most bizarre animal adaptation in nature?",
+    "Explain quantum entanglement using only food analogies",
+    "Create a fictional conspiracy theory about why socks disappear in the dryer",
+    "What would happen if humans could photosynthesize like plants?",
+    "Write a motivational speech from the perspective of a houseplant",
+    "Describe the plot of a movie that doesn't exist but should",
+    "What's the most interesting unsolved mystery in science?",
+    "Create a new sport that combines chess and extreme outdoor activities",
+    "Explain the plot of your favorite movie as if you were a pirate",
+    "What would social media look like in ancient Rome?",
+    "Write a cover letter for a job as a dragon's assistant",
+    "Describe what Earth would be like if dinosaurs never went extinct",
+    "Create a dialogue between a coffee cup and a tea cup debating their superiority",
+    "What's the most mind-bending paradox you know of?",
 ];
 
 // Fisher-Yates shuffle algorithm
@@ -70,7 +96,7 @@ function shuffleArray<T>(array: T[]): T[] {
     return shuffled;
 }
 
-function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect: (txt: string) => void; onPromptChipSelect?: (prompt: string) => void }) {
+function WelcomeScreen({ onPromptSelect, onPromptChipSelect, onSurpriseMe }: { onPromptSelect: (txt: string) => void; onPromptChipSelect?: (prompt: string, useImageModel?: boolean) => void; onSurpriseMe?: () => void }) {
     // Select 4 random prompts on mount (useMemo ensures consistency during render)
     const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
 
@@ -85,7 +111,7 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect:
                  {PROMPT_CHIPS.map((chip) => (
                      <button
                         key={chip.label}
-                        onClick={() => onPromptChipSelect?.(chip.prompt)}
+                        onClick={() => onPromptChipSelect?.(chip.prompt, chip.useImageModel)}
                         className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
                      >
                          <chip.icon className="h-4 w-4" />
@@ -93,9 +119,11 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect }: { onPromptSelect:
                      </button>
                  ))}
                  <button
+                    onClick={() => onSurpriseMe?.()}
                     className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-border bg-background hover:bg-accent transition-colors text-sm font-medium"
                  >
-                     More
+                     <Sparkles className="h-4 w-4" />
+                     Surprise me
                  </button>
              </div>
 
@@ -301,12 +329,25 @@ export function ChatLayout() {
    };
 
    // Handle prompt chip selection - just sets input value without sending, allows user to complete the prompt
-   const handlePromptChipSelect = (prompt: string) => {
+   // If useImageModel is true, switches to the default image generation model
+   const handlePromptChipSelect = (prompt: string, useImageModel?: boolean) => {
+       // Switch to image generation model if requested
+       if (useImageModel) {
+           const imageModel = getImageGenerationModel();
+           setSelectedModel(imageModel);
+       }
+
        setInputValue(prompt);
        // Focus the input field so user can continue typing
        if (typeof window !== 'undefined' && (window as any).__chatInputFocus) {
            (window as any).__chatInputFocus();
        }
+   };
+
+   // Handle "Surprise me" - selects a random interesting prompt and sends it immediately
+   const handleSurpriseMe = () => {
+       const randomPrompt = SURPRISE_PROMPTS[Math.floor(Math.random() * SURPRISE_PROMPTS.length)];
+       handlePromptSelect(randomPrompt);
    };
 
    // Handle retry for failed messages (e.g., rate limit errors)
@@ -715,7 +756,7 @@ export function ChatLayout() {
               {/* Main Content */}
               <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
                   {showWelcomeScreen ? (
-                      <WelcomeScreen onPromptSelect={handlePromptSelect} onPromptChipSelect={handlePromptChipSelect} />
+                      <WelcomeScreen onPromptSelect={handlePromptSelect} onPromptChipSelect={handlePromptChipSelect} onSurpriseMe={handleSurpriseMe} />
                   ) : (
                       <MessageList
                         sessionId={activeSessionId}

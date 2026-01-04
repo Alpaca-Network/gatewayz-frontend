@@ -3,17 +3,26 @@ import { ModelOption } from '@/components/chat/model-select';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { useToast } from '@/hooks/use-toast';
 
+// Default model for image generation tasks
+// The Gatewayz Router supports image generation via tools and routes to the best provider
+export const DEFAULT_IMAGE_GENERATION_MODEL: ModelOption = {
+  value: 'openrouter/auto',
+  label: 'Gatewayz Router',
+  category: 'Router',
+  sourceGateway: 'openrouter',
+  developer: 'Alpaca',
+  modalities: ['Text', 'Image', 'File', 'Audio', 'Video']
+};
+
+// Get the default model for image generation
+export const getImageGenerationModel = (): ModelOption => {
+  return DEFAULT_IMAGE_GENERATION_MODEL;
+};
+
 // List of known multimodal models that support image input
 // These are prioritized in order of preference
 const MULTIMODAL_MODELS: ModelOption[] = [
-  {
-    value: 'openrouter/auto',
-    label: 'Gatewayz Router',
-    category: 'Router',
-    sourceGateway: 'openrouter',
-    developer: 'Alpaca',
-    modalities: ['Text', 'Image', 'File', 'Audio', 'Video']
-  },
+  DEFAULT_IMAGE_GENERATION_MODEL,
   {
     value: 'google/gemini-2.0-flash-001',
     label: 'Gemini 2.0 Flash',

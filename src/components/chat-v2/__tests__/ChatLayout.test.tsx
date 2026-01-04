@@ -52,7 +52,7 @@ jest.mock('lucide-react', () => ({
   BarChart3: () => <span data-testid="bar-chart-icon">BarChart</span>,
   Code2: () => <span data-testid="code-icon">Code</span>,
   Lightbulb: () => <span data-testid="lightbulb-icon">Lightbulb</span>,
-  MoreHorizontal: () => <span data-testid="more-icon">More</span>,
+  Sparkles: () => <span data-testid="sparkles-icon">Sparkles</span>,
   // Icons used by ConnectionStatus
   WifiOff: () => <span data-testid="wifi-off-icon">WifiOff</span>,
   Wifi: () => <span data-testid="wifi-icon">Wifi</span>,
@@ -1147,6 +1147,184 @@ describe('handleRegenerate with undefined text values', () => {
       // Should only contain valid text, not "undefined" literals
       expect(mockSetInputValue).toHaveBeenCalledWith('Valid content.More content.');
     });
+  });
+});
+
+describe('Prompt chips', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    delete (window as any).__chatInputFocus;
+  });
+
+  afterEach(() => {
+    delete (window as any).__chatInputFocus;
+  });
+
+  it('should render prompt chips on welcome screen', () => {
+    render(<ChatLayout />);
+
+    // Should have prompt chips
+    expect(screen.getByText('Create image')).toBeInTheDocument();
+    expect(screen.getByText('Analyze data')).toBeInTheDocument();
+    // "Code" may appear in multiple elements, use getAllByText
+    expect(screen.getAllByText('Code').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Brainstorm')).toBeInTheDocument();
+    expect(screen.getByText('Surprise me')).toBeInTheDocument();
+  });
+
+  it('should set input value when a prompt chip is clicked', () => {
+    (window as any).__chatInputFocus = jest.fn();
+    render(<ChatLayout />);
+
+    // Click the "Brainstorm" chip (using this to avoid potential duplicate text issues)
+    const brainstormChip = screen.getByText('Brainstorm');
+    fireEvent.click(brainstormChip);
+
+    // Should set input value to the prompt text
+    expect(mockSetInputValue).toHaveBeenCalledWith('Brainstorm ideas for ');
+  });
+
+  it('should focus input when a prompt chip is clicked', () => {
+    const mockFocus = jest.fn();
+    (window as any).__chatInputFocus = mockFocus;
+
+    render(<ChatLayout />);
+
+    // Click the "Analyze data" chip
+    const analyzeDataChip = screen.getByText('Analyze data');
+    fireEvent.click(analyzeDataChip);
+
+    // Should focus the input
+    expect(mockFocus).toHaveBeenCalled();
+  });
+
+  it('should switch to image generation model when "Create image" chip is clicked', () => {
+    (window as any).__chatInputFocus = jest.fn();
+    render(<ChatLayout />);
+
+    // Click the "Create image" chip
+    const createImageChip = screen.getByText('Create image');
+    fireEvent.click(createImageChip);
+
+    // Should switch to image generation model (Gatewayz Router)
+    expect(mockSetSelectedModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: 'openrouter/auto',
+        label: 'Gatewayz Router',
+      })
+    );
+
+    // Should also set the input value
+    expect(mockSetInputValue).toHaveBeenCalledWith('Create an image of ');
+  });
+
+  it('should NOT switch model when other prompt chips are clicked', () => {
+    (window as any).__chatInputFocus = jest.fn();
+    render(<ChatLayout />);
+
+    // Click the "Analyze data" chip (should NOT switch model)
+    const analyzeDataChip = screen.getByText('Analyze data');
+    fireEvent.click(analyzeDataChip);
+
+    // Should NOT call setSelectedModel
+    expect(mockSetSelectedModel).not.toHaveBeenCalled();
+
+    // Should still set input value
+    expect(mockSetInputValue).toHaveBeenCalledWith('Analyze the following data: ');
+  });
+});
+
+describe('Surprise me functionality', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    delete (window as any).__chatInputSend;
+  });
+
+  afterEach(() => {
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should render "Surprise me" button with Sparkles icon', () => {
+    render(<ChatLayout />);
+
+    // Should have "Surprise me" button
+    expect(screen.getByText('Surprise me')).toBeInTheDocument();
+
+    // Should have Sparkles icon
+    expect(screen.getByTestId('sparkles-icon')).toBeInTheDocument();
+  });
+
+  it('should set input value with a random prompt when "Surprise me" is clicked', async () => {
+    const mockSend = jest.fn();
+    (window as any).__chatInputSend = mockSend;
+
+    // Mock requestAnimationFrame for testing
+    const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    render(<ChatLayout />);
+
+    // Click the "Surprise me" button
+    const surpriseMeButton = screen.getByText('Surprise me');
+    fireEvent.click(surpriseMeButton);
+
+    // Should set input value with some prompt (we can't predict which one due to randomness)
+    expect(mockSetInputValue).toHaveBeenCalled();
+    const calledValue = mockSetInputValue.mock.calls[0][0];
+    expect(typeof calledValue).toBe('string');
+    expect(calledValue.length).toBeGreaterThan(0);
+
+    rafSpy.mockRestore();
+  });
+
+  it('should trigger __chatInputSend when "Surprise me" is clicked', async () => {
+    const mockSend = jest.fn();
+    (window as any).__chatInputSend = mockSend;
+
+    // Mock requestAnimationFrame for testing
+    const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    render(<ChatLayout />);
+
+    // Click the "Surprise me" button
+    const surpriseMeButton = screen.getByText('Surprise me');
+    fireEvent.click(surpriseMeButton);
+
+    // Should trigger send via requestAnimationFrame
+    await waitFor(() => {
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    rafSpy.mockRestore();
+  });
+
+  it('should send the message immediately without requiring user input', async () => {
+    const mockSend = jest.fn();
+    (window as any).__chatInputSend = mockSend;
+
+    // Mock requestAnimationFrame for testing
+    const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    render(<ChatLayout />);
+
+    const surpriseMeButton = screen.getByText('Surprise me');
+    fireEvent.click(surpriseMeButton);
+
+    // Both setInputValue and __chatInputSend should be called (like handlePromptSelect)
+    await waitFor(() => {
+      expect(mockSetInputValue).toHaveBeenCalled();
+      expect(mockSend).toHaveBeenCalled();
+    });
+
+    rafSpy.mockRestore();
   });
 });
 
