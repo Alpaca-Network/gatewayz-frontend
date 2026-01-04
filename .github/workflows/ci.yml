@@ -290,7 +290,8 @@ jobs:
       - name: Wait for server to be ready
         run: |
           set +e
-          npx wait-on http://localhost:3000 --timeout 60000
+          # Wait for the app at /agent path (basePath configured in next.config.ts)
+          npx wait-on http://localhost:3000/agent --timeout 60000
           WAIT_RESULT=$?
           set -e
 
@@ -310,7 +311,7 @@ jobs:
         run: pnpm exec playwright test
         env:
           CI: true
-          PLAYWRIGHT_BASE_URL: http://localhost:3000
+          PLAYWRIGHT_BASE_URL: http://localhost:3000/agent
 
       - name: Upload Playwright report
         if: always()

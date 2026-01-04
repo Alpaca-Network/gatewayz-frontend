@@ -61,7 +61,8 @@ export default defineConfig({
 
   use: {
     // Base URL to use in actions like `await page.goto('/')`
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
+    // Note: App is deployed at /agent path (basePath in next.config.ts)
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000/agent',
 
     // Navigation timeout - for complex pages like /models
     // Override with --timeout flag or set PLAYWRIGHT_NAVIGATION_TIMEOUT env var
@@ -135,7 +136,7 @@ export default defineConfig({
     ? undefined
     : {
         command: 'pnpm dev',
-        url: 'http://localhost:3000',
+        url: 'http://localhost:3000/agent',
         reuseExistingServer: !process.env.CI,
         timeout: 180 * 1000, // 3 minutes to allow for initial compilation
         // Note: Even with timeout, tests may fail on first navigation to /chat
