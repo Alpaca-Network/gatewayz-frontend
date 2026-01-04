@@ -1,6 +1,12 @@
 import { renderHook, act } from '@testing-library/react';
 import { useAutoModelSwitch, modelSupportsModality, getMultimodalModel, getImageGenerationModel, DEFAULT_IMAGE_GENERATION_MODEL } from '../use-auto-model-switch';
 import { ModelOption } from '@/components/chat/model-select';
+import * as Sentry from '@sentry/nextjs';
+
+// Mock Sentry
+jest.mock('@sentry/nextjs', () => ({
+  captureException: jest.fn(),
+}));
 
 // Mock the toast hook
 const mockToast = jest.fn();
@@ -44,6 +50,24 @@ describe('modelSupportsModality', () => {
     expect(modelSupportsModality(['Text'], 'image')).toBe(false);
     expect(modelSupportsModality(['Text', 'File'], 'video')).toBe(false);
   });
+
+  it('should handle null modalities gracefully', () => {
+    expect(modelSupportsModality(null, 'text')).toBe(true);
+    expect(modelSupportsModality(null, 'image')).toBe(false);
+  });
+
+  it('should capture Sentry exception on error', () => {
+    // Force an error by using a proxy object
+    const errorModalities = new Proxy([], {
+      get() {
+        throw new Error('Forced error');
+      },
+    });
+
+    const result = modelSupportsModality(errorModalities as any, 'image');
+    expect(result).toBe(false); // Fallback to text-only
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
 });
 
 describe('getMultimodalModel', () => {
@@ -75,6 +99,37 @@ describe('getMultimodalModel', () => {
     const model = getMultimodalModel('image');
     expect(model.value).toBe('openrouter/auto');
     expect(model.label).toBe('Gatewayz Router');
+  });
+
+  it('should log warning when no model found and return fallback', () => {
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    // Force a scenario where find returns undefined
+    const originalFind = Array.prototype.find;
+    Array.prototype.find = jest.fn().mockReturnValue(undefined);
+
+    const model = getMultimodalModel('image');
+    expect(model).toBe(DEFAULT_IMAGE_GENERATION_MODEL);
+    expect(consoleWarnSpy).toHaveBeenCalled();
+
+    // Restore
+    Array.prototype.find = originalFind;
+    consoleWarnSpy.mockRestore();
+  });
+
+  it('should capture Sentry exception on error and return fallback', () => {
+    // Force an error
+    const originalFind = Array.prototype.find;
+    Array.prototype.find = jest.fn().mockImplementation(() => {
+      throw new Error('Find error');
+    });
+
+    const model = getMultimodalModel('image');
+    expect(model).toBe(DEFAULT_IMAGE_GENERATION_MODEL);
+    expect(Sentry.captureException).toHaveBeenCalled();
+
+    // Restore
+    Array.prototype.find = originalFind;
   });
 });
 
@@ -427,6 +482,63 @@ describe('useAutoModelSwitch', () => {
 
       expect(mockSetSelectedModel).not.toHaveBeenCalled();
       expect(mockToast).not.toHaveBeenCalled();
+    });
+
+    it('should handle error in validation and show error toast', () => {
+      const { result } = renderHook(() => useAutoModelSwitch());
+
+      const textOnlyModel: ModelOption = {
+        value: 'text-only-model',
+        label: 'Text Only Model',
+        category: 'Language',
+        modalities: ['Text'],
+      };
+
+      // Mock setSelectedModel to throw error during validation
+      mockSetSelectedModel.mockImplementation(() => {
+        throw new Error('Validation error');
+      });
+
+      act(() => {
+        const switched = result.current.checkAndSwitchModel(textOnlyModel, 'image');
+        expect(switched).toBe(false);
+      });
+
+      expect(Sentry.captureException).toHaveBeenCalled();
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Model switch failed',
+          variant: 'destructive',
+        })
+      );
+
+      // Restore
+      mockSetSelectedModel.mockRestore();
+    });
+
+    it('should validate new model has required fields', () => {
+      const { result } = renderHook(() => useAutoModelSwitch());
+
+      const textOnlyModel: ModelOption = {
+        value: 'text-only-model',
+        label: 'Text Only Model',
+        category: 'Language',
+        modalities: ['Text'],
+      };
+
+      // This should work normally - the multimodal model should have value and label
+      act(() => {
+        const switched = result.current.checkAndSwitchModel(textOnlyModel, 'image');
+        expect(switched).toBe(true);
+      });
+
+      // The new model should have been set and should have valid fields
+      expect(mockSetSelectedModel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          value: expect.any(String),
+          label: expect.any(String),
+        })
+      );
     });
   });
 });
