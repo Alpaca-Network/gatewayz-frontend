@@ -51,6 +51,22 @@ export interface GatewayConfig {
 export const GATEWAYS: GatewayConfig[] = [
   // Fast gateways (load first on models page)
   {
+    id: 'openai',
+    name: 'OpenAI',
+    color: 'bg-emerald-600',
+    priority: 'fast',
+    requiresApiKey: true,
+    apiKeyEnvVar: 'OPENAI_API_KEY',
+  },
+  {
+    id: 'anthropic',
+    name: 'Anthropic',
+    color: 'bg-amber-700',
+    priority: 'fast',
+    requiresApiKey: true,
+    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+  },
+  {
     id: 'openrouter',
     name: 'OpenRouter',
     color: 'bg-blue-500',

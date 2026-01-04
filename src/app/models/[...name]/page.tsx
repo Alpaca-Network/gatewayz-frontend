@@ -28,6 +28,7 @@ import {
     transformStaticModel,
     type ModelDetailRecord,
 } from '@/lib/model-detail-utils';
+import { stripDeveloperPrefix, keepFullModelId } from '@/lib/provider-model-formats';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -359,6 +360,20 @@ export default function ModelProfilePage() {
                 const parts = modelId.split('/');
                 return parts[parts.length - 1];
             }
+        },
+        openai: {
+            name: 'OpenAI',
+            baseUrl: 'https://api.openai.com/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'sk-...',
+            modelIdFormat: stripDeveloperPrefix,
+        },
+        anthropic: {
+            name: 'Anthropic',
+            baseUrl: 'https://api.anthropic.com/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'sk-ant-...',
+            modelIdFormat: stripDeveloperPrefix,
         },
     };
 
@@ -1016,6 +1031,8 @@ console.log(response.choices[0].message.content);`
                                 {modelProviders.map(provider => {
                                     const isRecommended = provider === selectedProvider;
                                     const providerNames: Record<string, string> = {
+                                        openai: 'OpenAI',
+                                        anthropic: 'Anthropic',
                                         openrouter: 'OpenRouter',
                                         portkey: 'Portkey',
                                         featherless: 'Featherless',
@@ -1035,6 +1052,8 @@ console.log(response.choices[0].message.content);`
                                         fal: 'FAL AI'
                                     };
                                     const providerLogos: Record<string, string> = {
+                                        openai: '/openai-logo.svg',
+                                        anthropic: '/anthropic-logo.svg',
                                         openrouter: '/openrouter-logo.svg',
                                         portkey: '/portkey-logo.svg',
                                         featherless: '/featherless-logo.svg',

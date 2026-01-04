@@ -51,6 +51,10 @@ interface Model {
 
 // Gateway display configuration
 const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React.ReactNode }> = {
+  // Direct API providers (primary)
+  openai: { name: 'OpenAI', color: 'bg-emerald-600' },
+  anthropic: { name: 'Anthropic', color: 'bg-amber-700' },
+  // Gateways and routers
   openrouter: { name: 'OpenRouter', color: 'bg-blue-500' },
   portkey: { name: 'Portkey', color: 'bg-purple-500' },
   featherless: { name: 'Featherless', color: 'bg-green-500' },
