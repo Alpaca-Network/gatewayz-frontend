@@ -360,6 +360,30 @@ export default function ModelProfilePage() {
                 return parts[parts.length - 1];
             }
         },
+        openai: {
+            name: 'OpenAI',
+            baseUrl: 'https://api.openai.com/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'sk-...',
+            modelIdFormat: (modelId: string) => {
+                // OpenAI uses the model name without the developer prefix
+                // e.g., 'openai/gpt-4o' → 'gpt-4o'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
+        },
+        anthropic: {
+            name: 'Anthropic',
+            baseUrl: 'https://api.anthropic.com/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'sk-ant-...',
+            modelIdFormat: (modelId: string) => {
+                // Anthropic uses the model name without the developer prefix
+                // e.g., 'anthropic/claude-3-5-sonnet-20241022' → 'claude-3-5-sonnet-20241022'
+                const parts = modelId.split('/');
+                return parts[parts.length - 1];
+            }
+        },
     };
 
     // Store the model ID
