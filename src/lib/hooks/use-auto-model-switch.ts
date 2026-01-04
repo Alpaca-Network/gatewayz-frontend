@@ -22,14 +22,7 @@ export const getImageGenerationModel = (): ModelOption => {
 // List of known multimodal models that support image input
 // These are prioritized in order of preference
 const MULTIMODAL_MODELS: ModelOption[] = [
-  {
-    value: 'openrouter/auto',
-    label: 'Gatewayz Router',
-    category: 'Router',
-    sourceGateway: 'openrouter',
-    developer: 'Alpaca',
-    modalities: ['Text', 'Image', 'File', 'Audio', 'Video']
-  },
+  DEFAULT_IMAGE_GENERATION_MODEL,
   {
     value: 'google/gemini-2.0-flash-001',
     label: 'Gemini 2.0 Flash',
