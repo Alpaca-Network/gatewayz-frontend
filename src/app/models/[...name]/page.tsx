@@ -28,6 +28,7 @@ import {
     transformStaticModel,
     type ModelDetailRecord,
 } from '@/lib/model-detail-utils';
+import { stripDeveloperPrefix, keepFullModelId } from '@/lib/provider-model-formats';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -365,24 +366,14 @@ export default function ModelProfilePage() {
             baseUrl: 'https://api.openai.com/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'sk-...',
-            modelIdFormat: (modelId: string) => {
-                // OpenAI uses the model name without the developer prefix
-                // e.g., 'openai/gpt-4o' → 'gpt-4o'
-                const parts = modelId.split('/');
-                return parts[parts.length - 1];
-            }
+            modelIdFormat: stripDeveloperPrefix,
         },
         anthropic: {
             name: 'Anthropic',
             baseUrl: 'https://api.anthropic.com/v1',
             requiresApiKey: true,
             apiKeyPlaceholder: 'sk-ant-...',
-            modelIdFormat: (modelId: string) => {
-                // Anthropic uses the model name without the developer prefix
-                // e.g., 'anthropic/claude-3-5-sonnet-20241022' → 'claude-3-5-sonnet-20241022'
-                const parts = modelId.split('/');
-                return parts[parts.length - 1];
-            }
+            modelIdFormat: stripDeveloperPrefix,
         },
     };
 
