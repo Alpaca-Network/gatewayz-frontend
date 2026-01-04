@@ -71,6 +71,18 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        source: '/agents',
+        destination: 'https://vibe-kanban-staging.up.railway.app/',
+      },
+      {
+        source: '/agents/:path*',
+        destination: 'https://vibe-kanban-staging.up.railway.app/:path*',
+      },
+    ];
+  },
   async headers() {
     return [
       {
