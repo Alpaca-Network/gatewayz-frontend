@@ -212,6 +212,14 @@ async function processCompletion(
         throw fetchError;
       }
 
+      // Don't retry on HTTP errors (4xx, 5xx) - these are from our error handling above
+      // Only retry on actual network/connection errors
+      const httpError = fetchError as any;
+      if (httpError.status) {
+        console.error('[API Proxy] HTTP error, not retrying:', httpError.status);
+        throw fetchError;
+      }
+
       // Retry on network errors if we haven't exceeded max retries
       if (retryCount < maxRetries) {
         console.warn(`[API Proxy] Fetch error on attempt ${retryCount + 1}, will retry:`, fetchError);
@@ -234,20 +242,22 @@ async function processCompletion(
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
   const requestStartTime = performance.now();
-  
+
   console.log(`[API Proxy] POST request received [${requestId}]`);
   profiler.startRequest(requestId, {
     method: 'POST',
     url: request.url,
     userAgent: request.headers.get('user-agent'),
   });
-  
+
   let timeoutMs = 30000; // Default timeout
+  let body: any; // Declare outside try block so it's accessible in catch block
+  let targetUrl: URL; // Declare outside try block for catch block access
 
   try {
     profiler.markStage(requestId, 'parse_request_body');
     console.log('[API Proxy] Parsing request body...');
-    const body = await request.json();
+    body = await request.json();
     console.log('[API Proxy] Request body parsed, model:', body.model, 'stream:', body.stream);
     
     profiler.markStage(requestId, 'validate_auth', {
@@ -355,7 +365,7 @@ export async function POST(request: NextRequest) {
 
     profiler.markStage(requestId, 'prepare_backend_request');
     const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-    const targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
+    targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
 
     // Add session_id to the backend URL if provided
     if (sessionId) {
@@ -801,7 +811,7 @@ export async function POST(request: NextRequest) {
 
       // Handle specific HTTP status codes with proper Sentry logging
       if (httpError.status === 404) {
-        userMessage = errorData.detail || errorData.message || 'The requested model or endpoint was not found. The model may be temporarily unavailable or the configuration may need to be updated.';
+        userMessage = 'The requested model or endpoint was not found. The model may be temporarily unavailable or the configuration may need to be updated.';
         errorType = 'not_found_error';
 
         Sentry.captureException(
@@ -810,19 +820,23 @@ export async function POST(request: NextRequest) {
             tags: {
               error_type: 'chat_not_found_error',
               http_status: httpError.status,
-              model: (request as any).parsedBody?.model,
+              model: body.model,
+              gateway: body.gateway,
+              is_streaming: body.stream ? 'true' : 'false',
             },
             extra: {
               requestId,
               errorData,
-              targetUrl: (request as any).targetUrl,
+              model: body.model,
+              gateway: body.gateway,
+              targetUrl: targetUrl.toString(),
               apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
             },
             level: 'warning',
           }
         );
       } else if (httpError.status === 400) {
-        userMessage = errorData.detail || errorData.message || 'Invalid request. Please check your input and try again.';
+        userMessage = 'Invalid request. Please check your input and try again.';
         errorType = 'validation_error';
 
         Sentry.captureException(
@@ -831,12 +845,15 @@ export async function POST(request: NextRequest) {
             tags: {
               error_type: 'chat_validation_error',
               http_status: httpError.status,
-              model: (request as any).parsedBody?.model,
+              model: body.model,
+              is_streaming: body.stream ? 'true' : 'false',
             },
             extra: {
               requestId,
               errorData,
-              messageCount: (request as any).parsedBody?.messages?.length,
+              model: body.model,
+              gateway: body.gateway,
+              messageCount: body.messages?.length,
             },
             level: 'warning',
           }
@@ -851,11 +868,15 @@ export async function POST(request: NextRequest) {
             tags: {
               error_type: 'chat_auth_error',
               http_status: httpError.status,
-              model: (request as any).parsedBody?.model,
+              model: body.model,
+              is_streaming: body.stream ? 'true' : 'false',
             },
             extra: {
               requestId,
               errorData,
+              model: body.model,
+              gateway: body.gateway,
+              targetUrl: targetUrl.toString(),
             },
             level: 'warning',
           }
@@ -867,11 +888,15 @@ export async function POST(request: NextRequest) {
             tags: {
               error_type: 'chat_server_error',
               http_status: httpError.status,
-              model: (request as any).parsedBody?.model,
+              model: body.model,
+              is_streaming: body.stream ? 'true' : 'false',
             },
             extra: {
               requestId,
               errorData,
+              model: body.model,
+              gateway: body.gateway,
+              targetUrl: targetUrl.toString(),
             },
             level: 'error',
           }
