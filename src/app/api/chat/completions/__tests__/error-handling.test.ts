@@ -51,11 +51,14 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 404 error with proper Sentry logging', async () => {
       const Sentry = require('@sentry/nextjs');
 
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
         statusText: 'Not Found',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Not Found' }),
       });
 
@@ -96,11 +99,14 @@ describe('Chat Completions API - Error Handling', () => {
     it('should include request context in 404 error', async () => {
       const Sentry = require('@sentry/nextjs');
 
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
         statusText: 'Not Found',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Model not found' }),
       });
 
@@ -138,11 +144,14 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 400 validation errors with Sentry logging', async () => {
       const Sentry = require('@sentry/nextjs');
 
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
         statusText: 'Bad Request',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Invalid message format' }),
       });
 
@@ -183,11 +192,14 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 401 authentication errors', async () => {
       const Sentry = require('@sentry/nextjs');
 
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
         statusText: 'Unauthorized',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Invalid API key' }),
       });
 
@@ -228,11 +240,14 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 500 server errors with proper logging', async () => {
       const Sentry = require('@sentry/nextjs');
 
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Server error occurred' }),
       });
 
@@ -268,11 +283,14 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 502 Bad Gateway errors', async () => {
       const Sentry = require('@sentry/nextjs');
 
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 502,
         statusText: 'Bad Gateway',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Gateway error' }),
       });
 
@@ -300,11 +318,14 @@ describe('Chat Completions API - Error Handling', () => {
     it('should include targetUrl in all error contexts', async () => {
       const Sentry = require('@sentry/nextjs');
 
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
         statusText: 'Not Found',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Not Found' }),
       });
 
@@ -330,11 +351,14 @@ describe('Chat Completions API - Error Handling', () => {
     it('should include model and gateway in error tags', async () => {
       const Sentry = require('@sentry/nextjs');
 
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
         statusText: 'Not Found',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Not Found' }),
       });
 
@@ -362,11 +386,14 @@ describe('Chat Completions API - Error Handling', () => {
 
   describe('User-Facing Error Messages', () => {
     it('should provide helpful 404 error message', async () => {
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
         statusText: 'Not Found',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Model not found' }),
       });
 
@@ -391,11 +418,14 @@ describe('Chat Completions API - Error Handling', () => {
     });
 
     it('should provide helpful validation error message', async () => {
+      const mockHeaders = new Headers();
+      mockHeaders.set('content-type', 'application/json');
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
         statusText: 'Bad Request',
-        headers: new Map([['content-type', 'application/json']]),
+        headers: mockHeaders,
         text: async () => JSON.stringify({ detail: 'Invalid format' }),
       });
 
