@@ -17,49 +17,23 @@ const releaseNotes: ReleaseWeek[] = [
   {
     date: "January 4, 2026",
     features: [
-      "OpenAI & Anthropic Direct Providers: Added direct API access to OpenAI (GPT models) and Anthropic (Claude models) with connection pool clients, pre-warming support, and manual pricing data",
-      "Surprise Me Feature: Added \"Surprise me\" button that generates and sends random interesting prompts from a curated list of fun questions",
-      "Image Model Auto-Switch: Automatically switches to image generation model when \"Create Image\" chip is clicked in chat",
-      "OpenCode & Claude Code Setup: Added multi-platform setup scripts and READMEs for OpenCode and Claude Code development environments",
+      "Direct API Providers: We've added native support for OpenAI (GPT) and Anthropic (Claude) with connection pool clients, pre-warming support, and manual pricing data",
+      "Enhanced Chat Intelligence: A new Image Model Auto-Switch automatically triggers the correct model when you click \"Create Image\"",
+      "\"Surprise Me\": Need inspiration? Use the new \"Surprise Me\" button to generate creative prompts",
+      "Dev Environment Boost: New setup scripts and documentation are live for OpenCode and Claude Code environments",
     ],
     bugFixes: [
       {
-        category: "Backend Fixes",
+        category: "Core Improvements & Fixes",
         items: [
-          "Fixed streaming middleware \"No response returned\" issue with pure ASGI middleware conversion",
-          "Added AIMO circuit breaker to handle API fetch errors gracefully",
-          "Fixed Braintrust NoneType content error with deep sanitization",
-          "Fixed Vertex AI streaming issues after submodule bump",
-          "Fixed health-service column name mismatches (current_status → last_status, last_check_at → last_called_at)",
-        ],
-      },
-      {
-        category: "Frontend Fixes",
-        items: [
-          "Fixed max plan display error",
-          "Added provider configs for OpenAI and Anthropic in model detail page",
-          "Added provider names and logos for new AI providers",
-          "Extracted modelIdFormat functions to testable utility module",
-          "Fixed duplicate model definition in use-auto-model-switch.ts",
-        ],
-      },
-      {
-        category: "CI/CD Fixes",
-        items: [
-          "Fixed PR comment step in auto-merge workflow to be non-fatal",
-          "Fixed PR lookup for forked PRs with correct head_repository.owner.login",
-          "Added null check for headBranch to prevent posting to unrelated PRs",
-          "Fixed workflow names in workflow-notification.yml",
-          "Improved unknown submodule handling in subrepo-ci-notification workflow",
+          "Infrastructure Stability: Resolved streaming middleware issues and implemented circuit breaker to handle API errors more gracefully",
+          "Database Sync: Optimized Vertex AI streaming and fixed health-service column name mismatches",
+          "Provider Integration: Added provider configs, names, and logos for OpenAI and Anthropic",
+          "CI/CD Reliability: Fixed PR comment handling, workflow names, and submodule notification handling",
         ],
       },
     ],
-    infrastructure: [
-      "Multiple submodule updates to keep frontend and backend in sync",
-      "Added comprehensive error reporting documentation for backend monitoring",
-      "Added CI notification workflows for enhanced visibility and automated alerting",
-      "Gateway pricing cross-reference from OpenRouter to prevent credit drain",
-    ],
+    infrastructure: [],
     documentation: [],
   },
   {
