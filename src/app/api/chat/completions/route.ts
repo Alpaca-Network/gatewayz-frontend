@@ -141,6 +141,27 @@ async function processCompletion(
             }
           }
 
+          // Handle error responses (4xx, 5xx) for non-streaming requests
+          if (!response.ok && !body.stream) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch {
+              errorData = { raw: errorText };
+            }
+
+            console.error('[API Proxy] Backend returned error status:', response.status);
+            console.error('[API Proxy] Error response:', errorData);
+
+            // Throw error with status and data for proper error handling in main handler
+            const error: any = new Error(`Backend API Error: ${response.status} ${response.statusText}`);
+            error.status = response.status;
+            error.statusText = response.statusText;
+            error.errorData = errorData;
+            throw error;
+          }
+
           // If not streaming, parse and log the response
           if (!body.stream) {
             // Try to parse JSON response
@@ -770,7 +791,107 @@ export async function POST(request: NextRequest) {
       stack: error.stack
     } : { message: 'Unknown error', name: 'UnknownError' };
 
-    // Capture all chat completion errors to Sentry
+    // Check if this is an HTTP error from processCompletion
+    const httpError = error as any;
+    if (httpError.status && httpError.errorData) {
+      // This is an HTTP error (404, 400, etc.) from the backend
+      const errorData = httpError.errorData;
+      let userMessage = errorData.message || errorData.detail || 'An error occurred';
+      let errorType = 'api_error';
+
+      // Handle specific HTTP status codes with proper Sentry logging
+      if (httpError.status === 404) {
+        userMessage = errorData.detail || errorData.message || 'The requested model or endpoint was not found. The model may be temporarily unavailable or the configuration may need to be updated.';
+        errorType = 'not_found_error';
+
+        Sentry.captureException(
+          new Error(`Chat API 404 Not Found: ${errorData.detail || 'Model or endpoint not found'}`),
+          {
+            tags: {
+              error_type: 'chat_not_found_error',
+              http_status: httpError.status,
+              model: (request as any).parsedBody?.model,
+            },
+            extra: {
+              requestId,
+              errorData,
+              targetUrl: (request as any).targetUrl,
+              apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+            },
+            level: 'warning',
+          }
+        );
+      } else if (httpError.status === 400) {
+        userMessage = errorData.detail || errorData.message || 'Invalid request. Please check your input and try again.';
+        errorType = 'validation_error';
+
+        Sentry.captureException(
+          new Error(`Chat API validation error: ${errorData.detail || 'Bad Request'}`),
+          {
+            tags: {
+              error_type: 'chat_validation_error',
+              http_status: httpError.status,
+              model: (request as any).parsedBody?.model,
+            },
+            extra: {
+              requestId,
+              errorData,
+              messageCount: (request as any).parsedBody?.messages?.length,
+            },
+            level: 'warning',
+          }
+        );
+      } else if (httpError.status === 401 || httpError.status === 403) {
+        userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
+        errorType = 'auth_error';
+
+        Sentry.captureException(
+          new Error(`Chat auth error: ${httpError.status} ${httpError.statusText}`),
+          {
+            tags: {
+              error_type: 'chat_auth_error',
+              http_status: httpError.status,
+              model: (request as any).parsedBody?.model,
+            },
+            extra: {
+              requestId,
+              errorData,
+            },
+            level: 'warning',
+          }
+        );
+      } else if (httpError.status >= 500) {
+        Sentry.captureException(
+          new Error(`Chat API server error: ${httpError.status} ${httpError.statusText}`),
+          {
+            tags: {
+              error_type: 'chat_server_error',
+              http_status: httpError.status,
+              model: (request as any).parsedBody?.model,
+            },
+            extra: {
+              requestId,
+              errorData,
+            },
+            level: 'error',
+          }
+        );
+      }
+
+      return new Response(JSON.stringify({
+        error: 'Backend API Error',
+        status: httpError.status,
+        statusText: httpError.statusText,
+        message: userMessage,
+        type: errorType,
+        errorData: errorData
+      }), {
+        status: httpError.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Capture all other chat completion errors to Sentry
     Sentry.captureException(
       error instanceof Error ? error : new Error(String(error)),
       {
