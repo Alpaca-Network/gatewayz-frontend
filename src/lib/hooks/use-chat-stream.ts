@@ -30,7 +30,11 @@ const debugLog = (message: string, data?: any) => {
 const debugError = (message: string, data?: any) => {
     const timestamp = new Date().toISOString();
     const prefix = `[ChatStream ERROR ${timestamp}]`;
-    console.error(prefix, message, data !== undefined ? data : '');
+    // Serialize data to avoid [object Object] in logs/Sentry
+    const serializedData = data !== undefined
+        ? (typeof data === 'object' ? JSON.stringify(data, null, 2) : String(data))
+        : '';
+    console.error(prefix, message, serializedData);
 };
 
 // Helper to extract image/video/audio/document from content array for display
