@@ -36,6 +36,23 @@ jest.mock('@/lib/guest-rate-limiter', () => ({
 describe('Chat Completions API - Error Handling', () => {
   let mockFetch: jest.SpyInstance;
 
+  // Helper to create a proper mock Response
+  const createMockResponse = (status: number, statusText: string, data: any) => {
+    const mockHeaders = new Headers();
+    mockHeaders.set('content-type', 'application/json');
+    const responseBody = JSON.stringify(data);
+
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      statusText,
+      headers: mockHeaders,
+      text: jest.fn().mockResolvedValue(responseBody),
+      json: jest.fn().mockResolvedValue(data),
+      clone: jest.fn().mockReturnThis(),
+    };
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch = jest.spyOn(global, 'fetch');
@@ -51,16 +68,9 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 404 error with proper Sentry logging', async () => {
       const Sentry = require('@sentry/nextjs');
 
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Not Found' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(404, 'Not Found', { detail: 'Not Found' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
@@ -99,16 +109,9 @@ describe('Chat Completions API - Error Handling', () => {
     it('should include request context in 404 error', async () => {
       const Sentry = require('@sentry/nextjs');
 
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Model not found' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(404, 'Not Found', { detail: 'Model not found' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
@@ -144,16 +147,9 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 400 validation errors with Sentry logging', async () => {
       const Sentry = require('@sentry/nextjs');
 
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Invalid message format' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(400, 'Bad Request', { detail: 'Invalid message format' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
@@ -192,16 +188,9 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 401 authentication errors', async () => {
       const Sentry = require('@sentry/nextjs');
 
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        statusText: 'Unauthorized',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Invalid API key' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(401, 'Unauthorized', { detail: 'Invalid API key' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
@@ -240,16 +229,9 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 500 server errors with proper logging', async () => {
       const Sentry = require('@sentry/nextjs');
 
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Server error occurred' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(500, 'Internal Server Error', { detail: 'Server error occurred' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
@@ -283,16 +265,9 @@ describe('Chat Completions API - Error Handling', () => {
     it('should handle 502 Bad Gateway errors', async () => {
       const Sentry = require('@sentry/nextjs');
 
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 502,
-        statusText: 'Bad Gateway',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Gateway error' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(502, 'Bad Gateway', { detail: 'Gateway error' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
@@ -318,16 +293,9 @@ describe('Chat Completions API - Error Handling', () => {
     it('should include targetUrl in all error contexts', async () => {
       const Sentry = require('@sentry/nextjs');
 
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Not Found' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(404, 'Not Found', { detail: 'Not Found' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
@@ -351,16 +319,9 @@ describe('Chat Completions API - Error Handling', () => {
     it('should include model and gateway in error tags', async () => {
       const Sentry = require('@sentry/nextjs');
 
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Not Found' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(404, 'Not Found', { detail: 'Not Found' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
@@ -386,16 +347,9 @@ describe('Chat Completions API - Error Handling', () => {
 
   describe('User-Facing Error Messages', () => {
     it('should provide helpful 404 error message', async () => {
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Model not found' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(404, 'Not Found', { detail: 'Model not found' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
@@ -418,16 +372,9 @@ describe('Chat Completions API - Error Handling', () => {
     });
 
     it('should provide helpful validation error message', async () => {
-      const mockHeaders = new Headers();
-      mockHeaders.set('content-type', 'application/json');
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        headers: mockHeaders,
-        text: async () => JSON.stringify({ detail: 'Invalid format' }),
-      });
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(400, 'Bad Request', { detail: 'Invalid format' })
+      );
 
       const request = new NextRequest('http://localhost:3000/api/chat/completions', {
         method: 'POST',
