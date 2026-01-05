@@ -164,6 +164,11 @@ async function processCompletion(
 
           // If not streaming, parse and log the response
           if (!body.stream) {
+            // Double-check that response is successful (should be guaranteed by earlier check, but being explicit)
+            if (!response.ok) {
+              throw new Error(`Unexpected error: response.ok is false but was not caught by error handler. Status: ${response.status}`);
+            }
+
             // Try to parse JSON response
             let data;
             try {
