@@ -141,8 +141,34 @@ async function processCompletion(
             }
           }
 
+          // Handle error responses (4xx, 5xx) for non-streaming requests
+          if (!response.ok && !body.stream) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch {
+              errorData = { raw: errorText };
+            }
+
+            console.error('[API Proxy] Backend returned error status:', response.status);
+            console.error('[API Proxy] Error response:', errorData);
+
+            // Throw error with status and data for proper error handling in main handler
+            const error: any = new Error(`Backend API Error: ${response.status} ${response.statusText}`);
+            error.status = response.status;
+            error.statusText = response.statusText;
+            error.errorData = errorData;
+            throw error;
+          }
+
           // If not streaming, parse and log the response
           if (!body.stream) {
+            // Double-check that response is successful (should be guaranteed by earlier check, but being explicit)
+            if (!response.ok) {
+              throw new Error(`Unexpected error: response.ok is false but was not caught by error handler. Status: ${response.status}`);
+            }
+
             // Try to parse JSON response
             let data;
             try {
@@ -191,6 +217,14 @@ async function processCompletion(
         throw fetchError;
       }
 
+      // Don't retry on HTTP errors (4xx, 5xx) - these are from our error handling above
+      // Only retry on actual network/connection errors
+      const httpError = fetchError as any;
+      if (httpError.status) {
+        console.error('[API Proxy] HTTP error, not retrying:', httpError.status);
+        throw fetchError;
+      }
+
       // Retry on network errors if we haven't exceeded max retries
       if (retryCount < maxRetries) {
         console.warn(`[API Proxy] Fetch error on attempt ${retryCount + 1}, will retry:`, fetchError);
@@ -213,20 +247,22 @@ async function processCompletion(
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
   const requestStartTime = performance.now();
-  
+
   console.log(`[API Proxy] POST request received [${requestId}]`);
   profiler.startRequest(requestId, {
     method: 'POST',
     url: request.url,
     userAgent: request.headers.get('user-agent'),
   });
-  
+
   let timeoutMs = 30000; // Default timeout
+  let body: any; // Declare outside try block so it's accessible in catch block
+  let targetUrl: URL | undefined; // Declare outside try block for catch block access
 
   try {
     profiler.markStage(requestId, 'parse_request_body');
     console.log('[API Proxy] Parsing request body...');
-    const body = await request.json();
+    body = await request.json();
     console.log('[API Proxy] Request body parsed, model:', body.model, 'stream:', body.stream);
     
     profiler.markStage(requestId, 'validate_auth', {
@@ -334,7 +370,7 @@ export async function POST(request: NextRequest) {
 
     profiler.markStage(requestId, 'prepare_backend_request');
     const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-    const targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
+    targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
 
     // Add session_id to the backend URL if provided
     if (sessionId) {
@@ -503,6 +539,33 @@ export async function POST(request: NextRequest) {
                     errorData,
                     model: body.model,
                     gateway: body.gateway,
+                    targetUrl: targetUrl.toString(),
+                  },
+                  level: 'warning',
+                }
+              );
+            } else if (response.status === 404) {
+              userMessage = errorData.detail || errorData.message || 'The requested model or endpoint was not found. The model may be temporarily unavailable or the configuration may need to be updated.';
+              errorType = 'not_found_error';
+
+              // Capture 404 errors to Sentry for monitoring
+              Sentry.captureException(
+                new Error(`Chat API 404 Not Found: ${errorData.detail || 'Model or endpoint not found'}`),
+                {
+                  tags: {
+                    error_type: 'chat_not_found_error',
+                    http_status: response.status,
+                    model: body.model,
+                    gateway: body.gateway,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                    targetUrl: targetUrl.toString(),
+                    apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
                   },
                   level: 'warning',
                 }
@@ -526,8 +589,33 @@ export async function POST(request: NextRequest) {
                     errorData,
                     model: body.model,
                     gateway: body.gateway,
+                    targetUrl: targetUrl.toString(),
                   },
                   level: 'error',
+                }
+              );
+            } else if (response.status === 400) {
+              userMessage = errorData.detail || errorData.message || 'Invalid request. Please check your input and try again.';
+              errorType = 'validation_error';
+
+              // Capture validation errors to Sentry
+              Sentry.captureException(
+                new Error(`Chat API validation error: ${errorData.detail || 'Bad Request'}`),
+                {
+                  tags: {
+                    error_type: 'chat_validation_error',
+                    http_status: response.status,
+                    model: body.model,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                    messageCount: body.messages?.length,
+                  },
+                  level: 'warning',
                 }
               );
             }
@@ -718,7 +806,122 @@ export async function POST(request: NextRequest) {
       stack: error.stack
     } : { message: 'Unknown error', name: 'UnknownError' };
 
-    // Capture all chat completion errors to Sentry
+    // Check if this is an HTTP error from processCompletion
+    const httpError = error as any;
+    if (httpError.status && httpError.errorData) {
+      // This is an HTTP error (404, 400, etc.) from the backend
+      const errorData = httpError.errorData;
+      let userMessage = errorData.message || errorData.detail || 'An error occurred';
+      let errorType = 'api_error';
+
+      // Handle specific HTTP status codes with proper Sentry logging
+      if (httpError.status === 404) {
+        userMessage = 'The requested model or endpoint was not found. The model may be temporarily unavailable or the configuration may need to be updated.';
+        errorType = 'not_found_error';
+
+        Sentry.captureException(
+          new Error(`Chat API 404 Not Found: ${errorData.detail || 'Model or endpoint not found'}`),
+          {
+            tags: {
+              error_type: 'chat_not_found_error',
+              http_status: httpError.status,
+              model: body.model,
+              gateway: body.gateway,
+              is_streaming: body.stream ? 'true' : 'false',
+            },
+            extra: {
+              requestId,
+              errorData,
+              model: body.model,
+              gateway: body.gateway,
+              targetUrl: targetUrl?.toString(),
+              apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+            },
+            level: 'warning',
+          }
+        );
+      } else if (httpError.status === 400) {
+        userMessage = 'Invalid request. Please check your input and try again.';
+        errorType = 'validation_error';
+
+        Sentry.captureException(
+          new Error(`Chat API validation error: ${errorData.detail || 'Bad Request'}`),
+          {
+            tags: {
+              error_type: 'chat_validation_error',
+              http_status: httpError.status,
+              model: body.model,
+              is_streaming: body.stream ? 'true' : 'false',
+            },
+            extra: {
+              requestId,
+              errorData,
+              model: body.model,
+              gateway: body.gateway,
+              messageCount: body.messages?.length,
+            },
+            level: 'warning',
+          }
+        );
+      } else if (httpError.status === 401 || httpError.status === 403) {
+        userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
+        errorType = 'auth_error';
+
+        Sentry.captureException(
+          new Error(`Chat auth error: ${httpError.status} ${httpError.statusText}`),
+          {
+            tags: {
+              error_type: 'chat_auth_error',
+              http_status: httpError.status,
+              model: body.model,
+              is_streaming: body.stream ? 'true' : 'false',
+            },
+            extra: {
+              requestId,
+              errorData,
+              model: body.model,
+              gateway: body.gateway,
+              targetUrl: targetUrl?.toString(),
+            },
+            level: 'warning',
+          }
+        );
+      } else if (httpError.status >= 500) {
+        Sentry.captureException(
+          new Error(`Chat API server error: ${httpError.status} ${httpError.statusText}`),
+          {
+            tags: {
+              error_type: 'chat_server_error',
+              http_status: httpError.status,
+              model: body.model,
+              is_streaming: body.stream ? 'true' : 'false',
+            },
+            extra: {
+              requestId,
+              errorData,
+              model: body.model,
+              gateway: body.gateway,
+              targetUrl: targetUrl?.toString(),
+            },
+            level: 'error',
+          }
+        );
+      }
+
+      return new Response(JSON.stringify({
+        error: 'Backend API Error',
+        status: httpError.status,
+        statusText: httpError.statusText,
+        message: userMessage,
+        type: errorType,
+        errorData: errorData
+      }), {
+        status: httpError.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Capture all other chat completion errors to Sentry
     Sentry.captureException(
       error instanceof Error ? error : new Error(String(error)),
       {

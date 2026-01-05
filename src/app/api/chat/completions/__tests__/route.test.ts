@@ -1059,7 +1059,9 @@ describe('Chat Completions API Route', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 500,
+        statusText: 'Internal Server Error',
         headers: new Headers(),
+        text: async () => JSON.stringify({ error: 'Internal server error' }),
         json: async () => ({ error: 'Internal server error' }),
       });
 
