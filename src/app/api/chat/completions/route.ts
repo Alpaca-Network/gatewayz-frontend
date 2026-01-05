@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
 
   let timeoutMs = 30000; // Default timeout
   let body: any; // Declare outside try block so it's accessible in catch block
-  let targetUrl: URL; // Declare outside try block for catch block access
+  let targetUrl: URL | undefined; // Declare outside try block for catch block access
 
   try {
     profiler.markStage(requestId, 'parse_request_body');
@@ -829,7 +829,7 @@ export async function POST(request: NextRequest) {
               errorData,
               model: body.model,
               gateway: body.gateway,
-              targetUrl: targetUrl.toString(),
+              targetUrl: targetUrl?.toString(),
               apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
             },
             level: 'warning',
@@ -876,7 +876,7 @@ export async function POST(request: NextRequest) {
               errorData,
               model: body.model,
               gateway: body.gateway,
-              targetUrl: targetUrl.toString(),
+              targetUrl: targetUrl?.toString(),
             },
             level: 'warning',
           }
@@ -896,7 +896,7 @@ export async function POST(request: NextRequest) {
               errorData,
               model: body.model,
               gateway: body.gateway,
-              targetUrl: targetUrl.toString(),
+              targetUrl: targetUrl?.toString(),
             },
             level: 'error',
           }
