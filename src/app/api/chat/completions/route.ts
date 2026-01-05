@@ -503,6 +503,33 @@ export async function POST(request: NextRequest) {
                     errorData,
                     model: body.model,
                     gateway: body.gateway,
+                    targetUrl: targetUrl.toString(),
+                  },
+                  level: 'warning',
+                }
+              );
+            } else if (response.status === 404) {
+              userMessage = errorData.detail || errorData.message || 'The requested model or endpoint was not found. The model may be temporarily unavailable or the configuration may need to be updated.';
+              errorType = 'not_found_error';
+
+              // Capture 404 errors to Sentry for monitoring
+              Sentry.captureException(
+                new Error(`Chat API 404 Not Found: ${errorData.detail || 'Model or endpoint not found'}`),
+                {
+                  tags: {
+                    error_type: 'chat_not_found_error',
+                    http_status: response.status,
+                    model: body.model,
+                    gateway: body.gateway,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                    targetUrl: targetUrl.toString(),
+                    apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
                   },
                   level: 'warning',
                 }
@@ -526,8 +553,33 @@ export async function POST(request: NextRequest) {
                     errorData,
                     model: body.model,
                     gateway: body.gateway,
+                    targetUrl: targetUrl.toString(),
                   },
                   level: 'error',
+                }
+              );
+            } else if (response.status === 400) {
+              userMessage = errorData.detail || errorData.message || 'Invalid request. Please check your input and try again.';
+              errorType = 'validation_error';
+
+              // Capture validation errors to Sentry
+              Sentry.captureException(
+                new Error(`Chat API validation error: ${errorData.detail || 'Bad Request'}`),
+                {
+                  tags: {
+                    error_type: 'chat_validation_error',
+                    http_status: response.status,
+                    model: body.model,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                    messageCount: body.messages?.length,
+                  },
+                  level: 'warning',
                 }
               );
             }
