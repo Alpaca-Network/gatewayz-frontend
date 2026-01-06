@@ -36,7 +36,11 @@ const devLog = (...args: unknown[]) => {
 };
 
 const devError = (...args: unknown[]) => {
-  console.error('[Streaming ERROR]', ...args);
+  // Serialize objects to avoid [object Object] in logs/Sentry
+  const serializedArgs = args.map(arg =>
+    typeof arg === 'object' && arg !== null ? JSON.stringify(arg, null, 2) : arg
+  );
+  console.error('[Streaming ERROR]', ...serializedArgs);
 };
 
 // Helper function to wait/sleep
