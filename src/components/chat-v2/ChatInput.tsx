@@ -548,6 +548,8 @@ export function ChatInput() {
   const currentRecognitionRef = useRef<SpeechRecognition | null>(null);
   // Ref to track last processed result index to prevent duplicates
   const lastProcessedIndexRef = useRef<number>(-1);
+  // Ref to track accumulated final transcript to detect and remove duplicates
+  const accumulatedFinalTranscriptRef = useRef<string>('');
 
   // Speech Recognition for transcription
   const startRecording = useCallback(() => {
@@ -574,6 +576,7 @@ export function ChatInput() {
 
     // Reset tracking state for new recording session
     lastProcessedIndexRef.current = -1;
+    accumulatedFinalTranscriptRef.current = '';
     setInterimTranscript('');
     setFinalTranscriptDuringRecording('');
     // Save the current input value before recording starts
@@ -597,8 +600,10 @@ export function ChatInput() {
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Build complete transcript from all results, only processing new finals
-      let newFinalTranscript = '';
+      // Build the complete final transcript from all final results
+      // The Web Speech API in continuous mode returns accumulated transcripts,
+      // so we need to track what we've already processed to avoid duplicates
+      let totalFinalTranscript = '';
       let currentInterim = '';
 
       for (let i = 0; i < event.results.length; i++) {
@@ -606,11 +611,9 @@ export function ChatInput() {
         const transcript = result[0].transcript;
 
         if (result.isFinal) {
-          // Only add to newFinalTranscript if this is a newly finalized result
-          if (i > lastProcessedIndexRef.current) {
-            newFinalTranscript += transcript;
-            lastProcessedIndexRef.current = i;
-          }
+          // Accumulate all final transcripts
+          totalFinalTranscript += transcript;
+          lastProcessedIndexRef.current = i;
         } else {
           // Interim results - these are still being processed
           currentInterim += transcript;
@@ -620,15 +623,39 @@ export function ChatInput() {
       // Update interim transcript display
       setInterimTranscript(currentInterim);
 
-      // Only update input if we have new final transcript
-      if (newFinalTranscript) {
+      // Calculate the truly NEW portion of the transcript by comparing
+      // against what we've already accumulated. This handles the case where
+      // the Speech API returns overlapping/repeated content in continuous mode.
+      const previousLength = accumulatedFinalTranscriptRef.current.length;
+
+      // Check if the new total transcript starts with what we already have
+      // If so, extract only the new portion
+      let newPortionOfTranscript = '';
+      if (totalFinalTranscript.length > previousLength) {
+        if (totalFinalTranscript.startsWith(accumulatedFinalTranscriptRef.current)) {
+          // Normal case: new transcript is an extension of the previous
+          newPortionOfTranscript = totalFinalTranscript.slice(previousLength);
+        } else {
+          // Edge case: transcript was modified (shouldn't happen, but handle it)
+          // Fall back to the full new transcript
+          newPortionOfTranscript = totalFinalTranscript;
+        }
+      }
+
+      // Update our accumulated tracking
+      if (totalFinalTranscript.length > previousLength) {
+        accumulatedFinalTranscriptRef.current = totalFinalTranscript;
+      }
+
+      // Only update input if we have genuinely new content
+      if (newPortionOfTranscript) {
         const currentValue = useChatUIStore.getState().inputValue;
         const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
-        setInputValue(currentValue + separator + newFinalTranscript);
-        // Also track final transcript separately for display (avoid doubling from inputValue slice)
+        setInputValue(currentValue + separator + newPortionOfTranscript);
+        // Also track final transcript separately for display
         setFinalTranscriptDuringRecording(prev => {
           const prevSeparator = prev && !prev.endsWith(' ') ? ' ' : '';
-          return prev + prevSeparator + newFinalTranscript;
+          return prev + prevSeparator + newPortionOfTranscript;
         });
       }
     };
@@ -702,6 +729,7 @@ export function ChatInput() {
       setInterimTranscript('');
       setFinalTranscriptDuringRecording('');
       lastProcessedIndexRef.current = -1;
+      accumulatedFinalTranscriptRef.current = '';
     }
   }, [speechRecognition]);
 
