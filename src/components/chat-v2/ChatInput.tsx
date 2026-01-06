@@ -844,14 +844,14 @@ export function ChatInput() {
             )}
         </div>
 
-        <div className="flex gap-2 items-center bg-muted p-3 rounded-2xl border">
+        <div className="flex gap-2 items-end bg-muted p-3 rounded-2xl border">
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
             <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
-            <div className="flex gap-1">
+            <div className="flex flex-col gap-1 self-end">
                 {/* Combined "Add photos & files" dropdown with [+] button */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
