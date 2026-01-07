@@ -1126,6 +1126,109 @@ describe('ChatInput speech recognition', () => {
     expect(mockSetInputValue).toHaveBeenCalledWith('Existing text new words');
   });
 
+  it('should deduplicate repeated transcripts in continuous mode', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate first result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    // First transcript should be added
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+
+    // Update the store state to reflect what was added
+    mockStoreState.inputValue = 'hello world';
+
+    // Simulate second result where the API returns accumulated transcript
+    // (this is what causes duplicates - the API returns "hello world how are you"
+    // instead of just "how are you")
+    const secondResult = {
+      resultIndex: 0,
+      results: {
+        length: 2,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+        1: {
+          isFinal: true,
+          0: { transcript: 'how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(secondResult);
+    }
+
+    // Should only append the NEW portion, not the duplicate "hello world"
+    // The separator logic adds a space between existing content and new content
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world how are you');
+  });
+
+  it('should handle overlapping transcripts without duplication', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate result with accumulated transcripts (common in continuous mode)
+    const mockResultEvent = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'how long has Burkina Faso been a country', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(mockResultEvent);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('how long has Burkina Faso been a country');
+    mockSetInputValue.mockClear();
+
+    // Update store state
+    mockStoreState.inputValue = 'how long has Burkina Faso been a country';
+
+    // Simulate another event where the API re-sends the same final result
+    // (this can happen with some browsers/implementations)
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(mockResultEvent);
+    }
+
+    // Should NOT add duplicate text - setInputValue should not be called
+    // because there's no new content
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
+
   it('should handle synchronous start() errors and reset state', () => {
     // Make start() throw synchronously
     mockRecognition.start.mockImplementation(() => {
