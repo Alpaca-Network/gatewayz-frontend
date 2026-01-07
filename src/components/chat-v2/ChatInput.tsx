@@ -611,7 +611,10 @@ export function ChatInput() {
         const transcript = result[0].transcript;
 
         if (result.isFinal) {
-          // Accumulate all final transcripts
+          // Accumulate all final transcripts with proper spacing between segments
+          if (totalFinalTranscript.length > 0 && !totalFinalTranscript.endsWith(' ')) {
+            totalFinalTranscript += ' ';
+          }
           totalFinalTranscript += transcript;
           lastProcessedIndexRef.current = i;
         } else {
@@ -649,14 +652,18 @@ export function ChatInput() {
 
       // Only update input if we have genuinely new content
       if (newPortionOfTranscript) {
-        const currentValue = useChatUIStore.getState().inputValue;
-        const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
-        setInputValue(currentValue + separator + newPortionOfTranscript);
-        // Also track final transcript separately for display
-        setFinalTranscriptDuringRecording(prev => {
-          const prevSeparator = prev && !prev.endsWith(' ') ? ' ' : '';
-          return prev + prevSeparator + newPortionOfTranscript;
-        });
+        // Trim the new portion to handle any leading/trailing spaces from concatenation
+        const trimmedNewPortion = newPortionOfTranscript.trim();
+        if (trimmedNewPortion) {
+          const currentValue = useChatUIStore.getState().inputValue;
+          const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
+          setInputValue(currentValue + separator + trimmedNewPortion);
+          // Also track final transcript separately for display
+          setFinalTranscriptDuringRecording(prev => {
+            const prevSeparator = prev && !prev.endsWith(' ') ? ' ' : '';
+            return prev + prevSeparator + trimmedNewPortion;
+          });
+        }
       }
     };
 
