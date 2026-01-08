@@ -169,6 +169,8 @@ export function ChatInput() {
   const [transcriptBeforeRecording, setTranscriptBeforeRecording] = useState<string>('');
   // Track final transcript accumulated during recording session (separate from inputValue)
   const [finalTranscriptDuringRecording, setFinalTranscriptDuringRecording] = useState<string>('');
+  // Track if textarea has expanded to multiple lines
+  const [isMultiline, setIsMultiline] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -197,6 +199,9 @@ export function ChatInput() {
     // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
     const newHeight = Math.min(Math.max(textarea.scrollHeight, 48), 150);
     textarea.style.height = `${newHeight}px`;
+
+    // Track if textarea has expanded beyond single line (48px is single line height)
+    setIsMultiline(newHeight > 48);
   }, []);
 
   // Store focus function in window for access from ChatLayout
@@ -872,14 +877,14 @@ export function ChatInput() {
             )}
         </div>
 
-        <div className="flex gap-2 items-end bg-muted p-3 rounded-2xl border">
+        <div className={cn("flex gap-2 bg-muted p-3 rounded-2xl border", isMultiline ? "items-end" : "items-center")}>
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
             <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
-            <div className="flex flex-col gap-1 self-end">
+            <div className={cn("flex gap-1", isMultiline ? "flex-col self-end" : "flex-row items-center")}>
                 {/* Combined "Add photos & files" dropdown with [+] button */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
