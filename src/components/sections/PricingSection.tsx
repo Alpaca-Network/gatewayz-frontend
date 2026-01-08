@@ -63,7 +63,7 @@ const tiers = [
       "24/7 dedicated support",
       "99.99% uptime SLA",
     ],
-    cta: "Contact Sales",
+    cta: "Get Started",
     highlighted: false,
   },
 ];

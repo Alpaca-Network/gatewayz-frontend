@@ -80,7 +80,7 @@ const pricingTiers: PricingTier[] = [
     name: 'Enterprise',
     description: 'Tailored for scale',
     price: 'Custom',
-    ctaText: 'Contact Sales',
+    ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
       'Dedicated infrastructure',
