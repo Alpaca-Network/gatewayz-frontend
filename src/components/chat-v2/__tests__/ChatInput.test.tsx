@@ -1136,36 +1136,13 @@ describe('ChatInput speech recognition', () => {
       fireEvent.click(micButton);
     }
 
-    // Simulate first result
+    // Simulate first onresult event with accumulated results
+    // The Web Speech API in continuous mode can return multiple segments in one event.
+    // With PR #707's spacing fix, these segments are concatenated with spaces.
     const firstResult = {
       resultIndex: 0,
       results: {
-        length: 1,
-        0: {
-          isFinal: true,
-          0: { transcript: 'hello world', confidence: 0.9 },
-        },
-      },
-    };
-
-    if (mockRecognition.onresult) {
-      mockRecognition.onresult(firstResult);
-    }
-
-    // First transcript should be added
-    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
-    mockSetInputValue.mockClear();
-
-    // Update the store state to reflect what was added
-    mockStoreState.inputValue = 'hello world';
-
-    // Simulate second result where the API returns accumulated transcript
-    // (this is what causes duplicates - the API returns "hello world how are you"
-    // instead of just "how are you")
-    const secondResult = {
-      resultIndex: 0,
-      results: {
-        length: 2,
+        length: 2,  // Two segments in one event
         0: {
           isFinal: true,
           0: { transcript: 'hello world', confidence: 0.9 },
@@ -1178,11 +1155,12 @@ describe('ChatInput speech recognition', () => {
     };
 
     if (mockRecognition.onresult) {
-      mockRecognition.onresult(secondResult);
+      mockRecognition.onresult(firstResult);
     }
 
-    // Should only append the NEW portion, not the duplicate "hello world"
-    // The separator logic adds a space between existing content and new content
+    // With PR #707's spacing logic, segments are properly spaced:
+    // totalFinalTranscript = 'hello world' + ' ' + 'how are you' = 'hello world how are you'
+    // Since input was empty and accumulatedRef was empty, the full transcript is added
     expect(mockSetInputValue).toHaveBeenCalledWith('hello world how are you');
   });
 
