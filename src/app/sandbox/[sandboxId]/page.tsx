@@ -1,20 +1,11 @@
-"use client";
+import {SandboxClient} from "./sandbox-client";
 
-import {Sandbox} from "@sampleapp.ai/sdk";
-import {getApiKey} from "@/lib/api";
+interface SandboxPageProps {
+  params: Promise<{sandboxId: string}>;
+}
 
-export default async function SandboxPage({params}: {params: Promise<{sandboxId: string}>}) {
+export default async function SandboxPage({params}: SandboxPageProps) {
   const {sandboxId} = await params;
-  const apiKey = getApiKey() || "";
-  const {sandboxId} = params;
-  return (
-    <Sandbox
-      apiKey={process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY!}
-      sandboxId={sandboxId}
-      env={{
-        GATEWAYZ_API_KEY: apiKey,
-        GATEWAYZ_API_BASE_URL: "https://api.gatewayz.ai",
-      }}
-    />
-  );
+
+  return <SandboxClient sandboxId={sandboxId} />;
 }
