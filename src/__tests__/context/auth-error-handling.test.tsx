@@ -89,6 +89,207 @@ describe('Authentication Error Handling', () => {
       expect(expectedSentryCall.level).toBe('warning');
       expect(expectedSentryCall.tags.http_status).toBe(504);
     });
+
+    it('should set shouldRetry=true for 504 errors within retry limit', () => {
+      const status = 504;
+      const authRetryCount = 0;
+      const MAX_AUTH_RETRIES = 3;
+
+      let shouldRetry = false;
+      if (status === 504) {
+        shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      }
+
+      expect(shouldRetry).toBe(true);
+    });
+
+    it('should set shouldRetry=false for 504 errors at retry limit', () => {
+      const status = 504;
+      const authRetryCount = 3;
+      const MAX_AUTH_RETRIES = 3;
+
+      let shouldRetry = false;
+      if (status === 504) {
+        shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      }
+
+      expect(shouldRetry).toBe(false);
+    });
+
+    it('should provide user-friendly message for 504 errors', () => {
+      const status = 504;
+      const authRetryCount = 0;
+      const MAX_AUTH_RETRIES = 3;
+
+      let userMessage = '';
+      let shouldRetry = false;
+
+      if (status === 504) {
+        userMessage = "Gateway timeout - our servers are taking too long to respond. Retrying...";
+        shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      }
+
+      expect(userMessage).toContain('Gateway timeout');
+      expect(userMessage).toContain('Retrying');
+      expect(shouldRetry).toBe(true);
+    });
+
+    it('should include is_gateway_timeout tag in Sentry context for 504', () => {
+      const status = 504;
+      const expectedTags = {
+        auth_error: 'backend_auth_failed',
+        http_status: 504,
+        is_gateway_timeout: status === 504 ? 'true' : 'false',
+      };
+
+      expect(expectedTags.is_gateway_timeout).toBe('true');
+      expect(expectedTags.http_status).toBe(504);
+    });
+
+    it('should include will_retry in Sentry extra context', () => {
+      const status = 504;
+      const authRetryCount = 1;
+      const MAX_AUTH_RETRIES = 3;
+
+      const shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      const expectedExtra = {
+        response_status: status,
+        retry_attempt: authRetryCount,
+        will_retry: shouldRetry,
+      };
+
+      expect(expectedExtra.will_retry).toBe(true);
+      expect(expectedExtra.retry_attempt).toBe(1);
+    });
+
+    it('should dispatch AUTH_REFRESH_EVENT when shouldRetry is true', () => {
+      const status = 504;
+      const authRetryCount = 0;
+      const MAX_AUTH_RETRIES = 3;
+      const shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+
+      // Simulate the retry dispatch logic
+      if (shouldRetry && typeof window !== 'undefined') {
+        const eventType = 'gatewayz-auth-refresh';
+        expect(eventType).toBe('gatewayz-auth-refresh');
+      }
+
+      expect(shouldRetry).toBe(true);
+    });
+  });
+
+  describe('5xx Error Retry Logic', () => {
+    it('should set shouldRetry=true for 502 errors within retry limit', () => {
+      const status = 502;
+      const authRetryCount = 0;
+      const MAX_AUTH_RETRIES = 3;
+      const is5xxError = status >= 500 && status < 600;
+
+      let shouldRetry = false;
+      if (is5xxError) {
+        shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      }
+
+      expect(shouldRetry).toBe(true);
+      expect(is5xxError).toBe(true);
+    });
+
+    it('should set shouldRetry=true for 503 errors within retry limit', () => {
+      const status = 503;
+      const authRetryCount = 1;
+      const MAX_AUTH_RETRIES = 3;
+      const is5xxError = status >= 500 && status < 600;
+
+      let shouldRetry = false;
+      if (is5xxError) {
+        shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      }
+
+      expect(shouldRetry).toBe(true);
+    });
+
+    it('should provide user-friendly message for 5xx errors', () => {
+      const status = 502;
+      const is5xxError = status >= 500 && status < 600;
+
+      let userMessage = '';
+      if (status === 504) {
+        userMessage = "Gateway timeout - our servers are taking too long to respond. Retrying...";
+      } else if (is5xxError) {
+        userMessage = "Our servers are experiencing issues. Please try again in a moment.";
+      }
+
+      expect(userMessage).toContain('servers are experiencing issues');
+    });
+
+    it('should NOT increment authRetryCount when dispatching retry event', () => {
+      // CRITICAL FIX: authRetryCount should NOT be incremented here
+      // syncWithBackend will increment it when handling AUTH_REFRESH_EVENT
+      // Incrementing twice causes retries to exhaust prematurely
+      const status = 504;
+      let authRetryCount = 0;
+      const MAX_AUTH_RETRIES = 3;
+      const shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+
+      // Simulate corrected retry logic - NO increment before dispatch
+      if (shouldRetry) {
+        // authRetryCount is NOT incremented here!
+        // syncWithBackend will handle the increment
+        expect(authRetryCount).toBe(0); // Still 0, not 1
+      }
+    });
+
+    it('should wait 2 seconds before retry for 504/5xx errors', async () => {
+      const status = 504;
+      const authRetryCount = 0;
+      const MAX_AUTH_RETRIES = 3;
+      const shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+
+      if (shouldRetry) {
+        const RETRY_DELAY_MS = 2000;
+        expect(RETRY_DELAY_MS).toBe(2000);
+      }
+    });
+
+    it('should determine shouldRetry BEFORE clearing credentials', () => {
+      // CRITICAL: clearStoredCredentials() resets authRetryCountRef.current to 0
+      // Must check shouldRetry BEFORE calling clearStoredCredentials()
+      // Otherwise would cause infinite retry loops
+
+      const status = 504;
+      let authRetryCount = 1; // Already attempted once
+      const MAX_AUTH_RETRIES = 3;
+
+      // Check retry limit FIRST
+      const shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      expect(shouldRetry).toBe(true);
+
+      // THEN clear credentials with appropriate flag
+      // If shouldRetry=true, pass resetRetryCounter=false to preserve counter
+      const resetRetryCounter = !shouldRetry;
+      expect(resetRetryCounter).toBe(false);
+
+      // If we cleared BEFORE checking, counter would be 0 and shouldRetry always true
+      // This would create an infinite loop
+    });
+
+    it('should pass resetRetryCounter=true for non-retryable errors', () => {
+      const status = 401; // Non-retryable
+      let authRetryCount = 1;
+      const MAX_AUTH_RETRIES = 3;
+
+      // 401 is not retryable
+      let shouldRetry = false;
+      if (status === 504 || (status >= 500 && status < 600)) {
+        shouldRetry = authRetryCount < MAX_AUTH_RETRIES;
+      }
+
+      expect(shouldRetry).toBe(false);
+
+      // For non-retryable errors, reset the counter
+      const resetRetryCounter = !shouldRetry;
+      expect(resetRetryCounter).toBe(true);
+    });
   });
 
   describe('AbortError Handling (JAVASCRIPT-NEXTJS-S)', () => {

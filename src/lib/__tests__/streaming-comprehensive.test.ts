@@ -774,7 +774,7 @@ describe('Streaming - Comprehensive Tests', () => {
         collectChunks(
           streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
         )
-      ).rejects.toThrow(/Access forbidden.*API key may be invalid/);
+      ).rejects.toThrow(/session has expired.*log out and log back in/i);
     });
 
     test('should handle 404 model not found', async () => {

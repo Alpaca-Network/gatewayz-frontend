@@ -15,12 +15,12 @@ export const NEW_USER_WELCOME_EVENT = 'gatewayz:new-user-welcome';
 
 export function WelcomeDialog() {
   const [open, setOpen] = useState(false);
-  const [credits, setCredits] = useState(10);
+  const [credits, setCredits] = useState(3);
 
   useEffect(() => {
     const handleWelcome = (event: Event) => {
       const customEvent = event as CustomEvent<{ credits: number }>;
-      setCredits(customEvent.detail?.credits || 10);
+      setCredits(customEvent.detail?.credits || 3);
       setOpen(true);
     };
 

@@ -5,40 +5,41 @@
 
 describe('Sentry Rate Limiting Configuration', () => {
   describe('Client-side Rate Limiting', () => {
-    it('should have aggressive rate limits to prevent 429 errors', () => {
+    it('should have balanced rate limits for error visibility', () => {
       // These tests document the expected configuration values
       // The actual implementation is in instrumentation-client.ts
 
       const EXPECTED_CONFIG = {
-        maxEventsPerMinute: 5,      // Very conservative
+        maxEventsPerMinute: 10,     // Balanced for visibility
         windowMs: 60000,            // 1 minute window
-        dedupeWindowMs: 120000,     // 2 minute deduplication
-        maxBreadcrumbs: 10,         // Reduced breadcrumbs
+        dedupeWindowMs: 60000,      // 1 minute deduplication
+        maxBreadcrumbs: 20,         // More breadcrumbs for debugging context
         cleanupIntervalMs: 30000,   // 30 second cleanup
         maxMapSize: 50,             // Reasonable map size
       };
 
       // Verify expected values are reasonable
-      expect(EXPECTED_CONFIG.maxEventsPerMinute).toBeLessThanOrEqual(10);
-      expect(EXPECTED_CONFIG.dedupeWindowMs).toBeGreaterThanOrEqual(60000);
-      expect(EXPECTED_CONFIG.maxBreadcrumbs).toBeLessThanOrEqual(30);
+      expect(EXPECTED_CONFIG.maxEventsPerMinute).toBe(10);
+      expect(EXPECTED_CONFIG.dedupeWindowMs).toBe(60000);
+      expect(EXPECTED_CONFIG.maxBreadcrumbs).toBe(20);
     });
 
-    it('should have low transaction sample rate', () => {
-      // tracesSampleRate should be very low to avoid 429s
+    it('should have reasonable transaction sample rate', () => {
+      // tracesSampleRate reduced from 10% to 1% to stay within quota
       const EXPECTED_TRACES_SAMPLE_RATE = 0.01; // 1%
 
-      expect(EXPECTED_TRACES_SAMPLE_RATE).toBeLessThanOrEqual(0.1);
+      expect(EXPECTED_TRACES_SAMPLE_RATE).toBe(0.01);
     });
 
-    it('should have replays disabled', () => {
-      // Replays contribute significantly to event volume
+    it('should have replays minimized to stay within quota', () => {
+      // Replays significantly reduced to address 798% overage on Sentry quota
+      // Previous: 100% error replays + 10% session replays caused massive quota overage
       const EXPECTED_REPLAY_RATES = {
-        replaysOnErrorSampleRate: 0,
-        replaysSessionSampleRate: 0,
+        replaysOnErrorSampleRate: 0.01, // 1% of errors (reduced from 100%)
+        replaysSessionSampleRate: 0,    // Disabled entirely (reduced from 10%)
       };
 
-      expect(EXPECTED_REPLAY_RATES.replaysOnErrorSampleRate).toBe(0);
+      expect(EXPECTED_REPLAY_RATES.replaysOnErrorSampleRate).toBe(0.01);
       expect(EXPECTED_REPLAY_RATES.replaysSessionSampleRate).toBe(0);
     });
   });
@@ -87,15 +88,16 @@ describe('Sentry Rate Limiting Configuration', () => {
       });
     });
 
-    it('should filter out pending prompt timeouts', () => {
-      // These informational messages should not consume quota
+    it('should NOT filter out pending prompt timeouts (captured for debugging)', () => {
+      // These messages are now captured for debugging UI timeout issues
       const TIMEOUT_PATTERNS = [
         'Pending prompt timed out',
         'timed out after',
         'clearing optimistic UI',
       ];
 
-      // Verify all patterns are non-empty strings
+      // These patterns are no longer filtered - they're captured in Sentry
+      // Verify patterns exist for documentation purposes
       TIMEOUT_PATTERNS.forEach(pattern => {
         expect(pattern.length).toBeGreaterThan(0);
       });

@@ -17,6 +17,7 @@
  * - @/lib/streaming/stream-chat.ts - Main streaming function
  */
 
+import * as Sentry from '@sentry/nextjs';
 import { requestAuthRefresh, getApiKey } from '@/lib/api';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
 
@@ -32,8 +33,11 @@ const devLog = (...args: any[]) => {
 };
 
 const devError = (...args: any[]) => {
-    // Always log errors, but add prefix for streaming errors
-    console.error('[Streaming ERROR]', ...args);
+    // Serialize objects to avoid [object Object] in logs/Sentry
+    const serializedArgs = args.map(arg =>
+        typeof arg === 'object' && arg !== null ? JSON.stringify(arg, null, 2) : arg
+    );
+    console.error('[Streaming ERROR]', ...serializedArgs);
 };
 
 const devWarn = (...args: any[]) => {
@@ -135,10 +139,10 @@ export async function* streamChatResponse(
   retryCount = 0,
   maxRetries = 7  // Increased from 5 for better 429 handling
 ): AsyncGenerator<StreamChunk> {
-  // Client-side timeout for the fetch request (10 minutes for streaming)
-  // Increased to accommodate reasoning models, slow providers, and models with large context windows
+  // Client-side timeout for the fetch request (1 minute max)
+  // If a model doesn't respond within 1 minute, it's likely unavailable or experiencing issues
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 600000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
     devLog('[Streaming] Initiating fetch request to:', url);
@@ -252,6 +256,25 @@ export async function* streamChatResponse(
       const errorCode = errorData.code;
       devError('401 Unauthorized - triggering auth refresh');
 
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error(`Chat 401 Unauthorized: ${errorMessage}`),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 401,
+            error_code: errorCode || 'unknown',
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+            retryCount,
+          },
+          level: 'warning',
+        }
+      );
+
       // Check if this is a guest user who needs to sign up
       if (errorCode === 'GUEST_NOT_CONFIGURED') {
         throw new Error(
@@ -293,11 +316,27 @@ export async function* streamChatResponse(
 
     // Handle 403 Forbidden - invalid or expired API key
     if (response.status === 403) {
-      const errorMessage = errorData.detail || errorData.error?.message || 'Access forbidden';
       devError('403 Forbidden details:', errorData);
 
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error('Chat 403 Forbidden - session expired'),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 403,
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+          },
+          level: 'warning',
+        }
+      );
+
       throw new Error(
-        errorMessage + '. Your API key may be invalid or expired. Please try logging out and back in.'
+        'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.'
       );
     }
 
@@ -310,10 +349,11 @@ export async function* streamChatResponse(
       );
     }
 
-    // Handle 503 Service Unavailable and 504 Gateway Timeout with retry logic
-    if (response.status === 503 || response.status === 504) {
-      const isTimeout = response.status === 504;
-      const statusText = isTimeout ? 'Gateway Timeout' : 'Service Unavailable';
+    // Handle 502 Bad Gateway, 503 Service Unavailable and 504 Gateway Timeout with retry logic
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      const statusText = response.status === 504 ? 'Gateway Timeout'
+        : response.status === 502 ? 'Bad Gateway'
+        : 'Service Unavailable';
       const errorMessage = errorData.detail || errorData.error?.message || errorData.message || statusText;
 
       if (retryCount < maxRetries) {
@@ -1042,7 +1082,7 @@ export async function* streamChatResponse(
     // Handle abort/timeout errors
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 10 minutes. The model may be overloaded, unavailable, or generating a very long response. Please try again or select a different model.');
+        throw new Error('Request timed out after 1 minute. The model may be overloaded or unavailable. Please try again or select a different model.');
       }
     }
 
@@ -1062,7 +1102,7 @@ export async function* streamChatResponse(
     // Handle abort/timeout errors from outer try block
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timed out after 10 minutes. The model may be overloaded, unavailable, or generating a very long response. Please try again or select a different model.');
+        throw new Error('Request timed out after 1 minute. The model may be overloaded or unavailable. Please try again or select a different model.');
       }
     }
 

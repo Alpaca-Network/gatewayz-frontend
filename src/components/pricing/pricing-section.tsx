@@ -30,7 +30,7 @@ const pricingTiers: PricingTier[] = [
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      '$10 free credits monthly',
+      '$3 free credits monthly',
       'Access to 5+ models',
       'Community support',
       'Basic analytics',
@@ -46,7 +46,7 @@ const pricingTiers: PricingTier[] = [
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      '50% discount on first $10 credits',
+      '50% discount on first $3 credits',
       'Access to 10,000+ models',
       'Smart cost optimization',
       'Advanced analytics',
@@ -111,7 +111,7 @@ export function PricingSection() {
         return;
       }
 
-      // For Pro and Max tiers, handle subscription checkout
+      // For Pro and Max tiers, check authentication and redirect to checkout page
       const userData = getUserData();
 
       if (!userData || !userData.api_key) {
@@ -125,35 +125,8 @@ export function PricingSection() {
         return;
       }
 
-      // Call subscription checkout API
-      const response = await fetch('/api/stripe/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          priceId: tier.stripePriceId,
-          productId: tier.stripeProductId,
-          userEmail: userData.email,
-          userId: userData.user_id,
-          apiKey: userData.api_key,
-          tier: tier.id, // Include tier name for Stripe metadata
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to start subscription');
-      }
-
-      const data = await response.json();
-
-      // Redirect to Stripe Checkout
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        throw new Error('No checkout URL received');
-      }
+      // Redirect to checkout page with tier info
+      window.location.href = `/checkout?tier=${tier.id}&mode=subscription`;
     } catch (error) {
       console.error('Subscription error:', error);
       alert(error instanceof Error ? error.message : 'Failed to start subscription. Please try again.');
@@ -163,24 +136,24 @@ export function PricingSection() {
   };
 
   return (
-    <div className="w-full py-20 bg-white">
+    <div className="w-full py-8 sm:py-12 lg:py-20 bg-white">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
-        <div className="text-center mb-12 space-y-3">
-          <h2 className="text-4xl sm:text-5xl font-bold text-foreground">Simple Pricing</h2>
-          <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
+        <div className="text-center mb-8 sm:mb-12 space-y-3">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground">Simple Pricing</h2>
+          <p className="text-muted-foreground text-sm sm:text-base lg:text-lg max-w-2xl mx-auto leading-relaxed px-2">
             Gatewayz is a universal inference engine providing access to 10,000+ models. One API at the lowest cost. Try now with free credits today.
           </p>
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           {pricingTiers.map((tier) => (
             <Card
               key={tier.id}
               className={`relative flex flex-col ${
                 tier.popular
-                  ? 'border-primary border-2 shadow-lg scale-105'
+                  ? 'border-primary border-2 shadow-lg md:scale-105'
                   : 'border-border'
               }`}
             >

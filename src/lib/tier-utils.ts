@@ -74,6 +74,68 @@ export const hasActiveSubscription = (userData: UserData | null): boolean => {
   return userData.subscription_status === 'active';
 };
 
+// Trial users start with 3 credits - if they have more, they've purchased credits
+const TRIAL_CREDIT_THRESHOLD = 3;
+
+/**
+ * Checks if a user has purchased credits (more than trial amount)
+ * @param userData - User data from auth response
+ * @returns true if user has purchased credits beyond trial allocation
+ */
+export const hasPurchasedCredits = (userData: UserData | null): boolean => {
+  if (!userData) {
+    return false;
+  }
+  // Credits > 3 indicates user has added payment beyond initial trial credits
+  return (userData.credits ?? 0) > TRIAL_CREDIT_THRESHOLD;
+};
+
+/**
+ * Checks if a user is on a trial
+ * @param userData - User data from auth response
+ * @returns true if user is on trial
+ */
+export const isOnTrial = (userData: UserData | null): boolean => {
+  if (!userData) {
+    return false;
+  }
+  // Users with pro or max tier are never on trial, even if subscription_status
+  // hasn't been updated yet (e.g., due to webhook timing or database sync issues)
+  const tier = userData.tier?.toLowerCase();
+  if (tier === 'pro' || tier === 'max') {
+    return false;
+  }
+  // Users who have purchased credits (> trial amount) are not on trial
+  // This handles cases where subscription_status hasn't been updated after payment
+  if (hasPurchasedCredits(userData)) {
+    return false;
+  }
+  return userData.subscription_status === 'trial';
+};
+
+/**
+ * Checks if a user's trial has expired
+ * @param userData - User data from auth response
+ * @returns true if trial has expired
+ */
+export const isTrialExpired = (userData: UserData | null): boolean => {
+  if (!userData) {
+    return false;
+  }
+  // Users with pro or max tier never have expired trials, even if subscription_status
+  // hasn't been updated yet (e.g., due to webhook timing or database sync issues)
+  const tier = userData.tier?.toLowerCase();
+  if (tier === 'pro' || tier === 'max') {
+    return false;
+  }
+  // Users who have purchased credits (> trial amount) don't have expired trials
+  // This handles cases where subscription_status hasn't been updated after payment
+  if (hasPurchasedCredits(userData)) {
+    return false;
+  }
+  return userData.subscription_status === 'expired';
+};
+
 /**
  * Gets the next subscription renewal date
  * @param userData - User data from auth response
@@ -138,6 +200,45 @@ export const canAccessModel = (modelRequiredTier: UserTier | undefined, userTier
 };
 
 /**
+ * Gets the trial expiration date
+ * @param userData - User data from auth response
+ * @returns Date object or null if not on trial
+ */
+export const getTrialExpirationDate = (userData: UserData | null): Date | null => {
+  if (!userData?.trial_expires_at) {
+    return null;
+  }
+  return new Date(userData.trial_expires_at);
+};
+
+/**
+ * Gets the number of days remaining in trial
+ * @param userData - User data from auth response
+ * @returns Number of days remaining or null if not on trial
+ */
+export const getTrialDaysRemaining = (userData: UserData | null): number | null => {
+  const expirationDate = getTrialExpirationDate(userData);
+  if (!expirationDate) {
+    return null;
+  }
+  const daysRemaining = Math.ceil((expirationDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  return Math.max(0, daysRemaining);
+};
+
+/**
+ * Checks if trial is expiring soon (within 1 day)
+ * @param userData - User data from auth response
+ * @returns true if trial expires within 1 day
+ */
+export const isTrialExpiringSoon = (userData: UserData | null): boolean => {
+  const daysRemaining = getTrialDaysRemaining(userData);
+  if (daysRemaining === null) {
+    return false;
+  }
+  return daysRemaining <= 1 && daysRemaining > 0;
+};
+
+/**
  * Gets subscription status display text
  * @param status - Subscription status
  * @returns Human-readable status text
@@ -156,6 +257,10 @@ export const formatSubscriptionStatus = (status: SubscriptionStatus | undefined)
       return 'Past due';
     case 'inactive':
       return 'Inactive';
+    case 'trial':
+      return 'Trial';
+    case 'expired':
+      return 'Expired';
     default:
       return 'Unknown';
   }

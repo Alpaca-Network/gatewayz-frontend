@@ -1,5 +1,7 @@
 import type { Model as StaticModelDefinition } from '@/lib/models-data';
 import { normalizeToUrlSafe } from '@/lib/utils';
+import { validateGateways, ensureValidGateways } from '@/lib/gateway-validation';
+import * as Sentry from '@sentry/nextjs';
 
 export interface ModelDetailRecord {
   id: string;
@@ -153,26 +155,67 @@ export const findModelByRouteParams = <T extends ModelDetailRecord>(
 };
 
 export const getModelGateways = (model: ModelDetailRecord): string[] => {
-  const gateways = new Set<string>();
-  const addGateway = (val?: string | null) => {
-    if (val) {
-      gateways.add(val.toLowerCase());
+  try {
+    const gateways = new Set<string>();
+    const addGateway = (val?: string | null) => {
+      if (val) {
+        gateways.add(val.toLowerCase());
+      }
+    };
+
+    if (Array.isArray(model.source_gateways)) {
+      model.source_gateways.forEach(addGateway);
     }
-  };
 
-  if (Array.isArray(model.source_gateways)) {
-    model.source_gateways.forEach(addGateway);
+    addGateway(model.source_gateway);
+
+    if (Array.isArray(model.gateways)) {
+      model.gateways.forEach(addGateway);
+    }
+
+    addGateway(model.gateway);
+
+    const gatewayArray = Array.from(gateways);
+
+    // Validate gateways and ensure at least one valid gateway
+    const validatedGateways = ensureValidGateways(gatewayArray);
+
+    if (validatedGateways.length === 0) {
+      console.warn(`[getModelGateways] No valid gateways found for model ${model.id}, using fallback`);
+      Sentry.captureMessage('Model has no valid gateways', {
+        level: 'warning',
+        tags: {
+          function: 'getModelGateways',
+          model_id: model.id,
+        },
+        contexts: {
+          model: {
+            id: model.id,
+            name: model.name,
+            raw_gateways: gatewayArray,
+          },
+        },
+      });
+    }
+
+    return validatedGateways;
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: {
+        function: 'getModelGateways',
+        error_type: 'gateway_extraction_failure',
+      },
+      contexts: {
+        model: {
+          id: model?.id,
+          name: model?.name,
+        },
+      },
+      level: 'error',
+    });
+    // Return fallback gateway on error
+    return ['gatewayz'];
   }
-
-  addGateway(model.source_gateway);
-
-  if (Array.isArray(model.gateways)) {
-    model.gateways.forEach(addGateway);
-  }
-
-  addGateway(model.gateway);
-
-  return Array.from(gateways);
 };
 
 export const getRelatedModels = <T extends ModelDetailRecord>(

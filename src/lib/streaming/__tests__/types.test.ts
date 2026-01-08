@@ -7,7 +7,7 @@ import type { StreamChunk, ParsedSSEData, StreamConfig } from '../types';
 
 describe('DEFAULT_STREAM_CONFIG', () => {
   it('should have correct default timeout values', () => {
-    expect(DEFAULT_STREAM_CONFIG.streamTimeoutMs).toBe(600_000); // 10 minutes
+    expect(DEFAULT_STREAM_CONFIG.streamTimeoutMs).toBe(60_000); // 1 minute max
     expect(DEFAULT_STREAM_CONFIG.firstChunkTimeoutMs).toBe(10_000); // 10 seconds
     expect(DEFAULT_STREAM_CONFIG.chunkTimeoutMs).toBe(30_000); // 30 seconds
   });

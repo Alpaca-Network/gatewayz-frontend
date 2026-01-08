@@ -16,6 +16,14 @@ jest.mock('next/link', () => {
   );
 });
 
+// Mock lucide-react icons
+jest.mock('lucide-react', () => ({
+  Coins: () => <span data-testid="coins-icon">Coins</span>,
+  Crown: () => <span data-testid="crown-icon">Crown</span>,
+  Sparkles: () => <span data-testid="sparkles-icon">Sparkles</span>,
+  AlertCircle: () => <span data-testid="alert-icon">AlertCircle</span>,
+}));
+
 describe('CreditsDisplay', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -63,6 +71,7 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
+      // Should show 0 credits
       expect(screen.getByText('0')).toBeInTheDocument();
     });
 
@@ -81,6 +90,7 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
+      // Should show 500 credits
       expect(screen.getByText('500')).toBeInTheDocument();
     });
   });
@@ -177,6 +187,297 @@ describe('CreditsDisplay', () => {
     });
   });
 
+  describe('Trial Users', () => {
+    it('should display trial badge with days remaining for basic tier user', () => {
+      // Set trial to expire in 5 days
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 5);
+
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Trial User',
+        email: 'trial@example.com',
+        credits: 3, // Trial users start with 3 credits
+        tier: 'basic', // Trial only applies to basic tier
+        subscription_status: 'trial',
+        trial_expires_at: futureDate.toISOString(),
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show trial badge with days remaining
+      expect(screen.getByText(/Trial.*\(5d\)/)).toBeInTheDocument();
+      // Should not show credits
+      expect(screen.queryByText('3')).not.toBeInTheDocument();
+    });
+
+    it('should display "Trial ending" when trial expires within 1 day for basic tier user', () => {
+      // Set trial to expire in 12 hours (less than 1 day)
+      const futureDate = new Date();
+      futureDate.setHours(futureDate.getHours() + 12);
+
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Trial User',
+        email: 'trial@example.com',
+        credits: 2, // Trial credits (less than or equal to 3)
+        tier: 'basic', // Trial only applies to basic tier
+        subscription_status: 'trial',
+        trial_expires_at: futureDate.toISOString(),
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show "Trial ending" text
+      expect(screen.getByText('Trial ending')).toBeInTheDocument();
+    });
+
+    it('should display trial without days when trial_expires_at is not set for basic tier user', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Trial User',
+        email: 'trial@example.com',
+        credits: 1, // Trial credits (less than or equal to 3)
+        tier: 'basic', // Trial only applies to basic tier
+        subscription_status: 'trial',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show just "Trial" without days
+      expect(screen.getByText('Trial')).toBeInTheDocument();
+    });
+
+    it('should display trial for user without tier specified (default to basic)', () => {
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 3);
+
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Trial User',
+        email: 'trial@example.com',
+        credits: 3, // Trial credits (3 is the trial amount)
+        // tier is undefined - should default to basic behavior
+        subscription_status: 'trial',
+        trial_expires_at: futureDate.toISOString(),
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show trial badge
+      expect(screen.getByText(/Trial.*\(3d\)/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Expired Trial Users', () => {
+    it('should display upgrade prompt for expired trial', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Expired User',
+        email: 'expired@example.com',
+        credits: 0,
+        tier: 'basic',
+        subscription_status: 'expired',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show upgrade prompt
+      expect(screen.getByText('Upgrade')).toBeInTheDocument();
+      // Should not show credits or tier badges
+      expect(screen.queryByText('0')).not.toBeInTheDocument();
+      expect(screen.queryByText('PRO')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Paid Tier with Stale Subscription Status (Bug Fix)', () => {
+    // These tests verify the fix for the bug where paid tier users (pro/max)
+    // were incorrectly showing trial/expired status due to stale subscription_status
+    // from webhook timing or database sync issues
+
+    it('should show MAX badge (not trial) when max tier user has stale trial subscription_status', () => {
+      // This is the exact bug reported for user vaughn.dimarco@gmail.com
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Max User',
+        email: 'max@example.com',
+        credits: 15000,
+        tier: 'max',
+        subscription_status: 'trial', // Stale status - should be ignored for max tier
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show MAX badge, not trial
+      expect(screen.getByText('MAX')).toBeInTheDocument();
+      expect(screen.queryByText(/Trial/)).not.toBeInTheDocument();
+    });
+
+    it('should show PRO badge (not trial) when pro tier user has stale trial subscription_status', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 5000,
+        tier: 'pro',
+        subscription_status: 'trial', // Stale status - should be ignored for pro tier
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge, not trial
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      expect(screen.queryByText(/Trial/)).not.toBeInTheDocument();
+    });
+
+    it('should show MAX badge (not upgrade prompt) when max tier user has stale expired subscription_status', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Max User',
+        email: 'max@example.com',
+        credits: 15000,
+        tier: 'max',
+        subscription_status: 'expired', // Stale status - should be ignored for max tier
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show MAX badge, not upgrade prompt
+      expect(screen.getByText('MAX')).toBeInTheDocument();
+      expect(screen.queryByText('Upgrade')).not.toBeInTheDocument();
+    });
+
+    it('should show PRO badge (not upgrade prompt) when pro tier user has stale expired subscription_status', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 5000,
+        tier: 'pro',
+        subscription_status: 'expired', // Stale status - should be ignored for pro tier
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge, not upgrade prompt
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      expect(screen.queryByText('Upgrade')).not.toBeInTheDocument();
+    });
+
+    it('should handle uppercase MAX tier with stale trial status', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Max User',
+        email: 'max@example.com',
+        credits: 15000,
+        tier: 'MAX' as any, // Uppercase tier from backend
+        subscription_status: 'trial', // Stale status
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show MAX badge after normalization, not trial
+      expect(screen.getByText('MAX')).toBeInTheDocument();
+      expect(screen.queryByText(/Trial/)).not.toBeInTheDocument();
+    });
+
+    it('should show credits (not trial) when basic user has purchased credits with stale trial status', () => {
+      // User has added credits beyond initial trial amount, but subscription_status is still trial
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Basic User with Credits',
+        email: 'basic@example.com',
+        credits: 25, // More than 3 trial credits = purchased credits
+        tier: 'basic',
+        subscription_status: 'trial', // Stale status - should be ignored due to purchased credits
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show credits, not trial badge
+      expect(screen.getByText('25')).toBeInTheDocument();
+      expect(screen.queryByText(/Trial/)).not.toBeInTheDocument();
+    });
+
+    it('should show credits (not upgrade) when basic user has purchased credits with stale expired status', () => {
+      // User has added credits but subscription_status is still expired
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Basic User with Credits',
+        email: 'basic@example.com',
+        credits: 50, // More than 3 trial credits = purchased credits
+        tier: 'basic',
+        subscription_status: 'expired', // Stale status - should be ignored due to purchased credits
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show credits, not upgrade prompt
+      expect(screen.getByText('50')).toBeInTheDocument();
+      expect(screen.queryByText('Upgrade')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should not render when credits is null', () => {
       (getUserData as jest.Mock).mockReturnValue(null);
@@ -242,6 +543,7 @@ describe('CreditsDisplay', () => {
 
       const { rerender } = render(<CreditsDisplay />);
 
+      // Should show credit count
       expect(screen.getByText('1,000')).toBeInTheDocument();
 
       // Simulate upgrade to PRO

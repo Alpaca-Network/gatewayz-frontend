@@ -135,12 +135,51 @@ export function initializeGlobalErrorHandlers(): void {
   // =============================================================================
 
   window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
-    console.error('[UnhandledRejection]', event.reason);
-
     // Extract error information
     const error = event.reason;
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorMessageLower = errorMessage.toLowerCase();
+
+    // Skip "message port closed" errors from Chrome extensions
+    // These are benign browser extension communication errors (password managers, ad blockers, etc.)
+    if (
+      errorMessageLower.includes('message port closed') ||
+      errorMessageLower.includes('the message port closed before a response was received')
+    ) {
+      console.debug('[UnhandledRejection] Skipping Chrome extension "message port closed" error (benign)');
+      return;
+    }
+
+    // Skip ONLY 429 rate limit errors and network errors from monitoring/telemetry endpoints
+    // These cause cascades: Sentry tries to report 429 errors, which causes more 429s
+    // IMPORTANT: Do NOT skip all monitoring errors - only 429s and network failures
+    const isMonitoringRelated =
+      errorMessageLower.includes('/monitoring') ||
+      errorMessageLower.includes('sentry') ||
+      errorMessageLower.includes('telemetry');
+
+    const is429Error =
+      errorMessageLower.includes('429') ||
+      errorMessageLower.includes('too many requests');
+
+    const isNetworkError =
+      errorMessageLower.includes('failed to fetch') ||
+      errorMessageLower.includes('network error') ||
+      errorMessageLower.includes('networkerror');
+
+    const isMonitoringNetworkError =
+      isNetworkError &&
+      (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io') || errorMessageLower.includes('telemetry'));
+
+    // Only skip 429 errors from monitoring endpoints OR network errors to monitoring endpoints
+    // Do NOT skip other monitoring errors (e.g., 500 errors should still be reported)
+    if ((is429Error && isMonitoringRelated) || isMonitoringNetworkError) {
+      console.debug('[UnhandledRejection] Skipping monitoring 429/network error to prevent cascade');
+      return;
+    }
+
+    console.error('[UnhandledRejection]', event.reason);
 
     // Add breadcrumb for additional context (Sentry will capture the error itself)
     Sentry.addBreadcrumb({
@@ -165,6 +204,47 @@ export function initializeGlobalErrorHandlers(): void {
   // =============================================================================
 
   window.addEventListener('error', (event: ErrorEvent) => {
+    const errorMessage = event.message || '';
+    const errorMessageLower = errorMessage.toLowerCase();
+
+    // Skip "message port closed" errors from Chrome extensions
+    // These are benign browser extension communication errors (password managers, ad blockers, etc.)
+    if (
+      errorMessageLower.includes('message port closed') ||
+      errorMessageLower.includes('the message port closed before a response was received')
+    ) {
+      console.debug('[GlobalError] Skipping Chrome extension "message port closed" error (benign)');
+      return;
+    }
+
+    // Skip ONLY 429 rate limit errors and network errors from monitoring/telemetry endpoints
+    // These cause cascades: Sentry tries to report 429 errors, which causes more 429s
+    // IMPORTANT: Do NOT skip all monitoring errors - only 429s and network failures
+    const isMonitoringRelated =
+      errorMessageLower.includes('/monitoring') ||
+      errorMessageLower.includes('sentry') ||
+      errorMessageLower.includes('telemetry');
+
+    const is429Error =
+      errorMessageLower.includes('429') ||
+      errorMessageLower.includes('too many requests');
+
+    const isNetworkError =
+      errorMessageLower.includes('failed to fetch') ||
+      errorMessageLower.includes('network error') ||
+      errorMessageLower.includes('networkerror');
+
+    const isMonitoringNetworkError =
+      isNetworkError &&
+      (errorMessageLower.includes('/monitoring') || errorMessageLower.includes('sentry.io') || errorMessageLower.includes('telemetry'));
+
+    // Only skip 429 errors from monitoring endpoints OR network errors to monitoring endpoints
+    // Do NOT skip other monitoring errors (e.g., 500 errors should still be reported)
+    if ((is429Error && isMonitoringRelated) || isMonitoringNetworkError) {
+      console.debug('[GlobalError] Skipping monitoring 429/network error to prevent cascade');
+      return;
+    }
+
     console.error('[GlobalError]', event.error || event.message);
 
     // Skip errors from external scripts (ads, analytics, etc.)

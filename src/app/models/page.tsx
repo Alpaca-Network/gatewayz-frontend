@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
+import { PRIORITY_GATEWAYS, DEFERRED_GATEWAYS } from '@/lib/gateway-registry';
 
 // Force dynamic rendering to always fetch latest models
 // This ensures models are always fresh and not cached from build time (when there are 0 models)
@@ -26,14 +27,8 @@ interface Model {
   created?: number;
 }
 
-// Fast-loading gateways (typically under 1s with new timeout)
-const PRIORITY_GATEWAYS = ['openrouter', 'groq', 'together', 'fireworks', 'vercel-ai-gateway'];
-
-// Slower gateways that can be deferred
-const DEFERRED_GATEWAYS = [
-  'featherless', 'chutes', 'deepinfra', 'google', 'cerebras',
-  'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'helicone', 'alpaca', 'alibaba', 'clarifai'
-];
+// Gateway lists are now imported from centralized gateway-registry.ts
+// To add a new gateway, simply add it to src/lib/gateway-registry.ts
 
 // Shared deduplication logic to avoid code duplication
 function deduplicateModels(models: Model[]): Model[] {

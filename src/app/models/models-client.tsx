@@ -29,6 +29,8 @@ import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
 import { safeParseJson } from '@/lib/http';
+import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, getAllActiveGatewayIds } from '@/lib/gateway-registry';
+import { isFreeModel as checkIsFreeModel, getSourceGateway } from '@/lib/model-pricing-utils';
 
 
 interface Model {
@@ -51,34 +53,22 @@ interface Model {
   source_gateway?: string; // Keep for backwards compatibility
   created?: number;
   is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
+  is_free?: boolean; // Only true for OpenRouter models with :free suffix
 }
 
-// Gateway display configuration
-const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React.ReactNode }> = {
-  openrouter: { name: 'OpenRouter', color: 'bg-blue-500' },
-  portkey: { name: 'Portkey', color: 'bg-purple-500' },
-  featherless: { name: 'Featherless', color: 'bg-green-500' },
-  groq: { name: 'Groq', color: 'bg-orange-500', icon: <Zap className="w-3 h-3" /> },
-  together: { name: 'Together', color: 'bg-indigo-500' },
-  fireworks: { name: 'Fireworks', color: 'bg-red-500' },
-  chutes: { name: 'Chutes', color: 'bg-yellow-500' },
-  deepinfra: { name: 'DeepInfra', color: 'bg-cyan-500' },
-  // New Portkey SDK providers
-  google: { name: 'Google', color: 'bg-blue-600' },
-  cerebras: { name: 'Cerebras', color: 'bg-amber-600' },
-  nebius: { name: 'Nebius', color: 'bg-slate-600' },
-  xai: { name: 'xAI', color: 'bg-black' },
-  novita: { name: 'Novita', color: 'bg-violet-600' },
-  huggingface: { name: 'Hugging Face', color: 'bg-yellow-600' },
-  hug: { name: 'Hugging Face', color: 'bg-yellow-600' }, // Backend uses 'hug' abbreviation
-  aimo: { name: 'AiMo', color: 'bg-pink-600' },
-  near: { name: 'NEAR', color: 'bg-teal-600' },
-  fal: { name: 'Fal', color: 'bg-emerald-600' },
-  'vercel-ai-gateway': { name: 'Vercel AI', color: 'bg-slate-900' },
-  helicone: { name: 'Helicone', color: 'bg-indigo-600' },
-  alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
-  clarifai: { name: 'Clarifai', color: 'bg-purple-600' }
-};
+// Gateway display configuration - now uses centralized gateway registry
+// To add a new gateway, simply add it to src/lib/gateway-registry.ts
+// Icon components need to be resolved here since the registry stores string identifiers
+const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React.ReactNode }> = Object.fromEntries(
+  Object.entries(REGISTRY_GATEWAY_CONFIG).map(([id, config]) => [
+    id,
+    {
+      name: config.name,
+      color: config.color,
+      icon: config.icon === 'zap' ? <Zap className="w-3 h-3" /> : undefined,
+    },
+  ])
+);
 
 // Provider display configuration (for providers that differ from gateway names)
 const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
@@ -105,7 +95,8 @@ const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
-  const isFree = hasPricing && parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
+  // Only OpenRouter models with :free suffix are legitimately free
+  const isFree = checkIsFreeModel(model);
   const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
   const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
@@ -117,7 +108,8 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
                           model.description?.toLowerCase().includes('multi-lingual'));
 
   // Get gateways - support both old and new format
-  const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (model.source_gateway ? [model.source_gateway] : []);
+  const sourceGateway = getSourceGateway(model);
+  const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (sourceGateway ? [sourceGateway] : []);
 
   // NEW: Get providers - support both old and new format
   const providers = (model.provider_slugs && model.provider_slugs.length > 0) ? model.provider_slugs : (model.provider_slug ? [model.provider_slug] : []);
@@ -605,7 +597,8 @@ export default function ModelsClient({
       const contextMatch = model.context_length === 0 ||
         (contextLengthRange[0] === 0 && contextLengthRange[1] === 1024) || // No filter applied
         (model.context_length >= contextLengthRange[0] * 1000 && model.context_length <= contextLengthRange[1] * 1000);
-      const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
+      // Only OpenRouter models with :free suffix are legitimately free
+      const isFree = checkIsFreeModel(model);
       const avgPrice = (parseFloat(model.pricing?.prompt || '0') + parseFloat(model.pricing?.completion || '0')) / 2;
       const priceMatch = (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
         isFree ||
@@ -732,8 +725,8 @@ export default function ModelsClient({
     let freeCount = 0;
     let paidCount = 0;
     deduplicatedModels.forEach(m => {
-      const isFree = parseFloat(m.pricing?.prompt || '0') === 0 && parseFloat(m.pricing?.completion || '0') === 0;
-      if (isFree) {
+      // Only OpenRouter models with :free suffix are legitimately free
+      if (checkIsFreeModel(m)) {
         freeCount++;
       } else {
         paidCount++;
@@ -812,10 +805,9 @@ export default function ModelsClient({
       });
     });
 
-    // Define all known gateways that should appear in the filter
-    // This ensures all gateways are visible even if they have 0 models currently
-    // Excludes 'portkey' as it's deprecated (use individual Portkey SDK providers instead)
-    const allKnownGateways = ['featherless', 'openrouter', 'groq', 'together', 'fireworks', 'chutes', 'deepinfra', 'google', 'cerebras', 'nebius', 'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway', 'helicone', 'alibaba', 'alpaca'];
+    // Use getAllActiveGatewayIds() to include dynamically registered gateways
+    // To add a new gateway, simply add it to src/lib/gateway-registry.ts
+    const allKnownGateways = getAllActiveGatewayIds();
 
     // Log gateway counts for debugging
     const gatewayStats = allKnownGateways.map(g => ({

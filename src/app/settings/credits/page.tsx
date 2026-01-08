@@ -13,14 +13,14 @@
  */
 
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Info, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, MoreHorizontal, CheckCircle } from "lucide-react";
+import { Info, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, MoreHorizontal, CheckCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { redirectToCheckout } from '@/lib/stripe';
 import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData } from '@/lib/api';
@@ -107,6 +107,42 @@ const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
     </div>
   );
 };
+
+// Credit package tier type
+interface CreditPackage {
+  id: string;
+  name: string;
+  creditValue: number; // Total credit value
+  price: number; // Discounted price
+  discount: string; // Discount percentage display
+  popular?: boolean;
+}
+
+// Monthly credit packages with tiered discounts
+const creditPackages: CreditPackage[] = [
+  {
+    id: 'tier1',
+    name: 'Starter',
+    creditValue: 10,
+    price: 9,
+    discount: '10% off',
+  },
+  {
+    id: 'tier2',
+    name: 'Growth',
+    creditValue: 100,
+    price: 75,
+    discount: '25% off',
+    popular: true,
+  },
+  {
+    id: 'tier3',
+    name: 'Scale',
+    creditValue: 250,
+    price: 175,
+    discount: '30% off',
+  },
+];
 
 // Transaction data type
 interface Transaction {
@@ -206,6 +242,7 @@ const TransactionRow = ({ transaction }: { transaction: Transaction }) => {
 // Component that uses useSearchParams - must be wrapped in Suspense
 function CreditsPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [cardName, setCardName] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
@@ -218,7 +255,7 @@ function CreditsPageContent() {
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [showEmojiExplosion, setShowEmojiExplosion] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
-  const [amount, setAmount] = useState('10');
+  const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
 
   // Check for success message from Stripe redirect
   useEffect(() => {
@@ -416,16 +453,13 @@ function CreditsPageContent() {
     setShowDialog(true);
   };
 
+  const handleSelectPackage = (pkg: CreditPackage) => {
+    setSelectedPackage(pkg);
+  };
+
   const handleConfirmPurchase = async () => {
-    const amountNum = parseFloat(amount);
-
-    if (isNaN(amountNum) || amountNum <= 0) {
-      alert('Please enter a valid amount greater than 0');
-      return;
-    }
-
-    if (amountNum < 1) {
-      alert('Minimum purchase amount is $1');
+    if (!selectedPackage) {
+      alert('Please select a credit package');
       return;
     }
 
@@ -441,16 +475,19 @@ function CreditsPageContent() {
         return;
       }
 
-      await redirectToCheckout(amountNum, userData.email, userData.user_id);
+      // Redirect to checkout page with package info
+      router.push(`/checkout?package=${selectedPackage.id}&mode=credits`);
     } catch (error) {
       console.log('Checkout error:', error);
       alert('Failed to start checkout. Please try again.');
+    } finally {
       setIsLoading(false);
+      setSelectedPackage(null);
     }
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8 px-4 sm:px-0">
+    <div className="space-y-6 sm:space-y-8 px-4 sm:px-0 pb-24 lg:pb-0">
       {/* Emoji explosion animation */}
       {showEmojiExplosion && (
         <EmojiExplosion onComplete={() => setShowEmojiExplosion(false)} />
@@ -519,43 +556,71 @@ function CreditsPageContent() {
       </div>
 
       {/* Purchase Credits Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-[425px]">
+      <Dialog open={showDialog} onOpenChange={(open) => {
+        setShowDialog(open);
+        if (!open) setSelectedPackage(null);
+      }}>
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Purchase Credits</DialogTitle>
             <DialogDescription>
-              Enter the amount you would like to add to your account. Minimum purchase is $1.
+              Choose a credit package. Larger packages offer bigger savings!
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="amount" className="text-right">Amount</Label>
-              <div className="col-span-3 relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                <Input
-                  id="amount"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleConfirmPurchase();
-                    }
-                  }}
-                  className="pl-7"
-                  autoFocus
-                />
-              </div>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 py-4">
+            {creditPackages.map((pkg) => (
+              <Card
+                key={pkg.id}
+                className={`relative cursor-pointer transition-all hover:shadow-md ${
+                  selectedPackage?.id === pkg.id
+                    ? 'border-primary border-2 shadow-md'
+                    : 'border-border hover:border-primary/50'
+                } ${pkg.popular ? 'ring-1 ring-primary/20' : ''}`}
+                onClick={() => handleSelectPackage(pkg)}
+              >
+                {pkg.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground px-3 py-0.5 rounded-full text-xs font-medium flex items-center gap-1">
+                    <Sparkles className="h-3 w-3" />
+                    Best Value
+                  </div>
+                )}
+                <CardContent className="p-4 pt-5 text-center">
+                  <h3 className="font-semibold text-base mb-1">{pkg.name}</h3>
+                  <div className="mb-2">
+                    <span className="text-2xl font-bold">${pkg.creditValue}</span>
+                    <span className="text-sm text-muted-foreground ml-1">credits</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-lg font-semibold text-primary">
+                      ${pkg.price}
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-sm text-muted-foreground line-through">${pkg.creditValue}</span>
+                      <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">
+                        {pkg.discount}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Save ${pkg.creditValue - pkg.price}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button type="button" variant="outline" onClick={() => setShowDialog(false)} className="sm:order-1">
               Cancel
             </Button>
-            <Button type="button" onClick={handleConfirmPurchase}>
-              Continue to Checkout
+            <Button
+              type="button"
+              onClick={handleConfirmPurchase}
+              disabled={!selectedPackage}
+              className="sm:order-2"
+            >
+              {selectedPackage
+                ? `Buy $${selectedPackage.creditValue} Credits for $${selectedPackage.price}`
+                : 'Select a Package'}
             </Button>
           </DialogFooter>
         </DialogContent>

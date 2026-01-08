@@ -7,6 +7,7 @@ import { useEffect } from 'react';
  * - Statsig analytics blocked by ad blockers (ERR_BLOCKED_BY_CLIENT)
  * - Privy wallet extension communication errors
  * - Browser wallet extension ethereum property conflicts
+ * - IndexedDB errors from user clearing browser data
  */
 export function ErrorSuppressor() {
   useEffect(() => {
@@ -30,6 +31,29 @@ export function ErrorSuppressor() {
       /inpage\.js.*removeListener/i,    // Wallet extension inpage.js errors
       /stopListeners/i,                 // Wallet extension stopListeners errors
     ];
+
+    // IndexedDB error patterns (these are handled gracefully, not suppressed from console)
+    const indexedDBPatterns = [
+      /Database deleted by request of the user/i,
+      /UnknownError.*Database/i,
+      /The database connection is closing/i,
+      /VersionError/i,
+      /InvalidStateError.*IndexedDB/i,
+      /AbortError.*IndexedDB/i,
+      /QuotaExceededError/i,
+    ];
+
+    // Check if error is an IndexedDB error
+    const isIndexedDBError = (message: string, errorName?: string): boolean => {
+      if (!message) return false;
+      
+      // Check for UnknownError with database context
+      if (errorName === 'UnknownError' && message.toLowerCase().includes('database')) {
+        return true;
+      }
+      
+      return indexedDBPatterns.some(pattern => pattern.test(message));
+    };
 
     // Override console.error
     console.error = (...args: any[]) => {
@@ -59,6 +83,15 @@ export function ErrorSuppressor() {
     const handleGlobalError = (event: ErrorEvent) => {
       const errorMessage = event.message || '';
       const errorFilename = event.filename || '';
+      const errorName = event.error?.name || '';
+
+      // Handle IndexedDB errors gracefully (e.g., "Database deleted by request of the user")
+      // These occur when user clears browser data, especially on Mobile Safari
+      if (isIndexedDBError(errorMessage, errorName)) {
+        console.warn('[ErrorSuppressor] IndexedDB error detected (non-blocking):', errorMessage);
+        event.preventDefault();
+        return true;
+      }
 
       // Suppress errors from wallet extensions trying to redefine ethereum property
       if (
@@ -102,10 +135,20 @@ export function ErrorSuppressor() {
     // Global unhandled rejection handler for promise-based extension errors
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       let reason = '';
+      let errorName = '';
       try {
         reason = event.reason?.message || `${event.reason}` || '';
+        errorName = event.reason?.name || '';
       } catch {
         // Handle cases like Symbol values that can't be converted
+        return;
+      }
+
+      // Handle IndexedDB errors gracefully (e.g., "Database deleted by request of the user")
+      // These occur when user clears browser data, especially on Mobile Safari
+      if (isIndexedDBError(reason, errorName)) {
+        console.warn('[ErrorSuppressor] IndexedDB error detected in Promise (non-blocking):', reason);
+        event.preventDefault();
         return;
       }
 

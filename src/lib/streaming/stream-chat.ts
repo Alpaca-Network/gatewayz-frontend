@@ -9,6 +9,7 @@
  * This file is kept for backwards compatibility during migration.
  */
 
+import * as Sentry from '@sentry/nextjs';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
 import type { StreamChunk, StreamConfig } from './types';
 import { parseSSEBuffer } from './sse-parser';
@@ -35,7 +36,11 @@ const devLog = (...args: unknown[]) => {
 };
 
 const devError = (...args: unknown[]) => {
-  console.error('[Streaming ERROR]', ...args);
+  // Serialize objects to avoid [object Object] in logs/Sentry
+  const serializedArgs = args.map(arg =>
+    typeof arg === 'object' && arg !== null ? JSON.stringify(arg, null, 2) : arg
+  );
+  console.error('[Streaming ERROR]', ...serializedArgs);
 };
 
 // Helper function to wait/sleep
@@ -45,7 +50,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Configuration with defaults applied.
  */
 const CONFIG: Required<StreamConfig> = {
-  streamTimeoutMs: 600_000, // 10 minutes
+  streamTimeoutMs: 60_000, // 1 minute max
   firstChunkTimeoutMs: 10_000, // 10 seconds
   chunkTimeoutMs: 30_000, // 30 seconds
   maxRetries: 7,
@@ -75,8 +80,27 @@ async function handleHttpError(
   // Handle specific status codes
   switch (response.status) {
     case 400: {
+      // Extract error message from various response formats:
+      // - Direct: errorData.detail, errorData.message
+      // - Nested error object: errorData.error?.message
+      // - Wrapped by API proxy: errorData.errorData?.detail, errorData.errorData?.message
       const errorMessage =
-        errorData.detail || errorData.error?.message || errorData.message || 'Bad request';
+        errorData.detail ||
+        errorData.error?.message ||
+        errorData.message ||
+        errorData.errorData?.detail ||
+        errorData.errorData?.message ||
+        errorData.errorData?.error?.message ||
+        'Bad request';
+
+      devError('400 Bad Request details:', {
+        detail: errorData.detail,
+        message: errorData.message,
+        errorMessage: errorData.error?.message,
+        nestedDetail: errorData.errorData?.detail,
+        nestedMessage: errorData.errorData?.message,
+        fullErrorData: errorData,
+      });
 
       if (
         errorMessage.toLowerCase().includes('trial has expired') ||
@@ -98,6 +122,25 @@ async function handleHttpError(
 
     case 401: {
       const errorCode = errorData.code;
+
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error(`Chat 401 Unauthorized: ${errorData.detail || errorData.message || 'Authentication required'}`),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 401,
+            error_code: errorCode || 'unknown',
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+            retryCount,
+          },
+          level: 'warning',
+        }
+      );
 
       if (errorCode === 'GUEST_NOT_CONFIGURED') {
         throw new AuthenticationError(
@@ -135,8 +178,24 @@ async function handleHttpError(
     }
 
     case 403:
+      // Capture auth error to Sentry
+      Sentry.captureException(
+        new Error('Chat 403 Forbidden - session expired'),
+        {
+          tags: {
+            error_type: 'chat_auth_error',
+            http_status: 403,
+            model: String(requestBody.model || 'unknown'),
+          },
+          extra: {
+            errorData,
+            url,
+          },
+          level: 'warning',
+        }
+      );
       throw new AuthenticationError(
-        'Your API key may be invalid or expired. Please try logging out and back in.'
+        'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.'
       );
 
     case 404:
@@ -191,6 +250,7 @@ async function handleHttpError(
         `Server error: ${errorData.detail || errorData.message || 'Internal server error'}. Please try again.`
       );
 
+    case 502:
     case 503:
     case 504: {
       if (retryCount < maxRetries) {
@@ -379,6 +439,24 @@ export async function* streamChatResponse(
               type: chunk.error.type,
               code: chunk.error.code,
             });
+          }
+
+          // Handle tool call events (server executing a tool)
+          if (chunk.type === 'tool_call' && chunk.toolCall) {
+            yield {
+              type: 'tool_call',
+              toolCall: chunk.toolCall,
+            };
+            continue;
+          }
+
+          // Handle tool result events (tool execution completed)
+          if (chunk.type === 'tool_result' && chunk.toolResult) {
+            yield {
+              type: 'tool_result',
+              toolResult: chunk.toolResult,
+            };
+            continue;
           }
 
           if (chunk.content || chunk.reasoning) {

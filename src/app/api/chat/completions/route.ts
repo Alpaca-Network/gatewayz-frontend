@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import * as Sentry from '@sentry/nextjs';
 import { profiler, generateRequestId } from '@/lib/performance-profiler';
 import { normalizeModelId } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
@@ -140,8 +141,34 @@ async function processCompletion(
             }
           }
 
+          // Handle error responses (4xx, 5xx) for non-streaming requests
+          if (!response.ok && !body.stream) {
+            const errorText = await response.text();
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch {
+              errorData = { raw: errorText };
+            }
+
+            console.error('[API Proxy] Backend returned error status:', response.status);
+            console.error('[API Proxy] Error response:', errorData);
+
+            // Throw error with status and data for proper error handling in main handler
+            const error: any = new Error(`Backend API Error: ${response.status} ${response.statusText}`);
+            error.status = response.status;
+            error.statusText = response.statusText;
+            error.errorData = errorData;
+            throw error;
+          }
+
           // If not streaming, parse and log the response
           if (!body.stream) {
+            // Double-check that response is successful (should be guaranteed by earlier check, but being explicit)
+            if (!response.ok) {
+              throw new Error(`Unexpected error: response.ok is false but was not caught by error handler. Status: ${response.status}`);
+            }
+
             // Try to parse JSON response
             let data;
             try {
@@ -190,6 +217,14 @@ async function processCompletion(
         throw fetchError;
       }
 
+      // Don't retry on HTTP errors (4xx, 5xx) - these are from our error handling above
+      // Only retry on actual network/connection errors
+      const httpError = fetchError as any;
+      if (httpError.status) {
+        console.error('[API Proxy] HTTP error, not retrying:', httpError.status);
+        throw fetchError;
+      }
+
       // Retry on network errors if we haven't exceeded max retries
       if (retryCount < maxRetries) {
         console.warn(`[API Proxy] Fetch error on attempt ${retryCount + 1}, will retry:`, fetchError);
@@ -212,20 +247,22 @@ async function processCompletion(
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
   const requestStartTime = performance.now();
-  
+
   console.log(`[API Proxy] POST request received [${requestId}]`);
   profiler.startRequest(requestId, {
     method: 'POST',
     url: request.url,
     userAgent: request.headers.get('user-agent'),
   });
-  
+
   let timeoutMs = 30000; // Default timeout
+  let body: any; // Declare outside try block so it's accessible in catch block
+  let targetUrl: URL | undefined; // Declare outside try block for catch block access
 
   try {
     profiler.markStage(requestId, 'parse_request_body');
     console.log('[API Proxy] Parsing request body...');
-    const body = await request.json();
+    body = await request.json();
     console.log('[API Proxy] Request body parsed, model:', body.model, 'stream:', body.stream);
     
     profiler.markStage(requestId, 'validate_auth', {
@@ -291,14 +328,14 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Increment rate limit counter immediately to prevent abuse via failed requests
-      const rateLimitResult = incrementGuestRateLimit(clientIP);
+      // Store client IP for later increment (after successful response)
+      // This ensures failed requests don't consume guest quota
+      (request as any).__guestClientIP = clientIP;
 
       console.log('[API Completions] Guest mode detected:', {
         isExplicitGuestRequest,
         isMissingApiKey,
         clientIP,
-        remaining: rateLimitResult.remaining,
         usingKey: guestKey.substring(0, 15) + '...'
       });
       apiKey = guestKey;
@@ -333,7 +370,7 @@ export async function POST(request: NextRequest) {
 
     profiler.markStage(requestId, 'prepare_backend_request');
     const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-    const targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
+    targetUrl = new URL(`${apiUrl}/v1/chat/completions`);
 
     // Add session_id to the backend URL if provided
     if (sessionId) {
@@ -479,11 +516,116 @@ export async function POST(request: NextRequest) {
               errorData = { raw: errorText };
             }
 
+            // Provide user-friendly error messages for common status codes
+            let userMessage = errorData.message || errorData.detail || errorText.substring(0, 500);
+            let errorType = 'api_error';
+
+            if (response.status === 401 || response.status === 403) {
+              userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
+              errorType = 'auth_error';
+
+              // Capture auth errors to Sentry
+              Sentry.captureException(
+                new Error(`Chat auth error: ${response.status} ${response.statusText}`),
+                {
+                  tags: {
+                    error_type: 'chat_auth_error',
+                    http_status: response.status,
+                    model: body.model,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                    targetUrl: targetUrl.toString(),
+                  },
+                  level: 'warning',
+                }
+              );
+            } else if (response.status === 404) {
+              userMessage = errorData.detail || errorData.message || 'The requested model or endpoint was not found. The model may be temporarily unavailable or the configuration may need to be updated.';
+              errorType = 'not_found_error';
+
+              // Capture 404 errors to Sentry for monitoring
+              Sentry.captureException(
+                new Error(`Chat API 404 Not Found: ${errorData.detail || 'Model or endpoint not found'}`),
+                {
+                  tags: {
+                    error_type: 'chat_not_found_error',
+                    http_status: response.status,
+                    model: body.model,
+                    gateway: body.gateway,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                    targetUrl: targetUrl.toString(),
+                    apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+                  },
+                  level: 'warning',
+                }
+              );
+            } else if (response.status === 429) {
+              userMessage = errorData.detail || errorData.message || 'Rate limit exceeded. Please wait a moment and try again.';
+              errorType = 'rate_limit_error';
+            } else if (response.status >= 500) {
+              // Capture server errors to Sentry
+              Sentry.captureException(
+                new Error(`Chat API server error: ${response.status} ${response.statusText}`),
+                {
+                  tags: {
+                    error_type: 'chat_server_error',
+                    http_status: response.status,
+                    model: body.model,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                    targetUrl: targetUrl.toString(),
+                  },
+                  level: 'error',
+                }
+              );
+            } else if (response.status === 400) {
+              userMessage = errorData.detail || errorData.message || 'Invalid request. Please check your input and try again.';
+              errorType = 'validation_error';
+
+              // Capture validation errors to Sentry
+              Sentry.captureException(
+                new Error(`Chat API validation error: ${errorData.detail || 'Bad Request'}`),
+                {
+                  tags: {
+                    error_type: 'chat_validation_error',
+                    http_status: response.status,
+                    model: body.model,
+                    is_streaming: 'true',
+                  },
+                  extra: {
+                    requestId,
+                    errorData,
+                    model: body.model,
+                    gateway: body.gateway,
+                    messageCount: body.messages?.length,
+                  },
+                  level: 'warning',
+                }
+              );
+            }
+
             return new Response(JSON.stringify({
               error: 'Backend API Error',
               status: response.status,
               statusText: response.statusText,
-              message: errorData.message || errorData.detail || errorText.substring(0, 500),
+              message: userMessage,
+              type: errorType,
               model: body.model,
               gateway: body.gateway,
               errorData: errorData
@@ -545,13 +687,15 @@ export async function POST(request: NextRequest) {
             'X-Network-Time': `${(totalTime - backendTime).toFixed(2)}ms`,
           };
 
-          // Add guest rate limit headers if applicable
-          if (isGuestRequest) {
-            const clientIP = getClientIP(request);
-            const rateLimitInfo = checkGuestRateLimit(clientIP);
-            responseHeaders['X-RateLimit-Limit'] = String(rateLimitInfo.limit);
-            responseHeaders['X-RateLimit-Remaining'] = String(rateLimitInfo.remaining);
-            responseHeaders['X-RateLimit-Reset'] = String(Math.ceil(rateLimitInfo.resetInMs / 1000));
+          // Increment guest rate limit only after successful response
+          // This ensures quota is not consumed on failed requests
+          const guestClientIP = (request as any).__guestClientIP;
+          if (guestClientIP) {
+            const incrementResult = incrementGuestRateLimit(guestClientIP);
+            console.log(`[API Completions] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+            responseHeaders['X-RateLimit-Limit'] = String(incrementResult.limit);
+            responseHeaders['X-RateLimit-Remaining'] = String(incrementResult.remaining);
+            responseHeaders['X-RateLimit-Reset'] = String(Math.ceil(incrementResult.resetInMs / 1000));
           }
 
           return new Response(wrappedStream, {
@@ -604,13 +748,15 @@ export async function POST(request: NextRequest) {
         'X-Response-Time': `${(performance.now() - requestStartTime).toFixed(2)}ms`,
       };
 
-      // Add guest rate limit headers if applicable
-      if (isGuestRequest) {
-        const clientIP = getClientIP(request);
-        const rateLimitInfo = checkGuestRateLimit(clientIP);
-        responseHeaders['X-RateLimit-Limit'] = String(rateLimitInfo.limit);
-        responseHeaders['X-RateLimit-Remaining'] = String(rateLimitInfo.remaining);
-        responseHeaders['X-RateLimit-Reset'] = String(Math.ceil(rateLimitInfo.resetInMs / 1000));
+      // Increment guest rate limit only after successful response (2xx status)
+      // This ensures quota is not consumed on failed requests
+      const guestClientIP = (request as any).__guestClientIP;
+      if (guestClientIP && result.status >= 200 && result.status < 300) {
+        const incrementResult = incrementGuestRateLimit(guestClientIP);
+        console.log(`[API Completions] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+        responseHeaders['X-RateLimit-Limit'] = String(incrementResult.limit);
+        responseHeaders['X-RateLimit-Remaining'] = String(incrementResult.remaining);
+        responseHeaders['X-RateLimit-Reset'] = String(Math.ceil(incrementResult.resetInMs / 1000));
       }
 
       return new Response(JSON.stringify(result.data), {
@@ -628,13 +774,15 @@ export async function POST(request: NextRequest) {
         'Connection': 'keep-alive',
       };
 
-      // Add guest rate limit headers if applicable
-      if (isGuestRequest) {
-        const clientIP = getClientIP(request);
-        const rateLimitInfo = checkGuestRateLimit(clientIP);
-        streamHeaders['X-RateLimit-Limit'] = String(rateLimitInfo.limit);
-        streamHeaders['X-RateLimit-Remaining'] = String(rateLimitInfo.remaining);
-        streamHeaders['X-RateLimit-Reset'] = String(Math.ceil(rateLimitInfo.resetInMs / 1000));
+      // Increment guest rate limit only after successful response (2xx status)
+      // This ensures quota is not consumed on failed requests
+      const guestClientIP = (request as any).__guestClientIP;
+      if (guestClientIP && result.status >= 200 && result.status < 300) {
+        const incrementResult = incrementGuestRateLimit(guestClientIP);
+        console.log(`[API Completions] Guest request from ${guestClientIP}. Remaining: ${incrementResult.remaining}/${incrementResult.limit}`);
+        streamHeaders['X-RateLimit-Limit'] = String(incrementResult.limit);
+        streamHeaders['X-RateLimit-Remaining'] = String(incrementResult.remaining);
+        streamHeaders['X-RateLimit-Reset'] = String(Math.ceil(incrementResult.resetInMs / 1000));
       }
 
       return new Response(result.stream, {
@@ -657,6 +805,138 @@ export async function POST(request: NextRequest) {
       cause: (error as any).cause,
       stack: error.stack
     } : { message: 'Unknown error', name: 'UnknownError' };
+
+    // Check if this is an HTTP error from processCompletion
+    const httpError = error as any;
+    if (httpError.status && httpError.errorData) {
+      // This is an HTTP error (404, 400, etc.) from the backend
+      const errorData = httpError.errorData;
+      let userMessage = errorData.message || errorData.detail || 'An error occurred';
+      let errorType = 'api_error';
+
+      // Handle specific HTTP status codes with proper Sentry logging
+      if (httpError.status === 404) {
+        userMessage = 'The requested model or endpoint was not found. The model may be temporarily unavailable or the configuration may need to be updated.';
+        errorType = 'not_found_error';
+
+        Sentry.captureException(
+          new Error(`Chat API 404 Not Found: ${errorData.detail || 'Model or endpoint not found'}`),
+          {
+            tags: {
+              error_type: 'chat_not_found_error',
+              http_status: httpError.status,
+              model: body.model,
+              gateway: body.gateway,
+              is_streaming: body.stream ? 'true' : 'false',
+            },
+            extra: {
+              requestId,
+              errorData,
+              model: body.model,
+              gateway: body.gateway,
+              targetUrl: targetUrl?.toString(),
+              apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+            },
+            level: 'warning',
+          }
+        );
+      } else if (httpError.status === 400) {
+        userMessage = 'Invalid request. Please check your input and try again.';
+        errorType = 'validation_error';
+
+        Sentry.captureException(
+          new Error(`Chat API validation error: ${errorData.detail || 'Bad Request'}`),
+          {
+            tags: {
+              error_type: 'chat_validation_error',
+              http_status: httpError.status,
+              model: body.model,
+              is_streaming: body.stream ? 'true' : 'false',
+            },
+            extra: {
+              requestId,
+              errorData,
+              model: body.model,
+              gateway: body.gateway,
+              messageCount: body.messages?.length,
+            },
+            level: 'warning',
+          }
+        );
+      } else if (httpError.status === 401 || httpError.status === 403) {
+        userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
+        errorType = 'auth_error';
+
+        Sentry.captureException(
+          new Error(`Chat auth error: ${httpError.status} ${httpError.statusText}`),
+          {
+            tags: {
+              error_type: 'chat_auth_error',
+              http_status: httpError.status,
+              model: body.model,
+              is_streaming: body.stream ? 'true' : 'false',
+            },
+            extra: {
+              requestId,
+              errorData,
+              model: body.model,
+              gateway: body.gateway,
+              targetUrl: targetUrl?.toString(),
+            },
+            level: 'warning',
+          }
+        );
+      } else if (httpError.status >= 500) {
+        Sentry.captureException(
+          new Error(`Chat API server error: ${httpError.status} ${httpError.statusText}`),
+          {
+            tags: {
+              error_type: 'chat_server_error',
+              http_status: httpError.status,
+              model: body.model,
+              is_streaming: body.stream ? 'true' : 'false',
+            },
+            extra: {
+              requestId,
+              errorData,
+              model: body.model,
+              gateway: body.gateway,
+              targetUrl: targetUrl?.toString(),
+            },
+            level: 'error',
+          }
+        );
+      }
+
+      return new Response(JSON.stringify({
+        error: 'Backend API Error',
+        status: httpError.status,
+        statusText: httpError.statusText,
+        message: userMessage,
+        type: errorType,
+        errorData: errorData
+      }), {
+        status: httpError.status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Capture all other chat completion errors to Sentry
+    Sentry.captureException(
+      error instanceof Error ? error : new Error(String(error)),
+      {
+        tags: {
+          error_type: 'chat_completion_error',
+          error_name: errorDetails.name,
+        },
+        extra: {
+          requestId,
+          errorDetails,
+          timeoutMs,
+        },
+        level: 'error',
+      }
+    );
 
     // Determine appropriate status code based on error type
     let status = 500;

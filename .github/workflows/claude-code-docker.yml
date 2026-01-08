@@ -16,7 +16,7 @@ on:
 jobs:
   claude-code:
     name: Claude Code Analysis
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     container:
       image: anthropic/claude-code:latest
 

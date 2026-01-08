@@ -107,8 +107,8 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
 
       // Send timeout event to Sentry for monitoring
       if (typeof window !== 'undefined' && duration > 8000) {
-        import('@sentry/nextjs').then((Sentry) => {
-          Sentry.captureMessage("Authentication timeout - stuck in authenticating state", {
+        import('@/lib/global-error-handlers').then(({ rateLimitedCaptureMessage }) => {
+          rateLimitedCaptureMessage("Authentication timeout - stuck in authenticating state", {
             level: 'error',
             tags: {
               error_type: 'auth_timeout',

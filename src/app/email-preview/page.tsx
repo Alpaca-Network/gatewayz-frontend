@@ -94,7 +94,7 @@ export default function EmailPreviewPage() {
                 fontWeight: 'bold',
                 margin: '0 0 8px 0',
               }}>
-                $10 Trial Credits Added!
+                $3 Trial Credits Added!
               </h2>
               <p style={{
                 color: '#15803d',

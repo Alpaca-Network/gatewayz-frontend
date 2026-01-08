@@ -1,11 +1,11 @@
 /**
  * Session Cache Utility
- * Provides localStorage-based caching for chat sessions to enable instant page load
- * and fast session creation with optimistic UI.
+ * Provides storage-based caching for chat sessions to enable instant page load
+ * and fast session creation with optimistic UI, with safe storage fallback
  */
 
 import { ChatSession } from './chat-history';
-import { safeLocalStorageGet, safeLocalStorageSet } from './safe-storage';
+import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemove } from './safe-storage';
 
 export interface SessionCacheData {
   sessions: ChatSession[];
@@ -227,7 +227,7 @@ export function removeCachedSession(sessionId: number): void {
  */
 export function clearSessionCache(): void {
   try {
-    localStorage.removeItem(CACHE_KEY);
+    safeLocalStorageRemove(CACHE_KEY);
   } catch (error) {
     console.warn('[SessionCache] Failed to clear cache:', error);
   }

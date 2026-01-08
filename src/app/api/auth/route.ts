@@ -11,10 +11,17 @@ import { retryFetch } from "@/lib/retry-utils";
  * Includes automatic retry logic for transient errors (502/503/504)
  */
 export async function POST(request: NextRequest) {
+  const requestStartTime = Date.now();
+
   try {
     const body = await request.json();
 
-    console.log("[API /api/auth] Proxying authentication request to backend");
+    console.log("[API /api/auth] Proxying authentication request to backend", {
+      has_privy_user_id: !!body.privy_user_id,
+      has_token: !!body.token,
+      is_new_user: body.is_new_user,
+      timestamp: new Date().toISOString(),
+    });
 
     // Use timeout to prevent hanging requests
     // Increased from 15s to 30s to handle backend load and slow network conditions
@@ -47,9 +54,15 @@ export async function POST(request: NextRequest) {
 
       clearTimeout(timeoutId);
       const responseText = await response.text();
+      const durationMs = Date.now() - requestStartTime;
 
       if (!response.ok) {
-        console.error("[API /api/auth] Backend auth failed:", response.status, responseText.substring(0, 200));
+        console.error("[API /api/auth] Backend auth failed", {
+          status: response.status,
+          statusText: response.statusText,
+          responsePreview: responseText.substring(0, 200),
+          durationMs,
+        });
         return new NextResponse(responseText, {
           status: response.status,
           headers: {
@@ -58,7 +71,10 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      console.log("[API /api/auth] Backend auth successful");
+      console.log("[API /api/auth] Backend auth successful", {
+        status: response.status,
+        durationMs,
+      });
 
       return new NextResponse(responseText, {
         status: 200,
@@ -68,11 +84,15 @@ export async function POST(request: NextRequest) {
       });
     } catch (fetchError) {
       clearTimeout(timeoutId);
+      const durationMs = Date.now() - requestStartTime;
 
       // Handle timeout and network errors
       if (fetchError instanceof Error) {
         if (fetchError.name === 'AbortError') {
-          console.error("[API /api/auth] Backend request timeout");
+          console.error("[API /api/auth] Backend request timeout", {
+            durationMs,
+            timeoutMs: 30000,
+          });
           return new NextResponse(
             JSON.stringify({ error: "Authentication service timeout" }),
             {
@@ -81,11 +101,22 @@ export async function POST(request: NextRequest) {
             }
           );
         }
+
+        console.error("[API /api/auth] Backend request failed", {
+          errorName: fetchError.name,
+          errorMessage: fetchError.message,
+          durationMs,
+        });
       }
 
       throw fetchError;
     }
   } catch (error) {
+    const durationMs = Date.now() - requestStartTime;
+    console.error("[API /api/auth] Unhandled error", {
+      error: error instanceof Error ? error.message : String(error),
+      durationMs,
+    });
     return handleApiError(error, "API /api/auth");
   }
 }
