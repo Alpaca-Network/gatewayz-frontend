@@ -1162,6 +1162,7 @@ describe('ChatInput speech recognition', () => {
     // Simulate second result where the API returns accumulated transcript
     // (this is what causes duplicates - the API returns "hello world how are you"
     // instead of just "how are you")
+    // Note: Web Speech API typically includes space at start of continuation
     const secondResult = {
       resultIndex: 0,
       results: {
@@ -1172,7 +1173,7 @@ describe('ChatInput speech recognition', () => {
         },
         1: {
           isFinal: true,
-          0: { transcript: 'how are you', confidence: 0.9 },
+          0: { transcript: ' how are you', confidence: 0.9 },
         },
       },
     };
@@ -1226,6 +1227,350 @@ describe('ChatInput speech recognition', () => {
 
     // Should NOT add duplicate text - setInputValue should not be called
     // because there's no new content
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
+
+  it('should handle overlapping phrase patterns like "How are you How are you doing"', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate first result: "How are you"
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'How are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('How are you');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'How are you';
+
+    // Simulate the problematic pattern where API returns overlapping content
+    // "How are you How are you doing" - the first phrase is repeated
+    const overlappingResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'How are you doing today', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(overlappingResult);
+    }
+
+    // Should only append "doing today", not the duplicate "How are you"
+    // Result should be "How are you doing today"
+    expect(mockSetInputValue).toHaveBeenCalledWith('How are you doing today');
+  });
+
+  it('should handle word overlap with different punctuation', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result with punctuation
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'Hello, world!', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('Hello, world!');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'Hello, world!';
+
+    // Second result with overlapping words but different punctuation
+    const secondResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'Hello world how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(secondResult);
+    }
+
+    // Should recognize "Hello world" overlaps with "Hello, world!" and only append new words
+    expect(mockSetInputValue).toHaveBeenCalledWith('Hello, world! how are you');
+  });
+
+  it('should handle word overlap with different casing', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result with uppercase
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'HELLO WORLD', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('HELLO WORLD');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'HELLO WORLD';
+
+    // Second result with different casing
+    const secondResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world goodbye', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(secondResult);
+    }
+
+    // Should recognize case-insensitive overlap and only append "goodbye"
+    expect(mockSetInputValue).toHaveBeenCalledWith('HELLO WORLD goodbye');
+  });
+
+  it('should handle completely different transcript with no overlap (API glitch)', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // Completely different transcript with same word count (API glitch scenario)
+    const glitchResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'goodbye moon', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(glitchResult);
+    }
+
+    // Should NOT update - no overlap and not longer, preserves continuity
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
+
+  it('should handle new transcript shorter than accumulated', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result - longer phrase
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world how are you');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world how are you';
+
+    // Shorter transcript (possible API re-processing)
+    const shorterResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(shorterResult);
+    }
+
+    // Should NOT update - shorter transcript should be ignored
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
+
+  it('should handle transcript with extra whitespace differences', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result with normal spacing
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // New transcript with extra spaces but more words
+    const spacedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello  world  how  are  you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(spacedResult);
+    }
+
+    // Should correctly extract new words despite whitespace differences
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world how are you');
+  });
+
+  it('should skip multiple consecutive identical transcripts', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    const sameResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    // First call - should add
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(sameResult);
+    }
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // Second call with same content - should skip
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(sameResult);
+    }
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+
+    // Third call with same content - should still skip
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(sameResult);
+    }
     expect(mockSetInputValue).not.toHaveBeenCalled();
   });
 
