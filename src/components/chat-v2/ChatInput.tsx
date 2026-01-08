@@ -679,12 +679,13 @@ export function ChatInput() {
           // Skip overlapping words, only take genuinely new words
           wordsToAppend = newWords.slice(overlapLen);
         } else if (newWords.length > accWords.length) {
-          // No word overlap found, but new is longer - try character-based fallback
-          const normalizedNew = newTotal.toLowerCase().replace(/\s+/g, ' ');
-          const normalizedAcc = accumulated.toLowerCase().replace(/\s+/g, ' ');
-          if (normalizedNew.startsWith(normalizedAcc)) {
-            wordsToAppend = getWords(newTotal.slice(accumulated.length));
-          }
+          // No word overlap found, but new is longer - use word-based extraction
+          // This handles cases where whitespace differs between accumulated and new
+          wordsToAppend = newWords.slice(accWords.length);
+        } else {
+          // No overlap and new is not longer - possible API glitch or re-send
+          // Don't update state to preserve continuity and avoid corruption
+          return;
         }
       }
 
