@@ -80,6 +80,9 @@ jest.mock('@/lib/config', () => ({
   API_BASE_URL: 'https://api.test.com',
 }));
 
+// Mock gtag for Google Ads conversion tracking
+const mockGtag = jest.fn();
+
 describe('CheckoutSuccessPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -89,6 +92,12 @@ describe('CheckoutSuccessPage', () => {
         writeText: jest.fn().mockResolvedValue(undefined),
       },
     });
+    // Setup gtag mock
+    (window as any).gtag = mockGtag;
+  });
+
+  afterEach(() => {
+    delete (window as any).gtag;
   });
 
   describe('when user is authenticated', () => {
@@ -326,6 +335,66 @@ describe('CheckoutSuccessPage API error handling', () => {
     render(<CheckoutSuccessPage />);
 
     // Should still render the page structure
+    await waitFor(() => {
+      expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('CheckoutSuccessPage - Google Ads Conversion Tracking', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetUserData.mockReturnValue({
+      user_id: 1,
+      api_key: 'test-api-key',
+    });
+    mockMakeAuthenticatedRequest.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
+    });
+    (window as any).gtag = mockGtag;
+  });
+
+  afterEach(() => {
+    delete (window as any).gtag;
+  });
+
+  it('should fire Google Ads conversion event on page load', async () => {
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() => {
+      expect(mockGtag).toHaveBeenCalledWith('event', 'conversion', {
+        'send_to': 'AW-17515449277/fsG3CMPGlt8bEL2XgqBB',
+        'transaction_id': 'cs_test_1234',
+      });
+    });
+  });
+
+  it('should only fire conversion event once', async () => {
+    const { rerender } = render(<CheckoutSuccessPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
+    });
+
+    // Rerender the component
+    rerender(<CheckoutSuccessPage />);
+
+    await waitFor(() => {
+      // gtag should only have been called once for the conversion event
+      const conversionCalls = mockGtag.mock.calls.filter(
+        (call: any[]) => call[0] === 'event' && call[1] === 'conversion'
+      );
+      expect(conversionCalls.length).toBe(1);
+    });
+  });
+
+  it('should handle missing gtag gracefully', async () => {
+    delete (window as any).gtag;
+
+    // Should not throw an error
+    expect(() => render(<CheckoutSuccessPage />)).not.toThrow();
+
     await waitFor(() => {
       expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
     });
