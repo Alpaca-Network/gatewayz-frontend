@@ -400,3 +400,68 @@ describe('CheckoutSuccessPage - Google Ads Conversion Tracking', () => {
     });
   });
 });
+
+describe('CheckoutSuccessPage - Google Ads Conversion Tracking without session_id', () => {
+  // Store original mock to restore later
+  let useSearchParamsMock: jest.Mock;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetUserData.mockReturnValue({
+      user_id: 1,
+      api_key: 'test-api-key',
+    });
+    mockMakeAuthenticatedRequest.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
+    });
+    (window as any).gtag = mockGtag;
+
+    // Override useSearchParams to return no session_id
+    useSearchParamsMock = jest.fn(() => ({
+      get: (key: string) => {
+        const params: Record<string, string> = {
+          tier: 'pro',
+          quantity: '1',
+          // session_id intentionally missing
+        };
+        return params[key] || null;
+      },
+    }));
+    jest.doMock('next/navigation', () => ({
+      useSearchParams: useSearchParamsMock,
+    }));
+  });
+
+  afterEach(() => {
+    delete (window as any).gtag;
+    jest.resetModules();
+  });
+
+  it('should fire conversion event with undefined transaction_id when session_id is missing', async () => {
+    // Dynamically import to get the fresh module with mocked useSearchParams
+    jest.isolateModules(() => {
+      jest.doMock('next/navigation', () => ({
+        useSearchParams: () => ({
+          get: (key: string) => {
+            const params: Record<string, string> = {
+              tier: 'pro',
+              quantity: '1',
+              // session_id intentionally missing
+            };
+            return params[key] || null;
+          },
+        }),
+      }));
+    });
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() => {
+      // Verify gtag was called - the transaction_id should be undefined when session_id is empty
+      expect(mockGtag).toHaveBeenCalledWith('event', 'conversion', expect.objectContaining({
+        'send_to': 'AW-17515449277/fsG3CMPGlt8bEL2XgqBB',
+      }));
+    });
+  });
+});
