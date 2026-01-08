@@ -3,7 +3,8 @@
 import {Sandbox} from "@sampleapp.ai/sdk";
 import {getApiKey} from "@/lib/api";
 
-export default function SandboxPage({params}: {params: {sandboxId: string}}) {
+export default async function SandboxPage({params}: {params: Promise<{sandboxId: string}>}) {
+  const {sandboxId} = await params;
   const apiKey = getApiKey() || "";
   const {sandboxId} = params;
   return (
