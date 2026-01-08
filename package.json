@@ -75,6 +75,7 @@
     "@radix-ui/react-toast": "^1.2.6",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
+    "@sampleapp.ai/sdk": "^1.0.29",
     "@sentry/nextjs": "^10.24.0",
     "@statsig/react-bindings": "^3.27.0",
     "@statsig/session-replay": "^3.27.0",
