@@ -1229,6 +1229,158 @@ describe('ChatInput speech recognition', () => {
     expect(mockSetInputValue).not.toHaveBeenCalled();
   });
 
+  it('should handle overlapping phrase patterns like "How are you How are you doing"', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate first result: "How are you"
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'How are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('How are you');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'How are you';
+
+    // Simulate the problematic pattern where API returns overlapping content
+    // "How are you How are you doing" - the first phrase is repeated
+    const overlappingResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'How are you doing today', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(overlappingResult);
+    }
+
+    // Should only append "doing today", not the duplicate "How are you"
+    // Result should be "How are you doing today"
+    expect(mockSetInputValue).toHaveBeenCalledWith('How are you doing today');
+  });
+
+  it('should handle word overlap with different punctuation', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result with punctuation
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'Hello, world!', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('Hello, world!');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'Hello, world!';
+
+    // Second result with overlapping words but different punctuation
+    const secondResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'Hello world how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(secondResult);
+    }
+
+    // Should recognize "Hello world" overlaps with "Hello, world!" and only append new words
+    expect(mockSetInputValue).toHaveBeenCalledWith('Hello, world! how are you');
+  });
+
+  it('should handle word overlap with different casing', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result with uppercase
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'HELLO WORLD', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('HELLO WORLD');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'HELLO WORLD';
+
+    // Second result with different casing
+    const secondResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world goodbye', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(secondResult);
+    }
+
+    // Should recognize case-insensitive overlap and only append "goodbye"
+    expect(mockSetInputValue).toHaveBeenCalledWith('HELLO WORLD goodbye');
+  });
+
   it('should handle synchronous start() errors and reset state', () => {
     // Make start() throw synchronously
     mockRecognition.start.mockImplementation(() => {

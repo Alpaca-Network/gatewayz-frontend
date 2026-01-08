@@ -138,6 +138,35 @@ const generateSessionTitle = (text: string, maxLength: number = 30): string => {
     return trimmed.substring(0, maxLength - 3) + '...';
 };
 
+// Helper functions for word-level speech transcript deduplication
+// Normalizes a word for comparison (lowercase, alphanumeric only)
+const normalizeWord = (word: string): string =>
+  word.toLowerCase().replace(/[^\w]/g, '');
+
+// Splits text into words, filtering out empty strings
+const getWords = (text: string): string[] =>
+  text.trim().split(/\s+/).filter(w => w.length > 0);
+
+// Finds the overlap between the suffix of accumulated words and prefix of new words
+// Returns the number of overlapping words to skip
+const findOverlappingPrefixLength = (
+  accumulatedWords: string[],
+  newWords: string[]
+): number => {
+  // Cap search at 10 words for performance
+  const maxLen = Math.min(accumulatedWords.length, newWords.length, 10);
+
+  for (let len = maxLen; len > 0; len--) {
+    const suffix = accumulatedWords.slice(-len).map(normalizeWord);
+    const prefix = newWords.slice(0, len).map(normalizeWord);
+
+    if (suffix.every((word, i) => word === prefix[i])) {
+      return len;
+    }
+  }
+  return 0;
+};
+
 export function ChatInput() {
   const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
@@ -623,39 +652,55 @@ export function ChatInput() {
       // Update interim transcript display
       setInterimTranscript(currentInterim);
 
-      // Calculate the truly NEW portion of the transcript by comparing
-      // against what we've already accumulated. This handles the case where
-      // the Speech API returns overlapping/repeated content in continuous mode.
-      const previousLength = accumulatedFinalTranscriptRef.current.length;
+      const newTotal = totalFinalTranscript.trim();
+      if (!newTotal) return;
 
-      // Check if the new total transcript starts with what we already have
-      // If so, extract only the new portion
-      let newPortionOfTranscript = '';
-      if (totalFinalTranscript.length > previousLength) {
-        if (totalFinalTranscript.startsWith(accumulatedFinalTranscriptRef.current)) {
-          // Normal case: new transcript is an extension of the previous
-          newPortionOfTranscript = totalFinalTranscript.slice(previousLength);
-        } else {
-          // Edge case: transcript was modified (shouldn't happen, but handle it)
-          // Fall back to the full new transcript
-          newPortionOfTranscript = totalFinalTranscript;
+      const accumulated = accumulatedFinalTranscriptRef.current.trim();
+
+      // Quick exit if identical (no new content)
+      if (newTotal === accumulated) return;
+
+      // Use word-level comparison to handle overlapping phrases
+      // This fixes issues where the API returns "How are you How are you doing"
+      // instead of just "How are you doing"
+      const newWords = getWords(newTotal);
+      const accWords = getWords(accumulated);
+
+      let wordsToAppend: string[] = [];
+
+      if (accWords.length === 0) {
+        // First transcript - add all words
+        wordsToAppend = newWords;
+      } else {
+        // Find overlapping words at the boundary (suffix of accumulated = prefix of new)
+        const overlapLen = findOverlappingPrefixLength(accWords, newWords);
+
+        if (overlapLen > 0) {
+          // Skip overlapping words, only take genuinely new words
+          wordsToAppend = newWords.slice(overlapLen);
+        } else if (newWords.length > accWords.length) {
+          // No word overlap found, but new is longer - try character-based fallback
+          const normalizedNew = newTotal.toLowerCase().replace(/\s+/g, ' ');
+          const normalizedAcc = accumulated.toLowerCase().replace(/\s+/g, ' ');
+          if (normalizedNew.startsWith(normalizedAcc)) {
+            wordsToAppend = getWords(newTotal.slice(accumulated.length));
+          }
         }
       }
 
-      // Update our accumulated tracking
-      if (totalFinalTranscript.length > previousLength) {
-        accumulatedFinalTranscriptRef.current = totalFinalTranscript;
-      }
+      // Update accumulated tracking with the full new transcript
+      accumulatedFinalTranscriptRef.current = newTotal;
 
-      // Only update input if we have genuinely new content
-      if (newPortionOfTranscript) {
+      // Only update input if we have genuinely new words
+      if (wordsToAppend.length > 0) {
+        const newText = wordsToAppend.join(' ');
         const currentValue = useChatUIStore.getState().inputValue;
         const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
-        setInputValue(currentValue + separator + newPortionOfTranscript);
+        setInputValue(currentValue + separator + newText);
         // Also track final transcript separately for display
         setFinalTranscriptDuringRecording(prev => {
           const prevSeparator = prev && !prev.endsWith(' ') ? ' ' : '';
-          return prev + prevSeparator + newPortionOfTranscript;
+          return prev + prevSeparator + newText;
         });
       }
     };
