@@ -2,6 +2,9 @@ import {
   getSourceGateway,
   isFreeModel,
   getModelPricingCategory,
+  isPerMillionPricingGateway,
+  formatPricingForDisplay,
+  getNormalizedPerTokenPrice,
   ModelPricingInfo,
 } from '../model-pricing-utils';
 
@@ -246,6 +249,122 @@ describe('model-pricing-utils', () => {
       models.forEach(({ model, expected }) => {
         expect(getModelPricingCategory(model)).toBe(expected);
       });
+    });
+  });
+
+  describe('isPerMillionPricingGateway', () => {
+    it('should return true for onerouter gateway', () => {
+      expect(isPerMillionPricingGateway('onerouter')).toBe(true);
+      expect(isPerMillionPricingGateway('OneRouter')).toBe(true);
+      expect(isPerMillionPricingGateway('ONEROUTER')).toBe(true);
+    });
+
+    it('should return false for standard per-token pricing gateways', () => {
+      const perTokenGateways = [
+        'openrouter',
+        'groq',
+        'together',
+        'fireworks',
+        'deepinfra',
+        'cerebras',
+        'huggingface',
+        'openai',
+        'anthropic',
+      ];
+
+      perTokenGateways.forEach((gateway) => {
+        expect(isPerMillionPricingGateway(gateway)).toBe(false);
+      });
+    });
+  });
+
+  describe('formatPricingForDisplay', () => {
+    it('should multiply per-token pricing by 1,000,000 for standard gateways', () => {
+      // OpenRouter GPT-4o-mini pricing: $0.00000015/token = $0.15/M
+      expect(formatPricingForDisplay('0.00000015', 'openrouter')).toBe('0.15');
+      expect(formatPricingForDisplay('0.0000006', 'openrouter')).toBe('0.60');
+
+      // Claude Haiku: $0.000001/token = $1.00/M
+      expect(formatPricingForDisplay('0.000001', 'groq')).toBe('1.00');
+    });
+
+    it('should NOT multiply for onerouter gateway (already per-million)', () => {
+      // OneRouter returns pricing in per-million format
+      expect(formatPricingForDisplay('1.00', 'onerouter')).toBe('1.00');
+      expect(formatPricingForDisplay('3.00', 'onerouter')).toBe('3.00');
+      expect(formatPricingForDisplay('15.00', 'onerouter')).toBe('15.00');
+    });
+
+    it('should return null for undefined or empty price', () => {
+      expect(formatPricingForDisplay(undefined, 'openrouter')).toBeNull();
+      expect(formatPricingForDisplay('', 'openrouter')).toBeNull();
+    });
+
+    it('should return null for non-numeric price', () => {
+      expect(formatPricingForDisplay('N/A', 'openrouter')).toBeNull();
+      expect(formatPricingForDisplay('free', 'openrouter')).toBeNull();
+    });
+
+    it('should handle zero pricing', () => {
+      expect(formatPricingForDisplay('0', 'openrouter')).toBe('0.00');
+      expect(formatPricingForDisplay('0', 'onerouter')).toBe('0.00');
+    });
+  });
+
+  describe('getNormalizedPerTokenPrice', () => {
+    it('should return price as-is for standard per-token gateways', () => {
+      expect(getNormalizedPerTokenPrice('0.00000015', 'openrouter')).toBe(0.00000015);
+      expect(getNormalizedPerTokenPrice('0.000001', 'groq')).toBe(0.000001);
+    });
+
+    it('should divide by 1,000,000 for onerouter gateway', () => {
+      // OneRouter $1.00/M = $0.000001/token
+      expect(getNormalizedPerTokenPrice('1.00', 'onerouter')).toBe(0.000001);
+      // OneRouter $15.00/M = $0.000015/token
+      expect(getNormalizedPerTokenPrice('15.00', 'onerouter')).toBe(0.000015);
+    });
+
+    it('should return 0 for undefined or empty price', () => {
+      expect(getNormalizedPerTokenPrice(undefined, 'openrouter')).toBe(0);
+      expect(getNormalizedPerTokenPrice('', 'openrouter')).toBe(0);
+    });
+
+    it('should return 0 for non-numeric price', () => {
+      expect(getNormalizedPerTokenPrice('N/A', 'openrouter')).toBe(0);
+    });
+  });
+
+  describe('pricing normalization integration', () => {
+    it('should display consistent pricing for same model from different gateways', () => {
+      // GPT-4o-mini from OpenRouter (per-token: 0.00000015)
+      const openrouterPrice = formatPricingForDisplay('0.00000015', 'openrouter');
+
+      // Same model from OneRouter (per-million: 0.15)
+      const onerouterPrice = formatPricingForDisplay('0.15', 'onerouter');
+
+      // Both should display as $0.15/M
+      expect(openrouterPrice).toBe('0.15');
+      expect(onerouterPrice).toBe('0.15');
+    });
+
+    it('should filter models consistently regardless of gateway pricing format', () => {
+      // Filter range: models costing less than $1/M input
+      const maxPerTokenPrice = 1 / 1000000; // $1/M = $0.000001/token
+
+      // OpenRouter model with per-token pricing
+      const openrouterPerToken = getNormalizedPerTokenPrice('0.00000015', 'openrouter');
+      expect(openrouterPerToken).toBeLessThan(maxPerTokenPrice); // $0.15/M < $1/M
+
+      // OneRouter model with per-million pricing
+      const onerouterPerToken = getNormalizedPerTokenPrice('0.15', 'onerouter');
+      expect(onerouterPerToken).toBeLessThan(maxPerTokenPrice); // $0.15/M < $1/M
+
+      // Expensive model should be filtered out
+      const expensiveOpenrouter = getNormalizedPerTokenPrice('0.000015', 'openrouter');
+      expect(expensiveOpenrouter).toBeGreaterThan(maxPerTokenPrice); // $15/M > $1/M
+
+      const expensiveOnerouter = getNormalizedPerTokenPrice('15', 'onerouter');
+      expect(expensiveOnerouter).toBeGreaterThan(maxPerTokenPrice); // $15/M > $1/M
     });
   });
 });
