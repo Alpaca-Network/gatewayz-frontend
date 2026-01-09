@@ -148,6 +148,29 @@ export function AppFooter() {
               </li>
             </ul>
           </div>
+
+          <div>
+            <h3 className="font-semibold mb-4 text-foreground">Security</h3>
+            <ul className="space-y-2">
+              <li>
+                <Link
+                  href="/trust"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Trust Center
+                </Link>
+              </li>
+            </ul>
+            <div className="mt-4">
+              <Link href="/trust" className="inline-block">
+                <img
+                  src="/caan3-badge.png"
+                  alt="CAAN3 Cybersecurity Certified 2025"
+                  className="h-16 w-auto"
+                />
+              </Link>
+            </div>
+          </div>
         </div>
 
         <div className="pt-8 border-t border-border flex flex-col sm:flex-row justify-between items-center gap-4 w-full">
