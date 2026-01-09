@@ -94,4 +94,20 @@ describe('AppFooter', () => {
 
     expect(screen.getByRole('contentinfo')).toBeInTheDocument();
   });
+
+  it('should handle null pathname gracefully and render footer', () => {
+    mockPathname.mockReturnValue(null);
+    render(<AppFooter />);
+    // With null pathname, isHomepage is false (null !== '/'), so showFooter is true
+    // and isSandboxPage is false (due to ?? false fallback), so footer renders
+    expect(screen.getByRole('contentinfo')).toBeInTheDocument();
+  });
+
+  it('should handle undefined pathname gracefully and render footer', () => {
+    mockPathname.mockReturnValue(undefined);
+    render(<AppFooter />);
+    // With undefined pathname, isHomepage is false (undefined !== '/'), so showFooter is true
+    // and isSandboxPage is false (due to ?? false fallback), so footer renders
+    expect(screen.getByRole('contentinfo')).toBeInTheDocument();
+  });
 });
