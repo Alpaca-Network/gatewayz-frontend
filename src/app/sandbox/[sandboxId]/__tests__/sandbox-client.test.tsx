@@ -1,0 +1,128 @@
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import { SandboxClient } from '../sandbox-client';
+
+// Mock the @sampleapp.ai/sdk module
+jest.mock('@sampleapp.ai/sdk', () => ({
+  Sandbox: ({
+    apiKey,
+    sandboxId,
+    env,
+  }: {
+    apiKey: string;
+    sandboxId: string;
+    env: { GATEWAYZ_API_KEY: string; GATEWAYZ_API_BASE_URL: string };
+  }) => (
+    <div
+      data-testid="sandbox"
+      data-api-key={apiKey}
+      data-sandbox-id={sandboxId}
+      data-gatewayz-key={env.GATEWAYZ_API_KEY}
+      data-gatewayz-url={env.GATEWAYZ_API_BASE_URL}
+    >
+      Sandbox Component
+    </div>
+  ),
+}));
+
+// Mock the getApiKey function
+jest.mock('@/lib/api', () => ({
+  getApiKey: jest.fn(),
+}));
+
+import { getApiKey } from '@/lib/api';
+
+const mockGetApiKey = getApiKey as jest.MockedFunction<typeof getApiKey>;
+
+describe('SandboxClient', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    jest.resetModules();
+    jest.clearAllMocks();
+    process.env = { ...originalEnv };
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
+  });
+
+  it('should render the Sandbox component', () => {
+    mockGetApiKey.mockReturnValue('user-api-key');
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-api-key';
+
+    render(<SandboxClient sandboxId="test-sandbox" />);
+
+    expect(screen.getByTestId('sandbox')).toBeInTheDocument();
+    expect(screen.getByText('Sandbox Component')).toBeInTheDocument();
+  });
+
+  it('should pass sandboxId prop correctly', () => {
+    mockGetApiKey.mockReturnValue('user-api-key');
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-api-key';
+
+    render(<SandboxClient sandboxId="my-sandbox-123" />);
+
+    const sandbox = screen.getByTestId('sandbox');
+    expect(sandbox).toHaveAttribute('data-sandbox-id', 'my-sandbox-123');
+  });
+
+  it('should pass sampleapp API key from environment variable', () => {
+    mockGetApiKey.mockReturnValue('user-api-key');
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'test-sampleapp-key';
+
+    render(<SandboxClient sandboxId="test-sandbox" />);
+
+    const sandbox = screen.getByTestId('sandbox');
+    expect(sandbox).toHaveAttribute('data-api-key', 'test-sampleapp-key');
+  });
+
+  it('should pass empty string when sampleapp API key is not set', () => {
+    mockGetApiKey.mockReturnValue('user-api-key');
+    delete process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY;
+
+    render(<SandboxClient sandboxId="test-sandbox" />);
+
+    const sandbox = screen.getByTestId('sandbox');
+    expect(sandbox).toHaveAttribute('data-api-key', '');
+  });
+
+  it('should pass user API key from getApiKey to env prop', () => {
+    mockGetApiKey.mockReturnValue('my-user-api-key');
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-key';
+
+    render(<SandboxClient sandboxId="test-sandbox" />);
+
+    const sandbox = screen.getByTestId('sandbox');
+    expect(sandbox).toHaveAttribute('data-gatewayz-key', 'my-user-api-key');
+  });
+
+  it('should pass empty string when user API key is null', () => {
+    mockGetApiKey.mockReturnValue(null);
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-key';
+
+    render(<SandboxClient sandboxId="test-sandbox" />);
+
+    const sandbox = screen.getByTestId('sandbox');
+    expect(sandbox).toHaveAttribute('data-gatewayz-key', '');
+  });
+
+  it('should pass correct GATEWAYZ_API_BASE_URL', () => {
+    mockGetApiKey.mockReturnValue('user-api-key');
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-key';
+
+    render(<SandboxClient sandboxId="test-sandbox" />);
+
+    const sandbox = screen.getByTestId('sandbox');
+    expect(sandbox).toHaveAttribute('data-gatewayz-url', 'https://api.gatewayz.ai');
+  });
+
+  it('should call getApiKey on render', () => {
+    mockGetApiKey.mockReturnValue('api-key');
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-key';
+
+    render(<SandboxClient sandboxId="test-sandbox" />);
+
+    expect(mockGetApiKey).toHaveBeenCalled();
+  });
+});
