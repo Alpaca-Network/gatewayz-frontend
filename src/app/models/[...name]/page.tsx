@@ -29,6 +29,7 @@ import {
     type ModelDetailRecord,
 } from '@/lib/model-detail-utils';
 import { stripDeveloperPrefix, keepFullModelId } from '@/lib/provider-model-formats';
+import { getSourceGateway, formatPricingForDisplay } from '@/lib/model-pricing-utils';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -666,9 +667,9 @@ export default function ModelProfilePage() {
                             <span>|</span>
                             <span>{model.context_length && model.context_length > 0 ? `${(model.context_length / 1000).toLocaleString()}k` : 'N/A'} context</span>
                             <span>|</span>
-                            <span>${model.pricing && model.pricing.prompt ? (parseFloat(String(model.pricing.prompt)) * 1000000).toFixed(2) : 'N/A'}/M input tokens</span>
+                            <span>${model.pricing && model.pricing.prompt ? formatPricingForDisplay(String(model.pricing.prompt), getSourceGateway(model)) : 'N/A'}/M input tokens</span>
                             <span>|</span>
-                            <span>${model.pricing && model.pricing.completion ? (parseFloat(String(model.pricing.completion)) * 1000000).toFixed(2) : 'N/A'}/M output tokens</span>
+                            <span>${model.pricing && model.pricing.completion ? formatPricingForDisplay(String(model.pricing.completion), getSourceGateway(model)) : 'N/A'}/M output tokens</span>
                             {model.architecture && model.architecture.input_modalities && model.architecture.input_modalities.includes('audio') && (
                                 <>
                                     <span>|</span>
@@ -1105,13 +1106,13 @@ console.log(response.choices[0].message.content);`
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Input Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${model.pricing && model.pricing.prompt ? (parseFloat(String(model.pricing.prompt)) * 1000000).toFixed(2) : 'N/A'}/M
+                                                        ${model.pricing && model.pricing.prompt ? formatPricingForDisplay(String(model.pricing.prompt), getSourceGateway(model)) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Output Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${model.pricing && model.pricing.completion ? (parseFloat(String(model.pricing.completion)) * 1000000).toFixed(2) : 'N/A'}/M
+                                                        ${model.pricing && model.pricing.completion ? formatPricingForDisplay(String(model.pricing.completion), getSourceGateway(model)) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>

@@ -30,7 +30,7 @@ import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
 import { safeParseJson } from '@/lib/http';
 import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, getAllActiveGatewayIds } from '@/lib/gateway-registry';
-import { isFreeModel as checkIsFreeModel, getSourceGateway } from '@/lib/model-pricing-utils';
+import { isFreeModel as checkIsFreeModel, getSourceGateway, formatPricingForDisplay, getNormalizedPerTokenPrice } from '@/lib/model-pricing-utils';
 
 
 interface Model {
@@ -97,8 +97,10 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
   // Only OpenRouter models with :free suffix are legitimately free
   const isFree = checkIsFreeModel(model);
-  const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
-  const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
+  // Get source gateway early so we can use it for pricing normalization
+  const sourceGateway = getSourceGateway(model);
+  const inputCost = hasPricing ? formatPricingForDisplay(model.pricing?.prompt, sourceGateway) : null;
+  const outputCost = hasPricing ? formatPricingForDisplay(model.pricing?.completion, sourceGateway) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
   // Determine if model is multi-lingual (simple heuristic - can be improved)
@@ -107,8 +109,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
                           model.description?.toLowerCase().includes('multilingual') ||
                           model.description?.toLowerCase().includes('multi-lingual'));
 
-  // Get gateways - support both old and new format
-  const sourceGateway = getSourceGateway(model);
+  // Get gateways - support both old and new format (sourceGateway already defined above)
   const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (sourceGateway ? [sourceGateway] : []);
 
   // NEW: Get providers - support both old and new format
@@ -599,7 +600,12 @@ export default function ModelsClient({
         (model.context_length >= contextLengthRange[0] * 1000 && model.context_length <= contextLengthRange[1] * 1000);
       // Only OpenRouter models with :free suffix are legitimately free
       const isFree = checkIsFreeModel(model);
-      const avgPrice = (parseFloat(model.pricing?.prompt || '0') + parseFloat(model.pricing?.completion || '0')) / 2;
+      // Get source gateway for pricing normalization
+      const modelSourceGateway = getSourceGateway(model);
+      // Normalize prices to per-token format for consistent filtering across all gateways
+      const normalizedPromptPrice = getNormalizedPerTokenPrice(model.pricing?.prompt, modelSourceGateway);
+      const normalizedCompletionPrice = getNormalizedPerTokenPrice(model.pricing?.completion, modelSourceGateway);
+      const avgPrice = (normalizedPromptPrice + normalizedCompletionPrice) / 2;
       const priceMatch = (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
         isFree ||
         (avgPrice >= promptPricingRange[0] / 1000000 && avgPrice <= promptPricingRange[1] / 1000000);
@@ -654,10 +660,22 @@ export default function ModelsClient({
                 return b.context_length - a.context_length;
             case 'tokens-asc':
                 return a.context_length - b.context_length;
-            case 'price-desc':
-                return (parseFloat(b.pricing?.prompt || '0') + parseFloat(b.pricing?.completion || '0')) - (parseFloat(a.pricing?.prompt || '0') + parseFloat(a.pricing?.completion || '0'));
-            case 'price-asc':
-                return (parseFloat(a.pricing?.prompt || '0') + parseFloat(a.pricing?.completion || '0')) - (parseFloat(b.pricing?.prompt || '0') + parseFloat(b.pricing?.completion || '0'));
+            case 'price-desc': {
+                // Normalize pricing for consistent sorting across gateways
+                const aGateway = getSourceGateway(a);
+                const bGateway = getSourceGateway(b);
+                const aTotalPrice = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway) + getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
+                const bTotalPrice = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway) + getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                return bTotalPrice - aTotalPrice;
+            }
+            case 'price-asc': {
+                // Normalize pricing for consistent sorting across gateways
+                const aGateway = getSourceGateway(a);
+                const bGateway = getSourceGateway(b);
+                const aTotalPrice = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway) + getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
+                const bTotalPrice = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway) + getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                return aTotalPrice - bTotalPrice;
+            }
             default:
                 return 0;
         }

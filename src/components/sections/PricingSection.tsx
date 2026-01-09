@@ -63,7 +63,7 @@ const tiers = [
       "24/7 dedicated support",
       "99.99% uptime SLA",
     ],
-    cta: "Contact Sales",
+    cta: "Get Started",
     highlighted: false,
   },
 ];
@@ -71,8 +71,8 @@ const tiers = [
 export function PricingSection() {
   const handleClick = (tierName: string) => {
     if (tierName === "Enterprise") {
-      // Enterprise tier goes to contact sales - don't track as signup conversion
-      window.location.href = "/contact";
+      // Enterprise tier goes to enterprise page - don't track as signup conversion
+      window.location.href = "https://gatewayz.ai/enterprise";
     } else {
       // Track Twitter conversion for ad attribution (signup tiers only)
       trackTwitterSignupClick();
