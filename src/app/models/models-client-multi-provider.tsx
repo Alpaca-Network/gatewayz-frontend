@@ -28,6 +28,8 @@ import { BookText, Bot, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid,
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
+import { getSourceGateway, formatPricingForDisplay, getNormalizedPerTokenPrice } from '@/lib/model-pricing-utils';
+
 interface Model {
   id: string;
   name: string;
@@ -83,9 +85,11 @@ const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: React
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  // Get source gateway for pricing normalization
+  const sourceGateway = getSourceGateway(model);
   const isFree = hasPricing && parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
-  const inputCost = hasPricing ? (parseFloat(model.pricing?.prompt || '0') * 1000000).toFixed(2) : null;
-  const outputCost = hasPricing ? (parseFloat(model.pricing?.completion || '0') * 1000000).toFixed(2) : null;
+  const inputCost = hasPricing ? formatPricingForDisplay(model.pricing?.prompt, sourceGateway) : null;
+  const outputCost = hasPricing ? formatPricingForDisplay(model.pricing?.completion, sourceGateway) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
   // Determine if model is multi-lingual (simple heuristic - can be improved)
@@ -334,7 +338,12 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
         (contextLengthRange[0] === 0 && contextLengthRange[1] === 1024) || // No filter applied
         (model.context_length >= contextLengthRange[0] * 1000 && model.context_length <= contextLengthRange[1] * 1000);
       const isFree = parseFloat(model.pricing?.prompt || '0') === 0 && parseFloat(model.pricing?.completion || '0') === 0;
-      const avgPrice = (parseFloat(model.pricing?.prompt || '0') + parseFloat(model.pricing?.completion || '0')) / 2;
+      // Get source gateway for pricing normalization
+      const modelSourceGateway = getSourceGateway(model);
+      // Normalize prices to per-token format for consistent filtering across all gateways
+      const normalizedPromptPrice = getNormalizedPerTokenPrice(model.pricing?.prompt, modelSourceGateway);
+      const normalizedCompletionPrice = getNormalizedPerTokenPrice(model.pricing?.completion, modelSourceGateway);
+      const avgPrice = (normalizedPromptPrice + normalizedCompletionPrice) / 2;
       const priceMatch = (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
         isFree ||
         (avgPrice >= promptPricingRange[0] / 1000000 && avgPrice <= promptPricingRange[1] / 1000000);
