@@ -12,6 +12,7 @@ export default function TrustPage() {
         src="https://trust.trycybe.ai/gatewayz"
         title="Gatewayz Trust Center"
         className="w-full h-screen border-0"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
       />

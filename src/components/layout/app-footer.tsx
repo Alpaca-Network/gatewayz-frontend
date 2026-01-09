@@ -2,6 +2,7 @@
 "use client";
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Twitter } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -163,9 +164,11 @@ export function AppFooter() {
             </ul>
             <div className="mt-4">
               <Link href="/trust" className="inline-block">
-                <img
+                <Image
                   src="/caan3-badge.png"
                   alt="CAAN3 Cybersecurity Certified 2025"
+                  width={64}
+                  height={64}
                   className="h-16 w-auto"
                 />
               </Link>
