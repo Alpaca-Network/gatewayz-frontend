@@ -167,9 +167,9 @@ export function AppFooter() {
                 <Image
                   src="/caan3-badge.png"
                   alt="CAAN3 Cybersecurity Certified 2025"
-                  width={64}
-                  height={64}
-                  className="h-16 w-auto"
+                  width={80}
+                  height={80}
+                  className="w-20 h-20"
                 />
               </Link>
             </div>
