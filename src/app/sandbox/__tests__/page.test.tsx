@@ -54,4 +54,15 @@ describe('SandboxPage', () => {
     const sandboxHome = screen.getByTestId('sandbox-home');
     expect(sandboxHome).toHaveAttribute('data-api-key', '');
   });
+
+  it('should wrap SandboxHome in a viewport-filling container', () => {
+    const { container } = render(<SandboxPage />);
+
+    const wrapper = container.firstChild as HTMLElement;
+    expect(wrapper).toHaveClass('flex-1');
+    expect(wrapper).toHaveClass('w-full');
+    expect(wrapper).toHaveClass('h-full');
+    expect(wrapper).toHaveClass('min-h-0');
+    expect(wrapper).toHaveClass('overflow-hidden');
+  });
 });
