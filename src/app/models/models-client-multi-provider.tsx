@@ -383,10 +383,22 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
                 return b.context_length - a.context_length;
             case 'tokens-asc':
                 return a.context_length - b.context_length;
-            case 'price-desc':
-                return (parseFloat(b.pricing?.prompt || '0') + parseFloat(b.pricing?.completion || '0')) - (parseFloat(a.pricing?.prompt || '0') + parseFloat(a.pricing?.completion || '0'));
-            case 'price-asc':
-                return (parseFloat(a.pricing?.prompt || '0') + parseFloat(a.pricing?.completion || '0')) - (parseFloat(b.pricing?.prompt || '0') + parseFloat(b.pricing?.completion || '0'));
+            case 'price-desc': {
+                // Normalize pricing for consistent sorting across gateways
+                const aGateway = getSourceGateway(a);
+                const bGateway = getSourceGateway(b);
+                const aTotalPrice = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway) + getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
+                const bTotalPrice = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway) + getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                return bTotalPrice - aTotalPrice;
+            }
+            case 'price-asc': {
+                // Normalize pricing for consistent sorting across gateways
+                const aGateway = getSourceGateway(a);
+                const bGateway = getSourceGateway(b);
+                const aTotalPrice = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway) + getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
+                const bTotalPrice = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway) + getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                return aTotalPrice - bTotalPrice;
+            }
             default:
                 return 0;
         }
