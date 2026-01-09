@@ -59,34 +59,40 @@ describe('SandboxClient', () => {
     });
   });
 
-  it('should pass sandboxId prop correctly', () => {
+  it('should pass sandboxId prop correctly', async () => {
     mockGetApiKey.mockReturnValue('user-api-key');
     process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-api-key';
 
     render(<SandboxClient sandboxId="my-sandbox-123" />);
 
-    const sandbox = screen.getByTestId('sandbox');
-    expect(sandbox).toHaveAttribute('data-sandbox-id', 'my-sandbox-123');
+    await waitFor(() => {
+      const sandbox = screen.getByTestId('sandbox');
+      expect(sandbox).toHaveAttribute('data-sandbox-id', 'my-sandbox-123');
+    });
   });
 
-  it('should pass sampleapp API key from environment variable', () => {
+  it('should pass sampleapp API key from environment variable', async () => {
     mockGetApiKey.mockReturnValue('user-api-key');
     process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'test-sampleapp-key';
 
     render(<SandboxClient sandboxId="test-sandbox" />);
 
-    const sandbox = screen.getByTestId('sandbox');
-    expect(sandbox).toHaveAttribute('data-api-key', 'test-sampleapp-key');
+    await waitFor(() => {
+      const sandbox = screen.getByTestId('sandbox');
+      expect(sandbox).toHaveAttribute('data-api-key', 'test-sampleapp-key');
+    });
   });
 
-  it('should pass empty string when sampleapp API key is not set', () => {
+  it('should pass empty string when sampleapp API key is not set', async () => {
     mockGetApiKey.mockReturnValue('user-api-key');
     delete process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY;
 
     render(<SandboxClient sandboxId="test-sandbox" />);
 
-    const sandbox = screen.getByTestId('sandbox');
-    expect(sandbox).toHaveAttribute('data-api-key', '');
+    await waitFor(() => {
+      const sandbox = screen.getByTestId('sandbox');
+      expect(sandbox).toHaveAttribute('data-api-key', '');
+    });
   });
 
   it('should pass user API key from getApiKey to env prop', async () => {
@@ -117,22 +123,26 @@ describe('SandboxClient', () => {
     });
   });
 
-  it('should pass correct GATEWAYZ_API_BASE_URL', () => {
+  it('should pass correct GATEWAYZ_API_BASE_URL', async () => {
     mockGetApiKey.mockReturnValue('user-api-key');
     process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-key';
 
     render(<SandboxClient sandboxId="test-sandbox" />);
 
-    const sandbox = screen.getByTestId('sandbox');
-    expect(sandbox).toHaveAttribute('data-gatewayz-url', 'https://api.gatewayz.ai');
+    await waitFor(() => {
+      const sandbox = screen.getByTestId('sandbox');
+      expect(sandbox).toHaveAttribute('data-gatewayz-url', 'https://api.gatewayz.ai');
+    });
   });
 
-  it('should call getApiKey on render', () => {
+  it('should call getApiKey after mount', async () => {
     mockGetApiKey.mockReturnValue('api-key');
     process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-key';
 
     render(<SandboxClient sandboxId="test-sandbox" />);
 
-    expect(mockGetApiKey).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(mockGetApiKey).toHaveBeenCalled();
+    });
   });
 });
