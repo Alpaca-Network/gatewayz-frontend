@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { SandboxClient } from '../sandbox-client';
 
 // Mock the @sampleapp.ai/sdk module
@@ -47,14 +47,16 @@ describe('SandboxClient', () => {
     process.env = originalEnv;
   });
 
-  it('should render the Sandbox component', () => {
+  it('should render the Sandbox component', async () => {
     mockGetApiKey.mockReturnValue('user-api-key');
     process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-api-key';
 
     render(<SandboxClient sandboxId="test-sandbox" />);
 
-    expect(screen.getByTestId('sandbox')).toBeInTheDocument();
-    expect(screen.getByText('Sandbox Component')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByTestId('sandbox')).toBeInTheDocument();
+      expect(screen.getByText('Sandbox Component')).toBeInTheDocument();
+    });
   });
 
   it('should pass sandboxId prop correctly', () => {
@@ -87,24 +89,32 @@ describe('SandboxClient', () => {
     expect(sandbox).toHaveAttribute('data-api-key', '');
   });
 
-  it('should pass user API key from getApiKey to env prop', () => {
+  it('should pass user API key from getApiKey to env prop', async () => {
     mockGetApiKey.mockReturnValue('my-user-api-key');
     process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-key';
 
     render(<SandboxClient sandboxId="test-sandbox" />);
 
-    const sandbox = screen.getByTestId('sandbox');
-    expect(sandbox).toHaveAttribute('data-gatewayz-key', 'my-user-api-key');
+    await waitFor(() => {
+      const sandbox = screen.getByTestId('sandbox');
+      expect(sandbox).toHaveAttribute('data-gatewayz-key', 'my-user-api-key');
+    });
   });
 
-  it('should pass empty string when user API key is null', () => {
+  it('should pass empty string when user API key is null', async () => {
     mockGetApiKey.mockReturnValue(null);
     process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-key';
 
     render(<SandboxClient sandboxId="test-sandbox" />);
 
+    // Initially renders with empty string (before useEffect runs)
     const sandbox = screen.getByTestId('sandbox');
     expect(sandbox).toHaveAttribute('data-gatewayz-key', '');
+
+    // After useEffect runs, should still be empty string
+    await waitFor(() => {
+      expect(sandbox).toHaveAttribute('data-gatewayz-key', '');
+    });
   });
 
   it('should pass correct GATEWAYZ_API_BASE_URL', () => {
