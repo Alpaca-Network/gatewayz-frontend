@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,20 +10,38 @@ import { useToast } from "@/hooks/use-toast";
 import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
 
+// Google Ads Purchase Conversion ID
+const GOOGLE_ADS_PURCHASE_CONVERSION_ID = 'AW-17515449277/fsG3CMPGlt8bEL2XgqBB';
+
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const conversionTrackedRef = useRef(false);
 
   // Get URL parameters
   const tier = searchParams.get('tier') || 'pro';
   const priceId = searchParams.get('priceId') || '';
   const quantity = searchParams.get('quantity') || '1';
+  const sessionId = searchParams.get('session_id') || '';
 
   const [referralCode, setReferralCode] = useState<string>('');
   const [referralLink, setReferralLink] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Track Google Ads purchase conversion on page load
+  useEffect(() => {
+    if (conversionTrackedRef.current) return;
+    conversionTrackedRef.current = true;
+
+    if (typeof window !== 'undefined' && (window as any).gtag) {
+      (window as any).gtag('event', 'conversion', {
+        'send_to': GOOGLE_ADS_PURCHASE_CONVERSION_ID,
+        'transaction_id': sessionId || undefined,
+      });
+    }
+  }, [sessionId]);
 
   // Tier display configuration
   const tierConfig: Record<string, { name: string; color: string; bgColor: string; isCredits?: boolean }> = {
