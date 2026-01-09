@@ -54,7 +54,7 @@ describe('SandboxLayout', () => {
     expect(layoutContainer).toHaveClass('overflow-hidden');
   });
 
-  it('should have flex display for proper child rendering', () => {
+  it('should have onboarding banner variant class for 115px header height', () => {
     const { container } = render(
       <SandboxLayout>
         <div>Content</div>
@@ -62,8 +62,19 @@ describe('SandboxLayout', () => {
     );
 
     const layoutContainer = container.firstChild as HTMLElement;
-    expect(layoutContainer.style.display).toBe('flex');
-    expect(layoutContainer.style.flexDirection).toBe('column');
+    expect(layoutContainer).toHaveClass('has-onboarding-banner:h-[calc(100dvh-115px)]');
+  });
+
+  it('should use Tailwind flex classes for proper child rendering', () => {
+    const { container } = render(
+      <SandboxLayout>
+        <div>Content</div>
+      </SandboxLayout>
+    );
+
+    const layoutContainer = container.firstChild as HTMLElement;
+    expect(layoutContainer).toHaveClass('flex');
+    expect(layoutContainer).toHaveClass('flex-col');
   });
 
   it('should clean up body class on unmount', () => {
