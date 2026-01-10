@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, Suspense } from 'react';
+import { useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import { Button } from '@/components/ui/button';
@@ -13,29 +13,43 @@ function SignupContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login, authenticated, ready } = usePrivy();
+  const hasAutoTriggeredLogin = useRef(false);
+
+  // Get the return URL from query params (defaults to /chat)
+  const returnUrl = searchParams?.get('returnUrl') || '/chat';
+  const refCode = searchParams?.get('ref');
 
   useEffect(() => {
     // Capture referral code from URL parameter
-    const refCode = searchParams?.get('ref');
-
     if (refCode) {
       console.log('Referral code detected:', refCode);
       // Store referral code using safe storage for use during authentication
       storeReferralCode(refCode, 'signup');
-
-      // Immediately redirect to chat with referral code
-      // The referral toast will be shown after authentication
-      router.push(`/chat?ref=${refCode}`);
     }
-  }, [searchParams, router]);
+  }, [refCode]);
 
   useEffect(() => {
-    // Redirect authenticated users to chat (only if no ref code)
-    const refCode = searchParams?.get('ref');
-    if (ready && authenticated && !refCode) {
-      router.push('/chat');
+    // Redirect authenticated users to the return URL
+    if (ready && authenticated) {
+      // If there's a ref code, include it in the redirect
+      const redirectUrl = refCode ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}ref=${refCode}` : returnUrl;
+      router.push(redirectUrl);
     }
-  }, [ready, authenticated, router, searchParams]);
+  }, [ready, authenticated, router, returnUrl, refCode]);
+
+  useEffect(() => {
+    // Auto-trigger Privy login modal for unauthenticated users
+    // Only trigger once to avoid repeated modal opens
+    if (ready && !authenticated && !hasAutoTriggeredLogin.current) {
+      hasAutoTriggeredLogin.current = true;
+
+      // Track Twitter conversion for ad attribution
+      trackTwitterSignupClick();
+
+      // Auto-open the Privy login modal
+      login();
+    }
+  }, [ready, authenticated, login]);
 
   const handleSignup = () => {
     if (!ready) {
@@ -43,7 +57,8 @@ function SignupContent() {
     }
 
     if (authenticated) {
-      router.push('/chat');
+      const redirectUrl = refCode ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}ref=${refCode}` : returnUrl;
+      router.push(redirectUrl);
       return;
     }
 
@@ -73,8 +88,6 @@ function SignupContent() {
       </div>
     );
   }
-
-  const refCode = searchParams?.get('ref');
 
   return (
     <div className="flex min-h-[calc(100vh-200px)] items-center justify-center p-4">
