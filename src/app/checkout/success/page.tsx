@@ -20,7 +20,9 @@ function CheckoutSuccessContent() {
 
   // Get URL parameters
   const tier = searchParams.get('tier') || 'pro';
-  const plan = searchParams.get('plan') || '';
+  const rawPlan = searchParams.get('plan') || '';
+  // Sanitize plan parameter - only allow alphanumeric, spaces, and basic punctuation
+  const plan = rawPlan.replace(/[^a-zA-Z0-9\s\-_.]/g, '');
   const priceId = searchParams.get('priceId') || '';
   const quantity = searchParams.get('quantity') || '1';
   const sessionId = searchParams.get('session_id') || '';

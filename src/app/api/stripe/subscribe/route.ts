@@ -8,6 +8,14 @@ export async function POST(req: NextRequest) {
       ? userEmail
       : undefined;
 
+    // Validate plan parameter if provided
+    if (plan !== undefined && plan !== null && typeof plan !== 'string') {
+      return NextResponse.json(
+        { error: 'Invalid plan parameter' },
+        { status: 400 }
+      );
+    }
+
     // Validate price ID
     if (!priceId) {
       return NextResponse.json(

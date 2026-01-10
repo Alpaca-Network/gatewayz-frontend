@@ -323,27 +323,31 @@ describe('CheckoutSuccessPage - plan URL parameter', () => {
   });
 
   it('should display custom plan name from URL param when provided', async () => {
-    // Override useSearchParams to include a custom plan name
-    jest.doMock('next/navigation', () => ({
-      useSearchParams: () => ({
-        get: (key: string) => {
-          const params: Record<string, string> = {
-            tier: 'pro',
-            plan: 'Custom Pro Plan',
-            session_id: 'cs_test_1234',
-            quantity: '1',
-          };
-          return params[key] || null;
-        },
-      }),
-    }));
+    // Update the mock to return custom plan name
+    const navigation = jest.requireMock('next/navigation');
+    const originalUseSearchParams = navigation.useSearchParams;
+    navigation.useSearchParams = () => ({
+      get: (key: string) => {
+        const params: Record<string, string> = {
+          tier: 'pro',
+          plan: 'Custom Pro Plan',
+          session_id: 'cs_test_1234',
+          quantity: '1',
+        };
+        return params[key] || null;
+      },
+    });
 
     render(<CheckoutSuccessPage />);
 
     await waitFor(() => {
-      // The page should still render correctly with custom plan name
-      expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
+      // Verify custom plan name is displayed (appears in multiple places)
+      const planElements = screen.getAllByText(/Custom Pro Plan/);
+      expect(planElements.length).toBeGreaterThan(0);
     });
+
+    // Restore original mock
+    navigation.useSearchParams = originalUseSearchParams;
   });
 
   it('should fall back to tier config name when plan param is empty', async () => {
