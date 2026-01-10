@@ -28,6 +28,7 @@ import {
 import { getReferralCode, clearReferralCode } from "@/lib/referral";
 import { resetGuestMessageCount } from "@/lib/guest-chat";
 import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
+import { trackSignupConversion } from "@/components/analytics/google-analytics";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -601,6 +602,10 @@ export function GatewayzAuthProvider({
 
       if (authData.is_new_user ?? isNewUserExpected) {
         console.log("[Auth] New user detected");
+
+        // Track Google Ads sign-up conversion for new users
+        trackSignupConversion();
+        console.log("[Auth] Google Ads sign-up conversion tracked");
 
         // If beta redirect is enabled, redirect there instead of onboarding
         if (enableBetaRedirect) {
