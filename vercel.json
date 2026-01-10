@@ -1,6 +1,6 @@
 {
-  "installCommand": "pnpm install",
-  "buildCommand": "pnpm run build",
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "npm run build",
   "git": {
     "submodules": false
   },
