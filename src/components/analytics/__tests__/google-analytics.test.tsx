@@ -207,9 +207,10 @@ describe('trackSignupConversion', () => {
     // @ts-ignore - intentionally setting window to undefined for SSR test
     delete (global as any).window;
 
-    // Need to handle that trackSignupConversion checks typeof window
-    // On server side, callback should still be executed
-    expect(() => trackSignupConversion(callback)).not.toThrow();
+    trackSignupConversion(callback);
+
+    // Callback should be executed even on server side (graceful fallback)
+    expect(callback).toHaveBeenCalled();
 
     global.window = originalWindow;
   });
