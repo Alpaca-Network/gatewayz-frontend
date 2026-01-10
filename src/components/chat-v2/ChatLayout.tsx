@@ -472,11 +472,21 @@ export function ChatLayout() {
        const apiKey = getApiKey();
        const message = activeMessages.find(m => m.id === messageId);
 
+       // Check if user is authenticated before submitting feedback
+       if (!apiKey) {
+           toast({
+               title: "Sign in required",
+               description: "Please sign in to submit feedback.",
+               variant: "destructive",
+           });
+           return;
+       }
+
        try {
            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
                method: 'POST',
                headers: {
-                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Authorization': `Bearer ${apiKey}`,
                    'Content-Type': 'application/json'
                },
                body: JSON.stringify({
@@ -492,6 +502,15 @@ export function ChatLayout() {
            });
 
            if (!response.ok) {
+               // Handle specific error cases
+               if (response.status === 401) {
+                   toast({
+                       title: "Sign in required",
+                       description: "Please sign in to submit feedback.",
+                       variant: "destructive",
+                   });
+                   return;
+               }
                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
            }
 
@@ -514,11 +533,21 @@ export function ChatLayout() {
        const apiKey = getApiKey();
        const message = activeMessages.find(m => m.id === messageId);
 
+       // Check if user is authenticated before submitting feedback
+       if (!apiKey) {
+           toast({
+               title: "Sign in required",
+               description: "Please sign in to submit feedback.",
+               variant: "destructive",
+           });
+           return;
+       }
+
        try {
            const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
                method: 'POST',
                headers: {
-                   ...(apiKey && { 'Authorization': `Bearer ${apiKey}` }),
+                   'Authorization': `Bearer ${apiKey}`,
                    'Content-Type': 'application/json'
                },
                body: JSON.stringify({
@@ -534,6 +563,15 @@ export function ChatLayout() {
            });
 
            if (!response.ok) {
+               // Handle specific error cases
+               if (response.status === 401) {
+                   toast({
+                       title: "Sign in required",
+                       description: "Please sign in to submit feedback.",
+                       variant: "destructive",
+                   });
+                   return;
+               }
                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
            }
 
