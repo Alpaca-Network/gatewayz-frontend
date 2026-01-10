@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, Suspense, useRef } from 'react';
+import { useEffect, Suspense, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,38 @@ function SignupContent() {
   const { login, authenticated, ready } = usePrivy();
   const hasAutoTriggeredLogin = useRef(false);
 
-  // Get the return URL from query params (defaults to /chat)
-  const returnUrl = searchParams?.get('returnUrl') || '/chat';
-  const refCode = searchParams?.get('ref');
+  // Memoize query params to prevent unstable effect dependencies
+  // This prevents redirect loops when searchParams object changes
+  const returnUrl = useMemo(() => searchParams?.get('returnUrl') || '/chat', [searchParams]);
+  const refCode = useMemo(() => searchParams?.get('ref'), [searchParams]);
+
+  // Memoize redirect URL construction with proper encoding and hash handling
+  const redirectUrl = useMemo(() => {
+    if (!refCode) return returnUrl;
+
+    // Parse the URL to handle hash fragments correctly
+    // Query params must come BEFORE hash fragments per URL spec
+    const hashIndex = returnUrl.indexOf('#');
+    const hasHash = hashIndex !== -1;
+    const baseUrl = hasHash ? returnUrl.slice(0, hashIndex) : returnUrl;
+    const hashFragment = hasHash ? returnUrl.slice(hashIndex) : '';
+
+    // Check if URL already has query params
+    const hasQueryParams = baseUrl.includes('?');
+
+    // Check if ref param already exists to avoid duplicates
+    const urlObj = new URL(baseUrl, 'http://dummy.com');
+    if (urlObj.searchParams.has('ref')) {
+      // Replace existing ref param
+      urlObj.searchParams.set('ref', refCode);
+      return `${urlObj.pathname}${urlObj.search}${hashFragment}`;
+    }
+
+    // Append ref param with proper encoding
+    const separator = hasQueryParams ? '&' : '?';
+    const encodedRef = encodeURIComponent(refCode);
+    return `${baseUrl}${separator}ref=${encodedRef}${hashFragment}`;
+  }, [returnUrl, refCode]);
 
   useEffect(() => {
     // Handle referral code storage and authenticated user redirect in a single effect
@@ -33,11 +62,9 @@ function SignupContent() {
     // Then, redirect authenticated users to the return URL
     // This ensures referral code is stored before redirect happens
     if (ready && authenticated) {
-      // If there's a ref code, include it in the redirect
-      const redirectUrl = refCode ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}ref=${refCode}` : returnUrl;
       router.push(redirectUrl);
     }
-  }, [ready, authenticated, router, returnUrl, refCode]);
+  }, [ready, authenticated, router, redirectUrl, refCode]);
 
   useEffect(() => {
     // Auto-trigger Privy login modal for unauthenticated users
@@ -59,7 +86,7 @@ function SignupContent() {
     }
 
     if (authenticated) {
-      const redirectUrl = refCode ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}ref=${refCode}` : returnUrl;
+      // Use the same properly-constructed redirect URL
       router.push(redirectUrl);
       return;
     }

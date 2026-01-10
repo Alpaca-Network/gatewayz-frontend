@@ -193,6 +193,56 @@ describe('SignupPage', () => {
         expect(mockPush).toHaveBeenCalledWith('/chat?model=gpt-4&ref=TEST123');
       });
     });
+
+    it('should properly encode referral codes with special characters', async () => {
+      mockAuthenticated = true;
+      mockSearchParams.set('ref', 'TEST&=?#123');
+
+      render(<SignupPage />);
+
+      await waitFor(() => {
+        // Special characters should be URL-encoded
+        expect(mockPush).toHaveBeenCalledWith('/chat?ref=TEST%26%3D%3F%23123');
+      });
+    });
+
+    it('should handle hash fragments correctly (query before hash)', async () => {
+      mockAuthenticated = true;
+      mockSearchParams.set('returnUrl', '/chat#section');
+      mockSearchParams.set('ref', 'HASH123');
+
+      render(<SignupPage />);
+
+      await waitFor(() => {
+        // Query param should come BEFORE hash fragment
+        expect(mockPush).toHaveBeenCalledWith('/chat?ref=HASH123#section');
+      });
+    });
+
+    it('should handle returnUrl with both query params and hash', async () => {
+      mockAuthenticated = true;
+      mockSearchParams.set('returnUrl', '/chat?model=gpt-4#section');
+      mockSearchParams.set('ref', 'COMPLEX123');
+
+      render(<SignupPage />);
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/chat?model=gpt-4&ref=COMPLEX123#section');
+      });
+    });
+
+    it('should replace existing ref param to avoid duplicates', async () => {
+      mockAuthenticated = true;
+      mockSearchParams.set('returnUrl', '/chat?ref=OLD123&model=gpt-4');
+      mockSearchParams.set('ref', 'NEW123');
+
+      render(<SignupPage />);
+
+      await waitFor(() => {
+        // Should replace OLD123 with NEW123, not append
+        expect(mockPush).toHaveBeenCalledWith('/chat?ref=NEW123&model=gpt-4');
+      });
+    });
   });
 
   describe('Referral code handling', () => {
