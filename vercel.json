@@ -1,5 +1,5 @@
 {
-  "installCommand": "rm -rf node_modules && pnpm install",
+  "installCommand": "corepack enable && corepack prepare pnpm@10.17.1 --activate && rm -rf node_modules && pnpm install --frozen-lockfile",
   "buildCommand": "pnpm run build",
   "git": {
     "submodules": false
