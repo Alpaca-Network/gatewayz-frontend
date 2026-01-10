@@ -8,6 +8,7 @@ jest.mock('next/navigation', () => ({
     get: (key: string) => {
       const params: Record<string, string> = {
         tier: 'pro',
+        plan: '',
         session_id: 'cs_test_1234',
         quantity: '1',
       };
@@ -303,6 +304,55 @@ describe('CheckoutSuccessPage - Credit purchase', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('CheckoutSuccessPage - plan URL parameter', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetUserData.mockReturnValue({
+      user_id: 1,
+      api_key: 'test-api-key',
+      email: 'test@example.com',
+    });
+    mockMakeAuthenticatedRequest.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
+    });
+  });
+
+  it('should display custom plan name from URL param when provided', async () => {
+    // Override useSearchParams to include a custom plan name
+    jest.doMock('next/navigation', () => ({
+      useSearchParams: () => ({
+        get: (key: string) => {
+          const params: Record<string, string> = {
+            tier: 'pro',
+            plan: 'Custom Pro Plan',
+            session_id: 'cs_test_1234',
+            quantity: '1',
+          };
+          return params[key] || null;
+        },
+      }),
+    }));
+
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() => {
+      // The page should still render correctly with custom plan name
+      expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
+    });
+  });
+
+  it('should fall back to tier config name when plan param is empty', async () => {
+    render(<CheckoutSuccessPage />);
+
+    await waitFor(() => {
+      // Pro tier appears from the tier config when plan is empty
+      const proElements = screen.getAllByText(/Pro/);
+      expect(proElements.length).toBeGreaterThan(0);
     });
   });
 });

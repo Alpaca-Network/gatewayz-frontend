@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { amount, creditValue, userEmail, userId, apiKey } = await req.json();
+    const { amount, creditValue, userEmail, userId, apiKey, plan } = await req.json();
 
     const normalizedEmail = typeof userEmail === 'string' && userEmail.includes('@') && !userEmail.startsWith('did:privy:')
       ? userEmail
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       currency: 'usd',
       description,
       customer_email: normalizedEmail,
-      success_url: `${frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}&tier=credits`,
+      success_url: `${frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}&tier=credits${plan ? `&plan=${encodeURIComponent(plan)}` : ''}`,
       cancel_url: `${frontendUrl}/settings/credits`,
     };
 

@@ -129,6 +129,7 @@ function CheckoutPageContent() {
             userId: userData.user_id,
             apiKey: userData.api_key,
             tier: tier,
+            plan: currentTier.name,
           }),
         });
 
@@ -157,6 +158,7 @@ function CheckoutPageContent() {
             userEmail: userData.email,
             userId: userData.user_id,
             apiKey: userData.api_key,
+            plan: currentPackage.name,
           }),
         });
 
