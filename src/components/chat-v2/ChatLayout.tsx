@@ -467,8 +467,13 @@ export function ChatLayout() {
        (window as any).__chatInputSend();
    }, [activeSessionId, activeMessages, queryClient, setInputValue]);
 
-   // Handle feedback - like a message
-   const handleLike = useCallback(async (messageId: number) => {
+   // Shared feedback submission handler
+   const submitFeedback = useCallback(async (
+       messageId: number,
+       feedbackType: 'thumbs_up' | 'thumbs_down',
+       rating: number,
+       successMessage: string
+   ) => {
        const apiKey = getApiKey();
        const message = activeMessages.find(m => m.id === messageId);
 
@@ -490,11 +495,11 @@ export function ChatLayout() {
                    'Content-Type': 'application/json'
                },
                body: JSON.stringify({
-                   feedback_type: 'thumbs_up',
+                   feedback_type: feedbackType,
                    session_id: activeSessionId,
                    message_id: messageId,
                    model: message?.model,
-                   rating: 5,
+                   rating,
                    metadata: {
                        response_content: typeof message?.content === 'string' ? message.content : undefined
                    }
@@ -516,7 +521,7 @@ export function ChatLayout() {
 
            toast({
                title: "Feedback received",
-               description: "Thanks for the positive feedback!",
+               description: successMessage,
            });
        } catch (error) {
            console.error('[ChatLayout] Failed to submit feedback:', error);
@@ -527,67 +532,16 @@ export function ChatLayout() {
            });
        }
    }, [activeSessionId, activeMessages, toast]);
+
+   // Handle feedback - like a message
+   const handleLike = useCallback(async (messageId: number) => {
+       await submitFeedback(messageId, 'thumbs_up', 5, "Thanks for the positive feedback!");
+   }, [submitFeedback]);
 
    // Handle feedback - dislike a message
    const handleDislike = useCallback(async (messageId: number) => {
-       const apiKey = getApiKey();
-       const message = activeMessages.find(m => m.id === messageId);
-
-       // Check if user is authenticated before submitting feedback
-       if (!apiKey) {
-           toast({
-               title: "Sign in required",
-               description: "Please sign in to submit feedback.",
-               variant: "destructive",
-           });
-           return;
-       }
-
-       try {
-           const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai'}/v1/chat/feedback`, {
-               method: 'POST',
-               headers: {
-                   'Authorization': `Bearer ${apiKey}`,
-                   'Content-Type': 'application/json'
-               },
-               body: JSON.stringify({
-                   feedback_type: 'thumbs_down',
-                   session_id: activeSessionId,
-                   message_id: messageId,
-                   model: message?.model,
-                   rating: 1,
-                   metadata: {
-                       response_content: typeof message?.content === 'string' ? message.content : undefined
-                   }
-               })
-           });
-
-           if (!response.ok) {
-               // Handle specific error cases
-               if (response.status === 401) {
-                   toast({
-                       title: "Sign in required",
-                       description: "Please sign in to submit feedback.",
-                       variant: "destructive",
-                   });
-                   return;
-               }
-               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-           }
-
-           toast({
-               title: "Feedback received",
-               description: "Thanks for letting us know. We'll work to improve.",
-           });
-       } catch (error) {
-           console.error('[ChatLayout] Failed to submit feedback:', error);
-           toast({
-               title: "Feedback failed",
-               description: "Unable to submit feedback. Please try again.",
-               variant: "destructive",
-           });
-       }
-   }, [activeSessionId, activeMessages, toast]);
+       await submitFeedback(messageId, 'thumbs_down', 1, "Thanks for letting us know. We'll work to improve.");
+   }, [submitFeedback]);
 
    // Handle share - create and copy shareable link
    // Note: messageId parameter is kept for interface compatibility with MessageList,
