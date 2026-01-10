@@ -604,18 +604,23 @@ export function GatewayzAuthProvider({
         console.log("[Auth] New user detected");
 
         // Track Google Ads sign-up conversion for new users
-        trackSignupConversion();
-        console.log("[Auth] Google Ads sign-up conversion tracked");
+        // Use callback to ensure redirect happens after conversion is sent
+        // If gtag isn't loaded, callback executes immediately (graceful degradation)
+        const performRedirect = () => {
+          console.log("[Auth] Google Ads sign-up conversion tracked");
 
-        // If beta redirect is enabled, redirect there instead of onboarding
-        if (enableBetaRedirect) {
-          console.log("[Auth] Redirecting new user to beta domain");
-          redirectToBetaIfEnabled("/onboarding");
-        } else {
-          console.log("[Auth] Redirecting new user to onboarding");
-          // Redirect immediately - localStorage writes are synchronous
-          window.location.href = "/onboarding";
-        }
+          // If beta redirect is enabled, redirect there instead of onboarding
+          if (enableBetaRedirect) {
+            console.log("[Auth] Redirecting new user to beta domain");
+            redirectToBetaIfEnabled("/onboarding");
+          } else {
+            console.log("[Auth] Redirecting new user to onboarding");
+            // Redirect immediately - localStorage writes are synchronous
+            window.location.href = "/onboarding";
+          }
+        };
+
+        trackSignupConversion(performRedirect);
       }
     },
     [updateStateFromStorage, enableBetaRedirect, redirectToBetaIfEnabled]
