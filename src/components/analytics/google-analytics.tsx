@@ -99,3 +99,19 @@ export const trackConversion = (
     });
   }
 };
+
+// Google Ads Sign-up Conversion ID
+const GOOGLE_ADS_SIGNUP_CONVERSION_ID = 'AW-17515449277/2RATCOzWnZAbEL2XgqBB';
+
+// Track sign-up conversion for Google Ads
+export const trackSignupConversion = (callback?: () => void) => {
+  if (typeof window !== 'undefined' && (window as any).gtag) {
+    (window as any).gtag('event', 'conversion', {
+      'send_to': GOOGLE_ADS_SIGNUP_CONVERSION_ID,
+      'event_callback': callback,
+    });
+  } else if (callback) {
+    // If gtag is not available, still execute the callback
+    callback();
+  }
+};
