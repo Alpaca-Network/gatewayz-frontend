@@ -229,6 +229,30 @@ describe('SignupPage', () => {
       expect(screen.getByText(/You've been invited!/)).toBeInTheDocument();
       expect(screen.getByText(/bonus credits/)).toBeInTheDocument();
     });
+
+    it('should store referral code BEFORE redirecting authenticated users (race condition fix)', async () => {
+      // This test verifies the fix for the race condition where redirect could happen
+      // before referral code storage completes for already-authenticated users
+      mockAuthenticated = true;
+      mockSearchParams.set('ref', 'RACE_TEST');
+
+      render(<SignupPage />);
+
+      await waitFor(() => {
+        // Verify referral code was stored
+        expect(mockStoreReferralCode).toHaveBeenCalledWith('RACE_TEST', 'signup');
+      });
+
+      // Verify redirect happened (but after storage)
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/chat?ref=RACE_TEST');
+      });
+
+      // Verify storage was called before push
+      const storeCallOrder = mockStoreReferralCode.mock.invocationCallOrder[0];
+      const pushCallOrder = mockPush.mock.invocationCallOrder[0];
+      expect(storeCallOrder).toBeLessThan(pushCallOrder);
+    });
   });
 
   describe('Loading state', () => {
