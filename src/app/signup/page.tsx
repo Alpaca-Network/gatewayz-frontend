@@ -20,16 +20,18 @@ function SignupContent() {
   const refCode = searchParams?.get('ref');
 
   useEffect(() => {
-    // Capture referral code from URL parameter
+    // Handle referral code storage and authenticated user redirect in a single effect
+    // to prevent race condition where redirect could happen before referral code is stored
+
+    // First, capture and store referral code if present
     if (refCode) {
       console.log('Referral code detected:', refCode);
       // Store referral code using safe storage for use during authentication
       storeReferralCode(refCode, 'signup');
     }
-  }, [refCode]);
 
-  useEffect(() => {
-    // Redirect authenticated users to the return URL
+    // Then, redirect authenticated users to the return URL
+    // This ensures referral code is stored before redirect happens
     if (ready && authenticated) {
       // If there's a ref code, include it in the redirect
       const redirectUrl = refCode ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}ref=${refCode}` : returnUrl;
