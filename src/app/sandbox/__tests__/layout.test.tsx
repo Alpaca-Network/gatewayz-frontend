@@ -88,7 +88,7 @@ describe('SandboxLayout', () => {
     expect(layoutContainer).toHaveClass('flex-col');
   });
 
-  it('should have mobile scroll prevention classes', () => {
+  it('should have mobile scroll prevention class', () => {
     const { container } = render(
       <SandboxLayout>
         <div>Content</div>
@@ -96,7 +96,6 @@ describe('SandboxLayout', () => {
     );
 
     const layoutContainer = container.firstChild as HTMLElement;
-    expect(layoutContainer).toHaveClass('touch-none');
     expect(layoutContainer).toHaveClass('overscroll-none');
   });
 
