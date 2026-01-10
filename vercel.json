@@ -1,6 +1,6 @@
 {
-  "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "npm run build",
+  "installCommand": "rm -rf node_modules .pnpm-store && corepack enable && pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm run build",
   "git": {
     "submodules": false
   },
