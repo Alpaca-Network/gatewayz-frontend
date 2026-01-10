@@ -20,6 +20,9 @@ function CheckoutSuccessContent() {
 
   // Get URL parameters
   const tier = searchParams.get('tier') || 'pro';
+  const rawPlan = searchParams.get('plan') || '';
+  // Sanitize plan parameter - only allow alphanumeric, spaces, and basic punctuation
+  const plan = rawPlan.replace(/[^a-zA-Z0-9\s\-_.]/g, '');
   const priceId = searchParams.get('priceId') || '';
   const quantity = searchParams.get('quantity') || '1';
   const sessionId = searchParams.get('session_id') || '';
@@ -54,6 +57,8 @@ function CheckoutSuccessContent() {
 
   const currentTier = tierConfig[tier.toLowerCase()] || tierConfig.pro;
   const isCredits = currentTier.isCredits;
+  // Use plan parameter if provided, otherwise fall back to tier config name
+  const displayPlanName = plan || currentTier.name;
 
   useEffect(() => {
     const fetchReferralData = async () => {
@@ -165,7 +170,7 @@ function CheckoutSuccessContent() {
             {isCredits ? (
               <>Your credits have been added to your account.</>
             ) : (
-              <>Your <span className={`font-semibold ${currentTier.color}`}>{currentTier.name}</span> subscription is now active.</>
+              <>Your <span className={`font-semibold ${currentTier.color}`}>{displayPlanName}</span> subscription is now active.</>
             )}
           </p>
         </div>
@@ -183,7 +188,7 @@ function CheckoutSuccessContent() {
               <div className="flex justify-between items-center py-2 border-b">
                 <span className="text-muted-foreground">{isCredits ? 'Purchase' : 'Plan'}</span>
                 <span className={`font-semibold px-3 py-1 rounded-full text-sm ${currentTier.bgColor} ${currentTier.color}`}>
-                  {currentTier.name}
+                  {displayPlanName}
                 </span>
               </div>
               {quantity && parseInt(quantity) > 1 && (
