@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       price_id: priceId,
       product_id: productId, // Stripe Product ID to store in database (prod_TKOqQPhVRxNp4Q or prod_TKOraBpWMxMAIu)
       customer_email: normalizedEmail,
-      success_url: `${frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}&tier=${tier || 'pro'}${plan ? `&plan=${encodeURIComponent(plan)}` : ''}`,
+      success_url: `${frontendUrl}/checkout/success?tier=${tier || 'pro'}${plan ? `&plan=${encodeURIComponent(plan)}` : ''}&session_id={{CHECKOUT_SESSION_ID}}`,
       cancel_url: `${frontendUrl}/settings/credits`,
       mode: 'subscription', // Subscription mode instead of payment
       ...(tier && { tier }), // Pass tier for subscription metadata tracking
