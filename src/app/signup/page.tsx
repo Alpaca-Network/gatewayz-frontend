@@ -13,7 +13,12 @@ function SignupContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login, authenticated, ready } = usePrivy();
-  const hasAutoTriggeredLogin = useRef(false);
+
+  // Persist auto-trigger flag across component lifecycle using sessionStorage
+  // This prevents login modal from opening again if user navigates back
+  const hasAutoTriggeredLogin = useRef(
+    typeof window !== 'undefined' && sessionStorage.getItem('signup_auto_triggered') === 'true'
+  );
 
   // Memoize query params to prevent unstable effect dependencies
   // This prevents redirect loops when searchParams object changes
@@ -35,11 +40,17 @@ function SignupContent() {
     const hasQueryParams = baseUrl.includes('?');
 
     // Check if ref param already exists to avoid duplicates
-    const urlObj = new URL(baseUrl, 'http://dummy.com');
+    // Use absolute URL for parsing if returnUrl is absolute, otherwise use dummy base
+    const isAbsolute = baseUrl.startsWith('http://') || baseUrl.startsWith('https://');
+    const urlObj = new URL(baseUrl, isAbsolute ? undefined : 'http://dummy.com');
+
     if (urlObj.searchParams.has('ref')) {
       // Replace existing ref param
       urlObj.searchParams.set('ref', refCode);
-      return `${urlObj.pathname}${urlObj.search}${hashFragment}`;
+      // Preserve origin if URL was absolute, otherwise return relative path
+      return isAbsolute
+        ? `${urlObj.origin}${urlObj.pathname}${urlObj.search}${hashFragment}`
+        : `${urlObj.pathname}${urlObj.search}${hashFragment}`;
     }
 
     // Append ref param with proper encoding
@@ -61,6 +72,9 @@ function SignupContent() {
 
     // Then, redirect authenticated users to the return URL
     // This ensures referral code is stored before redirect happens
+    // NOTE: If user is already authenticated when Privy becomes ready, both storage
+    // and redirect happen in the same effect tick. This is acceptable since
+    // storeReferralCode is synchronous (localStorage only).
     if (ready && authenticated) {
       router.push(redirectUrl);
     }
@@ -68,9 +82,14 @@ function SignupContent() {
 
   useEffect(() => {
     // Auto-trigger Privy login modal for unauthenticated users
-    // Only trigger once to avoid repeated modal opens
+    // Only trigger once per session to avoid repeated modal opens
     if (ready && !authenticated && !hasAutoTriggeredLogin.current) {
       hasAutoTriggeredLogin.current = true;
+
+      // Persist flag in sessionStorage to prevent re-trigger across navigation
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('signup_auto_triggered', 'true');
+      }
 
       // Track Twitter conversion for ad attribution
       trackTwitterSignupClick();

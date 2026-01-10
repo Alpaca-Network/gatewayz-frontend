@@ -99,6 +99,9 @@ describe('SignupPage', () => {
     mockPush.mockClear();
     mockStoreReferralCode.mockClear();
     mockTrackTwitterSignupClick.mockClear();
+
+    // Clear sessionStorage to reset auto-trigger flag between tests
+    sessionStorage.clear();
   });
 
   describe('Auto-trigger login modal', () => {
@@ -130,6 +133,29 @@ describe('SignupPage', () => {
 
       // Login should still only be called once
       expect(mockLogin).toHaveBeenCalledTimes(1);
+    });
+
+    it('should NOT auto-trigger login again after unmount and remount (persisted in sessionStorage)', async () => {
+      const { unmount } = render(<SignupPage />);
+
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalledTimes(1);
+      });
+
+      // Unmount component (simulates navigation away)
+      unmount();
+
+      // Clear the mock to reset call count
+      mockLogin.mockClear();
+
+      // Remount component (simulates navigating back)
+      render(<SignupPage />);
+
+      // Wait a bit to ensure effect runs
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Should NOT trigger again since flag is persisted in sessionStorage
+      expect(mockLogin).not.toHaveBeenCalled();
     });
 
     it('should not trigger login when Privy is not ready', () => {
