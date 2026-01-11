@@ -317,9 +317,13 @@ export function normalizeGatewayId(gatewayId: string): string {
 
 /**
  * Check if a gateway ID is valid
+ * Uses hasOwnProperty to avoid prototype pollution attacks
  */
 export function isValidGateway(gatewayId: string): boolean {
-  return VALID_GATEWAYS.includes(gatewayId) || gatewayId in GATEWAY_BY_ID;
+  return (
+    VALID_GATEWAYS.includes(gatewayId) ||
+    Object.prototype.hasOwnProperty.call(GATEWAY_BY_ID, gatewayId)
+  );
 }
 
 /**
@@ -380,36 +384,40 @@ export function registerDynamicGateway(
   gatewayId: string,
   config?: Partial<GatewayConfig>
 ): GatewayConfig {
+  // Normalize gateway ID to lowercase for consistent lookups
+  // This ensures validation (which normalizes to lowercase) will find the gateway
+  const normalizedId = gatewayId.toLowerCase();
+
   // If already in static registry, return that
-  if (GATEWAY_BY_ID[gatewayId]) {
-    return GATEWAY_BY_ID[gatewayId];
+  if (GATEWAY_BY_ID[normalizedId]) {
+    return GATEWAY_BY_ID[normalizedId];
   }
 
   // If already dynamically registered, return that
-  if (dynamicGateways.has(gatewayId)) {
-    return dynamicGateways.get(gatewayId)!;
+  if (dynamicGateways.has(normalizedId)) {
+    return dynamicGateways.get(normalizedId)!;
   }
 
   // Create new gateway config with sensible defaults
   // Spread config first so explicit defaults take precedence over undefined values
   const newGateway: GatewayConfig = {
     ...config,
-    id: gatewayId, // Always use the provided gatewayId
-    name: config?.name || formatGatewayName(gatewayId),
-    color: config?.color || generateGatewayColor(gatewayId),
+    id: normalizedId, // Always use the normalized lowercase ID
+    name: config?.name || formatGatewayName(gatewayId), // Use original for display name formatting
+    color: config?.color || generateGatewayColor(normalizedId),
     priority: config?.priority || 'slow', // Default to slow for safety
   };
 
-  // Register it
-  dynamicGateways.set(gatewayId, newGateway);
-  GATEWAY_BY_ID[gatewayId] = newGateway;
-  GATEWAY_CONFIG[gatewayId] = {
+  // Register it with normalized ID
+  dynamicGateways.set(normalizedId, newGateway);
+  GATEWAY_BY_ID[normalizedId] = newGateway;
+  GATEWAY_CONFIG[normalizedId] = {
     name: newGateway.name,
     color: newGateway.color,
     icon: newGateway.icon,
   };
 
-  console.log(`[Gateway Registry] Dynamically registered new gateway: ${gatewayId}`);
+  console.log(`[Gateway Registry] Dynamically registered new gateway: ${normalizedId}`);
   return newGateway;
 }
 
@@ -484,4 +492,16 @@ export function autoRegisterGatewaysFromModels(models: Array<{ source_gateway?: 
  */
 export function getDynamicGateways(): GatewayConfig[] {
   return Array.from(dynamicGateways.values());
+}
+
+/**
+ * Clear all dynamically registered gateways (useful for testing)
+ * @internal This should only be used in tests
+ */
+export function clearDynamicGateways(): void {
+  for (const gatewayId of dynamicGateways.keys()) {
+    delete GATEWAY_BY_ID[gatewayId];
+    delete GATEWAY_CONFIG[gatewayId];
+  }
+  dynamicGateways.clear();
 }

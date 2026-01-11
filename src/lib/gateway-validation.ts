@@ -1,8 +1,5 @@
 import * as Sentry from '@sentry/nextjs';
-import {
-  isValidGateway as isValidGatewayFromRegistry,
-  GATEWAY_BY_ID,
-} from '@/lib/gateway-registry';
+import { isValidGateway as isValidGatewayFromRegistry } from '@/lib/gateway-registry';
 
 /**
  * Gateway validation utilities
@@ -31,17 +28,26 @@ export function isValidGateway(gateway: string | undefined | null): boolean {
   if (!gateway) return false;
   const normalized = gateway.toLowerCase();
 
-  // Check the centralized gateway registry first (includes dynamic gateways)
+  // Reject prototype property names to prevent prototype pollution attacks
+  // These could be interpreted as valid if we use 'in' operator on plain objects
+  if (
+    normalized === 'constructor' ||
+    normalized === '__proto__' ||
+    normalized === 'prototype' ||
+    normalized === 'tostring' ||
+    normalized === 'valueof' ||
+    normalized === 'hasownproperty'
+  ) {
+    return false;
+  }
+
+  // Check the centralized gateway registry (includes static and dynamic gateways)
+  // isValidGatewayFromRegistry uses VALID_GATEWAYS array and GATEWAY_BY_ID with hasOwnProperty check
   if (isValidGatewayFromRegistry(normalized)) {
     return true;
   }
 
-  // Check if it exists in GATEWAY_BY_ID (catches dynamically registered gateways)
-  if (GATEWAY_BY_ID[normalized]) {
-    return true;
-  }
-
-  // Fallback to the local known gateways list for special cases
+  // Fallback to the local known gateways list for special cases like 'gatewayz'
   return KNOWN_GATEWAYS.includes(normalized);
 }
 

@@ -7,7 +7,7 @@ import {
   getModelGateways,
   sanitizeGatewayInput,
 } from '../gateway-validation';
-import { registerDynamicGateway } from '../gateway-registry';
+import { registerDynamicGateway, clearDynamicGateways } from '../gateway-registry';
 import * as Sentry from '@sentry/nextjs';
 
 // Mock Sentry
@@ -27,6 +27,8 @@ describe('gateway-validation', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    // Clean up any dynamically registered gateways to prevent test pollution
+    clearDynamicGateways();
   });
 
   describe('isValidGateway', () => {
@@ -381,6 +383,60 @@ describe('gateway-validation', () => {
       // ensureValidGateways should now include it
       const result = ensureValidGateways([newBackendProvider, 'openai']);
       expect(result).toContain(newBackendProvider);
+    });
+
+    it('should handle mixed-case gateway names from backend', () => {
+      // Backend might return gateway names with various casing
+      const mixedCaseGateway = 'New-Provider-Name';
+
+      // Register with original case
+      registerDynamicGateway(mixedCaseGateway);
+
+      // Should be valid when queried with any case
+      expect(isValidGateway('New-Provider-Name')).toBe(true);
+      expect(isValidGateway('new-provider-name')).toBe(true);
+      expect(isValidGateway('NEW-PROVIDER-NAME')).toBe(true);
+    });
+
+    it('should handle PascalCase gateway names', () => {
+      registerDynamicGateway('TestProvider');
+
+      expect(isValidGateway('TestProvider')).toBe(true);
+      expect(isValidGateway('testprovider')).toBe(true);
+    });
+
+    it('should handle snake_case gateway names', () => {
+      registerDynamicGateway('new_provider');
+
+      expect(isValidGateway('new_provider')).toBe(true);
+      expect(isValidGateway('NEW_PROVIDER')).toBe(true);
+    });
+  });
+
+  describe('prototype pollution protection', () => {
+    it('should reject prototype property names', () => {
+      expect(isValidGateway('constructor')).toBe(false);
+      expect(isValidGateway('__proto__')).toBe(false);
+      expect(isValidGateway('prototype')).toBe(false);
+      expect(isValidGateway('toString')).toBe(false);
+      expect(isValidGateway('valueOf')).toBe(false);
+      expect(isValidGateway('hasOwnProperty')).toBe(false);
+    });
+
+    it('should reject prototype names regardless of case', () => {
+      expect(isValidGateway('CONSTRUCTOR')).toBe(false);
+      expect(isValidGateway('Constructor')).toBe(false);
+      expect(isValidGateway('__PROTO__')).toBe(false);
+      expect(isValidGateway('TOSTRING')).toBe(false);
+    });
+
+    it('should filter out prototype names in validateGateways', () => {
+      const input = ['openai', 'constructor', '__proto__', 'anthropic'];
+      const result = validateGateways(input);
+
+      expect(result).toEqual(['openai', 'anthropic']);
+      expect(result).not.toContain('constructor');
+      expect(result).not.toContain('__proto__');
     });
   });
 });
