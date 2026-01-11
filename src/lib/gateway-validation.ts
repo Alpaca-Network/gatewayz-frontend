@@ -1,46 +1,54 @@
 import * as Sentry from '@sentry/nextjs';
+import { isValidGateway as isValidGatewayFromRegistry } from '@/lib/gateway-registry';
 
 /**
  * Gateway validation utilities
  * Ensures gateway configurations are valid and handles edge cases
+ *
+ * NOTE: This module now uses the centralized gateway-registry.ts as the source of truth.
+ * New gateways are automatically supported via:
+ * 1. Static registration in GATEWAYS array in gateway-registry.ts
+ * 2. Dynamic registration via autoRegisterGatewaysFromModels() when backend returns new gateways
+ *
+ * The hardcoded KNOWN_GATEWAYS list below is kept as a fallback and for the 'gatewayz' special gateway.
  */
 
-// List of known valid gateways
+// Fallback list of known valid gateways (kept for backwards compatibility)
+// Primary validation now uses gateway-registry.ts
 const KNOWN_GATEWAYS = [
-  'openai',
-  'anthropic',
-  'openrouter',
-  'portkey',
-  'featherless',
-  'groq',
-  'together',
-  'fireworks',
-  'chutes',
-  'deepinfra',
-  'google',
-  'cerebras',
-  'nebius',
-  'xai',
-  'novita',
-  'huggingface',
-  'hug', // Backend abbreviation
-  'aimo',
-  'near',
-  'fal',
-  'vercel-ai-gateway',
-  'helicone',
-  'alpaca',
-  'alibaba',
-  'clarifai',
-  'gatewayz', // Unified gateway
+  'gatewayz', // Unified gateway - special case not in registry
 ];
 
 /**
  * Validate if a gateway slug is known/supported
+ * Checks both the centralized gateway registry (including dynamically registered gateways)
+ * and the fallback list for special gateways like 'gatewayz'
  */
 export function isValidGateway(gateway: string | undefined | null): boolean {
   if (!gateway) return false;
-  return KNOWN_GATEWAYS.includes(gateway.toLowerCase());
+  const normalized = gateway.toLowerCase();
+
+  // Reject prototype property names to prevent prototype pollution attacks
+  // These could be interpreted as valid if we use 'in' operator on plain objects
+  if (
+    normalized === 'constructor' ||
+    normalized === '__proto__' ||
+    normalized === 'prototype' ||
+    normalized === 'tostring' ||
+    normalized === 'valueof' ||
+    normalized === 'hasownproperty'
+  ) {
+    return false;
+  }
+
+  // Check the centralized gateway registry (includes static and dynamic gateways)
+  // isValidGatewayFromRegistry uses VALID_GATEWAYS array and GATEWAY_BY_ID with hasOwnProperty check
+  if (isValidGatewayFromRegistry(normalized)) {
+    return true;
+  }
+
+  // Fallback to the local known gateways list for special cases like 'gatewayz'
+  return KNOWN_GATEWAYS.includes(normalized);
 }
 
 /**
