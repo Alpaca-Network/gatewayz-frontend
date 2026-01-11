@@ -258,6 +258,12 @@ export function AppHeader() {
               Researchers
             </Link>
             <Link
+              href="/sandbox"
+              className="transition-colors hover:text-foreground/80 "
+            >
+              Sandbox
+            </Link>
+            <Link
               href="/rankings"
               className="transition-colors hover:text-foreground/80 "
             >
@@ -372,6 +378,13 @@ export function AppHeader() {
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       Researchers
+                    </Link>
+                    <Link
+                      href="/sandbox"
+                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Sandbox
                     </Link>
                     <Link
                       href="/rankings"
