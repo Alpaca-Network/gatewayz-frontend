@@ -2,11 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { amount, creditValue, userEmail, userId, apiKey } = await req.json();
+    const { amount, creditValue, userEmail, userId, apiKey, plan } = await req.json();
 
     const normalizedEmail = typeof userEmail === 'string' && userEmail.includes('@') && !userEmail.startsWith('did:privy:')
       ? userEmail
       : undefined;
+
+    // Validate plan parameter if provided
+    if (plan !== undefined && plan !== null && typeof plan !== 'string') {
+      return NextResponse.json(
+        { error: 'Invalid plan parameter' },
+        { status: 400 }
+      );
+    }
 
     // Validate amount
     if (!amount || amount < 1) {
@@ -46,7 +54,7 @@ export async function POST(req: NextRequest) {
       currency: 'usd',
       description,
       customer_email: normalizedEmail,
-      success_url: `${frontendUrl}/checkout/success?session_id={{CHECKOUT_SESSION_ID}}&tier=credits`,
+      success_url: `${frontendUrl}/checkout/success?tier=credits${plan ? `&plan=${encodeURIComponent(plan)}` : ''}&session_id={{CHECKOUT_SESSION_ID}}`,
       cancel_url: `${frontendUrl}/settings/credits`,
     };
 

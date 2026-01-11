@@ -11,12 +11,14 @@ export function AppFooter() {
   const pathname = usePathname();
   const [isChatPage, setIsChatPage] = useState(false);
   const [isModelsPage, setIsModelsPage] = useState(false);
+  const [isSandboxPage, setIsSandboxPage] = useState(false);
   const [showFooter, setShowFooter] = useState(false);
   const [hasScrolledPastFold, setHasScrolledPastFold] = useState(false);
 
   useEffect(() => {
     setIsChatPage(pathname?.startsWith('/chat') ?? false);
     setIsModelsPage(pathname?.startsWith('/models') ?? false);
+    setIsSandboxPage(pathname?.startsWith('/sandbox') ?? false);
   }, [pathname]);
 
   // Track if user has scrolled past the initial viewport on homepage
@@ -47,6 +49,11 @@ export function AppFooter() {
 
   // Hide footer on models page (has sidebar layout)
   if (isModelsPage) {
+    return null;
+  }
+
+  // Hide footer on sandbox pages (full-screen embedded apps)
+  if (isSandboxPage) {
     return null;
   }
 
@@ -167,9 +174,9 @@ export function AppFooter() {
                 <Image
                   src="/caan3-badge.png"
                   alt="CAAN3 Cybersecurity Certified 2025"
-                  width={80}
-                  height={80}
-                  className="w-20 h-20"
+                  width={64}
+                  height={64}
+                  className="h-16 w-auto"
                   loading="lazy"
                 />
               </Link>
