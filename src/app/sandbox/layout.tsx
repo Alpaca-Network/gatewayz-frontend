@@ -6,10 +6,11 @@ import { useEffect } from "react";
  * Sandbox layout that ensures proper viewport filling for embedded sandbox apps.
  *
  * This layout:
- * 1. Sets up the container to fill the remaining viewport after the header (65px or 115px with onboarding banner)
+ * 1. Sets up the container to fill the remaining viewport after the header (65px)
+ *    and onboarding banner (dynamic height via --onboarding-banner-height CSS variable)
  * 2. Uses CSS classes to hide the footer on sandbox pages
  * 3. Prevents double scrolling by containing scroll within the sandbox
- * 4. Handles mobile-specific scroll behavior (touch-action, iOS safe areas)
+ * 4. Handles mobile-specific scroll behavior (overscroll-behavior, iOS safe areas)
  */
 export default function SandboxLayout({
   children,
@@ -33,7 +34,7 @@ export default function SandboxLayout({
   }, []);
 
   return (
-    <div className="sandbox-container flex flex-col h-[calc(100dvh-65px)] has-onboarding-banner:h-[calc(100dvh-115px)] w-full overflow-hidden overscroll-none">
+    <div className="sandbox-container flex flex-col h-[calc(100dvh-65px)] has-onboarding-banner:h-[calc(100dvh-65px-var(--onboarding-banner-height,50px))] w-full overflow-hidden overscroll-none">
       {children}
     </div>
   );

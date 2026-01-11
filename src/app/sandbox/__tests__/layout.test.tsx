@@ -65,7 +65,7 @@ describe('SandboxLayout', () => {
     expect(layoutContainer).toHaveClass('overflow-hidden');
   });
 
-  it('should have onboarding banner height variant class', () => {
+  it('should have onboarding banner height variant class using CSS variable', () => {
     const { container } = render(
       <SandboxLayout>
         <div>Content</div>
@@ -73,7 +73,8 @@ describe('SandboxLayout', () => {
     );
 
     const layoutContainer = container.firstChild as HTMLElement;
-    expect(layoutContainer).toHaveClass('has-onboarding-banner:h-[calc(100dvh-115px)]');
+    // Uses CSS variable for dynamic banner height with 50px fallback
+    expect(layoutContainer).toHaveClass('has-onboarding-banner:h-[calc(100dvh-65px-var(--onboarding-banner-height,50px))]');
   });
 
   it('should have flex classes for proper child rendering', () => {
