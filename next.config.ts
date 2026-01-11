@@ -72,36 +72,50 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
+    // Common security headers (excluding X-Frame-Options which varies by route)
+    const commonSecurityHeaders = [
+      {
+        key: 'Strict-Transport-Security',
+        value: 'max-age=31536000; includeSubDomains',
+      },
+      {
+        key: 'X-Content-Type-Options',
+        value: 'nosniff',
+      },
+      {
+        key: 'X-XSS-Protection',
+        value: '1; mode=block',
+      },
+      {
+        key: 'Referrer-Policy',
+        value: 'strict-origin-when-cross-origin',
+      },
+      {
+        // Allow microphone for speech recognition on /chat, block geolocation and camera
+        // microphone=(self) allows same-origin access needed for Web Speech API
+        key: 'Permissions-Policy',
+        value: 'geolocation=(), camera=(), microphone=(self)',
+      },
+    ];
+
     return [
       {
-        // Apply security headers to all routes
-        source: '/:path*',
+        // Agent page: Allow iframe embedding from any origin (page embeds external coding agent)
+        // The agent page needs to embed external content and may receive postMessage from it
+        source: '/agent',
         headers: [
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=31536000; includeSubDomains',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
+          ...commonSecurityHeaders,
+          // No X-Frame-Options header - allow embedding
+        ],
+      },
+      {
+        // All other routes: Apply strict security headers including X-Frame-Options: DENY
+        source: '/:path((?!agent).*)',
+        headers: [
+          ...commonSecurityHeaders,
           {
             key: 'X-Frame-Options',
             value: 'DENY',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            // Allow microphone for speech recognition on /chat, block geolocation and camera
-            // microphone=(self) allows same-origin access needed for Web Speech API
-            key: 'Permissions-Policy',
-            value: 'geolocation=(), camera=(), microphone=(self)',
           },
         ],
       },

@@ -1,8 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
 import AgentPage from "../page";
 
 // Store original env
 const originalEnv = process.env;
+
+// Mock timers for testing timeout behavior
+jest.useFakeTimers();
 
 describe("AgentPage", () => {
   beforeEach(() => {
@@ -95,6 +98,100 @@ describe("AgentPage", () => {
         "allow",
         "clipboard-read; clipboard-write"
       );
+    });
+
+    it("should show connection error after timeout", async () => {
+      render(<AgentPage />);
+
+      // Initially should show loading
+      expect(screen.getByText("Loading Coding Agent...")).toBeInTheDocument();
+
+      // Fast-forward past the 15 second timeout
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      // Should now show connection error
+      expect(screen.getByText("Connection Failed")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Unable to connect to the Coding Agent/i)
+      ).toBeInTheDocument();
+    });
+
+    it("should show retry button on connection error", async () => {
+      render(<AgentPage />);
+
+      // Fast-forward past the timeout
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      const retryButton = screen.getByRole("button", {
+        name: /retry connection/i,
+      });
+      expect(retryButton).toBeInTheDocument();
+    });
+
+    it("should show open directly link on connection error", async () => {
+      render(<AgentPage />);
+
+      // Fast-forward past the timeout
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      const openDirectlyLink = screen.getByRole("link", {
+        name: /open directly/i,
+      });
+      expect(openDirectlyLink).toBeInTheDocument();
+      expect(openDirectlyLink).toHaveAttribute("href", testAgentUrl);
+    });
+
+    it("should display the configured URL in connection error", async () => {
+      render(<AgentPage />);
+
+      // Fast-forward past the timeout
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      expect(screen.getByText(/Configured URL:/i)).toBeInTheDocument();
+      expect(screen.getByText(testAgentUrl)).toBeInTheDocument();
+    });
+
+    it("should retry connection when retry button is clicked", async () => {
+      render(<AgentPage />);
+
+      // Fast-forward past the timeout
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      // Verify error state
+      expect(screen.getByText("Connection Failed")).toBeInTheDocument();
+
+      // Click retry
+      const retryButton = screen.getByRole("button", {
+        name: /retry connection/i,
+      });
+      fireEvent.click(retryButton);
+
+      // Should show loading again
+      expect(screen.getByText("Loading Coding Agent...")).toBeInTheDocument();
+    });
+
+    it("should hide loading state when iframe loads successfully", () => {
+      render(<AgentPage />);
+
+      const iframe = screen.getByTitle("Coding Agent");
+
+      // Simulate iframe load
+      fireEvent.load(iframe);
+
+      // Loading message should be gone
+      expect(
+        screen.queryByText("Loading Coding Agent...")
+      ).not.toBeInTheDocument();
     });
   });
 });
