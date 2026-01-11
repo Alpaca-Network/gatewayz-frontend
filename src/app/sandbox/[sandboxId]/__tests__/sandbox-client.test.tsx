@@ -146,7 +146,7 @@ describe('SandboxClient', () => {
     });
   });
 
-  it('should wrap Sandbox in a viewport-filling container', () => {
+  it('should wrap Sandbox in a scrollable viewport-filling container', () => {
     mockGetApiKey.mockReturnValue('api-key');
     process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'sampleapp-key';
 
@@ -157,6 +157,6 @@ describe('SandboxClient', () => {
     expect(wrapper).toHaveClass('w-full');
     expect(wrapper).toHaveClass('h-full');
     expect(wrapper).toHaveClass('min-h-0');
-    expect(wrapper).toHaveClass('overflow-hidden');
+    expect(wrapper).toHaveClass('overflow-auto');
   });
 });
