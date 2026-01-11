@@ -19,7 +19,7 @@ export function SandboxClient({sandboxId}: SandboxClientProps) {
   }, []);
 
   return (
-    <div className="flex-1 w-full h-full min-h-0 overflow-hidden">
+    <div className="flex-1 w-full h-full min-h-0 overflow-auto">
       <Sandbox
         apiKey={sampleappApiKey}
         sandboxId={sandboxId}

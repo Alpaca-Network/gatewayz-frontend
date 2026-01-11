@@ -243,6 +243,32 @@ describe('SignupPage', () => {
         expect(mockPush).toHaveBeenCalledWith('/chat?ref=NEW123&model=gpt-4');
       });
     });
+
+    it('should handle malformed returnUrl ending with ?', async () => {
+      mockAuthenticated = true;
+      mockSearchParams.set('returnUrl', '/chat?');
+      mockSearchParams.set('ref', 'TEST123');
+
+      render(<SignupPage />);
+
+      await waitFor(() => {
+        // Should clean up trailing ? and add ref correctly
+        expect(mockPush).toHaveBeenCalledWith('/chat?ref=TEST123');
+      });
+    });
+
+    it('should handle malformed returnUrl ending with &', async () => {
+      mockAuthenticated = true;
+      mockSearchParams.set('returnUrl', '/settings?foo=bar&');
+      mockSearchParams.set('ref', 'TEST123');
+
+      render(<SignupPage />);
+
+      await waitFor(() => {
+        // Should clean up trailing & and add ref correctly
+        expect(mockPush).toHaveBeenCalledWith('/settings?foo=bar&ref=TEST123');
+      });
+    });
   });
 
   describe('Referral code handling', () => {

@@ -31,11 +31,14 @@ function SignupContent() {
     const baseUrl = hasHash ? returnUrl.slice(0, hashIndex) : returnUrl;
     const hashFragment = hasHash ? returnUrl.slice(hashIndex) : '';
 
+    // Clean up any trailing ? or & from the base URL (edge case handling)
+    const cleanedBaseUrl = baseUrl.replace(/[?&]+$/, '');
+
     // Check if URL already has query params
-    const hasQueryParams = baseUrl.includes('?');
+    const hasQueryParams = cleanedBaseUrl.includes('?');
 
     // Check if ref param already exists to avoid duplicates
-    const urlObj = new URL(baseUrl, 'http://dummy.com');
+    const urlObj = new URL(cleanedBaseUrl, 'http://dummy.com');
     if (urlObj.searchParams.has('ref')) {
       // Replace existing ref param
       urlObj.searchParams.set('ref', refCode);
@@ -45,7 +48,7 @@ function SignupContent() {
     // Append ref param with proper encoding
     const separator = hasQueryParams ? '&' : '?';
     const encodedRef = encodeURIComponent(refCode);
-    return `${baseUrl}${separator}ref=${encodedRef}${hashFragment}`;
+    return `${cleanedBaseUrl}${separator}ref=${encodedRef}${hashFragment}`;
   }, [returnUrl, refCode]);
 
   useEffect(() => {

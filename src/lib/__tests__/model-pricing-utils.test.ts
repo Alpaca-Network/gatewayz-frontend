@@ -3,6 +3,7 @@ import {
   isFreeModel,
   getModelPricingCategory,
   isPerMillionPricingGateway,
+  isPerBillionPricingGateway,
   formatPricingForDisplay,
   getNormalizedPerTokenPrice,
   ModelPricingInfo,
@@ -276,6 +277,40 @@ describe('model-pricing-utils', () => {
         expect(isPerMillionPricingGateway(gateway)).toBe(false);
       });
     });
+
+    it('should return false for per-billion pricing gateways', () => {
+      expect(isPerMillionPricingGateway('aihubmix')).toBe(false);
+    });
+  });
+
+  describe('isPerBillionPricingGateway', () => {
+    it('should return true for aihubmix gateway', () => {
+      expect(isPerBillionPricingGateway('aihubmix')).toBe(true);
+      expect(isPerBillionPricingGateway('AiHubMix')).toBe(true);
+      expect(isPerBillionPricingGateway('AIHUBMIX')).toBe(true);
+    });
+
+    it('should return false for standard per-token pricing gateways', () => {
+      const perTokenGateways = [
+        'openrouter',
+        'groq',
+        'together',
+        'fireworks',
+        'deepinfra',
+        'cerebras',
+        'huggingface',
+        'openai',
+        'anthropic',
+      ];
+
+      perTokenGateways.forEach((gateway) => {
+        expect(isPerBillionPricingGateway(gateway)).toBe(false);
+      });
+    });
+
+    it('should return false for per-million pricing gateways', () => {
+      expect(isPerBillionPricingGateway('onerouter')).toBe(false);
+    });
   });
 
   describe('formatPricingForDisplay', () => {
@@ -293,6 +328,22 @@ describe('model-pricing-utils', () => {
       expect(formatPricingForDisplay('1.00', 'onerouter')).toBe('1.00');
       expect(formatPricingForDisplay('3.00', 'onerouter')).toBe('3.00');
       expect(formatPricingForDisplay('15.00', 'onerouter')).toBe('15.00');
+    });
+
+    it('should divide by 1,000 for aihubmix gateway (per-billion format)', () => {
+      // AiHubMix returns pricing in per-billion format
+      // GPT-4o mini: 150.0 per-billion = $0.15 per-million
+      expect(formatPricingForDisplay('150', 'aihubmix')).toBe('0.15');
+      expect(formatPricingForDisplay('600', 'aihubmix')).toBe('0.60');
+
+      // Gemini 2.5 Flash: 75000 per-billion = $75.00 per-million
+      expect(formatPricingForDisplay('75000', 'aihubmix')).toBe('75.00');
+
+      // Gemini 2.5 Flash output: 300000 per-billion = $300.00 per-million
+      expect(formatPricingForDisplay('300000', 'aihubmix')).toBe('300.00');
+
+      // Gemini 2.5 Pro: 1250000 per-billion = $1250.00 per-million
+      expect(formatPricingForDisplay('1250000', 'aihubmix')).toBe('1250.00');
     });
 
     it('should return null for undefined or empty price', () => {
@@ -324,6 +375,13 @@ describe('model-pricing-utils', () => {
       expect(getNormalizedPerTokenPrice('15.00', 'onerouter')).toBe(0.000015);
     });
 
+    it('should divide by 1,000,000,000 for aihubmix gateway', () => {
+      // AiHubMix 150 per-billion = $0.00000015/token
+      expect(getNormalizedPerTokenPrice('150', 'aihubmix')).toBe(0.00000015);
+      // AiHubMix 600 per-billion = $0.0000006/token
+      expect(getNormalizedPerTokenPrice('600', 'aihubmix')).toBe(0.0000006);
+    });
+
     it('should return 0 for undefined or empty price', () => {
       expect(getNormalizedPerTokenPrice(undefined, 'openrouter')).toBe(0);
       expect(getNormalizedPerTokenPrice('', 'openrouter')).toBe(0);
@@ -342,9 +400,13 @@ describe('model-pricing-utils', () => {
       // Same model from OneRouter (per-million: 0.15)
       const onerouterPrice = formatPricingForDisplay('0.15', 'onerouter');
 
-      // Both should display as $0.15/M
+      // Same model from AiHubMix (per-billion: 150)
+      const aihubmixPrice = formatPricingForDisplay('150', 'aihubmix');
+
+      // All should display as $0.15/M
       expect(openrouterPrice).toBe('0.15');
       expect(onerouterPrice).toBe('0.15');
+      expect(aihubmixPrice).toBe('0.15');
     });
 
     it('should filter models consistently regardless of gateway pricing format', () => {
@@ -359,12 +421,45 @@ describe('model-pricing-utils', () => {
       const onerouterPerToken = getNormalizedPerTokenPrice('0.15', 'onerouter');
       expect(onerouterPerToken).toBeLessThan(maxPerTokenPrice); // $0.15/M < $1/M
 
+      // AiHubMix model with per-billion pricing
+      const aihubmixPerToken = getNormalizedPerTokenPrice('150', 'aihubmix');
+      expect(aihubmixPerToken).toBeLessThan(maxPerTokenPrice); // $0.15/M < $1/M
+
       // Expensive model should be filtered out
       const expensiveOpenrouter = getNormalizedPerTokenPrice('0.000015', 'openrouter');
       expect(expensiveOpenrouter).toBeGreaterThan(maxPerTokenPrice); // $15/M > $1/M
 
       const expensiveOnerouter = getNormalizedPerTokenPrice('15', 'onerouter');
       expect(expensiveOnerouter).toBeGreaterThan(maxPerTokenPrice); // $15/M > $1/M
+
+      const expensiveAihubmix = getNormalizedPerTokenPrice('15000', 'aihubmix');
+      expect(expensiveAihubmix).toBeGreaterThan(maxPerTokenPrice); // $15/M > $1/M
+    });
+
+    it('should correctly handle Gemini pricing from aihubmix (reported bug case)', () => {
+      // This test case covers the exact bug reported in the screenshot
+      // Gemini 2.5 Flash from aihubmix with per-billion pricing
+      // Input: 75000 per-billion should display as $75.00/M (NOT $75,000,000/M!)
+      const geminiFlashInput = formatPricingForDisplay('75000', 'aihubmix');
+      expect(geminiFlashInput).toBe('75.00');
+
+      // Output: 300000 per-billion should display as $300.00/M
+      const geminiFlashOutput = formatPricingForDisplay('300000', 'aihubmix');
+      expect(geminiFlashOutput).toBe('300.00');
+
+      // Gemini 2.5 Flash Lite
+      const geminiFlashLiteInput = formatPricingForDisplay('30000', 'aihubmix');
+      expect(geminiFlashLiteInput).toBe('30.00');
+
+      const geminiFlashLiteOutput = formatPricingForDisplay('120000', 'aihubmix');
+      expect(geminiFlashLiteOutput).toBe('120.00');
+
+      // Gemini 2.5 Pro
+      const geminiProInput = formatPricingForDisplay('1250000', 'aihubmix');
+      expect(geminiProInput).toBe('1250.00');
+
+      const geminiProOutput = formatPricingForDisplay('5000000', 'aihubmix');
+      expect(geminiProOutput).toBe('5000.00');
     });
   });
 });

@@ -342,8 +342,10 @@ describe('model-detail-utils', () => {
       expect(result.name).toBe('OpenAI: GPT-4');
       expect(result.description).toBe('Advanced language model');
       expect(result.context_length).toBe(8000);
-      expect(result.pricing?.prompt).toBe('0.03');
-      expect(result.pricing?.completion).toBe('0.06');
+      // Pricing should be converted from per-million to per-token format
+      // inputCost: 0.03 (per-million) -> 0.00000003 (per-token)
+      expect(result.pricing?.prompt).toBe('3e-8'); // 0.03 / 1000000
+      expect(result.pricing?.completion).toBe('6e-8'); // 0.06 / 1000000
       expect(result.architecture?.input_modalities).toEqual(['text']);
       expect(result.supported_parameters).toEqual(['temperature', 'top_p']);
       expect(result.provider_slug).toBe('openai');
@@ -429,6 +431,113 @@ describe('model-detail-utils', () => {
 
       const result = transformStaticModel(staticModel);
       expect(result.context_length).toBe(128000);
+    });
+
+    it('should convert pricing from per-million to per-token format for standard gateways', () => {
+      // This test verifies the pricing conversion for display purposes
+      const { formatPricingForDisplay } = require('@/lib/model-pricing-utils');
+
+      const staticModel: StaticModelDefinition = {
+        name: 'GPT-4o mini',
+        isFree: false,
+        tokens: '21B',
+        category: 'Chat',
+        description: 'Test',
+        developer: 'openai',
+        context: 128,
+        inputCost: 0.15, // $0.15/M in static data
+        outputCost: 0.60, // $0.60/M in static data
+        modalities: ['Text'],
+        series: 'gpt-4',
+        supportedParameters: [],
+      };
+
+      const result = transformStaticModel(staticModel);
+
+      // Verify pricing is converted to per-token format
+      const promptPrice = parseFloat(result.pricing?.prompt || '0');
+      const completionPrice = parseFloat(result.pricing?.completion || '0');
+
+      // Should be very small numbers (per-token)
+      expect(promptPrice).toBeCloseTo(0.00000015, 10);
+      expect(completionPrice).toBeCloseTo(0.0000006, 10);
+
+      // Verify formatPricingForDisplay correctly converts back for display
+      // Using 'openrouter' as a standard per-token gateway
+      const displayPrompt = formatPricingForDisplay(result.pricing?.prompt, 'openrouter');
+      const displayCompletion = formatPricingForDisplay(result.pricing?.completion, 'openrouter');
+
+      expect(displayPrompt).toBe('0.15');
+      expect(displayCompletion).toBe('0.60');
+    });
+
+    it('should keep pricing as per-million format for per-million gateways like onerouter', () => {
+      // This test verifies that per-million gateways receive pricing in the correct format
+      const { formatPricingForDisplay } = require('@/lib/model-pricing-utils');
+
+      const staticModel: StaticModelDefinition = {
+        name: 'GPT-4o mini',
+        isFree: false,
+        tokens: '21B',
+        category: 'Chat',
+        description: 'Test',
+        developer: 'openai',
+        context: 128,
+        inputCost: 0.15, // $0.15/M in static data
+        outputCost: 0.60, // $0.60/M in static data
+        modalities: ['Text'],
+        series: 'gpt-4',
+        supportedParameters: [],
+      };
+
+      // Transform with onerouter gateway (per-million pricing gateway)
+      const result = transformStaticModel(staticModel, 'onerouter');
+
+      // Verify pricing is kept as per-million format (not converted)
+      const promptPrice = parseFloat(result.pricing?.prompt || '0');
+      const completionPrice = parseFloat(result.pricing?.completion || '0');
+
+      // Should be the original per-million values
+      expect(promptPrice).toBe(0.15);
+      expect(completionPrice).toBe(0.60);
+
+      // Verify formatPricingForDisplay correctly displays for per-million gateway
+      // It skips the multiplication since onerouter is a per-million gateway
+      const displayPrompt = formatPricingForDisplay(result.pricing?.prompt, 'onerouter');
+      const displayCompletion = formatPricingForDisplay(result.pricing?.completion, 'onerouter');
+
+      expect(displayPrompt).toBe('0.15');
+      expect(displayCompletion).toBe('0.60');
+    });
+
+    it('should use default empty gateway (standard per-token) when no gateway specified', () => {
+      const { formatPricingForDisplay } = require('@/lib/model-pricing-utils');
+
+      const staticModel: StaticModelDefinition = {
+        name: 'Test Model',
+        isFree: false,
+        tokens: '8K',
+        category: 'Chat',
+        description: 'Test',
+        developer: 'test',
+        context: 8,
+        inputCost: 1.0, // $1.00/M in static data
+        outputCost: 2.0, // $2.00/M in static data
+        modalities: ['Text'],
+        series: 'test',
+        supportedParameters: [],
+      };
+
+      // No gateway specified - should use default empty string (standard per-token gateway)
+      const result = transformStaticModel(staticModel);
+
+      // Pricing should be converted to per-token format
+      const promptPrice = parseFloat(result.pricing?.prompt || '0');
+      expect(promptPrice).toBeCloseTo(0.000001, 10); // 1.0 / 1000000
+
+      // formatPricingForDisplay with empty gateway treats it as per-token gateway
+      const displayPrompt = formatPricingForDisplay(result.pricing?.prompt, '');
+      expect(displayPrompt).toBe('1.00');
     });
   });
 });
