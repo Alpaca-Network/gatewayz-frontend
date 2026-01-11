@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 
 /**
  * Agent page that embeds the Vercel Labs Coding Agent Template.
@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 export default function AgentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const iframeLoadedRef = useRef(false);
 
   // Get the agent URL from environment variable
   const agentUrl = process.env.NEXT_PUBLIC_AGENT_URL;
@@ -30,14 +31,13 @@ export default function AgentPage() {
     }
   }, [agentUrl]);
 
-  const handleIframeLoad = () => {
+  // Note: iframe onError events don't fire for HTTP errors (4xx, 5xx) or CORS issues.
+  // The iframe always fires onLoad even when content fails to load.
+  // We rely on onLoad to hide the spinner and let users see the iframe content or blank state.
+  const handleIframeLoad = useCallback(() => {
+    iframeLoadedRef.current = true;
     setIsLoading(false);
-  };
-
-  const handleIframeError = () => {
-    setError("Failed to load the coding agent. Please try again later.");
-    setIsLoading(false);
-  };
+  }, []);
 
   if (error) {
     return (
@@ -109,7 +109,6 @@ export default function AgentPage() {
           className="w-full h-full border-0"
           title="Coding Agent"
           onLoad={handleIframeLoad}
-          onError={handleIframeError}
           allow="clipboard-read; clipboard-write"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
         />

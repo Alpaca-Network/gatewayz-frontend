@@ -12,6 +12,7 @@ export function AppFooter() {
   const [isChatPage, setIsChatPage] = useState(false);
   const [isModelsPage, setIsModelsPage] = useState(false);
   const [isSandboxPage, setIsSandboxPage] = useState(false);
+  const [isAgentPage, setIsAgentPage] = useState(false);
   const [showFooter, setShowFooter] = useState(false);
   const [hasScrolledPastFold, setHasScrolledPastFold] = useState(false);
 
@@ -19,6 +20,7 @@ export function AppFooter() {
     setIsChatPage(pathname?.startsWith('/chat') ?? false);
     setIsModelsPage(pathname?.startsWith('/models') ?? false);
     setIsSandboxPage(pathname?.startsWith('/sandbox') ?? false);
+    setIsAgentPage(pathname?.startsWith('/agent') ?? false);
   }, [pathname]);
 
   // Track if user has scrolled past the initial viewport on homepage
@@ -54,6 +56,11 @@ export function AppFooter() {
 
   // Hide footer on sandbox pages (full-screen embedded apps)
   if (isSandboxPage) {
+    return null;
+  }
+
+  // Hide footer on agent pages (full-screen embedded coding agent)
+  if (isAgentPage) {
     return null;
   }
 
