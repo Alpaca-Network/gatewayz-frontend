@@ -1,6 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
+
+// Timeout for iframe loading (30 seconds)
+const IFRAME_LOAD_TIMEOUT = 30000;
+
+/**
+ * Validates that the agent URL is safe to load in an iframe.
+ * Only allows HTTPS URLs from approved domains.
+ */
+function isValidAgentUrl(url: string | undefined): boolean {
+  if (!url) return false;
+
+  try {
+    const parsed = new URL(url);
+    // Must be HTTPS
+    if (parsed.protocol !== "https:") return false;
+
+    // Allow Vercel deployments and localhost for development
+    const allowedPatterns = [
+      /\.vercel\.app$/,
+      /\.gatewayz\.ai$/,
+      /^localhost(:\d+)?$/,
+    ];
+
+    return allowedPatterns.some((pattern) => pattern.test(parsed.hostname));
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Agent page that embeds the Vercel Labs Coding Agent Template.
@@ -15,26 +43,56 @@ import { useEffect, useState } from "react";
  * @see https://github.com/vercel-labs/coding-agent-template
  */
 export default function AgentPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   // Get the agent URL from environment variable
   const agentUrl = process.env.NEXT_PUBLIC_AGENT_URL;
 
+  // Only show loading if we have a valid URL to load
+  const [isLoading, setIsLoading] = useState(() => isValidAgentUrl(agentUrl));
+  const [error, setError] = useState<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear timeout helper
+  const clearLoadingTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
+    // Validate URL and set appropriate error state
     if (!agentUrl) {
       setError(
         "Agent URL not configured. Please set NEXT_PUBLIC_AGENT_URL environment variable."
       );
       setIsLoading(false);
+      return;
     }
-  }, [agentUrl]);
+
+    if (!isValidAgentUrl(agentUrl)) {
+      setError(
+        "Invalid agent URL. The URL must be HTTPS and from an approved domain (*.vercel.app or *.gatewayz.ai)."
+      );
+      setIsLoading(false);
+      return;
+    }
+
+    // Set up loading timeout - iframe onError doesn't fire for most network errors
+    timeoutRef.current = setTimeout(() => {
+      setError("Failed to load the coding agent. The request timed out.");
+      setIsLoading(false);
+    }, IFRAME_LOAD_TIMEOUT);
+
+    return clearLoadingTimeout;
+  }, [agentUrl, clearLoadingTimeout]);
 
   const handleIframeLoad = () => {
+    clearLoadingTimeout();
     setIsLoading(false);
   };
 
   const handleIframeError = () => {
+    clearLoadingTimeout();
     setError("Failed to load the coding agent. Please try again later.");
     setIsLoading(false);
   };
@@ -111,7 +169,7 @@ export default function AgentPage() {
           onLoad={handleIframeLoad}
           onError={handleIframeError}
           allow="clipboard-read; clipboard-write"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+          sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
         />
       )}
     </div>
