@@ -1,5 +1,5 @@
 {
-  "installCommand": "pnpm install --frozen-lockfile",
+  "installCommand": "corepack enable && pnpm install",
   "buildCommand": "pnpm build",
   "git": {
     "submodules": false
