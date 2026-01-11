@@ -7,11 +7,14 @@ export const metadata: Metadata = {
 
 export default function TrustPage() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-[calc(100vh-65px)] bg-background">
       <iframe
         src="https://trust.trycybe.ai/gatewayz"
         title="Gatewayz Trust Center"
-        className="w-full h-screen border-0"
+        className="w-full h-full border-0"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        allow="fullscreen"
+        loading="lazy"
         allowFullScreen
       />
     </div>
