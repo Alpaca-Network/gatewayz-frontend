@@ -31,10 +31,24 @@ export interface ModelPricingInfo {
 const PER_MILLION_PRICING_GATEWAYS = ['onerouter'];
 
 /**
+ * Gateways that return pricing in per-billion-tokens format.
+ * These prices need to be divided by 1,000 to convert to per-million for display.
+ * Example: aihubmix returns 150.0 for GPT-4o mini which should display as $0.15/M
+ */
+const PER_BILLION_PRICING_GATEWAYS = ['aihubmix'];
+
+/**
  * Check if a gateway returns pricing in per-million format.
  */
 export function isPerMillionPricingGateway(gateway: string): boolean {
   return PER_MILLION_PRICING_GATEWAYS.includes(gateway.toLowerCase());
+}
+
+/**
+ * Check if a gateway returns pricing in per-billion format.
+ */
+export function isPerBillionPricingGateway(gateway: string): boolean {
+  return PER_BILLION_PRICING_GATEWAYS.includes(gateway.toLowerCase());
 }
 
 /**
@@ -82,9 +96,14 @@ export function getModelPricingCategory(model: ModelPricingInfo): 'Free' | 'Paid
 
 /**
  * Convert pricing to per-million-tokens format for display.
- * Most gateways return per-token pricing (e.g., 0.00000015 = $0.00000015/token)
- * which needs to be multiplied by 1,000,000 to get per-million-tokens.
- * Some gateways (e.g., onerouter) already return per-million pricing.
+ *
+ * Gateway pricing formats:
+ * - Most gateways (OpenRouter, Helicone, etc.): per-token (e.g., 0.00000015)
+ *   → multiply by 1,000,000 to get per-million
+ * - Per-million gateways (onerouter): per-million (e.g., 0.15)
+ *   → display as-is
+ * - Per-billion gateways (aihubmix): per-billion (e.g., 150.0)
+ *   → divide by 1,000 to get per-million
  *
  * @param price - Price string from the API
  * @param sourceGateway - Gateway the model comes from
@@ -95,9 +114,17 @@ export function formatPricingForDisplay(price: string | undefined, sourceGateway
   const numPrice = parseFloat(price);
   if (isNaN(numPrice)) return null;
 
-  // If gateway already returns per-million pricing, display as-is
-  // Otherwise, multiply by 1,000,000 to convert from per-token to per-million
-  const perMillionPrice = isPerMillionPricingGateway(sourceGateway) ? numPrice : numPrice * 1000000;
+  let perMillionPrice: number;
+  if (isPerMillionPricingGateway(sourceGateway)) {
+    // Already in per-million format, display as-is
+    perMillionPrice = numPrice;
+  } else if (isPerBillionPricingGateway(sourceGateway)) {
+    // Per-billion format: divide by 1,000 to get per-million
+    perMillionPrice = numPrice / 1000;
+  } else {
+    // Per-token format: multiply by 1,000,000 to get per-million
+    perMillionPrice = numPrice * 1000000;
+  }
 
   return perMillionPrice.toFixed(2);
 }
@@ -115,7 +142,13 @@ export function getNormalizedPerTokenPrice(price: string | undefined, sourceGate
   const numPrice = parseFloat(price);
   if (isNaN(numPrice)) return 0;
 
-  // If gateway returns per-million pricing, convert to per-token
-  // Otherwise, it's already per-token
-  return isPerMillionPricingGateway(sourceGateway) ? numPrice / 1000000 : numPrice;
+  if (isPerMillionPricingGateway(sourceGateway)) {
+    // Per-million format: divide by 1,000,000 to get per-token
+    return numPrice / 1000000;
+  } else if (isPerBillionPricingGateway(sourceGateway)) {
+    // Per-billion format: divide by 1,000,000,000 to get per-token
+    return numPrice / 1000000000;
+  }
+  // Already per-token
+  return numPrice;
 }

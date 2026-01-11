@@ -7,6 +7,7 @@ describe('SandboxLayout', () => {
     // Clean up body class and style after each test
     document.body.classList.remove('sandbox-page');
     document.body.style.overflow = '';
+    document.body.style.overscrollBehavior = '';
   });
 
   it('should render children', () => {
@@ -40,6 +41,16 @@ describe('SandboxLayout', () => {
     expect(document.body.style.overflow).toBe('hidden');
   });
 
+  it('should set overscrollBehavior none on body for mobile', () => {
+    render(
+      <SandboxLayout>
+        <div>Content</div>
+      </SandboxLayout>
+    );
+
+    expect(document.body.style.overscrollBehavior).toBe('none');
+  });
+
   it('should render container with correct viewport height class', () => {
     const { container } = render(
       <SandboxLayout>
@@ -54,7 +65,7 @@ describe('SandboxLayout', () => {
     expect(layoutContainer).toHaveClass('overflow-hidden');
   });
 
-  it('should have flex display for proper child rendering', () => {
+  it('should have onboarding banner height variant class using CSS variable', () => {
     const { container } = render(
       <SandboxLayout>
         <div>Content</div>
@@ -62,11 +73,34 @@ describe('SandboxLayout', () => {
     );
 
     const layoutContainer = container.firstChild as HTMLElement;
-    expect(layoutContainer.style.display).toBe('flex');
-    expect(layoutContainer.style.flexDirection).toBe('column');
+    // Uses CSS variable for dynamic banner height with 50px fallback
+    expect(layoutContainer).toHaveClass('has-onboarding-banner:h-[calc(100dvh-65px-var(--onboarding-banner-height,50px))]');
   });
 
-  it('should clean up body class on unmount', () => {
+  it('should have flex classes for proper child rendering', () => {
+    const { container } = render(
+      <SandboxLayout>
+        <div>Content</div>
+      </SandboxLayout>
+    );
+
+    const layoutContainer = container.firstChild as HTMLElement;
+    expect(layoutContainer).toHaveClass('flex');
+    expect(layoutContainer).toHaveClass('flex-col');
+  });
+
+  it('should have mobile scroll prevention class', () => {
+    const { container } = render(
+      <SandboxLayout>
+        <div>Content</div>
+      </SandboxLayout>
+    );
+
+    const layoutContainer = container.firstChild as HTMLElement;
+    expect(layoutContainer).toHaveClass('overscroll-none');
+  });
+
+  it('should clean up body class and styles on unmount', () => {
     const { unmount } = render(
       <SandboxLayout>
         <div>Content</div>
@@ -75,10 +109,12 @@ describe('SandboxLayout', () => {
 
     expect(document.body.classList.contains('sandbox-page')).toBe(true);
     expect(document.body.style.overflow).toBe('hidden');
+    expect(document.body.style.overscrollBehavior).toBe('none');
 
     unmount();
 
     expect(document.body.classList.contains('sandbox-page')).toBe(false);
     expect(document.body.style.overflow).toBe('');
+    expect(document.body.style.overscrollBehavior).toBe('');
   });
 });
