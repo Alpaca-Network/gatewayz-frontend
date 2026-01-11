@@ -55,7 +55,7 @@ describe('SandboxPage', () => {
     expect(sandboxHome).toHaveAttribute('data-api-key', '');
   });
 
-  it('should wrap SandboxHome in a viewport-filling container', () => {
+  it('should wrap SandboxHome in a scrollable viewport-filling container', () => {
     const { container } = render(<SandboxPage />);
 
     const wrapper = container.firstChild as HTMLElement;
@@ -63,6 +63,6 @@ describe('SandboxPage', () => {
     expect(wrapper).toHaveClass('w-full');
     expect(wrapper).toHaveClass('h-full');
     expect(wrapper).toHaveClass('min-h-0');
-    expect(wrapper).toHaveClass('overflow-hidden');
+    expect(wrapper).toHaveClass('overflow-auto');
   });
 });
