@@ -42,6 +42,15 @@ export const getUserTier = (userData: UserData | null): UserTier => {
     const normalizedTier = (userData.tier as string).toLowerCase() as UserTier;
     // Validate the tier is a recognized value
     if (normalizedTier === 'basic' || normalizedTier === 'pro' || normalizedTier === 'max') {
+      // IMPORTANT: If user has an active subscription, they cannot be on basic tier
+      // This handles cases where tier wasn't properly updated after subscription purchase
+      if (normalizedTier === 'basic' && userData.subscription_status === 'active') {
+        console.warn(
+          'getUserTier: User has active subscription but tier is "basic". Correcting to "pro".',
+          { tier: normalizedTier, subscription_status: userData.subscription_status }
+        );
+        return 'pro';
+      }
       return normalizedTier;
     }
   }

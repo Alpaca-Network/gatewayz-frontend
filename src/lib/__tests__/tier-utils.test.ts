@@ -144,6 +144,86 @@ describe('tier-utils', () => {
 
       expect(getUserTier(userData)).toBe('max');
     });
+
+    it('should return pro tier when user has basic tier but active subscription (data inconsistency fix)', () => {
+      // This test covers the bug where a user upgrades to Pro but tier field
+      // wasn't updated from 'basic' due to webhook timing or database sync issues
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'basic', // Stale - wasn't updated after subscription purchase
+        subscription_status: 'active', // But subscription is clearly active
+      };
+
+      // Basic tier users cannot have active subscriptions, so this should return 'pro'
+      expect(getUserTier(userData)).toBe('pro');
+
+      // Should log a warning about the data inconsistency
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'getUserTier: User has active subscription but tier is "basic". Correcting to "pro".',
+        { tier: 'basic', subscription_status: 'active' }
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should not change pro tier when subscription is active', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'pro',
+        subscription_status: 'active',
+      };
+
+      // Pro tier with active subscription should stay as pro
+      expect(getUserTier(userData)).toBe('pro');
+    });
+
+    it('should not change max tier when subscription is active', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'max',
+        subscription_status: 'active',
+      };
+
+      // Max tier with active subscription should stay as max
+      expect(getUserTier(userData)).toBe('max');
+    });
+
+    it('should keep basic tier when subscription is not active (cancelled user)', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'basic',
+        subscription_status: 'cancelled',
+      };
+
+      // Basic tier with cancelled subscription should stay basic
+      expect(getUserTier(userData)).toBe('basic');
+    });
   });
 
   describe('hasActiveSubscription', () => {
