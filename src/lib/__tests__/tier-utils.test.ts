@@ -224,6 +224,80 @@ describe('tier-utils', () => {
       // Basic tier with cancelled subscription should stay basic
       expect(getUserTier(userData)).toBe('basic');
     });
+
+    it('should infer max tier from tier_display_name when tier is basic but subscription is active', () => {
+      // This test covers the case where a max subscriber has stale tier='basic'
+      // but tier_display_name correctly shows 'Max' or 'MAX'
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'basic', // Stale
+        tier_display_name: 'Max', // Correct value from backend
+        subscription_status: 'active',
+      };
+
+      // Should use tier_display_name to determine correct tier
+      expect(getUserTier(userData)).toBe('max');
+
+      // Should log a warning about the correction
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'getUserTier: User has active subscription but tier is "basic". Correcting to "max" based on tier_display_name.',
+        { tier: 'basic', tier_display_name: 'Max', subscription_status: 'active' }
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should infer pro tier from tier_display_name when tier is basic but subscription is active', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'basic', // Stale
+        tier_display_name: 'Pro', // Correct value from backend
+        subscription_status: 'active',
+      };
+
+      // Should use tier_display_name to determine correct tier
+      expect(getUserTier(userData)).toBe('pro');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should default to pro when tier_display_name is also basic or missing', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'basic',
+        tier_display_name: 'Basic', // Also stale
+        subscription_status: 'active',
+      };
+
+      // When tier_display_name doesn't help, default to 'pro'
+      expect(getUserTier(userData)).toBe('pro');
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('hasActiveSubscription', () => {

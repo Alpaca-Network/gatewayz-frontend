@@ -15,6 +15,7 @@ jest.mock('@/context/gatewayz-auth-context', () => ({
 jest.mock('@/hooks/use-tier', () => ({
   useTier: () => ({
     tier: 'basic',
+    tierDisplayName: 'Basic',
     tierInfo: null,
     userData: null,
   }),
@@ -206,29 +207,8 @@ describe('UserNav', () => {
   });
 });
 
-// Separate test file for Pro tier badge display
-// This uses a separate describe block with its own mock configuration
-describe('UserNav Pro Tier Badge', () => {
-  const mockUser = {
-    email: { address: 'pro@example.com' },
-    linkedAccounts: [],
-  };
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should show Pro badge when user has pro tier with active subscription', async () => {
-    // This test verifies that the getUserTier fix properly displays Pro badge
-    // for users with tier='basic' but subscription_status='active'
-    // The fix in tier-utils.ts ensures getUserTier returns 'pro' in this case
-
-    // Note: This test relies on the useTier mock above returning 'basic' tier,
-    // but in practice the fix ensures that users with active subscriptions
-    // will have getUserTier() return 'pro', triggering the badge display.
-    //
-    // To fully test this scenario, we would need to modify the mock,
-    // which is done in the separate pro-tier test file or by using jest.doMock()
-    expect(true).toBe(true); // Placeholder - actual integration test in tier-utils.test.ts
-  });
-});
+// Note: Tests for tier correction logic (basic tier + active subscription -> pro/max)
+// are covered in src/lib/__tests__/tier-utils.test.ts which tests:
+// - getUserTier() returns 'pro' when tier='basic' but subscription_status='active'
+// - getUserTier() uses tier_display_name to infer correct tier (pro or max)
+// - useTier hook provides tierDisplayName that matches the corrected tier
