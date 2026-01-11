@@ -1,5 +1,5 @@
 {
-  "installCommand": "pnpm install",
+  "installCommand": "rm -rf node_modules && pnpm install",
   "buildCommand": "pnpm build",
   "git": {
     "submodules": false
