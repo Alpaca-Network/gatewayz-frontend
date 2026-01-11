@@ -22,11 +22,17 @@ import {
   isDynamicGateway,
   autoRegisterGatewaysFromModels,
   getDynamicGateways,
+  clearDynamicGateways,
 } from '../gateway-registry';
 
 describe('gateway-registry', () => {
   // Store original env vars to restore after tests
   const originalEnv = process.env;
+
+  afterEach(() => {
+    // Clean up dynamically registered gateways after each test
+    clearDynamicGateways();
+  });
 
   beforeEach(() => {
     // Reset env for each test

@@ -1,7 +1,5 @@
-import { Suspense } from 'react';
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
-import { PRIORITY_GATEWAYS, DEFERRED_GATEWAYS } from '@/lib/gateway-registry';
 
 // Force dynamic rendering to always fetch latest models
 // This ensures models are always fresh and not cached from build time (when there are 0 models)
@@ -27,8 +25,10 @@ interface Model {
   created?: number;
 }
 
-// Gateway lists are now imported from centralized gateway-registry.ts
-// To add a new gateway, simply add it to src/lib/gateway-registry.ts
+// Models are now fetched using gateway='all' which:
+// 1. Makes a single API call to the backend (more efficient)
+// 2. Auto-discovers new gateways from the response
+// 3. Automatically includes models from newly added providers
 
 // Shared deduplication logic to avoid code duplication
 function deduplicateModels(models: Model[]): Model[] {
@@ -77,7 +77,7 @@ function deduplicateModels(models: Model[]): Model[] {
   return Array.from(modelMap.values());
 }
 
-async function getPriorityModels(): Promise<Model[]> {
+async function getAllModels(): Promise<Model[]> {
   try {
     // During build time, skip API calls if running in CI/build environment
     if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.CI) {
@@ -85,92 +85,30 @@ async function getPriorityModels(): Promise<Model[]> {
       return [];
     }
 
-    console.log('[Models Page] Fetching priority models from fast gateways:', PRIORITY_GATEWAYS);
+    console.log('[Models Page] Fetching all models with gateway=all (single request)');
     const startTime = Date.now();
 
-    // Fetch from priority gateways in parallel with timeout for fast failure
-    const promises = PRIORITY_GATEWAYS.map(gateway =>
-      Promise.race([
-        getModelsForGateway(gateway),
-        new Promise(resolve => setTimeout(() => resolve({ data: [] }), 1500)) // 1.5s timeout (optimized)
-      ])
-    );
-
-    const results = await Promise.all(promises);
-
-    const allModels = results.flatMap((result: unknown) => {
-      const typedResult = result as { data?: Model[] };
-      return typedResult.data || [];
-    });
+    // Fetch all models from all gateways in a single request
+    // This automatically discovers and registers new gateways from the backend response
+    const result = await getModelsForGateway('all');
+    const allModels = result.data || [];
 
     // Deduplicate intelligently using shared function
     const uniqueModels = deduplicateModels(allModels);
 
     const duration = Date.now() - startTime;
-    console.log(`[Models Page] Priority models fetched: ${uniqueModels.length} models in ${duration}ms`);
+    console.log(`[Models Page] All models fetched: ${uniqueModels.length} models in ${duration}ms`);
     return uniqueModels;
   } catch (error) {
-    console.error('[Models Page] Failed to fetch priority models:', error);
+    console.error('[Models Page] Failed to fetch models:', error);
     return [];
   }
-}
-
-async function getDeferredModels(): Promise<Model[]> {
-  try {
-    console.log('[Models Page] Fetching deferred models from slower gateways:', DEFERRED_GATEWAYS);
-    const startTime = Date.now();
-
-    // Fetch from deferred gateways in parallel
-    const results = await Promise.all(
-      DEFERRED_GATEWAYS.map(gateway => getModelsForGateway(gateway))
-    );
-
-    const allModels = results.flatMap(result => result.data || []);
-
-    // Deduplicate intelligently using shared function
-    const uniqueModels = deduplicateModels(allModels);
-
-    const duration = Date.now() - startTime;
-    console.log(`[Models Page] Deferred models fetched: ${uniqueModels.length} models in ${duration}ms`);
-    return uniqueModels;
-  } catch (error) {
-    console.error('[Models Page] Failed to fetch deferred models:', error);
-    return [];
-  }
-}
-
-// Suspense boundary component for deferred models
-async function DeferredModelsLoader({
-  priorityModels,
-  deferredModelsPromise
-}: {
-  priorityModels: Model[],
-  deferredModelsPromise: Promise<Model[]>
-}) {
-  // This will stream in after priority models are rendered
-  const deferredModels = await deferredModelsPromise;
-
-  // Combine and deduplicate intelligently using shared function
-  const allModels = [...priorityModels, ...deferredModels];
-  const uniqueModels = deduplicateModels(allModels);
-
-  console.log(`[Models Page] Total combined models: ${uniqueModels.length}`);
-  return <ModelsClient initialModels={uniqueModels} isLoadingMore={false} />;
 }
 
 export default async function ModelsPage() {
-  // Fetch priority models immediately (blocks initial render)
-  const priorityModels = await getPriorityModels();
+  // Fetch all models from all gateways in a single request
+  // This automatically discovers and includes models from any new providers added to the backend
+  const models = await getAllModels();
 
-  // Start fetching deferred models but DON'T await (streams in background)
-  const deferredModelsPromise = getDeferredModels();
-
-  return (
-    <Suspense fallback={<ModelsClient initialModels={priorityModels} isLoadingMore={true} />}>
-      <DeferredModelsLoader
-        priorityModels={priorityModels}
-        deferredModelsPromise={deferredModelsPromise}
-      />
-    </Suspense>
-  );
+  return <ModelsClient initialModels={models} isLoadingMore={false} />;
 }
