@@ -520,5 +520,68 @@ describe('models-service', () => {
         }
       });
     });
+
+    describe('Static Fallback Pricing Conversion', () => {
+      it('should convert static model pricing from per-million to per-token format', async () => {
+        // Force API to fail so we get static fallback data
+        mockFetch.mockRejectedValue(new Error('API error'));
+
+        const result = await getModelsForGateway('openrouter');
+
+        // Find a model with known pricing (e.g., GPT-4o mini has inputCost: 0.15 in static data)
+        const gptMiniModel = result.data.find(
+          (m: any) => m.name === 'GPT-4o mini' || m.name.includes('GPT-4o mini')
+        );
+
+        if (gptMiniModel) {
+          // Static data has inputCost: 0.15 (per-million format)
+          // Should be converted to per-token format: 0.15 / 1,000,000 = 0.00000015
+          const promptPrice = parseFloat(gptMiniModel.pricing?.prompt || '0');
+          const completionPrice = parseFloat(gptMiniModel.pricing?.completion || '0');
+
+          // Prices should be in per-token format (very small numbers)
+          // inputCost 0.15 should become 0.00000015
+          expect(promptPrice).toBeLessThan(0.001); // Per-token prices are tiny
+          expect(promptPrice).toBeCloseTo(0.00000015, 10);
+
+          // outputCost 0.60 should become 0.0000006
+          expect(completionPrice).toBeLessThan(0.001);
+          expect(completionPrice).toBeCloseTo(0.0000006, 10);
+        }
+      });
+
+      it('should allow formatPricingForDisplay to correctly format static fallback prices', async () => {
+        // Import the pricing utils
+        const { formatPricingForDisplay } = require('@/lib/model-pricing-utils');
+
+        // Force API to fail so we get static fallback data
+        mockFetch.mockRejectedValue(new Error('API error'));
+
+        const result = await getModelsForGateway('openrouter');
+
+        // Find a model with known pricing
+        const gptMiniModel = result.data.find(
+          (m: any) => m.name === 'GPT-4o mini' || m.name.includes('GPT-4o mini')
+        );
+
+        if (gptMiniModel) {
+          const sourceGateway = gptMiniModel.source_gateway || 'openrouter';
+
+          // Format the pricing for display (should multiply by 1,000,000)
+          const displayInput = formatPricingForDisplay(
+            gptMiniModel.pricing?.prompt,
+            sourceGateway
+          );
+          const displayOutput = formatPricingForDisplay(
+            gptMiniModel.pricing?.completion,
+            sourceGateway
+          );
+
+          // Should display as $0.15/M and $0.60/M
+          expect(displayInput).toBe('0.15');
+          expect(displayOutput).toBe('0.60');
+        }
+      });
+    });
   });
 });
