@@ -11,7 +11,7 @@ import {
   getAllActiveGatewayIds,
 } from '@/lib/gateway-registry';
 import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
-import { isPerMillionPricingGateway } from '@/lib/model-pricing-utils';
+import { isPerMillionPricingGateway, isPerBillionPricingGateway } from '@/lib/model-pricing-utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
