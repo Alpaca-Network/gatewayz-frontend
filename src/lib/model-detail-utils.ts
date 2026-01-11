@@ -3,6 +3,14 @@ import { normalizeToUrlSafe } from '@/lib/utils';
 import { validateGateways, ensureValidGateways } from '@/lib/gateway-validation';
 import * as Sentry from '@sentry/nextjs';
 
+/**
+ * Conversion constant for static model pricing.
+ * Static models-data uses per-million pricing (e.g., 0.15 = $0.15/M)
+ * API responses use per-token pricing (e.g., 0.00000015 = $0.00000015/token)
+ * formatPricingForDisplay() expects per-token format and multiplies by 1,000,000 for display.
+ */
+const PER_MILLION_TO_PER_TOKEN = 1000000;
+
 export interface ModelDetailRecord {
   id: string;
   name: string;
@@ -264,8 +272,9 @@ export const transformStaticModel = (staticModel: StaticModelDefinition): ModelD
     description: staticModel.description,
     context_length: staticModel.context * 1000,
     pricing: {
-      prompt: staticModel.inputCost.toString(),
-      completion: staticModel.outputCost.toString(),
+      // Convert from per-million to per-token format for consistency with API responses
+      prompt: (staticModel.inputCost / PER_MILLION_TO_PER_TOKEN).toString(),
+      completion: (staticModel.outputCost / PER_MILLION_TO_PER_TOKEN).toString(),
     },
     architecture: {
       input_modalities: staticModel.modalities.map((m) => m.toLowerCase()),

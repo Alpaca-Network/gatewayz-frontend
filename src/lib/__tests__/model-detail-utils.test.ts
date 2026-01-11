@@ -342,8 +342,10 @@ describe('model-detail-utils', () => {
       expect(result.name).toBe('OpenAI: GPT-4');
       expect(result.description).toBe('Advanced language model');
       expect(result.context_length).toBe(8000);
-      expect(result.pricing?.prompt).toBe('0.03');
-      expect(result.pricing?.completion).toBe('0.06');
+      // Pricing should be converted from per-million to per-token format
+      // inputCost: 0.03 (per-million) -> 0.00000003 (per-token)
+      expect(result.pricing?.prompt).toBe('3e-8'); // 0.03 / 1000000
+      expect(result.pricing?.completion).toBe('6e-8'); // 0.06 / 1000000
       expect(result.architecture?.input_modalities).toEqual(['text']);
       expect(result.supported_parameters).toEqual(['temperature', 'top_p']);
       expect(result.provider_slug).toBe('openai');
@@ -429,6 +431,44 @@ describe('model-detail-utils', () => {
 
       const result = transformStaticModel(staticModel);
       expect(result.context_length).toBe(128000);
+    });
+
+    it('should convert pricing from per-million to per-token format', () => {
+      // This test verifies the pricing conversion for display purposes
+      const { formatPricingForDisplay } = require('@/lib/model-pricing-utils');
+
+      const staticModel: StaticModelDefinition = {
+        name: 'GPT-4o mini',
+        isFree: false,
+        tokens: '21B',
+        category: 'Chat',
+        description: 'Test',
+        developer: 'openai',
+        context: 128,
+        inputCost: 0.15, // $0.15/M in static data
+        outputCost: 0.60, // $0.60/M in static data
+        modalities: ['Text'],
+        series: 'gpt-4',
+        supportedParameters: [],
+      };
+
+      const result = transformStaticModel(staticModel);
+
+      // Verify pricing is converted to per-token format
+      const promptPrice = parseFloat(result.pricing?.prompt || '0');
+      const completionPrice = parseFloat(result.pricing?.completion || '0');
+
+      // Should be very small numbers (per-token)
+      expect(promptPrice).toBeCloseTo(0.00000015, 10);
+      expect(completionPrice).toBeCloseTo(0.0000006, 10);
+
+      // Verify formatPricingForDisplay correctly converts back for display
+      // Using 'openrouter' as a standard per-token gateway
+      const displayPrompt = formatPricingForDisplay(result.pricing?.prompt, 'openrouter');
+      const displayCompletion = formatPricingForDisplay(result.pricing?.completion, 'openrouter');
+
+      expect(displayPrompt).toBe('0.15');
+      expect(displayCompletion).toBe('0.60');
     });
   });
 });

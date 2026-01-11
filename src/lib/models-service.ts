@@ -11,6 +11,7 @@ import {
   getAllActiveGatewayIds,
 } from '@/lib/gateway-registry';
 import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
+import { isPerMillionPricingGateway } from '@/lib/model-pricing-utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -72,17 +73,27 @@ function transformModel(model: any, gateway: string) {
   const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : model.name;
   const normalizedName = modelNamePart.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
+  // Static models-data uses per-million pricing (e.g., 0.15 = $0.15/M)
+  // For standard gateways: convert to per-token format for consistency with API responses
+  // formatPricingForDisplay() will multiply by 1,000,000 for display
+  // For per-million gateways (e.g., onerouter): keep as-is since formatPricingForDisplay
+  // skips the multiplication for these gateways
+  const shouldConvertToPerToken = !isPerMillionPricingGateway(resolvedGateway);
+  const promptPrice = shouldConvertToPerToken
+    ? (model.inputCost / 1000000).toString()
+    : model.inputCost.toString();
+  const completionPrice = shouldConvertToPerToken
+    ? (model.outputCost / 1000000).toString()
+    : model.outputCost.toString();
+
   return {
     id: `${model.developer}/${normalizedName}`,
     name: model.name,
     description: model.description,
     context_length: model.context * 1000, // Convert K to actual number
     pricing: {
-      // Static models-data uses per-million pricing (e.g., 0.15 = $0.15/M)
-      // Convert to per-token format for consistency with API responses
-      // formatPricingForDisplay() will multiply by 1,000,000 for display
-      prompt: (model.inputCost / 1000000).toString(),
-      completion: (model.outputCost / 1000000).toString()
+      prompt: promptPrice,
+      completion: completionPrice,
     },
     architecture: {
       input_modalities: model.modalities.map((m: string) => m.toLowerCase()),
