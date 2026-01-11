@@ -151,7 +151,7 @@ export default function ModelProfilePage() {
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedProvider, setSelectedProvider] = useState<string>('gatewayz');
     const [selectedPlaygroundProvider, setSelectedPlaygroundProvider] = useState<string>('gatewayz');
-    const transformedStaticModels = useMemo(() => staticModels.map(transformStaticModel), []);
+    const transformedStaticModels = useMemo(() => staticModels.map((model) => transformStaticModel(model)), []);
 
     // Extract catch-all parameter and parse it
     // For URL /models/near/deepseek-ai/deepseek-v3-1
