@@ -34,7 +34,7 @@ export default function SandboxLayout({
   }, []);
 
   return (
-    <div className="sandbox-container flex flex-col h-[calc(100dvh-65px)] has-onboarding-banner:h-[calc(100dvh-65px-var(--onboarding-banner-height,50px))] w-full overflow-hidden overscroll-none">
+    <div className="sandbox-container flex flex-col h-[calc(100dvh-65px)] has-onboarding-banner:h-[calc(100dvh-65px-var(--onboarding-banner-height,50px))] w-full overflow-auto overscroll-none">
       {children}
     </div>
   );

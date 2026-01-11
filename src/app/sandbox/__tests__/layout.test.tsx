@@ -62,7 +62,7 @@ describe('SandboxLayout', () => {
     expect(layoutContainer).toHaveClass('sandbox-container');
     expect(layoutContainer).toHaveClass('h-[calc(100dvh-65px)]');
     expect(layoutContainer).toHaveClass('w-full');
-    expect(layoutContainer).toHaveClass('overflow-hidden');
+    expect(layoutContainer).toHaveClass('overflow-auto');
   });
 
   it('should have onboarding banner height variant class using CSS variable', () => {
