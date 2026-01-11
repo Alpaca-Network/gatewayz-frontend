@@ -15,6 +15,33 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
+    date: "January 11, 2026",
+    features: [
+      "Discounted Credit Packages: New discounted credit package options are now available",
+    ],
+    bugFixes: [
+      {
+        category: "Gatewayz Chat",
+        items: [
+          "Fixed duplicate words appearing in voice transcription results",
+          "Fixed issue where account tier wasn't updating immediately after upgrading to PRO/MAX",
+        ],
+      },
+      {
+        category: "Gatewayz API",
+        items: [
+          "Added support for AiHubMix and Simplismart with highly optimized text, image, and voice models",
+          "Added developer role for enhanced API access control",
+          "Better HTTP/2 error handling and automatic retry logic for more reliable API calls",
+          "Enhanced provider failover when encountering payment-related errors (402)",
+          "Fixed issue where paid API users were incorrectly marked as trial users",
+        ],
+      },
+    ],
+    infrastructure: [],
+    documentation: [],
+  },
+  {
     date: "January 4, 2026",
     features: [
       "OpenAI & Anthropic Direct Providers: Added direct API access to OpenAI (GPT models) and Anthropic (Claude models) with connection pool clients, pre-warming support, and manual pricing data",
