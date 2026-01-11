@@ -1,6 +1,6 @@
 {
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm run build",
+  "buildCommand": "pnpm build",
   "git": {
     "submodules": false
   },
