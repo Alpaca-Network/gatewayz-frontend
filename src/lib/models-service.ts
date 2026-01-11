@@ -78,8 +78,11 @@ function transformModel(model: any, gateway: string) {
     description: model.description,
     context_length: model.context * 1000, // Convert K to actual number
     pricing: {
-      prompt: model.inputCost.toString(),
-      completion: model.outputCost.toString()
+      // Static models-data uses per-million pricing (e.g., 0.15 = $0.15/M)
+      // Convert to per-token format for consistency with API responses
+      // formatPricingForDisplay() will multiply by 1,000,000 for display
+      prompt: (model.inputCost / 1000000).toString(),
+      completion: (model.outputCost / 1000000).toString()
     },
     architecture: {
       input_modalities: model.modalities.map((m: string) => m.toLowerCase()),
