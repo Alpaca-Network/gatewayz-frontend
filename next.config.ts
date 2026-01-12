@@ -109,7 +109,19 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // All other routes: Apply strict security headers including X-Frame-Options: DENY
+        // Root path: Apply strict security headers including X-Frame-Options: DENY
+        // Note: /:path patterns don't match root, so we need an explicit rule
+        source: '/',
+        headers: [
+          ...commonSecurityHeaders,
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+        ],
+      },
+      {
+        // All other routes (except /agent): Apply strict security headers including X-Frame-Options: DENY
         source: '/:path((?!agent).*)',
         headers: [
           ...commonSecurityHeaders,
