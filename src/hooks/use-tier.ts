@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import {
   getUserTier,
@@ -35,50 +36,75 @@ const getTierDisplayName = (tier: UserTier, rawDisplayName: string | undefined):
 
 /**
  * Hook to access tier and subscription information for the current user
+ * Memoized to prevent excessive recalculations and console warnings
  */
 export const useTier = () => {
   try {
     const { userData } = useGatewayzAuth();
 
-    const tier = getUserTier(userData);
-    const hasSubscription = hasActiveSubscription(userData);
-    const renewalDate = getSubscriptionRenewalDate(userData);
-    const isExpiringSoon = isSubscriptionExpiringsoon(userData);
-    const status = userData?.subscription_status;
+    // Memoize all tier calculations to prevent repeated console warnings
+    // when there's a tier/subscription mismatch
+    const tierData = useMemo(() => {
+      const tier = getUserTier(userData);
+      const hasSubscription = hasActiveSubscription(userData);
+      const renewalDate = getSubscriptionRenewalDate(userData);
+      const isExpiringSoon = isSubscriptionExpiringsoon(userData);
+      const status = userData?.subscription_status;
 
-    // Trial info
-    const isTrial = isOnTrial(userData);
-    const trialExpired = isTrialExpired(userData);
-    const trialExpirationDate = getTrialExpirationDate(userData);
-    const trialDaysRemaining = getTrialDaysRemaining(userData);
-    const trialExpiringSoon = isTrialExpiringSoon(userData);
+      // Trial info
+      const isTrial = isOnTrial(userData);
+      const trialExpired = isTrialExpired(userData);
+      const trialExpirationDate = getTrialExpirationDate(userData);
+      const trialDaysRemaining = getTrialDaysRemaining(userData);
+      const trialExpiringSoon = isTrialExpiringSoon(userData);
 
-    // Get corrected display name that matches the computed tier
-    const tierDisplayName = getTierDisplayName(tier, userData?.tier_display_name);
+      // Get corrected display name that matches the computed tier
+      const tierDisplayName = getTierDisplayName(tier, userData?.tier_display_name);
+
+      return {
+        tier,
+        tierDisplayName,
+        hasSubscription,
+        renewalDate,
+        isExpiringSoon,
+        status,
+        isTrial,
+        trialExpired,
+        trialExpirationDate,
+        trialDaysRemaining,
+        trialExpiringSoon,
+      };
+    }, [userData]);
+
+    // Memoize the canAccessModel function to maintain referential equality
+    const canAccessModelFn = useMemo(
+      () => (requiredTier: UserTier | undefined) => canAccessModel(requiredTier, tierData.tier),
+      [tierData.tier]
+    );
 
     return {
       // Tier info
-      tier,
-      tierDisplayName, // Use this instead of userData.tier_display_name
-      tierConfig: TIER_CONFIG[tier],
-      tierInfo: formatTierInfo(tier),
+      tier: tierData.tier,
+      tierDisplayName: tierData.tierDisplayName,
+      tierConfig: TIER_CONFIG[tierData.tier],
+      tierInfo: formatTierInfo(tierData.tier),
 
       // Subscription info
-      hasSubscription,
-      subscriptionStatus: status,
-      subscriptionStatusText: formatSubscriptionStatus(status),
-      renewalDate,
-      isExpiringSoon,
+      hasSubscription: tierData.hasSubscription,
+      subscriptionStatus: tierData.status,
+      subscriptionStatusText: formatSubscriptionStatus(tierData.status),
+      renewalDate: tierData.renewalDate,
+      isExpiringSoon: tierData.isExpiringSoon,
 
       // Trial info
-      isTrial,
-      trialExpired,
-      trialExpirationDate,
-      trialDaysRemaining,
-      trialExpiringSoon,
+      isTrial: tierData.isTrial,
+      trialExpired: tierData.trialExpired,
+      trialExpirationDate: tierData.trialExpirationDate,
+      trialDaysRemaining: tierData.trialDaysRemaining,
+      trialExpiringSoon: tierData.trialExpiringSoon,
 
       // Access control
-      canAccessModel: (requiredTier: UserTier | undefined) => canAccessModel(requiredTier, tier),
+      canAccessModel: canAccessModelFn,
 
       // Raw data
       userData,
