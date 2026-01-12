@@ -13,10 +13,15 @@ import {
   getTrialExpirationDate,
   getTrialDaysRemaining,
   isTrialExpiringSoon,
+  _resetLoggedWarnings,
 } from '../tier-utils';
 import type { UserData, UserTier, SubscriptionStatus } from '../api';
 
 describe('tier-utils', () => {
+  // Reset logged warnings before each test to ensure consistent behavior
+  beforeEach(() => {
+    _resetLoggedWarnings();
+  });
   describe('TIER_CONFIG', () => {
     it('should have correct configuration for basic tier', () => {
       expect(TIER_CONFIG.basic).toEqual({
@@ -31,8 +36,8 @@ describe('tier-utils', () => {
     it('should have correct configuration for pro tier', () => {
       expect(TIER_CONFIG.pro).toEqual({
         name: 'Pro',
-        description: '$15/month subscription',
-        monthlyPrice: 1500,
+        description: '$10/month subscription',
+        monthlyPrice: 1000,
         creditAllocation: 0,
         isSubscription: true,
       });
@@ -170,6 +175,34 @@ describe('tier-utils', () => {
         'getUserTier: User has active subscription but tier is "basic". Correcting to "pro".',
         { tier: 'basic', subscription_status: 'active' }
       );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should only log warning once for the same user tier mismatch (warnOnce behavior)', () => {
+      // This test verifies that repeated calls to getUserTier don't spam the console
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const userData: UserData = {
+        user_id: 999,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-999',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'basic',
+        subscription_status: 'active',
+      };
+
+      // Call getUserTier multiple times
+      expect(getUserTier(userData)).toBe('pro');
+      expect(getUserTier(userData)).toBe('pro');
+      expect(getUserTier(userData)).toBe('pro');
+      expect(getUserTier(userData)).toBe('pro');
+
+      // Should only have logged once
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
 
       consoleSpy.mockRestore();
     });
@@ -626,8 +659,8 @@ describe('tier-utils', () => {
       const result = formatTierInfo('pro');
       expect(result).toEqual({
         displayName: 'Pro',
-        description: '$15/month subscription',
-        monthlyPrice: '$15.00',
+        description: '$10/month subscription',
+        monthlyPrice: '$10.00',
         isSubscription: true,
       });
     });
