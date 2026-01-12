@@ -21,12 +21,13 @@ const CORS_HEADERS = {
 };
 
 // Rate limiting configuration
-// EXTREMELY AGGRESSIVE: Further reduced to prevent 429 errors from Sentry
-// Client now sends max 2 events/min + 3 transactions/min = 5 total/min
+// Balanced approach: Allow bursts on page load while preventing sustained abuse
+// Client-side rate limiting in instrumentation-client.ts handles event deduplication,
+// so server-side limiting mainly prevents abuse from malformed/malicious requests
 const RATE_LIMIT_CONFIG = {
-  maxRequestsPerMinute: 8, // REDUCED from 15 - client sends max 5/min, small buffer
+  maxRequestsPerMinute: 30, // INCREASED from 8 - allow normal page load patterns
   windowMs: 60000, // 1 minute window
-  maxRequestsPerSecond: 1,  // REDUCED from 2 - strict burst prevention
+  maxRequestsPerSecond: 5,  // INCREASED from 1 - allow burst on page load (session + events)
   secondWindowMs: 1000,
 };
 
