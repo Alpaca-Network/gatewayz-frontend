@@ -281,9 +281,11 @@ export const GATEWAYS_WITH_API_KEYS = ACTIVE_GATEWAYS.filter(g => g.requiresApiK
 
 /**
  * Get API key for a gateway from environment variables
+ * Handles case-insensitive lookups
  */
 export function getGatewayApiKey(gatewayId: string): string | undefined {
-  const config = GATEWAY_BY_ID[gatewayId];
+  // Try exact match first, then lowercase
+  const config = GATEWAY_BY_ID[gatewayId] || GATEWAY_BY_ID[gatewayId.toLowerCase()];
   if (!config?.apiKeyEnvVar) return undefined;
 
   const envVar = config.apiKeyEnvVar;
@@ -293,6 +295,7 @@ export function getGatewayApiKey(gatewayId: string): string | undefined {
 
 /**
  * Build headers for gateway request, including API key if required
+ * Handles case-insensitive gateway IDs
  */
 export function buildGatewayHeaders(gatewayId: string): Record<string, string> {
   const headers: Record<string, string> = {

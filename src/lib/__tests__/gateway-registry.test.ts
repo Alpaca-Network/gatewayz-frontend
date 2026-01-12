@@ -302,6 +302,19 @@ describe('gateway-registry', () => {
       it('should return undefined for unknown gateways', () => {
         expect(getGatewayApiKey('unknown')).toBeUndefined();
       });
+
+      it('should return API key for case-insensitive gateway IDs', () => {
+        process.env.NEXT_PUBLIC_HF_API_KEY = 'test-hf-key-case';
+        expect(getGatewayApiKey('HUGGINGFACE')).toBe('test-hf-key-case');
+        expect(getGatewayApiKey('HuggingFace')).toBe('test-hf-key-case');
+        expect(getGatewayApiKey('huggingface')).toBe('test-hf-key-case');
+      });
+
+      it('should return API key for case-insensitive aliases', () => {
+        process.env.NEXT_PUBLIC_HF_API_KEY = 'test-hf-key-alias';
+        expect(getGatewayApiKey('HUG')).toBe('test-hf-key-alias');
+        expect(getGatewayApiKey('Hug')).toBe('test-hf-key-alias');
+      });
     });
 
     describe('buildGatewayHeaders', () => {
@@ -321,6 +334,13 @@ describe('gateway-registry', () => {
         delete process.env.NEAR_API_KEY;
         const headers = buildGatewayHeaders('near');
         expect(headers['Authorization']).toBeUndefined();
+      });
+
+      it('should include Authorization for case-insensitive gateway IDs', () => {
+        process.env.NEXT_PUBLIC_NEAR_API_KEY = 'test-near-key-case';
+        expect(buildGatewayHeaders('NEAR')['Authorization']).toBe('Bearer test-near-key-case');
+        expect(buildGatewayHeaders('Near')['Authorization']).toBe('Bearer test-near-key-case');
+        expect(buildGatewayHeaders('near')['Authorization']).toBe('Bearer test-near-key-case');
       });
     });
 
