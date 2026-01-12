@@ -365,7 +365,7 @@ describe('model-pricing-utils', () => {
   });
 
   describe('getNormalizedPerTokenPrice', () => {
-    it('should return price as-is for standard per-token gateways', () => {
+    it('should return price as-is for standard per-token gateways (within limits)', () => {
       expect(getNormalizedPerTokenPrice('0.00000015', 'openrouter')).toBe(0.00000015);
       expect(getNormalizedPerTokenPrice('0.000001', 'groq')).toBe(0.000001);
     });
@@ -377,10 +377,10 @@ describe('model-pricing-utils', () => {
       expect(getNormalizedPerTokenPrice('15.00', 'onerouter')).toBe(0.000015);
     });
 
-    it('should divide by 1,000,000,000 for aihubmix gateway', () => {
-      // AiHubMix 150 per-billion = $0.00000015/token
+    it('should handle aihubmix gateway (per-billion format)', () => {
+      // AiHubMix 150 per-billion = $0.15/M = $0.00000015/token
       expect(getNormalizedPerTokenPrice('150', 'aihubmix')).toBe(0.00000015);
-      // AiHubMix 600 per-billion = $0.0000006/token
+      // AiHubMix 600 per-billion = $0.60/M = $0.0000006/token
       expect(getNormalizedPerTokenPrice('600', 'aihubmix')).toBe(0.0000006);
     });
 
@@ -391,6 +391,35 @@ describe('model-pricing-utils', () => {
 
     it('should return 0 for non-numeric price', () => {
       expect(getNormalizedPerTokenPrice('N/A', 'openrouter')).toBe(0);
+    });
+
+    it('should apply same price cap as formatPricingForDisplay', () => {
+      // $100/M = $0.0001/token is the cap
+      const maxPerToken = MAX_PRICE_PER_MILLION / 1000000; // 0.0001
+
+      // Prices exceeding cap should be capped
+      expect(getNormalizedPerTokenPrice('0.0002', 'openrouter')).toBe(maxPerToken); // $200/M, capped
+      expect(getNormalizedPerTokenPrice('150', 'onerouter')).toBe(maxPerToken); // $150/M, capped
+      expect(getNormalizedPerTokenPrice('200000', 'aihubmix')).toBe(maxPerToken); // $200/M, capped
+    });
+
+    it('should be consistent with formatPricingForDisplay', () => {
+      // Verify that the same price gives consistent results in both functions
+      const testCases = [
+        { price: '0.00000015', gateway: 'openrouter' },
+        { price: '15.00', gateway: 'onerouter' },
+        { price: '150', gateway: 'aihubmix' },
+        { price: '0.001', gateway: 'openrouter' }, // Exceeds cap
+        { price: '500', gateway: 'onerouter' }, // Exceeds cap
+      ];
+
+      testCases.forEach(({ price, gateway }) => {
+        const displayPrice = parseFloat(formatPricingForDisplay(price, gateway) || '0');
+        const normalizedPrice = getNormalizedPerTokenPrice(price, gateway);
+
+        // normalizedPrice * 1,000,000 should equal displayPrice
+        expect(normalizedPrice * 1000000).toBeCloseTo(displayPrice, 2);
+      });
     });
   });
 
@@ -427,7 +456,7 @@ describe('model-pricing-utils', () => {
       const aihubmixPerToken = getNormalizedPerTokenPrice('150', 'aihubmix');
       expect(aihubmixPerToken).toBeLessThan(maxPerTokenPrice); // $0.15/M < $1/M
 
-      // Expensive model should be filtered out
+      // Expensive models within the cap ($100) should still be filtered correctly
       const expensiveOpenrouter = getNormalizedPerTokenPrice('0.000015', 'openrouter');
       expect(expensiveOpenrouter).toBeGreaterThan(maxPerTokenPrice); // $15/M > $1/M
 
@@ -436,6 +465,11 @@ describe('model-pricing-utils', () => {
 
       const expensiveAihubmix = getNormalizedPerTokenPrice('15000', 'aihubmix');
       expect(expensiveAihubmix).toBeGreaterThan(maxPerTokenPrice); // $15/M > $1/M
+
+      // Verify that capped prices still filter correctly within range
+      const cappedPerToken = MAX_PRICE_PER_MILLION / 1000000; // $100/M = $0.0001/token
+      const cappedOpenrouter = getNormalizedPerTokenPrice('0.001', 'openrouter'); // Would be $1000/M, capped to $100/M
+      expect(cappedOpenrouter).toBe(cappedPerToken);
     });
 
     it('should correctly handle Gemini pricing from aihubmix (reported bug case)', () => {
