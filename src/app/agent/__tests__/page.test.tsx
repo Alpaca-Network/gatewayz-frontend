@@ -4,13 +4,15 @@ import AgentPage from "../page";
 // Store original env
 const originalEnv = process.env;
 
-// Mock timers for testing timeout behavior
-jest.useFakeTimers();
-
 describe("AgentPage", () => {
   beforeEach(() => {
+    jest.useFakeTimers();
     jest.resetModules();
     process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   afterAll(() => {
