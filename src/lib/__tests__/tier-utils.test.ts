@@ -56,6 +56,31 @@ describe('tier-utils', () => {
 
       consoleSpy.mockRestore();
     });
+
+    it('should handle max warnings limit to prevent memory leaks', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Generate more than MAX_LOGGED_WARNINGS (100) unique users
+      for (let i = 0; i < 105; i++) {
+        const userData: UserData = {
+          user_id: 2000 + i,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: `privy-${2000 + i}`,
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 100,
+          tier: 'basic',
+          subscription_status: 'active',
+        };
+        getUserTier(userData);
+      }
+
+      // All 105 should have logged (oldest entries are evicted)
+      expect(consoleSpy).toHaveBeenCalledTimes(105);
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('TIER_CONFIG', () => {
