@@ -289,16 +289,77 @@ describe("Monitoring Route (Sentry Tunnel)", () => {
       const rateLimitedCount = responses.filter((r) => r.status === 429).length;
       expect(rateLimitedCount).toBeGreaterThan(0);
     });
+
+    it("should release quota when request fails validation", async () => {
+      mockFetch.mockResolvedValue({ status: 200, body: null });
+
+      // Send 4 valid requests (leaving 1 slot in per-second limit of 5)
+      for (let i = 0; i < 4; i++) {
+        const request = createMockRequest(createMockEnvelopeString());
+        await POST(request);
+      }
+
+      // Send an invalid request - it should be rejected AND release quota
+      const invalidRequest = createMockRequest(
+        createMockEnvelopeString("https://public@sentry.io/")
+      );
+      const invalidResponse = await POST(invalidRequest);
+      expect(invalidResponse.status).toBe(400); // Invalid envelope (empty project ID)
+
+      // Invalid request releases quota, so we should still have 1 slot
+      // Send 2 more valid requests - both should succeed (proving quota was released)
+      const response1 = await POST(createMockRequest(createMockEnvelopeString()));
+      expect(response1.status).toBe(200);
+      const response2 = await POST(createMockRequest(createMockEnvelopeString()));
+      expect(response2.status).toBe(429); // Now we hit the limit (4+1+1 = 6 > 5)
+    });
+
+    it("should release quota when body read fails", async () => {
+      mockFetch.mockResolvedValue({ status: 200, body: null });
+
+      // Send 4 valid requests (leaving 1 slot in per-second limit of 5)
+      for (let i = 0; i < 4; i++) {
+        const request = createMockRequest(createMockEnvelopeString());
+        await POST(request);
+      }
+
+      // Send a request that fails during body read - should release quota
+      const failingRequest = {
+        method: "POST",
+        url: "http://localhost/monitoring",
+        arrayBuffer: jest.fn().mockRejectedValue(new Error("Body read error")),
+      } as unknown as NextRequest;
+      const failResponse = await POST(failingRequest);
+      expect(failResponse.status).toBe(400); // Bad Request
+
+      // Failed request releases quota, so we should still have 1 slot
+      // Send 2 more valid requests - both should succeed (proving quota was released)
+      const response1 = await POST(createMockRequest(createMockEnvelopeString()));
+      expect(response1.status).toBe(200);
+      const response2 = await POST(createMockRequest(createMockEnvelopeString()));
+      expect(response2.status).toBe(429); // Now we hit the limit (4+1+1 = 6 > 5)
+    });
   });
 
   describe("Error Handling", () => {
-    it("should return 500 on internal error", async () => {
+    it("should return 400 when body read fails", async () => {
       const request = {
         method: "POST",
         url: "http://localhost/monitoring",
         arrayBuffer: jest.fn().mockRejectedValue(new Error("Network error")),
       } as unknown as NextRequest;
 
+      const response = await POST(request);
+
+      expect(response.status).toBe(400);
+      expect(await response.text()).toBe("Bad Request");
+    });
+
+    it("should return 500 on internal error during forwarding", async () => {
+      // Simulate an error that occurs after validation (during forwarding)
+      mockFetch.mockRejectedValueOnce(new Error("Unexpected network error"));
+
+      const request = createMockRequest(createMockEnvelopeString());
       const response = await POST(request);
 
       expect(response.status).toBe(500);

@@ -41,10 +41,18 @@ const rateLimitState = {
 };
 
 /**
- * Try to acquire rate limit quota atomically.
+ * Try to acquire rate limit quota.
  * Returns success status and retryAfter if limited.
- * This atomic approach prevents TOCTOU race conditions where multiple
- * concurrent requests could bypass rate limits by checking before consuming.
+ *
+ * NOTE: This is "best-effort" rate limiting for a single-instance deployment.
+ * While JavaScript is single-threaded, concurrent async requests can interleave
+ * between the check and increment operations. This means:
+ * - The limit may occasionally be exceeded by a few requests under high concurrency
+ * - For strict rate limiting with multiple instances, use Redis with atomic operations
+ *
+ * This approach is acceptable for our use case (preventing sustained abuse while
+ * allowing legitimate burst traffic) since slight over-allowance is preferable
+ * to false rejections of valid Sentry events.
  */
 function tryAcquireRateLimitQuota(): { acquired: boolean; retryAfter?: number } {
   const now = Date.now();
@@ -74,8 +82,8 @@ function tryAcquireRateLimitQuota(): { acquired: boolean; retryAfter?: number } 
     return { acquired: false, retryAfter: 1 };
   }
 
-  // Atomically consume quota immediately after check passes
-  // This prevents race conditions in concurrent request handling
+  // Consume quota immediately after check passes
+  // Note: Concurrent requests may interleave here, allowing slight over-limit
   rateLimitState.minuteCount++;
   rateLimitState.secondCount++;
 
@@ -84,7 +92,12 @@ function tryAcquireRateLimitQuota(): { acquired: boolean; retryAfter?: number } 
 
 /**
  * Release rate limit quota (call if request fails validation after quota acquired)
- * This allows malformed requests to not count against the rate limit
+ * This allows malformed requests to not count against the rate limit.
+ *
+ * NOTE: If the rate limit window resets between acquire and release, this will
+ * decrement the new window's count instead. This is acceptable for best-effort
+ * rate limiting - the impact is slightly more lenient limits in rare edge cases.
+ * For strict correctness, use request-specific tokens instead of global counters.
  */
 function releaseRateLimitQuota(): void {
   if (rateLimitState.minuteCount > 0) rateLimitState.minuteCount--;
@@ -130,8 +143,7 @@ function parseEnvelopeHeader(buffer: ArrayBuffer): { projectId: string; host: st
 
 export async function POST(request: NextRequest) {
   try {
-    // Try to acquire rate limit quota atomically
-    // This prevents TOCTOU race conditions in concurrent request handling
+    // Try to acquire rate limit quota (best-effort, see function comment)
     const { acquired, retryAfter } = tryAcquireRateLimitQuota();
     if (!acquired) {
       console.warn("[Sentry Tunnel] Rate limit exceeded, rejecting request");
@@ -147,7 +159,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Read body as ArrayBuffer to preserve binary data (e.g., session replays)
-    const buffer = await request.arrayBuffer();
+    // Release quota if body read fails since we can't validate the request
+    let buffer: ArrayBuffer;
+    try {
+      buffer = await request.arrayBuffer();
+    } catch (error) {
+      releaseRateLimitQuota();
+      console.error("[Sentry Tunnel] Failed to read request body:", error);
+      return new NextResponse("Bad Request", { status: 400, headers: CORS_HEADERS });
+    }
     const envelope = parseEnvelopeHeader(buffer);
 
     // Validate envelope - release quota for invalid requests
@@ -220,6 +240,11 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    // Note: We intentionally do NOT release quota on unexpected errors.
+    // If we reach here, it means:
+    // 1. Validation passed (quota should count for valid requests)
+    // 2. An unexpected error occurred during forwarding
+    // Keeping quota consumed prevents potential abuse via error-triggering requests
     console.error("[Sentry Tunnel] Error:", error);
     return new NextResponse("Internal Server Error", { status: 500, headers: CORS_HEADERS });
   }
