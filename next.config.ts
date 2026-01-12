@@ -134,12 +134,10 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // All other routes (except /agent and /agent/*): Apply strict security headers including frame protection
-        // The negative lookahead (?!agent(?:$|/)) excludes:
-        //   - /agent (exact match via $)
-        //   - /agent/* (sub-paths via /)
-        // But allows: /agents, /agency, etc. (which should have frame protection)
-        source: '/:path((?!agent(?:$|/)).*)',
+        // All other routes (except /agent): Apply strict security headers including X-Frame-Options: DENY
+        // Using /:path* to match all paths including multi-segment paths like /api/health, /settings/account
+        // The /agent route is handled by a more specific rule above, which takes precedence
+        source: '/:path*',
         headers: [
           ...commonSecurityHeaders,
           ...frameProtectionHeaders,
