@@ -452,6 +452,51 @@ describe('gateway-registry', () => {
         // (hug was already in GATEWAY_BY_ID as an alias)
         expect(GATEWAY_BY_ID['hug'].id).toBe('huggingface');
       });
+
+      it('should handle case-insensitive gateway IDs', () => {
+        // Register with mixed case
+        const models1 = [
+          { source_gateway: 'CaseSensitiveTest' },
+        ];
+        autoRegisterGatewaysFromModels(models1);
+
+        // Should be registered as lowercase
+        expect(GATEWAY_BY_ID['casesensitivetest']).toBeDefined();
+        expect(GATEWAY_BY_ID['casesensitivetest'].id).toBe('casesensitivetest');
+
+        // Now try to register with different casing - should not create duplicate
+        const models2 = [
+          { source_gateway: 'CASESENSITIVETEST' },
+          { source_gateway: 'casesensitivetest' },
+          { source_gateway: 'CaseSensitiveTest' },
+        ];
+        autoRegisterGatewaysFromModels(models2);
+
+        // Should still have just one entry (lowercase)
+        const dynamicGateways = getDynamicGateways();
+        const caseSensitiveGateways = dynamicGateways.filter(g => g.id.includes('casesensitive'));
+        expect(caseSensitiveGateways.length).toBe(1);
+      });
+
+      it('should not re-register known gateways with different casing', () => {
+        const originalName = GATEWAY_BY_ID['openrouter'].name;
+
+        const models = [
+          { source_gateway: 'OpenRouter' },
+          { source_gateway: 'OPENROUTER' },
+          { source_gateway: 'openrouter' },
+        ];
+
+        autoRegisterGatewaysFromModels(models);
+
+        // Name should remain unchanged (not treated as new gateway)
+        expect(GATEWAY_BY_ID['openrouter'].name).toBe(originalName);
+
+        // Should not create any dynamic entries for openrouter variants
+        const dynamicGateways = getDynamicGateways();
+        const openrouterDynamic = dynamicGateways.filter(g => g.id.toLowerCase().includes('openrouter'));
+        expect(openrouterDynamic.length).toBe(0);
+      });
     });
   });
 

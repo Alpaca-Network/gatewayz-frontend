@@ -309,36 +309,58 @@ export function buildGatewayHeaders(gatewayId: string): Record<string, string> {
 
 /**
  * Normalize gateway ID (handles aliases like 'hug' -> 'huggingface')
+ * Also handles case-insensitive lookups (e.g., 'OpenRouter' -> 'openrouter')
  */
 export function normalizeGatewayId(gatewayId: string): string {
-  const config = GATEWAY_BY_ID[gatewayId];
-  return config?.id || gatewayId;
+  // First try exact match (handles aliases and exact IDs)
+  const exactMatch = GATEWAY_BY_ID[gatewayId];
+  if (exactMatch) {
+    return exactMatch.id;
+  }
+
+  // Then try lowercase match (handles case differences)
+  const lowercaseId = gatewayId.toLowerCase();
+  const lowercaseMatch = GATEWAY_BY_ID[lowercaseId];
+  if (lowercaseMatch) {
+    return lowercaseMatch.id;
+  }
+
+  // No match found, return lowercase version for consistency
+  return lowercaseId;
 }
 
 /**
  * Check if a gateway ID is valid
  * Uses hasOwnProperty to avoid prototype pollution attacks
+ * Handles case-insensitive lookups
  */
 export function isValidGateway(gatewayId: string): boolean {
+  const lowercaseId = gatewayId.toLowerCase();
   return (
     VALID_GATEWAYS.includes(gatewayId) ||
-    Object.prototype.hasOwnProperty.call(GATEWAY_BY_ID, gatewayId)
+    VALID_GATEWAYS.includes(lowercaseId) ||
+    Object.prototype.hasOwnProperty.call(GATEWAY_BY_ID, gatewayId) ||
+    Object.prototype.hasOwnProperty.call(GATEWAY_BY_ID, lowercaseId)
   );
 }
 
 /**
  * Get gateway display name
+ * Handles case-insensitive lookups
  */
 export function getGatewayDisplayName(gatewayId: string): string {
-  const config = GATEWAY_BY_ID[gatewayId];
+  // Try exact match first, then lowercase
+  const config = GATEWAY_BY_ID[gatewayId] || GATEWAY_BY_ID[gatewayId.toLowerCase()];
   return config?.name || gatewayId;
 }
 
 /**
  * Check if gateway is deprecated
+ * Handles case-insensitive lookups
  */
 export function isGatewayDeprecated(gatewayId: string): boolean {
-  const config = GATEWAY_BY_ID[gatewayId];
+  // Try exact match first, then lowercase
+  const config = GATEWAY_BY_ID[gatewayId] || GATEWAY_BY_ID[gatewayId.toLowerCase()];
   return config?.deprecated || false;
 }
 
@@ -452,7 +474,8 @@ export function getAllActiveGatewayIds(): string[] {
  * Check if a gateway was dynamically registered (not in static config)
  */
 export function isDynamicGateway(gatewayId: string): boolean {
-  return dynamicGateways.has(gatewayId);
+  // Normalize to lowercase for consistent lookup (dynamic gateways are stored lowercase)
+  return dynamicGateways.has(gatewayId.toLowerCase());
 }
 
 /**
@@ -477,13 +500,23 @@ export function autoRegisterGatewaysFromModels(models: Array<{ source_gateway?: 
 
   // Register any unknown gateways
   for (const gatewayId of seenGateways) {
-    if (!GATEWAY_BY_ID[gatewayId] && !dynamicGateways.has(gatewayId)) {
-      // Normalize alias first (e.g., 'hug' -> 'huggingface')
-      const normalized = normalizeGatewayId(gatewayId);
-      if (!GATEWAY_BY_ID[normalized]) {
-        registerDynamicGateway(gatewayId);
-      }
+    // IMPORTANT: Normalize to lowercase FIRST for consistent lookups
+    // registerDynamicGateway stores keys as lowercase, so we must check with lowercase
+    const lowercaseId = gatewayId.toLowerCase();
+
+    // Check if already registered (either static or dynamic) using lowercase key
+    if (GATEWAY_BY_ID[lowercaseId] || dynamicGateways.has(lowercaseId)) {
+      continue; // Already registered
     }
+
+    // Also check if it's an alias that resolves to a known gateway
+    const aliasResolved = GATEWAY_BY_ID[gatewayId]?.id;
+    if (aliasResolved && GATEWAY_BY_ID[aliasResolved]) {
+      continue; // Alias to known gateway
+    }
+
+    // Register the new gateway (registerDynamicGateway will normalize to lowercase)
+    registerDynamicGateway(gatewayId);
   }
 }
 
