@@ -122,7 +122,9 @@ const nextConfig: NextConfig = {
       },
       {
         // All other routes (except /agent): Apply strict security headers including X-Frame-Options: DENY
-        source: '/:path((?!agent).*)',
+        // Using /:path* to match all paths including multi-segment paths like /api/health, /settings/account
+        // The /agent route is handled by a more specific rule above, which takes precedence
+        source: '/:path*',
         headers: [
           ...commonSecurityHeaders,
           {
