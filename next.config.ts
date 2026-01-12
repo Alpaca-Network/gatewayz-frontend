@@ -115,16 +115,6 @@ const nextConfig: NextConfig = {
 
     return [
       {
-        // Agent page: Allow iframe embedding from any origin (page embeds external coding agent)
-        // The agent page needs to embed external content and may receive postMessage from it
-        // Note: No frame protection headers - this page can be embedded and embeds other content
-        source: '/agent',
-        headers: [
-          ...commonSecurityHeaders,
-          // No X-Frame-Options or frame-ancestors CSP - allow embedding
-        ],
-      },
-      {
         // Root path: Apply strict security headers including frame protection
         // Note: /:path patterns don't match root, so we need an explicit rule
         source: '/',
@@ -134,16 +124,24 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // All other routes (except /agent and /agent/*): Apply strict security headers including frame protection
-        // Using :path* to match all path segments (e.g., /settings/account, /models/gpt-4)
-        // The negative lookahead (?!agent(?:$|/)) excludes:
-        //   - /agent (exact match via $)
-        //   - /agent/* (sub-paths via /)
-        // But allows: /agents, /agency, etc. (which should have frame protection)
-        source: '/:path*((?!agent(?:$|/)).*)',
+        // All other routes (except /agent): Apply strict security headers including X-Frame-Options: DENY
+        // Using /:path* to match all paths including multi-segment paths like /api/health, /settings/account
+        // IMPORTANT: Must come BEFORE /agent rule so /agent can override it
+        source: '/:path*',
         headers: [
           ...commonSecurityHeaders,
           ...frameProtectionHeaders,
+        ],
+      },
+      {
+        // Agent page: Allow iframe embedding from any origin (page embeds external coding agent)
+        // The agent page needs to embed external content and may receive postMessage from it
+        // IMPORTANT: Must come LAST to override the /:path* rule above
+        // In Next.js, when multiple rules match, the last one in the array wins
+        source: '/agent',
+        headers: [
+          ...commonSecurityHeaders,
+          // No X-Frame-Options or frame-ancestors CSP - allow embedding
         ],
       },
     ];

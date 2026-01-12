@@ -21,12 +21,13 @@ const CORS_HEADERS = {
 };
 
 // Rate limiting configuration
-// EXTREMELY AGGRESSIVE: Further reduced to prevent 429 errors from Sentry
-// Client now sends max 2 events/min + 3 transactions/min = 5 total/min
+// Balanced approach: Allow bursts on page load while preventing sustained abuse
+// Client-side rate limiting in instrumentation-client.ts handles event deduplication,
+// so server-side limiting mainly prevents abuse from malformed/malicious requests
 const RATE_LIMIT_CONFIG = {
-  maxRequestsPerMinute: 8, // REDUCED from 15 - client sends max 5/min, small buffer
+  maxRequestsPerMinute: 30, // INCREASED from 8 - allow normal page load patterns
   windowMs: 60000, // 1 minute window
-  maxRequestsPerSecond: 1,  // REDUCED from 2 - strict burst prevention
+  maxRequestsPerSecond: 5,  // INCREASED from 1 - allow burst on page load (session + events)
   secondWindowMs: 1000,
 };
 
@@ -40,9 +41,20 @@ const rateLimitState = {
 };
 
 /**
- * Check if request would be rate limited (without consuming quota)
+ * Try to acquire rate limit quota.
+ * Returns success status and retryAfter if limited.
+ *
+ * NOTE: This is "best-effort" rate limiting for a single-instance deployment.
+ * While JavaScript is single-threaded, concurrent async requests can interleave
+ * between the check and increment operations. This means:
+ * - The limit may occasionally be exceeded by a few requests under high concurrency
+ * - For strict rate limiting with multiple instances, use Redis with atomic operations
+ *
+ * This approach is acceptable for our use case (preventing sustained abuse while
+ * allowing legitimate burst traffic) since slight over-allowance is preferable
+ * to false rejections of valid Sentry events.
  */
-function isRateLimited(): { limited: boolean; retryAfter?: number } {
+function tryAcquireRateLimitQuota(): { acquired: boolean; retryAfter?: number } {
   const now = Date.now();
 
   // Reset minute window if expired
@@ -62,23 +74,34 @@ function isRateLimited(): { limited: boolean; retryAfter?: number } {
     const retryAfter = Math.ceil(
       (RATE_LIMIT_CONFIG.windowMs - (now - rateLimitState.minuteWindowStart)) / 1000
     );
-    return { limited: true, retryAfter };
+    return { acquired: false, retryAfter };
   }
 
   // Check second limit (burst protection)
   if (rateLimitState.secondCount >= RATE_LIMIT_CONFIG.maxRequestsPerSecond) {
-    return { limited: true, retryAfter: 1 };
+    return { acquired: false, retryAfter: 1 };
   }
 
-  return { limited: false };
+  // Consume quota immediately after check passes
+  // Note: Concurrent requests may interleave here, allowing slight over-limit
+  rateLimitState.minuteCount++;
+  rateLimitState.secondCount++;
+
+  return { acquired: true };
 }
 
 /**
- * Consume rate limit quota (call only after request validation passes)
+ * Release rate limit quota (call if request fails validation after quota acquired)
+ * This allows malformed requests to not count against the rate limit.
+ *
+ * NOTE: If the rate limit window resets between acquire and release, this will
+ * decrement the new window's count instead. This is acceptable for best-effort
+ * rate limiting - the impact is slightly more lenient limits in rare edge cases.
+ * For strict correctness, use request-specific tokens instead of global counters.
  */
-function consumeRateLimitQuota(): void {
-  rateLimitState.minuteCount++;
-  rateLimitState.secondCount++;
+function releaseRateLimitQuota(): void {
+  if (rateLimitState.minuteCount > 0) rateLimitState.minuteCount--;
+  if (rateLimitState.secondCount > 0) rateLimitState.secondCount--;
 }
 
 /**
@@ -106,6 +129,10 @@ function parseEnvelopeHeader(buffer: ArrayBuffer): { projectId: string; host: st
     const dsnUrl = new URL(header.dsn);
     // Extract first path segment as project ID (handles /123 and /123/foo cases)
     const projectId = dsnUrl.pathname.replace(/^\/+/, "").split("/")[0];
+    // Early return if projectId is empty (e.g., DSN is "https://public@sentry.io/")
+    if (!projectId) {
+      return null;
+    }
     const host = dsnUrl.hostname;
 
     return { projectId, host };
@@ -116,9 +143,9 @@ function parseEnvelopeHeader(buffer: ArrayBuffer): { projectId: string; host: st
 
 export async function POST(request: NextRequest) {
   try {
-    // Check rate limit first (without consuming quota yet)
-    const { limited, retryAfter } = isRateLimited();
-    if (limited) {
+    // Try to acquire rate limit quota (best-effort, see function comment)
+    const { acquired, retryAfter } = tryAcquireRateLimitQuota();
+    if (!acquired) {
       console.warn("[Sentry Tunnel] Rate limit exceeded, rejecting request");
       return new NextResponse("Too Many Requests", {
         status: 429,
@@ -132,44 +159,73 @@ export async function POST(request: NextRequest) {
     }
 
     // Read body as ArrayBuffer to preserve binary data (e.g., session replays)
-    const buffer = await request.arrayBuffer();
+    // Release quota if body read fails since we can't validate the request
+    let buffer: ArrayBuffer;
+    try {
+      buffer = await request.arrayBuffer();
+    } catch (error) {
+      releaseRateLimitQuota();
+      console.error("[Sentry Tunnel] Failed to read request body:", error);
+      return new NextResponse("Bad Request", { status: 400, headers: CORS_HEADERS });
+    }
     const envelope = parseEnvelopeHeader(buffer);
 
-    // Validate envelope - invalid requests don't consume rate limit quota
+    // Validate envelope - release quota for invalid requests
     if (!envelope) {
+      releaseRateLimitQuota();
       console.warn("[Sentry Tunnel] Invalid envelope format");
       return new NextResponse("Invalid envelope", { status: 400, headers: CORS_HEADERS });
     }
 
     // Validate project ID format (security check - must be numeric)
     if (!SENTRY_PROJECT_ID_PATTERN.test(envelope.projectId)) {
+      releaseRateLimitQuota();
       console.warn("[Sentry Tunnel] Invalid project ID format:", envelope.projectId);
       return new NextResponse("Invalid project", { status: 403, headers: CORS_HEADERS });
     }
 
     // Validate host (security check - must be exactly "sentry.io" or "*.sentry.io")
     // This prevents SSRF via malicious domains like "evil-sentry.io"
-    const isValidHost = envelope.host === SENTRY_HOST || envelope.host.endsWith(`.${SENTRY_HOST}`);
+    // Use case-insensitive comparison per RFC 1035 (DNS is case-insensitive)
+    const hostLower = envelope.host.toLowerCase();
+    const isValidHost = hostLower === SENTRY_HOST || hostLower.endsWith(`.${SENTRY_HOST}`);
     if (!isValidHost) {
+      releaseRateLimitQuota();
       console.warn("[Sentry Tunnel] Invalid Sentry host:", envelope.host);
       return new NextResponse("Invalid host", { status: 403, headers: CORS_HEADERS });
     }
 
-    // Only consume rate limit quota after all validation passes
-    // This prevents DoS attacks using malformed requests to exhaust quota
-    consumeRateLimitQuota();
+    // Quota already acquired above (best-effort), proceed to forward request
 
-    // Build upstream URL
-    const upstreamUrl = `https://${envelope.host}/api/${envelope.projectId}/envelope/`;
+    // Build upstream URL using normalized lowercase host for consistency
+    // DNS is case-insensitive, but using lowercase prevents potential issues
+    // with logging, caching, or HTTP clients that might treat URLs differently
+    const upstreamUrl = `https://${hostLower}/api/${envelope.projectId}/envelope/`;
 
-    // Forward to Sentry (use original buffer to preserve binary data)
-    const upstreamResponse = await fetch(upstreamUrl, {
-      method: "POST",
-      body: buffer,
-      headers: {
-        "Content-Type": "application/x-sentry-envelope",
-      },
-    });
+    // Forward to Sentry with timeout to prevent hanging requests
+    // 10 second timeout prevents tying up server resources if Sentry is slow/unresponsive
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    let upstreamResponse: Response;
+    try {
+      upstreamResponse = await fetch(upstreamUrl, {
+        method: "POST",
+        body: buffer,
+        headers: {
+          "Content-Type": "application/x-sentry-envelope",
+        },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        console.warn("[Sentry Tunnel] Upstream request timed out");
+        return new NextResponse("Gateway Timeout", { status: 504, headers: CORS_HEADERS });
+      }
+      throw error;
+    }
+    clearTimeout(timeoutId);
 
     // Log if Sentry returns rate limit (shouldn't happen with our rate limiting)
     if (upstreamResponse.status === 429) {
@@ -184,6 +240,11 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    // Note: We intentionally do NOT release quota on unexpected errors.
+    // If we reach here, it means:
+    // 1. Validation passed (quota should count for valid requests)
+    // 2. An unexpected error occurred during forwarding
+    // Keeping quota consumed prevents potential abuse via error-triggering requests
     console.error("[Sentry Tunnel] Error:", error);
     return new NextResponse("Internal Server Error", { status: 500, headers: CORS_HEADERS });
   }
