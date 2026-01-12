@@ -1,6 +1,8 @@
 import type { UserTier, SubscriptionStatus, UserData } from './api';
 
 // Track logged warnings to prevent duplicate console spam
+// Limited to MAX_LOGGED_WARNINGS entries to prevent memory leaks in long-running apps
+const MAX_LOGGED_WARNINGS = 100;
 const loggedWarnings = new Set<string>();
 
 /**
@@ -8,6 +10,13 @@ const loggedWarnings = new Set<string>();
  */
 const warnOnce = (key: string, message: string, data?: Record<string, unknown>) => {
   if (loggedWarnings.has(key)) return;
+
+  // Prevent unbounded growth - clear oldest entries when limit reached
+  if (loggedWarnings.size >= MAX_LOGGED_WARNINGS) {
+    const firstKey = loggedWarnings.values().next().value;
+    if (firstKey) loggedWarnings.delete(firstKey);
+  }
+
   loggedWarnings.add(key);
   if (data) {
     console.warn(message, data);
