@@ -195,7 +195,7 @@ export async function POST(request: NextRequest) {
       return new NextResponse("Invalid host", { status: 403, headers: CORS_HEADERS });
     }
 
-    // Quota already acquired atomically above, proceed to forward request
+    // Quota already acquired above (best-effort), proceed to forward request
 
     // Build upstream URL using normalized lowercase host for consistency
     // DNS is case-insensitive, but using lowercase prevents potential issues
