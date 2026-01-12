@@ -21,12 +21,13 @@ const CORS_HEADERS = {
 };
 
 // Rate limiting configuration
-// EXTREMELY AGGRESSIVE: Further reduced to prevent 429 errors from Sentry
-// Client now sends max 2 events/min + 3 transactions/min = 5 total/min
+// Balanced approach: Allow bursts on page load while preventing sustained abuse
+// Client-side rate limiting in instrumentation-client.ts handles event deduplication,
+// so server-side limiting mainly prevents abuse from malformed/malicious requests
 const RATE_LIMIT_CONFIG = {
-  maxRequestsPerMinute: 8, // REDUCED from 15 - client sends max 5/min, small buffer
+  maxRequestsPerMinute: 30, // INCREASED from 8 - allow normal page load patterns
   windowMs: 60000, // 1 minute window
-  maxRequestsPerSecond: 1,  // REDUCED from 2 - strict burst prevention
+  maxRequestsPerSecond: 5,  // INCREASED from 1 - allow burst on page load (session + events)
   secondWindowMs: 1000,
 };
 
@@ -149,7 +150,9 @@ export async function POST(request: NextRequest) {
 
     // Validate host (security check - must be exactly "sentry.io" or "*.sentry.io")
     // This prevents SSRF via malicious domains like "evil-sentry.io"
-    const isValidHost = envelope.host === SENTRY_HOST || envelope.host.endsWith(`.${SENTRY_HOST}`);
+    // Use case-insensitive comparison per RFC 1035 (DNS is case-insensitive)
+    const hostLower = envelope.host.toLowerCase();
+    const isValidHost = hostLower === SENTRY_HOST || hostLower.endsWith(`.${SENTRY_HOST}`);
     if (!isValidHost) {
       console.warn("[Sentry Tunnel] Invalid Sentry host:", envelope.host);
       return new NextResponse("Invalid host", { status: 403, headers: CORS_HEADERS });
@@ -162,14 +165,30 @@ export async function POST(request: NextRequest) {
     // Build upstream URL
     const upstreamUrl = `https://${envelope.host}/api/${envelope.projectId}/envelope/`;
 
-    // Forward to Sentry (use original buffer to preserve binary data)
-    const upstreamResponse = await fetch(upstreamUrl, {
-      method: "POST",
-      body: buffer,
-      headers: {
-        "Content-Type": "application/x-sentry-envelope",
-      },
-    });
+    // Forward to Sentry with timeout to prevent hanging requests
+    // 10 second timeout prevents tying up server resources if Sentry is slow/unresponsive
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    let upstreamResponse: Response;
+    try {
+      upstreamResponse = await fetch(upstreamUrl, {
+        method: "POST",
+        body: buffer,
+        headers: {
+          "Content-Type": "application/x-sentry-envelope",
+        },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === "AbortError") {
+        console.warn("[Sentry Tunnel] Upstream request timed out");
+        return new NextResponse("Gateway Timeout", { status: 504, headers: CORS_HEADERS });
+      }
+      throw error;
+    }
+    clearTimeout(timeoutId);
 
     // Log if Sentry returns rate limit (shouldn't happen with our rate limiting)
     if (upstreamResponse.status === 429) {

@@ -72,7 +72,7 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
-    // Common security headers (excluding X-Frame-Options which varies by route)
+    // Common security headers (excluding frame-related headers which vary by route)
     const commonSecurityHeaders = [
       {
         key: 'Strict-Transport-Security',
@@ -98,26 +98,39 @@ const nextConfig: NextConfig = {
       },
     ];
 
+    // Frame protection headers for routes that should NOT be embedded
+    // Uses both X-Frame-Options (legacy) and CSP frame-ancestors (modern)
+    const frameProtectionHeaders = [
+      {
+        key: 'X-Frame-Options',
+        value: 'DENY',
+      },
+      {
+        // CSP frame-ancestors is the modern replacement for X-Frame-Options
+        // 'none' prevents this page from being embedded in any iframe
+        key: 'Content-Security-Policy',
+        value: "frame-ancestors 'none'",
+      },
+    ];
+
     return [
       {
         // Agent page: Allow iframe embedding from any origin (page embeds external coding agent)
         // The agent page needs to embed external content and may receive postMessage from it
+        // Note: No frame protection headers - this page can be embedded and embeds other content
         source: '/agent',
         headers: [
           ...commonSecurityHeaders,
-          // No X-Frame-Options header - allow embedding
+          // No X-Frame-Options or frame-ancestors CSP - allow embedding
         ],
       },
       {
-        // Root path: Apply strict security headers including X-Frame-Options: DENY
+        // Root path: Apply strict security headers including frame protection
         // Note: /:path patterns don't match root, so we need an explicit rule
         source: '/',
         headers: [
           ...commonSecurityHeaders,
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
+          ...frameProtectionHeaders,
         ],
       },
       {
@@ -127,10 +140,7 @@ const nextConfig: NextConfig = {
         source: '/:path*',
         headers: [
           ...commonSecurityHeaders,
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
+          ...frameProtectionHeaders,
         ],
       },
     ];
