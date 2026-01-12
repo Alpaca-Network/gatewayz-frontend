@@ -147,6 +147,35 @@ describe("Monitoring Route (Sentry Tunnel)", () => {
 
       expect(response.status).toBe(200);
     });
+
+    it("should accept hosts with mixed case (DNS is case-insensitive)", async () => {
+      mockFetch.mockResolvedValueOnce({
+        status: 200,
+        body: null,
+      });
+
+      // Test uppercase host - should be accepted per RFC 1035
+      const mixedCaseDsn = "https://public@SENTRY.IO/1234567";
+      const request = createMockRequest(createMockEnvelopeString(mixedCaseDsn));
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(200);
+    });
+
+    it("should accept subdomains with mixed case", async () => {
+      mockFetch.mockResolvedValueOnce({
+        status: 200,
+        body: null,
+      });
+
+      const mixedCaseSubdomainDsn = "https://public@O123.Ingest.Sentry.IO/1234567";
+      const request = createMockRequest(createMockEnvelopeString(mixedCaseSubdomainDsn));
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(200);
+    });
   });
 
   describe("Request Forwarding", () => {
@@ -275,6 +304,44 @@ describe("Monitoring Route (Sentry Tunnel)", () => {
       );
 
       consoleSpy.mockRestore();
+    });
+
+    it("should return 504 on upstream timeout", async () => {
+      // Create an AbortError to simulate timeout
+      const abortError = new Error("The operation was aborted");
+      abortError.name = "AbortError";
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const consoleSpy = jest.spyOn(console, "warn").mockImplementation();
+
+      const request = createMockRequest(createMockEnvelopeString());
+      const response = await POST(request);
+
+      expect(response.status).toBe(504);
+      expect(await response.text()).toBe("Gateway Timeout");
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("timed out")
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should include AbortSignal in fetch call for timeout", async () => {
+      mockFetch.mockResolvedValueOnce({
+        status: 200,
+        body: null,
+      });
+
+      const request = createMockRequest(createMockEnvelopeString());
+      await POST(request);
+
+      // Verify fetch was called with signal
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+        })
+      );
     });
   });
 });
