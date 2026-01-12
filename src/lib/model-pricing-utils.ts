@@ -60,8 +60,24 @@ export interface ModelPricingInfo {
 /**
  * Gateways that return pricing in per-million-tokens format (not per-token).
  * These gateways should NOT have their pricing multiplied by 1,000,000.
+ *
+ * How to identify if a gateway uses per-million pricing:
+ * - If a model like GPT-4o-mini shows $0.15 in the API response, it's per-million
+ * - If it shows $0.00000015, it's per-token
+ *
+ * Known per-million gateways:
+ * - onerouter: Returns prices like 0.15 for $0.15/M
+ * - google/google-vertex: Returns prices like 0.075 for $0.075/M
+ * - helicone: Returns prices like 0.15 for $0.15/M
+ * - vercel-ai-gateway: Returns prices like 0.15 for $0.15/M
  */
-const PER_MILLION_PRICING_GATEWAYS = ['onerouter'];
+const PER_MILLION_PRICING_GATEWAYS = [
+  'onerouter',
+  'google',
+  'google-vertex',
+  'helicone',
+  'vercel-ai-gateway',
+];
 
 /**
  * Gateways that return pricing in per-billion-tokens format.
