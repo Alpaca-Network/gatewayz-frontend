@@ -7,6 +7,7 @@ import {
   formatPricingForDisplay,
   getNormalizedPerTokenPrice,
   ModelPricingInfo,
+  MAX_PRICE_PER_MILLION,
 } from '../model-pricing-utils';
 
 describe('model-pricing-utils', () => {
@@ -339,11 +340,12 @@ describe('model-pricing-utils', () => {
       // Gemini 2.5 Flash: 75000 per-billion = $75.00 per-million
       expect(formatPricingForDisplay('75000', 'aihubmix')).toBe('75.00');
 
-      // Gemini 2.5 Flash output: 300000 per-billion = $300.00 per-million
-      expect(formatPricingForDisplay('300000', 'aihubmix')).toBe('300.00');
+      // Prices above $100/M are capped at $100.00
+      // Gemini 2.5 Flash output: 300000 per-billion = $300.00 per-million, but capped at $100
+      expect(formatPricingForDisplay('300000', 'aihubmix')).toBe('100.00');
 
-      // Gemini 2.5 Pro: 1250000 per-billion = $1250.00 per-million
-      expect(formatPricingForDisplay('1250000', 'aihubmix')).toBe('1250.00');
+      // Gemini 2.5 Pro: 1250000 per-billion = $1250.00 per-million, but capped at $100
+      expect(formatPricingForDisplay('1250000', 'aihubmix')).toBe('100.00');
     });
 
     it('should return null for undefined or empty price', () => {
@@ -443,23 +445,81 @@ describe('model-pricing-utils', () => {
       const geminiFlashInput = formatPricingForDisplay('75000', 'aihubmix');
       expect(geminiFlashInput).toBe('75.00');
 
-      // Output: 300000 per-billion should display as $300.00/M
+      // Output: 300000 per-billion = $300.00/M, but capped at $100
       const geminiFlashOutput = formatPricingForDisplay('300000', 'aihubmix');
-      expect(geminiFlashOutput).toBe('300.00');
+      expect(geminiFlashOutput).toBe('100.00');
 
       // Gemini 2.5 Flash Lite
       const geminiFlashLiteInput = formatPricingForDisplay('30000', 'aihubmix');
       expect(geminiFlashLiteInput).toBe('30.00');
 
+      // Output: 120000 per-billion = $120.00/M, but capped at $100
       const geminiFlashLiteOutput = formatPricingForDisplay('120000', 'aihubmix');
-      expect(geminiFlashLiteOutput).toBe('120.00');
+      expect(geminiFlashLiteOutput).toBe('100.00');
 
-      // Gemini 2.5 Pro
+      // Gemini 2.5 Pro: prices above $100 are capped
       const geminiProInput = formatPricingForDisplay('1250000', 'aihubmix');
-      expect(geminiProInput).toBe('1250.00');
+      expect(geminiProInput).toBe('100.00');
 
       const geminiProOutput = formatPricingForDisplay('5000000', 'aihubmix');
-      expect(geminiProOutput).toBe('5000.00');
+      expect(geminiProOutput).toBe('100.00');
+    });
+
+    it('should enforce MAX_PRICE_PER_MILLION constant', () => {
+      // Verify the constant is set to $100
+      expect(MAX_PRICE_PER_MILLION).toBe(100);
+    });
+
+    it('should cap prices at $100/M regardless of gateway', () => {
+      // Test price capping for various gateways
+
+      // Standard per-token gateway: huge per-token price would exceed cap
+      // $200/M = $0.0002/token, when multiplied by 1,000,000 = $200/M, capped at $100
+      expect(formatPricingForDisplay('0.0002', 'openrouter')).toBe('100.00');
+      expect(formatPricingForDisplay('0.001', 'groq')).toBe('100.00'); // $1000/M, capped
+
+      // Per-million gateway: direct pricing exceeding cap
+      expect(formatPricingForDisplay('150', 'onerouter')).toBe('100.00');
+      expect(formatPricingForDisplay('500', 'onerouter')).toBe('100.00');
+
+      // Per-billion gateway: pricing that converts to > $100/M
+      expect(formatPricingForDisplay('200000', 'aihubmix')).toBe('100.00'); // $200/M, capped
+    });
+
+    it('should never return a price higher than $100', () => {
+      // This is the key test that ensures the fix works for the reported issue
+      const testPrices = [
+        // Prices that caused the original bug (Gemini models showing $75000, $300000, etc.)
+        { price: '75000', gateway: 'google' },      // Would be $75B/M without cap
+        { price: '300000', gateway: 'helicone' },   // Would be $300B/M without cap
+        { price: '1250000', gateway: 'vercel-ai-gateway' },  // Would be $1.25T/M without cap
+        // Various gateway scenarios
+        { price: '0.001', gateway: 'openrouter' },   // $1000/M
+        { price: '1000', gateway: 'onerouter' },     // $1000/M
+        { price: '500000', gateway: 'aihubmix' },    // $500/M
+      ];
+
+      testPrices.forEach(({ price, gateway }) => {
+        const result = formatPricingForDisplay(price, gateway);
+        if (result !== null) {
+          const numericResult = parseFloat(result);
+          expect(numericResult).toBeLessThanOrEqual(MAX_PRICE_PER_MILLION);
+        }
+      });
+    });
+
+    it('should allow prices at or below $100/M', () => {
+      // Test that legitimate prices under $100 are not affected
+      expect(formatPricingForDisplay('0.00000015', 'openrouter')).toBe('0.15');
+      expect(formatPricingForDisplay('0.00001', 'openrouter')).toBe('10.00');
+      expect(formatPricingForDisplay('0.0001', 'openrouter')).toBe('100.00'); // Exactly $100
+
+      expect(formatPricingForDisplay('50', 'onerouter')).toBe('50.00');
+      expect(formatPricingForDisplay('99.99', 'onerouter')).toBe('99.99');
+      expect(formatPricingForDisplay('100', 'onerouter')).toBe('100.00');
+
+      expect(formatPricingForDisplay('50000', 'aihubmix')).toBe('50.00');
+      expect(formatPricingForDisplay('100000', 'aihubmix')).toBe('100.00');
     });
   });
 });

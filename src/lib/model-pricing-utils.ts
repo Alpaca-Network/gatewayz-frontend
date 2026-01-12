@@ -11,7 +11,19 @@
  * - OneRouter: per-million-tokens (e.g., 0.15 = $0.15/M tokens)
  *
  * The formatPricingForDisplay function normalizes all pricing to per-million-tokens for display.
+ *
+ * Price Limit:
+ * Maximum displayed price is capped at $100/M tokens. If a calculated price exceeds this,
+ * it indicates a pricing unit mismatch that needs investigation. The cap prevents
+ * unrealistic prices from being displayed to users.
  */
+
+/**
+ * Maximum allowed price per million tokens for display.
+ * Prices exceeding this are capped to prevent display of unrealistic values
+ * caused by pricing unit mismatches between gateways.
+ */
+export const MAX_PRICE_PER_MILLION = 100;
 
 export interface ModelPricingInfo {
   id?: string;
@@ -98,16 +110,22 @@ export function getModelPricingCategory(model: ModelPricingInfo): 'Free' | 'Paid
  * Convert pricing to per-million-tokens format for display.
  *
  * Gateway pricing formats:
- * - Most gateways (OpenRouter, Helicone, etc.): per-token (e.g., 0.00000015)
+ * - Most gateways (OpenRouter, Groq, etc.): per-token (e.g., 0.00000015)
  *   → multiply by 1,000,000 to get per-million
  * - Per-million gateways (onerouter): per-million (e.g., 0.15)
  *   → display as-is
  * - Per-billion gateways (aihubmix): per-billion (e.g., 150.0)
  *   → divide by 1,000 to get per-million
  *
+ * Price Cap:
+ * Prices are capped at MAX_PRICE_PER_MILLION ($100/M tokens) to prevent
+ * display of unrealistic values caused by pricing unit mismatches.
+ * If a price exceeds this limit, it indicates the gateway's pricing format
+ * may need to be added to the appropriate pricing gateway list.
+ *
  * @param price - Price string from the API
  * @param sourceGateway - Gateway the model comes from
- * @returns Formatted price string for display (per-million-tokens) or null
+ * @returns Formatted price string for display (per-million-tokens), capped at $100, or null
  */
 export function formatPricingForDisplay(price: string | undefined, sourceGateway: string): string | null {
   if (!price) return null;
@@ -124,6 +142,13 @@ export function formatPricingForDisplay(price: string | undefined, sourceGateway
   } else {
     // Per-token format: multiply by 1,000,000 to get per-million
     perMillionPrice = numPrice * 1000000;
+  }
+
+  // Cap price at MAX_PRICE_PER_MILLION to prevent unrealistic display values
+  // This catches pricing unit mismatches where gateways return per-million
+  // but aren't registered in PER_MILLION_PRICING_GATEWAYS
+  if (perMillionPrice > MAX_PRICE_PER_MILLION) {
+    perMillionPrice = MAX_PRICE_PER_MILLION;
   }
 
   return perMillionPrice.toFixed(2);
