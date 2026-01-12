@@ -18,6 +18,7 @@ export default function AgentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0);
   const iframeLoadedRef = useRef(false);
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -151,6 +152,8 @@ export default function AgentPage() {
                 setConnectionError(false);
                 setIsLoading(true);
                 iframeLoadedRef.current = false;
+                // Increment key to force iframe remount (idiomatic React pattern)
+                setIframeKey((prev) => prev + 1);
                 // Reset timeout
                 if (loadTimeoutRef.current) {
                   clearTimeout(loadTimeoutRef.current);
@@ -201,6 +204,7 @@ export default function AgentPage() {
 
       {agentUrl && (
         <iframe
+          key={iframeKey}
           src={agentUrl}
           className="w-full h-full border-0"
           title="Coding Agent"

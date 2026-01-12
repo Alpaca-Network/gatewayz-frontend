@@ -193,5 +193,100 @@ describe("AgentPage", () => {
         screen.queryByText("Loading Coding Agent...")
       ).not.toBeInTheDocument();
     });
+
+    it("should remount iframe with new key when retrying connection", () => {
+      const { container } = render(<AgentPage />);
+
+      // Get initial iframe key
+      const initialIframe = container.querySelector("iframe");
+      expect(initialIframe).toHaveAttribute("src", testAgentUrl);
+
+      // Fast-forward past the timeout to trigger connection error
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      // Click retry
+      const retryButton = screen.getByRole("button", {
+        name: /retry connection/i,
+      });
+      fireEvent.click(retryButton);
+
+      // New iframe should be rendered (React will remount due to key change)
+      const newIframe = container.querySelector("iframe");
+      expect(newIframe).toBeInTheDocument();
+      expect(newIframe).toHaveAttribute("src", testAgentUrl);
+    });
+
+    it("should not show connection error if iframe loads before timeout", () => {
+      render(<AgentPage />);
+
+      const iframe = screen.getByTitle("Coding Agent");
+
+      // Simulate iframe load before timeout
+      fireEvent.load(iframe);
+
+      // Fast-forward past the timeout
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      // Should NOT show connection error since iframe loaded successfully
+      expect(screen.queryByText("Connection Failed")).not.toBeInTheDocument();
+    });
+
+    it("should clear existing timeout when retrying", () => {
+      render(<AgentPage />);
+
+      // Fast-forward to just before timeout
+      act(() => {
+        jest.advanceTimersByTime(14000);
+      });
+
+      // Should still be loading
+      expect(screen.getByText("Loading Coding Agent...")).toBeInTheDocument();
+
+      // Trigger timeout
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+
+      // Now in error state
+      expect(screen.getByText("Connection Failed")).toBeInTheDocument();
+
+      // Click retry
+      const retryButton = screen.getByRole("button", {
+        name: /retry connection/i,
+      });
+      fireEvent.click(retryButton);
+
+      // Should be loading again
+      expect(screen.getByText("Loading Coding Agent...")).toBeInTheDocument();
+
+      // Advance time but not enough to trigger new timeout
+      act(() => {
+        jest.advanceTimersByTime(10000);
+      });
+
+      // Should still be loading (not error yet)
+      expect(screen.getByText("Loading Coding Agent...")).toBeInTheDocument();
+    });
+
+    it("should show possible causes list in connection error", () => {
+      render(<AgentPage />);
+
+      // Fast-forward past the timeout
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      expect(screen.getByText("Possible causes:")).toBeInTheDocument();
+      expect(
+        screen.getByText(/The Coding Agent server is not running or unreachable/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/Network connectivity issues or firewall blocking/i)
+      ).toBeInTheDocument();
+    });
   });
 });
