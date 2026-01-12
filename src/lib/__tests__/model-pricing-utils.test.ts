@@ -261,6 +261,23 @@ describe('model-pricing-utils', () => {
       expect(isPerMillionPricingGateway('ONEROUTER')).toBe(true);
     });
 
+    it('should return true for google and google-vertex gateways', () => {
+      expect(isPerMillionPricingGateway('google')).toBe(true);
+      expect(isPerMillionPricingGateway('Google')).toBe(true);
+      expect(isPerMillionPricingGateway('google-vertex')).toBe(true);
+      expect(isPerMillionPricingGateway('Google-Vertex')).toBe(true);
+    });
+
+    it('should return true for helicone gateway', () => {
+      expect(isPerMillionPricingGateway('helicone')).toBe(true);
+      expect(isPerMillionPricingGateway('Helicone')).toBe(true);
+    });
+
+    it('should return true for vercel-ai-gateway', () => {
+      expect(isPerMillionPricingGateway('vercel-ai-gateway')).toBe(true);
+      expect(isPerMillionPricingGateway('Vercel-AI-Gateway')).toBe(true);
+    });
+
     it('should return false for standard per-token pricing gateways', () => {
       const perTokenGateways = [
         'openrouter',
@@ -329,6 +346,28 @@ describe('model-pricing-utils', () => {
       expect(formatPricingForDisplay('1.00', 'onerouter')).toBe('1.00');
       expect(formatPricingForDisplay('3.00', 'onerouter')).toBe('3.00');
       expect(formatPricingForDisplay('15.00', 'onerouter')).toBe('15.00');
+    });
+
+    it('should NOT multiply for google/helicone/vercel gateways (per-million format) - ROOT CAUSE FIX', () => {
+      // These gateways return pricing in per-million format
+      // This test verifies the root cause fix for Gemini models showing $75000/M instead of $0.075/M
+
+      // Google gateway - Gemini 2.5 Flash pricing
+      // API returns 0.075 meaning $0.075/M, NOT $0.075/token
+      expect(formatPricingForDisplay('0.075', 'google')).toBe('0.07'); // $0.075/M (toFixed(2) truncates)
+      expect(formatPricingForDisplay('0.30', 'google')).toBe('0.30');  // $0.30/M output
+      expect(formatPricingForDisplay('1.25', 'google')).toBe('1.25');  // Gemini Pro input
+
+      // Google-vertex gateway (alias)
+      expect(formatPricingForDisplay('0.075', 'google-vertex')).toBe('0.07');
+
+      // Helicone gateway
+      expect(formatPricingForDisplay('0.15', 'helicone')).toBe('0.15'); // GPT-4o-mini style pricing
+      expect(formatPricingForDisplay('2.50', 'helicone')).toBe('2.50');
+
+      // Vercel AI Gateway
+      expect(formatPricingForDisplay('0.15', 'vercel-ai-gateway')).toBe('0.15');
+      expect(formatPricingForDisplay('5.00', 'vercel-ai-gateway')).toBe('5.00');
     });
 
     it('should divide by 1,000 for aihubmix gateway (per-billion format)', () => {
