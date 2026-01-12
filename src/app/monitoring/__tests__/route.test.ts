@@ -122,6 +122,18 @@ describe("Monitoring Route (Sentry Tunnel)", () => {
       expect(await response.text()).toBe("Invalid project");
     });
 
+    it("should reject requests with empty project ID", async () => {
+      const emptyProjectDsn = "https://public@sentry.io/";
+      const request = createMockRequest(
+        createMockEnvelopeString(emptyProjectDsn)
+      );
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(400);
+      expect(await response.text()).toBe("Invalid envelope");
+    });
+
     it("should reject requests with invalid Sentry host", async () => {
       const invalidHostDsn = "https://public@evil-sentry.io/1234567";
       const request = createMockRequest(
@@ -161,6 +173,11 @@ describe("Monitoring Route (Sentry Tunnel)", () => {
       const response = await POST(request);
 
       expect(response.status).toBe(200);
+      // Verify URL is normalized to lowercase
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringMatching(/^https:\/\/sentry\.io\//),
+        expect.any(Object)
+      );
     });
 
     it("should accept subdomains with mixed case", async () => {
@@ -175,6 +192,11 @@ describe("Monitoring Route (Sentry Tunnel)", () => {
       const response = await POST(request);
 
       expect(response.status).toBe(200);
+      // Verify URL is normalized to lowercase
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringMatching(/^https:\/\/o123\.ingest\.sentry\.io\//),
+        expect.any(Object)
+      );
     });
   });
 
