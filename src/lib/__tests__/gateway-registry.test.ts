@@ -178,6 +178,19 @@ describe('gateway-registry', () => {
         expect(isValidGateway('')).toBe(false);
         expect(isValidGateway('random')).toBe(false);
       });
+
+      it('should validate gateways case-insensitively', () => {
+        expect(isValidGateway('OPENROUTER')).toBe(true);
+        expect(isValidGateway('OpenRouter')).toBe(true);
+        expect(isValidGateway('ALL')).toBe(true);
+        expect(isValidGateway('All')).toBe(true);
+      });
+
+      it('should validate aliases case-insensitively', () => {
+        expect(isValidGateway('HUG')).toBe(true);
+        expect(isValidGateway('Hug')).toBe(true);
+        expect(isValidGateway('GOOGLE')).toBe(true);
+      });
     });
 
     describe('normalizeGatewayId', () => {
@@ -192,6 +205,22 @@ describe('gateway-registry', () => {
 
       it('should return input for unknown gateways', () => {
         expect(normalizeGatewayId('unknown')).toBe('unknown');
+      });
+
+      it('should normalize gateway IDs to lowercase for known gateways', () => {
+        expect(normalizeGatewayId('OpenRouter')).toBe('openrouter');
+        expect(normalizeGatewayId('GROQ')).toBe('groq');
+        expect(normalizeGatewayId('HuggingFace')).toBe('huggingface');
+      });
+
+      it('should normalize unknown gateway IDs to lowercase', () => {
+        expect(normalizeGatewayId('UnknownGateway')).toBe('unknowngateway');
+        expect(normalizeGatewayId('NEW-GATEWAY')).toBe('new-gateway');
+      });
+
+      it('should handle case-insensitive alias resolution', () => {
+        expect(normalizeGatewayId('HUG')).toBe('huggingface');
+        expect(normalizeGatewayId('Hug')).toBe('huggingface');
       });
     });
 
@@ -209,6 +238,17 @@ describe('gateway-registry', () => {
       it('should return input ID for unknown gateways', () => {
         expect(getGatewayDisplayName('unknown-gateway')).toBe('unknown-gateway');
       });
+
+      it('should return display name for case-insensitive gateway IDs', () => {
+        expect(getGatewayDisplayName('OPENROUTER')).toBe('OpenRouter');
+        expect(getGatewayDisplayName('GrOq')).toBe('Groq');
+        expect(getGatewayDisplayName('HUGGINGFACE')).toBe('Hugging Face');
+      });
+
+      it('should return display name for case-insensitive aliases', () => {
+        expect(getGatewayDisplayName('HUG')).toBe('Hugging Face');
+        expect(getGatewayDisplayName('GOOGLE')).toBe('Google');
+      });
     });
 
     describe('isGatewayDeprecated', () => {
@@ -224,6 +264,13 @@ describe('gateway-registry', () => {
 
       it('should return false for unknown gateways', () => {
         expect(isGatewayDeprecated('unknown')).toBe(false);
+      });
+
+      it('should check deprecated status case-insensitively', () => {
+        expect(isGatewayDeprecated('PORTKEY')).toBe(true);
+        expect(isGatewayDeprecated('Portkey')).toBe(true);
+        expect(isGatewayDeprecated('OPENROUTER')).toBe(false);
+        expect(isGatewayDeprecated('OpenRouter')).toBe(false);
       });
     });
   });
@@ -380,6 +427,13 @@ describe('gateway-registry', () => {
         registerDynamicGateway('dynamic-check-test');
         expect(isDynamicGateway('dynamic-check-test')).toBe(true);
       });
+
+      it('should check dynamic gateway status case-insensitively', () => {
+        registerDynamicGateway('case-sensitive-dynamic-test');
+        expect(isDynamicGateway('case-sensitive-dynamic-test')).toBe(true);
+        expect(isDynamicGateway('CASE-SENSITIVE-DYNAMIC-TEST')).toBe(true);
+        expect(isDynamicGateway('Case-Sensitive-Dynamic-Test')).toBe(true);
+      });
     });
 
     describe('getDynamicGateways', () => {
@@ -451,6 +505,51 @@ describe('gateway-registry', () => {
         // 'hug' should resolve to huggingface, not be registered separately
         // (hug was already in GATEWAY_BY_ID as an alias)
         expect(GATEWAY_BY_ID['hug'].id).toBe('huggingface');
+      });
+
+      it('should handle case-insensitive gateway IDs', () => {
+        // Register with mixed case
+        const models1 = [
+          { source_gateway: 'CaseSensitiveTest' },
+        ];
+        autoRegisterGatewaysFromModels(models1);
+
+        // Should be registered as lowercase
+        expect(GATEWAY_BY_ID['casesensitivetest']).toBeDefined();
+        expect(GATEWAY_BY_ID['casesensitivetest'].id).toBe('casesensitivetest');
+
+        // Now try to register with different casing - should not create duplicate
+        const models2 = [
+          { source_gateway: 'CASESENSITIVETEST' },
+          { source_gateway: 'casesensitivetest' },
+          { source_gateway: 'CaseSensitiveTest' },
+        ];
+        autoRegisterGatewaysFromModels(models2);
+
+        // Should still have just one entry (lowercase)
+        const dynamicGateways = getDynamicGateways();
+        const caseSensitiveGateways = dynamicGateways.filter(g => g.id.includes('casesensitive'));
+        expect(caseSensitiveGateways.length).toBe(1);
+      });
+
+      it('should not re-register known gateways with different casing', () => {
+        const originalName = GATEWAY_BY_ID['openrouter'].name;
+
+        const models = [
+          { source_gateway: 'OpenRouter' },
+          { source_gateway: 'OPENROUTER' },
+          { source_gateway: 'openrouter' },
+        ];
+
+        autoRegisterGatewaysFromModels(models);
+
+        // Name should remain unchanged (not treated as new gateway)
+        expect(GATEWAY_BY_ID['openrouter'].name).toBe(originalName);
+
+        // Should not create any dynamic entries for openrouter variants
+        const dynamicGateways = getDynamicGateways();
+        const openrouterDynamic = dynamicGateways.filter(g => g.id.toLowerCase().includes('openrouter'));
+        expect(openrouterDynamic.length).toBe(0);
       });
     });
   });
