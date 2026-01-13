@@ -3,16 +3,12 @@ import { ReactNode } from 'react';
 /**
  * Static generation params for desktop static export.
  * Returns an empty array since sandbox IDs are dynamic.
- * This allows the page to exist in static export builds without pre-rendering.
+ * For static export (desktop builds), this route won't be pre-rendered.
+ * For server mode (web), dynamic routing still works normally.
  */
 export function generateStaticParams(): { sandboxId: string }[] {
   return [];
 }
-
-/**
- * Allow dynamic params not in generateStaticParams.
- */
-export const dynamicParams = true;
 
 interface LayoutProps {
   children: ReactNode;
