@@ -3,6 +3,7 @@ name: Desktop App Build
 on:
   push:
     branches:
+      - master
       - main
     tags:
       - 'v*'
@@ -12,6 +13,7 @@ on:
       - '.github/workflows/desktop-build.yml'
   pull_request:
     branches:
+      - master
       - main
     paths:
       - 'src-tauri/**'
