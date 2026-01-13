@@ -72,37 +72,76 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
+    // Common security headers (excluding frame-related headers which vary by route)
+    const commonSecurityHeaders = [
+      {
+        key: 'Strict-Transport-Security',
+        value: 'max-age=31536000; includeSubDomains',
+      },
+      {
+        key: 'X-Content-Type-Options',
+        value: 'nosniff',
+      },
+      {
+        key: 'X-XSS-Protection',
+        value: '1; mode=block',
+      },
+      {
+        key: 'Referrer-Policy',
+        value: 'strict-origin-when-cross-origin',
+      },
+      {
+        // Allow microphone for speech recognition on /chat, block geolocation and camera
+        // microphone=(self) allows same-origin access needed for Web Speech API
+        key: 'Permissions-Policy',
+        value: 'geolocation=(), camera=(), microphone=(self)',
+      },
+    ];
+
+    // Frame protection headers for routes that should NOT be embedded
+    // Uses both X-Frame-Options (legacy) and CSP frame-ancestors (modern)
+    const frameProtectionHeaders = [
+      {
+        key: 'X-Frame-Options',
+        value: 'DENY',
+      },
+      {
+        // CSP frame-ancestors is the modern replacement for X-Frame-Options
+        // 'none' prevents this page from being embedded in any iframe
+        key: 'Content-Security-Policy',
+        value: "frame-ancestors 'none'",
+      },
+    ];
+
     return [
       {
-        // Apply security headers to all routes
+        // Root path: Apply strict security headers including frame protection
+        // Note: /:path patterns don't match root, so we need an explicit rule
+        source: '/',
+        headers: [
+          ...commonSecurityHeaders,
+          ...frameProtectionHeaders,
+        ],
+      },
+      {
+        // All other routes (except /agent): Apply strict security headers including X-Frame-Options: DENY
+        // Using /:path* to match all paths including multi-segment paths like /api/health, /settings/account
+        // IMPORTANT: Must come BEFORE /agent rule so /agent can override it
         source: '/:path*',
         headers: [
-          {
-            key: 'Strict-Transport-Security',
-            value: 'max-age=31536000; includeSubDomains',
-          },
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'DENY',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            // Allow microphone for speech recognition on /chat, block geolocation and camera
-            // microphone=(self) allows same-origin access needed for Web Speech API
-            key: 'Permissions-Policy',
-            value: 'geolocation=(), camera=(), microphone=(self)',
-          },
+          ...commonSecurityHeaders,
+          ...frameProtectionHeaders,
+        ],
+      },
+      {
+        // Agent page: Allow iframe embedding from any origin (page embeds external coding agent)
+        // The agent page needs to embed external content and may receive postMessage from it
+        // IMPORTANT: Must come LAST to override the /:path* rule above
+        // In Next.js, when multiple rules match, the last one in the array wins
+        source: '/agent',
+        headers: [
+          ...commonSecurityHeaders,
+          // No X-Frame-Options or frame-ancestors CSP - allow embedding
         ],
       },
     ];

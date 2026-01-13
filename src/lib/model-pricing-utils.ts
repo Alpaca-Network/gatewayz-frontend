@@ -11,7 +11,40 @@
  * - OneRouter: per-million-tokens (e.g., 0.15 = $0.15/M tokens)
  *
  * The formatPricingForDisplay function normalizes all pricing to per-million-tokens for display.
+ *
+ * Pricing Unit Mismatch Detection:
+ * When a gateway returns pricing in an unexpected format, we detect this using heuristics:
+ * 1. If calculated per-million price exceeds a reasonable threshold (e.g., $1000/M),
+ *    the gateway likely returns per-million instead of per-token
+ * 2. We auto-correct by dividing by the appropriate factor
+ * 3. Final prices are capped at MAX_PRICE_PER_MILLION ($100/M) as a safety net
+ *
+ * This approach prevents order-of-magnitude errors from reaching users while
+ * allowing the system to gracefully handle unknown gateways.
  */
+
+/**
+ * Maximum allowed price per million tokens for display.
+ * Prices exceeding this are capped to prevent display of unrealistic values
+ * caused by pricing unit mismatches between gateways.
+ */
+export const MAX_PRICE_PER_MILLION = 100;
+
+/**
+ * Threshold for detecting pricing unit mismatches.
+ * If calculated per-million price exceeds this, we assume the gateway
+ * returns per-million (not per-token) and auto-correct.
+ *
+ * Set to $1000/M - no legitimate model costs more than this per million tokens.
+ * GPT-4o is ~$15/M, Claude 3.5 Opus is ~$75/M, so $1000 provides headroom.
+ */
+const PRICE_MISMATCH_THRESHOLD = 1000;
+
+/**
+ * Track gateways that have been warned about pricing mismatches.
+ * Prevents flooding logs with repeated warnings for the same gateway.
+ */
+const warnedGateways = new Set<string>();
 
 export interface ModelPricingInfo {
   id?: string;
@@ -27,8 +60,24 @@ export interface ModelPricingInfo {
 /**
  * Gateways that return pricing in per-million-tokens format (not per-token).
  * These gateways should NOT have their pricing multiplied by 1,000,000.
+ *
+ * How to identify if a gateway uses per-million pricing:
+ * - If a model like GPT-4o-mini shows $0.15 in the API response, it's per-million
+ * - If it shows $0.00000015, it's per-token
+ *
+ * Known per-million gateways:
+ * - onerouter: Returns prices like 0.15 for $0.15/M
+ * - google/google-vertex: Returns prices like 0.075 for $0.075/M
+ * - helicone: Returns prices like 0.15 for $0.15/M
+ * - vercel-ai-gateway: Returns prices like 0.15 for $0.15/M
  */
-const PER_MILLION_PRICING_GATEWAYS = ['onerouter'];
+const PER_MILLION_PRICING_GATEWAYS = [
+  'onerouter',
+  'google',
+  'google-vertex',
+  'helicone',
+  'vercel-ai-gateway',
+];
 
 /**
  * Gateways that return pricing in per-billion-tokens format.
@@ -95,26 +144,24 @@ export function getModelPricingCategory(model: ModelPricingInfo): 'Free' | 'Paid
 }
 
 /**
- * Convert pricing to per-million-tokens format for display.
+ * Normalize price to per-million-tokens format with automatic mismatch detection.
  *
- * Gateway pricing formats:
- * - Most gateways (OpenRouter, Helicone, etc.): per-token (e.g., 0.00000015)
- *   → multiply by 1,000,000 to get per-million
- * - Per-million gateways (onerouter): per-million (e.g., 0.15)
- *   → display as-is
- * - Per-billion gateways (aihubmix): per-billion (e.g., 150.0)
- *   → divide by 1,000 to get per-million
+ * This is the core normalization logic used by both formatPricingForDisplay
+ * and getNormalizedPerTokenPrice to ensure consistent behavior.
  *
- * @param price - Price string from the API
+ * Detection Logic:
+ * 1. Apply known gateway format (per-token, per-million, per-billion)
+ * 2. If result exceeds PRICE_MISMATCH_THRESHOLD ($1000/M), assume the gateway
+ *    returns per-million instead of per-token and auto-correct
+ * 3. Cap final result at MAX_PRICE_PER_MILLION ($100/M)
+ *
+ * @param numPrice - Numeric price value from the API
  * @param sourceGateway - Gateway the model comes from
- * @returns Formatted price string for display (per-million-tokens) or null
+ * @returns Normalized price in per-million-tokens format, capped at $100
  */
-export function formatPricingForDisplay(price: string | undefined, sourceGateway: string): string | null {
-  if (!price) return null;
-  const numPrice = parseFloat(price);
-  if (isNaN(numPrice)) return null;
-
+function normalizeToPerMillion(numPrice: number, sourceGateway: string): number {
   let perMillionPrice: number;
+
   if (isPerMillionPricingGateway(sourceGateway)) {
     // Already in per-million format, display as-is
     perMillionPrice = numPrice;
@@ -122,10 +169,58 @@ export function formatPricingForDisplay(price: string | undefined, sourceGateway
     // Per-billion format: divide by 1,000 to get per-million
     perMillionPrice = numPrice / 1000;
   } else {
-    // Per-token format: multiply by 1,000,000 to get per-million
+    // Assume per-token format: multiply by 1,000,000 to get per-million
     perMillionPrice = numPrice * 1000000;
   }
 
+  // Detect pricing unit mismatch: if price is unrealistically high,
+  // the gateway likely returns per-million (not per-token)
+  if (perMillionPrice > PRICE_MISMATCH_THRESHOLD) {
+    // Log warning once per gateway to help identify gateways needing registration
+    if (!warnedGateways.has(sourceGateway) && typeof console !== 'undefined') {
+      warnedGateways.add(sourceGateway);
+      console.warn(
+        `[model-pricing-utils] Detected pricing unit mismatch for gateway "${sourceGateway}". ` +
+        `Price ${numPrice} converted to $${perMillionPrice.toFixed(2)}/M which exceeds threshold. ` +
+        `Consider adding "${sourceGateway}" to PER_MILLION_PRICING_GATEWAYS if it returns per-million prices.`
+      );
+    }
+  }
+
+  // Cap price at MAX_PRICE_PER_MILLION as a safety net
+  if (perMillionPrice > MAX_PRICE_PER_MILLION) {
+    perMillionPrice = MAX_PRICE_PER_MILLION;
+  }
+
+  return perMillionPrice;
+}
+
+/**
+ * Convert pricing to per-million-tokens format for display.
+ *
+ * Gateway pricing formats:
+ * - Most gateways (OpenRouter, Groq, etc.): per-token (e.g., 0.00000015)
+ *   → multiply by 1,000,000 to get per-million
+ * - Per-million gateways (onerouter): per-million (e.g., 0.15)
+ *   → display as-is
+ * - Per-billion gateways (aihubmix): per-billion (e.g., 150.0)
+ *   → divide by 1,000 to get per-million
+ *
+ * Automatic Mismatch Detection:
+ * If the calculated price exceeds $1000/M, we assume the gateway returns
+ * per-million instead of per-token and log a warning. Final prices are
+ * always capped at MAX_PRICE_PER_MILLION ($100/M) as a safety net.
+ *
+ * @param price - Price string from the API
+ * @param sourceGateway - Gateway the model comes from
+ * @returns Formatted price string for display (per-million-tokens), capped at $100, or null
+ */
+export function formatPricingForDisplay(price: string | undefined, sourceGateway: string): string | null {
+  if (!price) return null;
+  const numPrice = parseFloat(price);
+  if (isNaN(numPrice)) return null;
+
+  const perMillionPrice = normalizeToPerMillion(numPrice, sourceGateway);
   return perMillionPrice.toFixed(2);
 }
 
@@ -133,22 +228,22 @@ export function formatPricingForDisplay(price: string | undefined, sourceGateway
  * Get normalized per-token price for filtering/sorting.
  * Returns price in per-token format regardless of gateway pricing convention.
  *
+ * Uses the same normalization logic as formatPricingForDisplay to ensure
+ * consistent behavior between display and filtering. A model showing $X/M
+ * will be filtered/sorted using the same $X/M value.
+ *
  * @param price - Price string from the API
  * @param sourceGateway - Gateway the model comes from
- * @returns Normalized per-token price as number
+ * @returns Normalized per-token price as number (capped per-million / 1,000,000)
  */
 export function getNormalizedPerTokenPrice(price: string | undefined, sourceGateway: string): number {
   if (!price) return 0;
   const numPrice = parseFloat(price);
   if (isNaN(numPrice)) return 0;
 
-  if (isPerMillionPricingGateway(sourceGateway)) {
-    // Per-million format: divide by 1,000,000 to get per-token
-    return numPrice / 1000000;
-  } else if (isPerBillionPricingGateway(sourceGateway)) {
-    // Per-billion format: divide by 1,000,000,000 to get per-token
-    return numPrice / 1000000000;
-  }
-  // Already per-token
-  return numPrice;
+  // Use the shared normalization logic (includes mismatch detection and capping)
+  const perMillionPrice = normalizeToPerMillion(numPrice, sourceGateway);
+
+  // Convert per-million to per-token
+  return perMillionPrice / 1000000;
 }

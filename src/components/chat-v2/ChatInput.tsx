@@ -223,11 +223,48 @@ export function ChatInput() {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    // Reset height to auto to get the correct scrollHeight
-    textarea.style.height = 'auto';
-    // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
-    const newHeight = Math.min(Math.max(textarea.scrollHeight, 48), 150);
-    textarea.style.height = `${newHeight}px`;
+    // Early exit if no parent node to append clone to
+    const parentNode = textarea.parentNode;
+    if (!parentNode) return;
+
+    // Get current height before any changes
+    const currentHeight = textarea.offsetHeight;
+
+    // Use a clone to avoid visual flicker - measure in a hidden element
+    const clone = textarea.cloneNode(true) as HTMLTextAreaElement;
+
+    // Copy the text content (cloneNode doesn't copy the value property)
+    clone.value = textarea.value;
+
+    // Copy computed styles that affect height measurement
+    const computedStyle = window.getComputedStyle(textarea);
+    clone.style.position = 'absolute';
+    clone.style.visibility = 'hidden';
+    clone.style.height = 'auto';
+    clone.style.width = `${textarea.offsetWidth}px`;
+    clone.style.overflow = 'hidden';
+    clone.style.fontSize = computedStyle.fontSize;
+    clone.style.fontFamily = computedStyle.fontFamily;
+    clone.style.lineHeight = computedStyle.lineHeight;
+    clone.style.padding = computedStyle.padding;
+    clone.style.border = computedStyle.border;
+    clone.style.boxSizing = computedStyle.boxSizing;
+
+    parentNode.appendChild(clone);
+
+    let newHeight: number;
+    try {
+      // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
+      newHeight = Math.min(Math.max(clone.scrollHeight, 48), 150);
+    } finally {
+      // Always remove the clone, even if an error occurs
+      clone.remove();
+    }
+
+    // Only update height if it changed to avoid unnecessary reflows
+    if (currentHeight !== newHeight) {
+      textarea.style.height = `${newHeight}px`;
+    }
 
     // Track if textarea has expanded beyond single line (48px is single line height)
     setIsMultiline(newHeight > 48);

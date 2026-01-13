@@ -99,8 +99,8 @@ importers:
         specifier: ^1.2.2
         version: 1.2.2(@types/react@18.3.27)(react@18.3.1)
       '@sampleapp.ai/sdk':
-        specifier: ^1.0.32
-        version: 1.0.32(@emotion/is-prop-valid@1.4.0)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(monaco-editor@0.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.2))(zod@3.25.76)
+        specifier: ^1.0.33
+        version: 1.0.33(@emotion/is-prop-valid@1.4.0)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(monaco-editor@0.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.2))(zod@3.25.76)
       '@sentry/nextjs':
         specifier: ^10.24.0
         version: 10.32.1(@opentelemetry/context-async-hooks@2.3.0(@opentelemetry/api@1.9.0))(@opentelemetry/core@2.3.0(@opentelemetry/api@1.9.0))(@opentelemetry/sdk-trace-base@2.3.0(@opentelemetry/api@1.9.0))(next@15.3.8(@babel/core@7.28.5)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(webpack@5.104.1)
@@ -2957,8 +2957,8 @@ packages:
     resolution: {integrity: sha512-6ORQfwtEJYpalCeVO21L4XXGSdbEMfyp2hEv6cP82afKXSwvse6d3sdelgaPWUxHIsFRkWvHDdzh8IyyKHZKxw==}
     engines: {node: '>=16'}
 
-  '@sampleapp.ai/sdk@1.0.32':
-    resolution: {integrity: sha512-0N+Swbeopn1WCPmcgtCAvrGPAciNuNkda7vz/rBfY0R+u4TKa8lRxKwdNplcmfD/y0F6QMCOUAPvQ4m4l18DjA==}
+  '@sampleapp.ai/sdk@1.0.33':
+    resolution: {integrity: sha512-OaBa8xVpuqhZt7Bbq3FG8Af0nKZ1/iT5vOhrfxu8Jog2BIobQ21HgDJR96VigzgDG/Qrp696kfteEKnHBGXw1A==}
     peerDependencies:
       react: '>=16.8.0'
       react-dom: '>=16.8.0'
@@ -13092,7 +13092,7 @@ snapshots:
 
   '@safe-global/safe-gateway-typescript-sdk@3.23.1': {}
 
-  '@sampleapp.ai/sdk@1.0.32(@emotion/is-prop-valid@1.4.0)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(monaco-editor@0.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.2))(zod@3.25.76)':
+  '@sampleapp.ai/sdk@1.0.33(@emotion/is-prop-valid@1.4.0)(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(monaco-editor@0.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.19(tsx@4.21.0)(yaml@2.8.2))(zod@3.25.76)':
     dependencies:
       '@ai-sdk/react': 2.0.121(react@18.3.1)(zod@3.25.76)
       '@monaco-editor/react': 4.7.0(monaco-editor@0.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

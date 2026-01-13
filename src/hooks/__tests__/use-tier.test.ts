@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react';
 import { useTier } from '../use-tier';
 import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
+import { captureHookError } from '@/lib/sentry-utils';
 import type { UserData } from '@/lib/api';
 
 // Mock the auth context
@@ -8,11 +9,35 @@ jest.mock('@/context/gatewayz-auth-context', () => ({
   useGatewayzAuth: jest.fn(),
 }));
 
+// Mock sentry-utils
+jest.mock('@/lib/sentry-utils', () => ({
+  captureHookError: jest.fn(),
+}));
+
 describe('useTier', () => {
   const mockUseGatewayzAuth = useGatewayzAuth as jest.Mock;
+  const mockCaptureHookError = captureHookError as jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('Error Handling', () => {
+    it('should capture and rethrow errors from auth context', () => {
+      const testError = new Error('Auth context failed');
+      mockUseGatewayzAuth.mockImplementation(() => {
+        throw testError;
+      });
+
+      expect(() => {
+        renderHook(() => useTier());
+      }).toThrow('Auth context failed');
+
+      expect(mockCaptureHookError).toHaveBeenCalledWith(testError, {
+        hookName: 'useTier',
+        operation: 'tier_utils_calculation',
+      });
+    });
   });
 
   describe('Basic Tier Users', () => {
@@ -117,7 +142,7 @@ describe('useTier', () => {
       expect(result.current.tier).toBe('pro');
       expect(result.current.hasSubscription).toBe(true);
       expect(result.current.tierConfig.name).toBe('Pro');
-      expect(result.current.tierConfig.monthlyPrice).toBe(1500);
+      expect(result.current.tierConfig.monthlyPrice).toBe(1000);
       expect(result.current.tierConfig.isSubscription).toBe(true);
     });
 
@@ -163,8 +188,8 @@ describe('useTier', () => {
 
       expect(result.current.tierInfo).toEqual({
         displayName: 'Pro',
-        description: '$15/month subscription',
-        monthlyPrice: '$15.00',
+        description: '$10/month subscription',
+        monthlyPrice: '$10.00',
         isSubscription: true,
       });
     });
@@ -585,6 +610,74 @@ describe('useTier', () => {
       // Skipping this test as invalid tier data will cause errors
       // In production, backend should always return valid tier values
     });
+
+    it('should preserve tier_display_name casing when it matches computed tier', () => {
+      // This tests the branch where rawDisplayName matches the computed tier
+      const mockUserData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 1000,
+        tier: 'pro',
+        tier_display_name: 'Pro', // Matches the computed tier
+        subscription_status: 'active',
+      };
+
+      mockUseGatewayzAuth.mockReturnValue({ userData: mockUserData });
+
+      const { result } = renderHook(() => useTier());
+
+      // Should preserve the original casing from tier_display_name
+      expect(result.current.tierDisplayName).toBe('Pro');
+    });
+
+    it('should use config display name when tier_display_name does not match computed tier', () => {
+      // This tests the fallback to TIER_CONFIG when display name doesn't match
+      const mockUserData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 1000,
+        tier: 'pro',
+        tier_display_name: 'Basic', // Doesn't match computed tier 'pro'
+        subscription_status: 'active',
+      };
+
+      mockUseGatewayzAuth.mockReturnValue({ userData: mockUserData });
+
+      const { result } = renderHook(() => useTier());
+
+      // Should use the canonical display name from tier config
+      expect(result.current.tierDisplayName).toBe('Pro');
+    });
+
+    it('should use config display name when tier_display_name is undefined', () => {
+      const mockUserData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 1000,
+        tier: 'max',
+        // tier_display_name is undefined
+        subscription_status: 'active',
+      };
+
+      mockUseGatewayzAuth.mockReturnValue({ userData: mockUserData });
+
+      const { result } = renderHook(() => useTier());
+
+      // Should use the canonical display name from tier config
+      expect(result.current.tierDisplayName).toBe('Max');
+    });
   });
 
   describe('Integration Scenarios', () => {
@@ -624,7 +717,7 @@ describe('useTier', () => {
       expect(result.current.tier).toBe('pro');
       expect(result.current.hasSubscription).toBe(true);
       expect(result.current.canAccessModel('pro')).toBe(true);
-      expect(result.current.tierInfo.monthlyPrice).toBe('$15.00');
+      expect(result.current.tierInfo.monthlyPrice).toBe('$10.00');
     });
 
     it('should support downgrade from max to basic', () => {

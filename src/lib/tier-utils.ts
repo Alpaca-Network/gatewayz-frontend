@@ -1,5 +1,38 @@
 import type { UserTier, SubscriptionStatus, UserData } from './api';
 
+// Track logged warnings to prevent duplicate console spam
+// Limited to MAX_LOGGED_WARNINGS entries to prevent memory leaks in long-running apps
+const MAX_LOGGED_WARNINGS = 100;
+const loggedWarnings = new Set<string>();
+
+/**
+ * Log a warning only once per unique key to prevent console spam
+ */
+const warnOnce = (key: string, message: string, data?: Record<string, unknown>) => {
+  if (loggedWarnings.has(key)) return;
+
+  // Prevent unbounded growth - clear oldest entries when limit reached
+  if (loggedWarnings.size >= MAX_LOGGED_WARNINGS) {
+    const firstKey = loggedWarnings.values().next().value;
+    if (firstKey) loggedWarnings.delete(firstKey);
+  }
+
+  loggedWarnings.add(key);
+  if (data) {
+    console.warn(message, data);
+  } else {
+    console.warn(message);
+  }
+};
+
+/**
+ * Reset logged warnings (for testing purposes)
+ * @internal
+ */
+export const _resetLoggedWarnings = () => {
+  loggedWarnings.clear();
+};
+
 /**
  * Tier configuration and metadata
  */
@@ -13,8 +46,8 @@ export const TIER_CONFIG = {
   },
   pro: {
     name: 'Pro',
-    description: '$15/month subscription',
-    monthlyPrice: 1500, // $15.00 in cents
+    description: '$10/month subscription',
+    monthlyPrice: 1000, // $10.00 in cents
     creditAllocation: 0, // Credits determined by separate balance
     isSubscription: true,
   },
@@ -62,14 +95,16 @@ export const getUserTier = (userData: UserData | null): UserTier => {
         // Try to determine actual tier from tier_display_name if available
         const inferredTier = inferTierFromDisplayName(userData.tier_display_name);
         if (inferredTier && inferredTier !== 'basic') {
-          console.warn(
+          warnOnce(
+            `tier-mismatch-${userData.user_id}-${inferredTier}`,
             `getUserTier: User has active subscription but tier is "basic". Correcting to "${inferredTier}" based on tier_display_name.`,
             { tier: normalizedTier, tier_display_name: userData.tier_display_name, subscription_status: userData.subscription_status }
           );
           return inferredTier;
         }
         // If tier_display_name doesn't help, default to 'pro' (safer than assuming 'max')
-        console.warn(
+        warnOnce(
+          `tier-mismatch-${userData.user_id}-pro`,
           'getUserTier: User has active subscription but tier is "basic". Correcting to "pro".',
           { tier: normalizedTier, subscription_status: userData.subscription_status }
         );
@@ -86,7 +121,8 @@ export const getUserTier = (userData: UserData | null): UserTier => {
     // Try to determine tier from tier_display_name if available
     const inferredTier = inferTierFromDisplayName(userData.tier_display_name);
     if (inferredTier && inferredTier !== 'basic') {
-      console.warn(
+      warnOnce(
+        `tier-missing-${userData.user_id}-${inferredTier}`,
         `getUserTier: User has active subscription but no tier field. Using "${inferredTier}" from tier_display_name.`,
         { tier_display_name: userData.tier_display_name, subscription_status: userData.subscription_status }
       );
@@ -94,7 +130,8 @@ export const getUserTier = (userData: UserData | null): UserTier => {
     }
     // Cannot safely determine tier without explicit backend data
     // Default to 'pro' for backward compatibility, but log this edge case
-    console.warn(
+    warnOnce(
+      `tier-missing-${userData.user_id}-pro`,
       'getUserTier: User has active subscription but no tier field. Defaulting to pro. User ID may need manual verification.',
       { subscription_status: userData.subscription_status }
     );
