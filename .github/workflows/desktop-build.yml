@@ -29,6 +29,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Increase Node.js heap size for Next.js builds to prevent OOM during Tauri builds
+  NODE_OPTIONS: '--max-old-space-size=4096'
 
 jobs:
   build:

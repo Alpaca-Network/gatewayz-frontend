@@ -186,10 +186,11 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 /// Register global keyboard shortcuts
 #[cfg(desktop)]
 fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
     // Register Cmd/Ctrl+Shift+G to show/focus GatewayZ
-    let shortcut: Shortcut = "CmdOrCtrl+Shift+G".parse()?;
+    // Use Shortcut::new() instead of parse() for reliable type inference
+    let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyG);
     app.global_shortcut().register(shortcut)?;
 
     log::info!("Global shortcuts registered");
