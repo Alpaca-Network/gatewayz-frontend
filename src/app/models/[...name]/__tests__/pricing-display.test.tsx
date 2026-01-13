@@ -120,9 +120,9 @@ describe('Model Detail Page - Pricing Display', () => {
 
     it('should correctly identify cheaper provider regardless of format', () => {
       const providers = [
-        { gateway: 'openrouter', price: '0.00000020' }, // $0.20/M
-        { gateway: 'onerouter', price: '0.15' }, // $0.15/M
-        { gateway: 'groq', price: '0.00000025' }, // $0.25/M
+        { gateway: 'openrouter', price: '0.00000020' }, // $0.20/M (per-token format)
+        { gateway: 'onerouter', price: '0.15' }, // $0.15/M (per-million format)
+        { gateway: 'groq', price: '0.25' }, // $0.25/M (per-million format - groq uses per-million)
       ];
 
       const normalizedPrices = providers.map((p) => ({
@@ -132,9 +132,9 @@ describe('Model Detail Page - Pricing Display', () => {
 
       const sorted = normalizedPrices.sort((a, b) => a.normalized - b.normalized);
 
-      expect(sorted[0].gateway).toBe('onerouter'); // Cheapest
-      expect(sorted[1].gateway).toBe('openrouter');
-      expect(sorted[2].gateway).toBe('groq'); // Most expensive
+      expect(sorted[0].gateway).toBe('onerouter'); // Cheapest at $0.15/M
+      expect(sorted[1].gateway).toBe('openrouter'); // $0.20/M
+      expect(sorted[2].gateway).toBe('groq'); // Most expensive at $0.25/M
     });
   });
 
