@@ -27,6 +27,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Increase Node.js memory limit for Next.js build (prevents heap out of memory)
+  NODE_OPTIONS: '--max-old-space-size=8192'
 
 jobs:
   build:
