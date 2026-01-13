@@ -12,7 +12,6 @@ on:
       - 'scripts/build-desktop.js'
       - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
-      - 'next.config.ts'
       - 'package.json'
   pull_request:
     branches:
@@ -23,7 +22,6 @@ on:
       - 'scripts/build-desktop.js'
       - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
-      - 'next.config.ts'
       - 'package.json'
   workflow_dispatch:
     inputs:
