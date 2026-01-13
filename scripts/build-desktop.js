@@ -113,6 +113,7 @@ async function main() {
       env: {
         ...process.env,
         NEXT_STATIC_EXPORT: 'true',
+        NEXT_PUBLIC_IS_DESKTOP_BUILD: 'true',
       },
     });
 

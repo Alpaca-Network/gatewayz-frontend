@@ -54,6 +54,7 @@ export function AppHeader() {
   const isAuthenticating = status === "authenticating";
   const authToastShownRef = useRef(false);
   const slowAuthToastShownRef = useRef(false);
+  const isDesktopBuild = process.env.NEXT_PUBLIC_IS_DESKTOP_BUILD === 'true';
 
   // Show toast when authentication starts and completes
   // Skip showing toast on chat page to avoid clutter
@@ -238,54 +239,66 @@ export function AppHeader() {
           {/*  <GetCreditsButton />*/}
           {/*</div>*/}
 
-          <nav className="hidden lg:flex items-center gap-6 text-sm whitespace-nowrap">
-            <Link
-              href="/models"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Models
-            </Link>
-            <Link
-              href="/chat"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Chat
-            </Link>
-            <Link
-              href="/developers"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Researchers
-            </Link>
-            <Link
-              href="/sandbox"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Sandbox
-            </Link>
-            <Link
-              href="/rankings"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Ranking
-            </Link>
-            <Link
-              href="https://blog.gatewayz.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Insights
-            </Link>
-            <Link
-              href="https://docs.gatewayz.ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Docs
-            </Link>
-          </nav>
+          {!isDesktopBuild && (
+            <nav className="hidden lg:flex items-center gap-6 text-sm whitespace-nowrap">
+              <Link
+                href="/models"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Models
+              </Link>
+              <Link
+                href="/chat"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Chat
+              </Link>
+              <Link
+                href="/developers"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Researchers
+              </Link>
+              <Link
+                href="/sandbox"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Sandbox
+              </Link>
+              <Link
+                href="/rankings"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Ranking
+              </Link>
+              <Link
+                href="https://blog.gatewayz.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Insights
+              </Link>
+              <Link
+                href="https://docs.gatewayz.ai/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Docs
+              </Link>
+            </nav>
+          )}
+          {isDesktopBuild && (
+            <nav className="hidden lg:flex items-center gap-6 text-sm whitespace-nowrap">
+              <Link
+                href="/chat"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Chat
+              </Link>
+            </nav>
+          )}
 
           <div className="lg:hidden shrink-0">
             <GetCreditsButton />
@@ -354,64 +367,79 @@ export function AppHeader() {
                   <SheetTitle>Mobile Navigation Menu</SheetTitle>
                 </SheetHeader>
                 <div className="flex flex-col py-6">
-                  <div className="px-2 mb-4">
-                    <SearchBar autoOpenOnFocus={false} />
-                  </div>
-                  <nav className="flex flex-col gap-4 text-base">
-                    <Link
-                      href="/models"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Models
-                    </Link>
-                    <Link
-                      href="/chat"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Chat
-                    </Link>
-                    <Link
-                      href="/developers"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Researchers
-                    </Link>
-                    <Link
-                      href="/sandbox"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Sandbox
-                    </Link>
-                    <Link
-                      href="/rankings"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Ranking
-                    </Link>
-                    <Link
-                      href="https://blog.gatewayz.ai"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Insights
-                    </Link>
-                    <Link
-                      href="https://docs.gatewayz.ai/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Docs
-                    </Link>
-                  </nav>
+                  {!isDesktopBuild && (
+                    <div className="px-2 mb-4">
+                      <SearchBar autoOpenOnFocus={false} />
+                    </div>
+                  )}
+                  {!isDesktopBuild && (
+                    <nav className="flex flex-col gap-4 text-base">
+                      <Link
+                        href="/models"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Models
+                      </Link>
+                      <Link
+                        href="/chat"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Chat
+                      </Link>
+                      <Link
+                        href="/developers"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Researchers
+                      </Link>
+                      <Link
+                        href="/sandbox"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Sandbox
+                      </Link>
+                      <Link
+                        href="/rankings"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Ranking
+                      </Link>
+                      <Link
+                        href="https://blog.gatewayz.ai"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Insights
+                      </Link>
+                      <Link
+                        href="https://docs.gatewayz.ai/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Docs
+                      </Link>
+                    </nav>
+                  )}
+                  {isDesktopBuild && (
+                    <nav className="flex flex-col gap-4 text-base">
+                      <Link
+                        href="/chat"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Chat
+                      </Link>
+                    </nav>
+                  )}
 
                   {user && (
                     <>
@@ -438,79 +466,104 @@ export function AppHeader() {
                             <Copy className="h-3 w-3" />
                           </Button>
                         </div>
-                        <p className="text-xs font-semibold text-muted-foreground uppercase px-2 mt-4">
-                          Account
-                        </p>
-                        <Link
-                          href="/settings/account"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Account
-                        </Link>
-                        <Link
-                          href="/settings/credits"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Credits
-                        </Link>
-                        <Link
-                          href="/settings/referrals"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Referrals
-                        </Link>
-                        <Link
-                          href="/settings/keys"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          API Keys
-                        </Link>
-                        <Link
-                          href="/settings/activity"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Activity
-                        </Link>
-                        <Link
-                          href="/settings/presets"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Presets
-                        </Link>
-                        <Link
-                          href="/settings/provisioning"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Provisioning Keys
-                        </Link>
-                        <Link
-                          href="/settings/integrations"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Integrations (BYOK)
-                        </Link>
-                        <Link
-                          href="/settings/privacy"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Privacy
-                        </Link>
-                        <Link
-                          href="/settings"
-                          className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
-                          onClick={() => setMobileMenuOpen(false)}
-                        >
-                          Settings
-                        </Link>
+                        {!isDesktopBuild && (
+                          <>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase px-2 mt-4">
+                              Account
+                            </p>
+                            <Link
+                              href="/settings/account"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Account
+                            </Link>
+                            <Link
+                              href="/settings/credits"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Credits
+                            </Link>
+                            <Link
+                              href="/settings/referrals"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Referrals
+                            </Link>
+                            <Link
+                              href="/settings/keys"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              API Keys
+                            </Link>
+                            <Link
+                              href="/settings/activity"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Activity
+                            </Link>
+                            <Link
+                              href="/settings/presets"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Presets
+                            </Link>
+                            <Link
+                              href="/settings/provisioning"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Provisioning Keys
+                            </Link>
+                            <Link
+                              href="/settings/integrations"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Integrations (BYOK)
+                            </Link>
+                            <Link
+                              href="/settings/privacy"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Privacy
+                            </Link>
+                            <Link
+                              href="/settings"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Settings
+                            </Link>
+                          </>
+                        )}
+                        {isDesktopBuild && (
+                          <>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase px-2 mt-4">
+                              Account
+                            </p>
+                            <Link
+                              href="/settings/account"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Account
+                            </Link>
+                            <Link
+                              href="/settings/activity"
+                              className="transition-colors hover:text-foreground/80 text-foreground/60 py-2 px-2 rounded-md hover:bg-accent"
+                              onClick={() => setMobileMenuOpen(false)}
+                            >
+                              Activity
+                            </Link>
+                          </>
+                        )}
                       </div>
                       <Separator className="my-4" />
                       <Button
