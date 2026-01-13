@@ -6,7 +6,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Listener, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 mod commands;
@@ -186,10 +186,10 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 /// Register global keyboard shortcuts
 #[cfg(desktop)]
 fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
     // Register Cmd/Ctrl+Shift+G to show/focus GatewayZ
-    let shortcut = "CmdOrCtrl+Shift+G".parse()?;
+    let shortcut: Shortcut = "CmdOrCtrl+Shift+G".parse()?;
     app.global_shortcut().register(shortcut)?;
 
     log::info!("Global shortcuts registered");
