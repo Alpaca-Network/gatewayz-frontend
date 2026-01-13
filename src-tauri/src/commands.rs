@@ -176,6 +176,10 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
 
             // Restart the application (this call never returns)
             app.restart();
+
+            // Note: app.restart() never returns, but we need Ok(()) for the type system
+            #[allow(unreachable_code)]
+            Ok(())
         }
         Ok(None) => Err("No update available".to_string()),
         Err(e) => Err(e.to_string()),
