@@ -223,11 +223,29 @@ export function ChatInput() {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    // Reset height to auto to get the correct scrollHeight
-    textarea.style.height = 'auto';
+    // Get current height before any changes
+    const currentHeight = textarea.offsetHeight;
+
+    // Temporarily set height to auto to measure scrollHeight accurately
+    // Use a clone to avoid visual flicker - measure in a hidden element
+    const clone = textarea.cloneNode(true) as HTMLTextAreaElement;
+    clone.style.position = 'absolute';
+    clone.style.visibility = 'hidden';
+    clone.style.height = 'auto';
+    clone.style.width = `${textarea.offsetWidth}px`;
+    clone.style.overflow = 'hidden';
+    textarea.parentNode?.appendChild(clone);
+
     // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
-    const newHeight = Math.min(Math.max(textarea.scrollHeight, 48), 150);
-    textarea.style.height = `${newHeight}px`;
+    const newHeight = Math.min(Math.max(clone.scrollHeight, 48), 150);
+
+    // Remove the clone
+    clone.remove();
+
+    // Only update height if it changed to avoid unnecessary reflows
+    if (currentHeight !== newHeight) {
+      textarea.style.height = `${newHeight}px`;
+    }
 
     // Track if textarea has expanded beyond single line (48px is single line height)
     setIsMultiline(newHeight > 48);
