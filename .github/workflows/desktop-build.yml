@@ -3,20 +3,24 @@ name: Desktop App Build
 on:
   push:
     branches:
-      - main
+      - master
     tags:
       - 'v*'
     paths:
       - 'src-tauri/**'
       - 'src/lib/desktop/**'
       - '.github/workflows/desktop-build.yml'
+      - 'next.config.ts'
+      - 'package.json'
   pull_request:
     branches:
-      - main
+      - master
     paths:
       - 'src-tauri/**'
       - 'src/lib/desktop/**'
       - '.github/workflows/desktop-build.yml'
+      - 'next.config.ts'
+      - 'package.json'
   workflow_dispatch:
     inputs:
       release:
@@ -27,6 +31,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Increase Node.js memory limit for Next.js build (prevents heap out of memory)
+  NODE_OPTIONS: '--max-old-space-size=8192'
 
 jobs:
   build:
@@ -119,6 +125,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
+          tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
           tagName: v__VERSION__
           releaseName: 'GatewayZ Desktop v__VERSION__'
@@ -220,5 +227,8 @@ jobs:
 
       - name: Run Clippy
         run: |
+          # Create empty out directory to satisfy frontendDist check
+          # The generate_context!() macro verifies this path exists at compile time
+          mkdir -p out
           cd src-tauri
           cargo clippy -- -D warnings
