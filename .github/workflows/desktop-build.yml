@@ -106,7 +106,8 @@ jobs:
           # This creates icon.icns (macOS), icon.ico (Windows), and various PNG sizes
           pnpm tauri icon src-tauri/icons/icon.png --output src-tauri/icons
 
-      - name: Build the desktop app
+      - name: Build the desktop app (Release)
+        if: github.event_name != 'pull_request'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -125,6 +126,17 @@ jobs:
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
+
+      - name: Build the desktop app (PR - no code signing)
+        if: github.event_name == 'pull_request'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Don't pass signing certificates for PRs - builds will be unsigned
+          # This avoids "failed to import keychain certificate" errors
+        with:
+          args: --target ${{ matrix.target }}
+          # Skip release creation for PRs by not specifying tagName/releaseName
 
       - name: Upload artifacts (macOS)
         if: matrix.platform == 'macos-latest'
