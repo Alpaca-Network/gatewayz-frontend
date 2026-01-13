@@ -67,6 +67,13 @@ export default function Home() {
   const { toast } = useToast();
   const [showPathChooser, setShowPathChooser] = useState(false);
 
+  // Redirect to /chat for desktop builds
+  useEffect(() => {
+    if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_IS_DESKTOP_BUILD === 'true') {
+      router.push('/chat');
+    }
+  }, [router]);
+
   // Fix hydration error - ensure client-only rendering
   useEffect(() => {
     setIsClient(true);

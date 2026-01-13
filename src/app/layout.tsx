@@ -4,6 +4,7 @@ import './globals.css';
 import 'katex/dist/katex.min.css';
 import { Toaster } from "@/components/ui/toaster";
 import { AppHeader } from '@/components/layout/app-header';
+import { DesktopAppHeader } from '@/components/layout/desktop-app-header';
 import { AppFooter } from '@/components/layout/app-footer';
 import { ThemeProvider } from '@/components/theme-provider';
 import { PrivyProviderWrapper } from '@/components/providers/privy-provider';
@@ -114,9 +115,17 @@ export default function RootLayout({
                 {/* Session transfer from main domain - handles automatic authentication */}
                 <SessionInitializer />
                 <GTMLoader />
-                <AppHeader />
-                <OnboardingBanner />
-                <div data-header-spacer aria-hidden="true" className="flex-shrink-0 h-[65px] has-onboarding-banner:h-[115px]" style={{ transition: 'height 0.3s ease' }} />
+                {process.env.NEXT_PUBLIC_IS_DESKTOP_BUILD === 'true' ? (
+                  <DesktopAppHeader />
+                ) : (
+                  <>
+                    <AppHeader />
+                    <OnboardingBanner />
+                  </>
+                )}
+                {process.env.NEXT_PUBLIC_IS_DESKTOP_BUILD !== 'true' && (
+                  <div data-header-spacer aria-hidden="true" className="flex-shrink-0 h-[65px] has-onboarding-banner:h-[115px]" style={{ transition: 'height 0.3s ease' }} />
+                )}
                 <main className="flex-1 flex flex-col w-full overflow-x-hidden">
                   {children}
                 </main>
@@ -129,7 +138,9 @@ export default function RootLayout({
                   strategy="afterInteractive"
                 /> */}
                 <Toaster />
-                <AppFooter />
+                {process.env.NEXT_PUBLIC_IS_DESKTOP_BUILD !== 'true' && (
+                  <AppFooter />
+                )}
                 <WelcomeDialog />
                 <TrialCreditsNotice />
                 <ReferralBonusDialog />
