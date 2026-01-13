@@ -201,6 +201,29 @@ The desktop app is built via GitHub Actions:
 | `APPLE_PASSWORD` | App-specific password |
 | `APPLE_TEAM_ID` | Apple Developer Team ID |
 
+### Setting Up Update Signing (Required Before Release)
+
+Before releasing the desktop app, you must generate and configure update signing keys:
+
+1. **Generate a key pair:**
+   ```bash
+   pnpm tauri signer generate -w ~/.tauri/gatewayz.key
+   ```
+
+2. **Copy the public key** (displayed after generation) to `src-tauri/tauri.conf.json`:
+   ```json
+   "updater": {
+     "pubkey": "YOUR_PUBLIC_KEY_HERE",
+     ...
+   }
+   ```
+
+3. **Add the private key to CI/CD secrets:**
+   - `TAURI_SIGNING_PRIVATE_KEY`: Contents of `~/.tauri/gatewayz.key`
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: Password used during generation
+
+**Security Note**: The updater will not verify signatures until the public key is configured. Do not release without proper signing.
+
 ## Troubleshooting
 
 ### Common Issues

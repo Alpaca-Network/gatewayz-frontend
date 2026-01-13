@@ -45,15 +45,28 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
   });
 
   // Handle OAuth callbacks from deep links
-  useAuthCallback((query) => {
+  useAuthCallback(async (query) => {
     // Parse the query string and handle the OAuth callback
     const params = new URLSearchParams(query);
     const code = params.get("code");
     const state = params.get("state");
 
-    if (code && state) {
-      // Redirect to the auth callback handler
-      router.push(`/api/auth/callback/privy?code=${code}&state=${state}`);
+    if (code) {
+      try {
+        // Use the desktop-specific auth callback endpoint
+        const { handleDesktopOAuthCallback } = await import("@/lib/desktop");
+        const result = await handleDesktopOAuthCallback(query);
+
+        if (result.success) {
+          // Refresh the page to pick up the new auth state
+          router.refresh();
+          router.push("/chat");
+        } else {
+          console.error("[Desktop Auth] Callback failed:", result.error);
+        }
+      } catch (error) {
+        console.error("[Desktop Auth] Error handling callback:", error);
+      }
     }
   });
 

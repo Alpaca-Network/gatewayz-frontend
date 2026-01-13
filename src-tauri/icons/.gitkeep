@@ -1,11 +1,14 @@
-# Placeholder for icon files
+# Icon files for GatewayZ Desktop
 #
-# Required icons:
-# - 32x32.png
-# - 128x128.png
-# - 128x128@2x.png
-# - icon.icns (macOS)
-# - icon.ico (Windows)
-# - icon.png (tray icon)
+# PNG icons are included. Platform-specific icons (.icns, .ico) are generated
+# during CI/CD builds using the Tauri icon generator.
 #
-# Generate icons using: pnpm tauri icon <source-image.png>
+# To generate all icons locally:
+#   pnpm tauri icon icon.png
+#
+# This will create all required formats:
+# - 32x32.png, 128x128.png, 128x128@2x.png (PNG)
+# - icon.icns (macOS app bundle)
+# - icon.ico (Windows installer)
+#
+# Source: icon.png (512x512)
