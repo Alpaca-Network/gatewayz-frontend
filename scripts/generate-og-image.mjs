@@ -2,6 +2,7 @@
 /**
  * Generate Open Graph social sharing image for Gatewayz
  * Creates a 1200x630 PNG image optimized for social media platforms
+ * Uses the actual logo PNG file provided
  */
 
 import { writeFileSync, readFileSync } from 'fs';
@@ -11,19 +12,9 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Read the logo PNG and convert to base64 for embedding
-const logoPath = join(__dirname, '..', 'public', 'gatewayz-logo-icon.png');
-let logoBase64 = '';
-try {
-  const logoBuffer = readFileSync(logoPath);
-  logoBase64 = logoBuffer.toString('base64');
-} catch (e) {
-  console.log('Warning: Could not read logo file, using fallback');
-}
-
-// Create SVG with light, bright design
-const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+// Create SVG background (without logo - we'll composite the PNG logo separately)
+const svgBackground = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <!-- Light gradient background -->
     <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -58,20 +49,10 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
   <circle cx="1100" cy="100" r="150" fill="rgba(139, 92, 246, 0.04)"/>
   <circle cx="600" cy="315" r="280" fill="rgba(59, 130, 246, 0.03)"/>
 
-  <!-- Logo container with dark background -->
-  <circle cx="600" cy="200" r="90" fill="#0f172a"/>
-
-  <!-- Logo (embedded as black version for dark circle) -->
-  <g transform="translate(510, 110) scale(0.04)">
-    <!-- Main G shape -->
-    <path d="M2218.5 0C993.9 0 0 993.9 0 2218.5s993.9 2218.5 2218.5 2218.5c245.4 0 483-39.9 704.4-113.6c0-173.4-69.4-331.3-182.1-445.8c-188.1 53.8-342.6 60.7-522.3 60.7c-843 0-1526.4-683.4-1526.4-1526.4s683.4-1526.4 1526.4-1526.4c438 0 833.4 184.8 1111.9 480.5l-520.4 520.4c-147.4-147.4-351.3-238.6-577-238.6c-451 0-816.9 365.9-816.9 816.9s365.9 816.9 816.9 816.9c225.5 0 429.4-91.2 577-238.6l238.6 238.6c-212.5 212.5-506.5 344.2-832.6 344.2c-654.7 0-1185.5-530.8-1185.5-1185.5s530.8-1185.5 1185.5-1185.5c333.8 0 635.7 137.9 851 359.8l520.4-520.4C3149.1 275 2707.6 0 2218.5 0z" fill="white"/>
-    <!-- Arrow -->
-    <polygon points="3329.3,1109.6 4437,1109.6 3329.3,2218.5" fill="white"/>
-    <line x1="3329.3" y1="1109.6" x2="2218.5" y2="2218.5" stroke="white" stroke-width="477" stroke-linecap="round"/>
-  </g>
+  <!-- Logo will be composited here - no background circle for light theme -->
 
   <!-- Brand name -->
-  <text x="600" y="360"
+  <text x="600" y="340"
         font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
         font-size="72"
         font-weight="700"
@@ -80,7 +61,7 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
         letter-spacing="-2">Gatewayz</text>
 
   <!-- Tagline -->
-  <text x="600" y="420"
+  <text x="600" y="400"
         font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
         font-size="28"
         font-weight="500"
@@ -88,7 +69,7 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
         text-anchor="middle">Enterprise AI For Everyone</text>
 
   <!-- Feature pills -->
-  <g transform="translate(600, 520)" text-anchor="middle">
+  <g transform="translate(600, 500)" text-anchor="middle">
     <!-- Pill backgrounds -->
     <rect x="-340" y="-20" width="100" height="40" rx="20" fill="rgba(59, 130, 246, 0.12)"/>
     <rect x="-200" y="-20" width="120" height="40" rx="20" fill="rgba(139, 92, 246, 0.12)"/>
@@ -130,29 +111,47 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
 
 // Write the SVG file
 const svgOutputPath = join(__dirname, '..', 'public', 'og-image.svg');
-writeFileSync(svgOutputPath, svg);
+writeFileSync(svgOutputPath, svgBackground);
 console.log('✓ Created og-image.svg');
 
-// Now convert to PNG using sharp if available
-async function convertToPng() {
+// Now create PNG with the actual logo composited
+async function createOgImage() {
   try {
     const sharp = (await import('sharp')).default;
     const pngPath = join(__dirname, '..', 'public', 'og-image.png');
+    const logoPath = join(__dirname, '..', 'public', 'gatewayz-logo-icon.png');
 
-    await sharp(Buffer.from(svg))
-      .png()
+    // Create base image from SVG
+    const baseImage = sharp(Buffer.from(svgBackground))
+      .png();
+
+    // Resize the logo and invert colors (white logo -> black for light background)
+    const logoSize = 150;
+    const resizedLogo = await sharp(logoPath)
+      .resize(logoSize, logoSize, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .negate({ alpha: false }) // Invert colors but keep alpha channel
+      .toBuffer();
+
+    // Composite the logo onto the base image
+    // Logo should be centered at (600, 180) - the center of the dark circle
+    await baseImage
+      .composite([
+        {
+          input: resizedLogo,
+          top: Math.round(180 - logoSize/2),  // Center vertically at y=180
+          left: Math.round(600 - logoSize/2), // Center horizontally at x=600
+        }
+      ])
       .toFile(pngPath);
 
-    console.log('✓ Created og-image.png (1200x630)');
+    console.log('✓ Created og-image.png (1200x630) with logo');
     console.log('\n✅ OG image generated successfully!');
     console.log(`   SVG: ${svgOutputPath}`);
     console.log(`   PNG: ${pngPath}`);
   } catch (error) {
-    console.log('\n⚠️  Sharp not available for PNG conversion.');
-    console.log('   SVG created. Convert manually or use online converter.');
-    console.log(`   SVG: ${svgOutputPath}`);
+    console.log('\n⚠️  Error creating OG image:');
     console.error(error);
   }
 }
 
-convertToPng();
+createOgImage();
