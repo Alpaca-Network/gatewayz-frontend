@@ -145,7 +145,9 @@ jobs:
           # This avoids "failed to import keychain certificate" errors
         with:
           tauriScript: pnpm tauri
-          args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          # Disable createUpdaterArtifacts AND remove the updater pubkey to prevent
+          # "A public key has been found, but no private key" error
+          args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false},"plugins":{"updater":{"pubkey":""}}}'
           includeUpdaterJson: false
           # Skip release creation for PRs by not specifying tagName/releaseName
           # Skip updater artifacts since we don't have signing keys in PRs
@@ -158,7 +160,9 @@ jobs:
           # Don't pass signing certificates when release is disabled
         with:
           tauriScript: pnpm tauri
-          args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          # Disable createUpdaterArtifacts AND remove the updater pubkey to prevent
+          # "A public key has been found, but no private key" error
+          args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false},"plugins":{"updater":{"pubkey":""}}}'
           includeUpdaterJson: false
           # Skip release creation when release input is false
           # Skip updater artifacts since we don't have signing keys in non-release builds
