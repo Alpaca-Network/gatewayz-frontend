@@ -141,8 +141,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Don't pass signing certificates for PRs - builds will be unsigned
-          # This avoids "failed to import keychain certificate" errors
+          # Explicitly empty signing keys for unsigned builds
+          # This prevents Tauri from requiring private key when public key exists
+          TAURI_SIGNING_PRIVATE_KEY: ''
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
         with:
           tauriScript: pnpm tauri
           # Disable createUpdaterArtifacts AND remove the updater pubkey to prevent
@@ -157,7 +159,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Don't pass signing certificates when release is disabled
+          # Explicitly empty signing keys for unsigned builds
+          TAURI_SIGNING_PRIVATE_KEY: ''
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
         with:
           tauriScript: pnpm tauri
           # Disable createUpdaterArtifacts AND remove the updater pubkey to prevent
