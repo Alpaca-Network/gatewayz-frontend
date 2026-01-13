@@ -26,6 +26,7 @@ import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
 import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
 import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
+import { DesktopProvider } from '@/components/providers/desktop-provider';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -109,6 +110,7 @@ export default function RootLayout({
             <PreviewHostnameRestorer />
             <PrivyProviderWrapper>
               <AnalyticsProvidersWrapper>
+                <DesktopProvider>
                 {/* Session transfer from main domain - handles automatic authentication */}
                 <SessionInitializer />
                 <GTMLoader />
@@ -136,6 +138,7 @@ export default function RootLayout({
                 <Analytics />
                 <SpeedInsights />
                 <WebVitalsReporter />
+                </DesktopProvider>
               </AnalyticsProvidersWrapper>
             </PrivyProviderWrapper>
           </ReactQueryProvider>
