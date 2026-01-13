@@ -6,7 +6,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Listener, Manager, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Listener,
 };
 
 mod commands;
@@ -132,7 +132,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let _tray = TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
-        .menu_on_left_click(false)
+        .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => {
                 if let Some(window) = app.get_webview_window("main") {
@@ -216,20 +216,14 @@ fn setup_deep_link_handler(app: &AppHandle) {
 
     // Listen for deep link events
     app.listen("deep-link://new-url", move |event| {
-        if let Some(urls) = event.payload().as_str() {
-            log::info!("Received deep link: {}", urls);
+        let urls = event.payload();
+        log::info!("Received deep link: {}", urls);
 
-            // Parse the URL and handle it
-            if let Ok(url) = url::Url::parse(urls) {
-                handle_deep_link(&app_handle, &url);
-            } else {
-                log::warn!("Failed to parse deep link URL: {}", urls);
-            }
+        // Parse the URL and handle it
+        if let Ok(url) = url::Url::parse(urls) {
+            handle_deep_link(&app_handle, &url);
         } else {
-            log::warn!(
-                "Deep link event payload is not a string: {:?}",
-                event.payload()
-            );
+            log::warn!("Failed to parse deep link URL: {}", urls);
         }
     });
 }
