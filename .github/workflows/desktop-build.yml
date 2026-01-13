@@ -76,7 +76,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install Rust stable
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -191,12 +191,15 @@ jobs:
         with:
           version: 9
 
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
       - name: Install frontend dependencies
         run: pnpm install
 
       - name: Run desktop tests
-        # Note: Desktop tests mock all Tauri APIs and don't require Rust/Tauri dependencies.
-        # If future tests need actual Tauri functionality, Rust should be installed in this job.
         run: pnpm test:desktop
 
       - name: Check Rust formatting
