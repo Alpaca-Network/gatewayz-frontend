@@ -6,7 +6,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Listener,
+    AppHandle, Emitter, Listener, Manager,
 };
 
 mod commands;
