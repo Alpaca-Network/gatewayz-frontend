@@ -4,7 +4,7 @@
 //! between the frontend and the Rust backend.
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, WebviewWindow};
+use tauri::{AppHandle, WebviewWindow};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_store::StoreExt;
 use tauri_plugin_updater::UpdaterExt;

@@ -245,6 +245,11 @@ jobs:
           cd src-tauri
           cargo fmt --check
 
+      - name: Create frontend dist directory for Clippy
+        # Tauri's generate_context!() macro validates that frontendDist exists at compile time.
+        # Create an empty directory to satisfy this check during Clippy analysis.
+        run: mkdir -p out
+
       - name: Run Clippy
         run: |
           cd src-tauri
