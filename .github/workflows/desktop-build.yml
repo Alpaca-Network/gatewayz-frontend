@@ -3,6 +3,7 @@ name: Desktop App Build
 on:
   push:
     branches:
+      - master
       - main
     tags:
       - 'v*'
@@ -14,6 +15,7 @@ on:
       - '.github/workflows/desktop-build.yml'
   pull_request:
     branches:
+      - master
       - main
     paths:
       - 'src-tauri/**'
@@ -144,6 +146,7 @@ jobs:
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          includeUpdaterJson: false
           # Skip release creation for PRs by not specifying tagName/releaseName
           # Skip updater artifacts since we don't have signing keys in PRs
 
@@ -156,6 +159,7 @@ jobs:
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          includeUpdaterJson: false
           # Skip release creation when release input is false
           # Skip updater artifacts since we don't have signing keys in non-release builds
 
