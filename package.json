@@ -55,7 +55,7 @@
     "desktop:dev": "pnpm tauri:dev",
     "desktop:build": "pnpm tauri:build",
     "desktop:build:release": "pnpm tauri:build --release",
-    "build:desktop": "next build && next export",
+    "build:desktop": "next build",
     "test:desktop": "jest --testPathPatterns=desktop"
   },
   "dependencies": {

@@ -16,8 +16,14 @@ try {
   console.log('Bundle analyzer not installed. Install with: npm install --save-dev @next/bundle-analyzer');
 }
 
+// Detect desktop build mode for Tauri static export
+const isDesktopBuild = process.env.DESKTOP_BUILD === 'true';
+
 const nextConfig: NextConfig = {
   /* config options here */
+  // Enable static export for desktop builds (Tauri requires static HTML)
+  // This replaces the deprecated `next export` CLI command
+  ...(isDesktopBuild && { output: 'export' }),
   typescript: {
     ignoreBuildErrors: true,
   },

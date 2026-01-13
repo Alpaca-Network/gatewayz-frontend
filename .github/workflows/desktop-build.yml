@@ -123,6 +123,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Enable static export mode for desktop builds
+          DESKTOP_BUILD: 'true'
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
@@ -139,6 +141,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Don't pass signing certificates for PRs - builds will be unsigned
           # This avoids "failed to import keychain certificate" errors
+          # Enable static export mode for desktop builds
+          DESKTOP_BUILD: 'true'
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
@@ -150,6 +154,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Don't pass signing certificates when release is disabled
+          # Enable static export mode for desktop builds
+          DESKTOP_BUILD: 'true'
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
