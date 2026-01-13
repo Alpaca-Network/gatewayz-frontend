@@ -16,8 +16,13 @@ try {
   console.log('Bundle analyzer not installed. Install with: npm install --save-dev @next/bundle-analyzer');
 }
 
+// Check if we're building for static export (desktop app)
+const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true';
+
 const nextConfig: NextConfig = {
   /* config options here */
+  // Enable static export for desktop builds
+  ...(isStaticExport && { output: 'export' }),
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -43,7 +48,8 @@ const nextConfig: NextConfig = {
     minimumCacheTTL: 60,
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    unoptimized: false,
+    // Disable image optimization for static export (desktop builds)
+    unoptimized: isStaticExport,
   },
   // Enable compression
   compress: true,
