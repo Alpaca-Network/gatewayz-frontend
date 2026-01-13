@@ -3,19 +3,23 @@ name: Desktop App Build
 on:
   push:
     branches:
-      - main
+      - master
     tags:
       - 'v*'
     paths:
       - 'src-tauri/**'
       - 'src/lib/desktop/**'
+      - 'scripts/build-desktop.js'
+      - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
   pull_request:
     branches:
-      - main
+      - master
     paths:
       - 'src-tauri/**'
       - 'src/lib/desktop/**'
+      - 'scripts/build-desktop.js'
+      - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
   workflow_dispatch:
     inputs:
