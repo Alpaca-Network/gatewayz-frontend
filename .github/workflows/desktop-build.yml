@@ -3,21 +3,23 @@ name: Desktop App Build
 on:
   push:
     branches:
-      - master
       - main
     tags:
       - 'v*'
     paths:
       - 'src-tauri/**'
       - 'src/lib/desktop/**'
+      - 'scripts/build-desktop.js'
+      - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
   pull_request:
     branches:
-      - master
       - main
     paths:
       - 'src-tauri/**'
       - 'src/lib/desktop/**'
+      - 'scripts/build-desktop.js'
+      - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
   workflow_dispatch:
     inputs:
@@ -29,8 +31,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Increase Node.js heap size for Next.js builds to prevent OOM during Tauri builds
-  NODE_OPTIONS: '--max-old-space-size=4096'
+  # Increase Node.js memory for large Next.js builds
+  NODE_OPTIONS: '--max-old-space-size=8192'
 
 jobs:
   build:
@@ -123,8 +125,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          # Enable static export mode for desktop builds
-          DESKTOP_BUILD: 'true'
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
@@ -141,8 +141,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Don't pass signing certificates for PRs - builds will be unsigned
           # This avoids "failed to import keychain certificate" errors
-          # Enable static export mode for desktop builds
-          DESKTOP_BUILD: 'true'
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
@@ -154,8 +152,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Don't pass signing certificates when release is disabled
-          # Enable static export mode for desktop builds
-          DESKTOP_BUILD: 'true'
         with:
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
@@ -253,12 +249,9 @@ jobs:
           cd src-tauri
           cargo fmt --check
 
-      - name: Create frontend dist directory for Clippy
-        # Tauri's generate_context!() macro validates that frontendDist exists at compile time.
-        # Create an empty directory to satisfy this check during Clippy analysis.
-        run: mkdir -p out
-
       - name: Run Clippy
         run: |
+          # Create empty out directory for Clippy check (it validates frontendDist path)
+          mkdir -p out
           cd src-tauri
           cargo clippy -- -D warnings
