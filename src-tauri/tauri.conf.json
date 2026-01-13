@@ -1,0 +1,110 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GatewayZ",
+  "version": "1.0.0",
+  "identifier": "com.gatewayz.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "",
+    "frontendDist": "https://app.gatewayz.io"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "GatewayZ",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true,
+        "decorations": true,
+        "transparent": false,
+        "visible": true,
+        "focus": true,
+        "shadow": true,
+        "titleBarStyle": "Visible",
+        "hiddenTitle": false,
+        "tabbingIdentifier": "GatewayZ",
+        "acceptFirstMouse": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false,
+      "title": "GatewayZ"
+    },
+    "security": {
+      "csp": null,
+      "freezePrototype": false,
+      "dangerousDisableAssetCspModification": true
+    },
+    "macOSPrivateApi": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "Copyright 2026 Alpaca Network",
+    "category": "Productivity",
+    "shortDescription": "AI Chat Interface powered by 100+ models",
+    "longDescription": "GatewayZ Desktop - A unified AI chat interface that provides access to 100+ AI models from 30+ providers including OpenAI, Anthropic, Google, and more.",
+    "createUpdaterArtifacts": true,
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null,
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "wix": null,
+      "nsis": {
+        "template": null,
+        "headerImage": null,
+        "sidebarImage": null,
+        "installerIcon": null,
+        "languages": null
+      }
+    }
+  },
+  "plugins": {
+    "shell": {
+      "open": true,
+      "scope": []
+    },
+    "notification": {
+      "all": true
+    },
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://api.gatewayz.io/desktop/updates/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["gatewayz"]
+      }
+    }
+  }
+}
