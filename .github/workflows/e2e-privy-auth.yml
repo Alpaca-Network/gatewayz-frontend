@@ -21,7 +21,7 @@ on:
 jobs:
   e2e-real-auth:
     name: E2E Tests with Real Privy Authentication
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     timeout-minutes: 30
 
     steps:
@@ -194,7 +194,7 @@ jobs:
 
   notify-on-failure:
     name: Notify on E2E Failure
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     needs: e2e-real-auth
     if: failure() && github.event_name == 'schedule'
 
