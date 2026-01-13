@@ -143,8 +143,9 @@ jobs:
           # This avoids "failed to import keychain certificate" errors
         with:
           tauriScript: pnpm tauri
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false}}'
           # Skip release creation for PRs by not specifying tagName/releaseName
+          # Skip updater artifacts since we don't have signing keys in PRs
 
       - name: Build the desktop app (Build only - no code signing)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.release != 'true'
@@ -154,8 +155,9 @@ jobs:
           # Don't pass signing certificates when release is disabled
         with:
           tauriScript: pnpm tauri
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false}}'
           # Skip release creation when release input is false
+          # Skip updater artifacts since we don't have signing keys in non-release builds
 
       - name: Upload artifacts (macOS)
         if: matrix.platform == 'macos-latest'
