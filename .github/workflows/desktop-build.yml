@@ -103,7 +103,8 @@ jobs:
       - name: Generate app icons
         run: |
           # Generate all required icon formats from the source PNG
-          pnpm tauri icon src-tauri/icons/icon.png
+          # This creates icon.icns (macOS), icon.ico (Windows), and various PNG sizes
+          pnpm tauri icon src-tauri/icons/icon.png --output src-tauri/icons
 
       - name: Build the desktop app
         uses: tauri-apps/tauri-action@v0
@@ -194,6 +195,8 @@ jobs:
         run: pnpm install
 
       - name: Run desktop tests
+        # Note: Desktop tests mock all Tauri APIs and don't require Rust/Tauri dependencies.
+        # If future tests need actual Tauri functionality, Rust should be installed in this job.
         run: pnpm test:desktop
 
       - name: Check Rust formatting

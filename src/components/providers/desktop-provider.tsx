@@ -8,6 +8,7 @@ import {
   useDesktopUpdates,
   useNewChatEvent,
   useAuthCallback,
+  useNavigateEvent,
 } from "@/lib/desktop";
 import { useRouter } from "next/navigation";
 
@@ -42,6 +43,11 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
   // Handle new chat events from system tray
   useNewChatEvent(() => {
     router.push("/chat");
+  });
+
+  // Handle navigation events from Rust backend (replaces eval)
+  useNavigateEvent((path) => {
+    router.push(path);
   });
 
   // Handle OAuth callbacks from deep links

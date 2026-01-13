@@ -275,6 +275,20 @@ export function onAuthCallback(
 }
 
 /**
+ * Listen for navigate events from Rust backend
+ */
+export function onNavigate(
+  callback: (path: string) => void
+): Promise<() => void> {
+  if (!isTauri()) {
+    return Promise.resolve(() => {});
+  }
+  return listen<string>("navigate", (event) => callback(event.payload)).then(
+    (unlisten) => unlisten
+  );
+}
+
+/**
  * Emit an event to the Rust backend
  */
 export async function emitEvent(event: string, payload?: unknown): Promise<void> {

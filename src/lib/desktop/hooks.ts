@@ -17,6 +17,7 @@ import {
   onNewChat,
   onCheckUpdates,
   onAuthCallback,
+  onNavigate,
   registerDesktopShortcuts,
   showNotification,
   type AppVersion,
@@ -198,6 +199,32 @@ export function useAuthCallback(
 }
 
 /**
+ * Hook to handle navigation events from Rust backend
+ */
+export function useNavigateEvent(
+  callback: (path: string) => void
+): void {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    let unlisten: (() => void) | undefined;
+
+    onNavigate((path) => {
+      callbackRef.current(path);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+}
+
+/**
  * Hook to register desktop keyboard shortcuts
  */
 export function useDesktopShortcuts(): void {
@@ -234,13 +261,14 @@ export function useDesktopNotification(): {
  */
 export function useWindowStatePersistence(): void {
   const isTauriEnv = useIsTauri();
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!isTauriEnv) return;
 
     const saveWindowState = async () => {
       try {
-        const { getWindowState, setWindowState } = await import("./tauri");
+        const { getWindowState } = await import("./tauri");
         const state = await getWindowState();
 
         // Store in local storage as backup
@@ -248,6 +276,16 @@ export function useWindowStatePersistence(): void {
       } catch (e) {
         console.error("Failed to save window state:", e);
       }
+    };
+
+    // Debounced save to avoid excessive writes during resize operations
+    const debouncedSaveWindowState = () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        saveWindowState();
+      }, 500);
     };
 
     const restoreWindowState = async () => {
@@ -267,15 +305,15 @@ export function useWindowStatePersistence(): void {
     // Restore state on mount
     restoreWindowState();
 
-    // Save state on window resize/move
-    const handleResize = () => {
-      saveWindowState();
-    };
-
-    window.addEventListener("resize", handleResize);
+    // Save state on window resize/move (debounced)
+    window.addEventListener("resize", debouncedSaveWindowState);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", debouncedSaveWindowState);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      // Final save on unmount
       saveWindowState();
     };
   }, [isTauriEnv]);

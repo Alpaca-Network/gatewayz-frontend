@@ -84,9 +84,14 @@ pub fn run() {
             commands::minimize_to_tray,
         ])
         .on_window_event(|window, event| {
-            // Handle window close event - minimize to tray instead of closing
+            // Handle window close event - minimize to tray instead of closing.
+            // This is intentional UX for desktop apps with system tray integration:
+            // - Users can fully quit via the tray menu "Quit" option
+            // - The tray icon indicates the app is still running
+            // - Alt+F4/Cmd+Q will also trigger this (use tray menu to fully quit)
+            // Future improvement: Add a user preference to toggle this behavior
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Hide window instead of closing
+                // Hide window instead of closing - app stays in tray
                 let _ = window.hide();
                 api.prevent_close();
             }
@@ -100,8 +105,13 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItem::with_id(app, "show", "Show GatewayZ", true, None::<&str>)?;
     let new_chat = MenuItem::with_id(app, "new_chat", "New Chat", true, Some("CmdOrCtrl+N"))?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let check_updates =
-        MenuItem::with_id(app, "check_updates", "Check for Updates...", true, None::<&str>)?;
+    let check_updates = MenuItem::with_id(
+        app,
+        "check_updates",
+        "Check for Updates...",
+        true,
+        None::<&str>,
+    )?;
     let settings = MenuItem::with_id(app, "settings", "Settings...", true, Some("CmdOrCtrl+,"))?;
     let separator2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Quit GatewayZ", true, Some("CmdOrCtrl+Q"))?;
@@ -146,7 +156,7 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.set_focus();
-                    let _ = window.eval("window.location.href = '/settings'");
+                    let _ = window.emit("navigate", "/settings");
                 }
             }
             "quit" => {
@@ -188,10 +198,7 @@ fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
 
 /// Handle global shortcut events
 #[cfg(desktop)]
-fn handle_global_shortcut(
-    app: &AppHandle,
-    shortcut: &tauri_plugin_global_shortcut::Shortcut,
-) {
+fn handle_global_shortcut(app: &AppHandle, shortcut: &tauri_plugin_global_shortcut::Shortcut) {
     use tauri_plugin_global_shortcut::Code;
 
     if shortcut.key == Code::KeyG {
@@ -215,7 +222,14 @@ fn setup_deep_link_handler(app: &AppHandle) {
             // Parse the URL and handle it
             if let Ok(url) = url::Url::parse(urls) {
                 handle_deep_link(&app_handle, &url);
+            } else {
+                log::warn!("Failed to parse deep link URL: {}", urls);
             }
+        } else {
+            log::warn!(
+                "Deep link event payload is not a string: {:?}",
+                event.payload()
+            );
         }
     });
 }
@@ -234,7 +248,7 @@ fn handle_deep_link(app: &AppHandle, url: &url::Url) {
             "/chat" => {
                 // Open a new chat or specific chat
                 if let Some(chat_id) = url.query_pairs().find(|(k, _)| k == "id").map(|(_, v)| v) {
-                    let _ = window.eval(&format!("window.location.href = '/chat?id={}'", chat_id));
+                    let _ = window.emit("navigate", format!("/chat?id={}", chat_id));
                 } else {
                     let _ = window.emit("new-chat", ());
                 }
@@ -245,9 +259,9 @@ fn handle_deep_link(app: &AppHandle, url: &url::Url) {
                 let _ = window.emit("auth-callback", query);
             }
             _ => {
-                // Navigate to the path directly
+                // Navigate to the path directly via event
                 let path = url.path();
-                let _ = window.eval(&format!("window.location.href = '{}'", path));
+                let _ = window.emit("navigate", path);
             }
         }
     }

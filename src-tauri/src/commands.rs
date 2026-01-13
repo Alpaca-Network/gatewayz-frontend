@@ -96,11 +96,11 @@ pub async fn open_external_url(url: String) -> Result<(), String> {
 /// Get the stored authentication token
 #[tauri::command]
 pub async fn get_auth_token(app: AppHandle) -> Result<Option<String>, String> {
-    let store = app
-        .store("auth.json")
-        .map_err(|e| e.to_string())?;
+    let store = app.store("auth.json").map_err(|e| e.to_string())?;
 
-    let token = store.get("auth_token").and_then(|v| v.as_str().map(String::from));
+    let token = store
+        .get("auth_token")
+        .and_then(|v| v.as_str().map(String::from));
 
     Ok(token)
 }
@@ -108,9 +108,7 @@ pub async fn get_auth_token(app: AppHandle) -> Result<Option<String>, String> {
 /// Store the authentication token securely
 #[tauri::command]
 pub async fn set_auth_token(app: AppHandle, token: String) -> Result<(), String> {
-    let store = app
-        .store("auth.json")
-        .map_err(|e| e.to_string())?;
+    let store = app.store("auth.json").map_err(|e| e.to_string())?;
 
     store.set("auth_token", serde_json::json!(token));
     store.save().map_err(|e| e.to_string())?;
@@ -121,9 +119,7 @@ pub async fn set_auth_token(app: AppHandle, token: String) -> Result<(), String>
 /// Clear the stored authentication token
 #[tauri::command]
 pub async fn clear_auth_token(app: AppHandle) -> Result<(), String> {
-    let store = app
-        .store("auth.json")
-        .map_err(|e| e.to_string())?;
+    let store = app.store("auth.json").map_err(|e| e.to_string())?;
 
     store.delete("auth_token");
     store.save().map_err(|e| e.to_string())?;
@@ -175,14 +171,14 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
                 .await
                 .map_err(|e| e.to_string())?;
 
-            // Install the update (this will restart the app)
+            // Install the update
             update.install(bytes).map_err(|e| e.to_string())?;
 
-            // Restart the application
+            // Restart the application (this call never returns)
             app.restart();
         }
-        Ok(None) => return Err("No update available".to_string()),
-        Err(e) => return Err(e.to_string()),
+        Ok(None) => Err("No update available".to_string()),
+        Err(e) => Err(e.to_string()),
     }
 }
 
