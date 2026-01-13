@@ -107,7 +107,7 @@ jobs:
           pnpm tauri icon src-tauri/icons/icon.png --output src-tauri/icons
 
       - name: Build the desktop app (Release)
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.event.inputs.release == 'true')
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -137,6 +137,16 @@ jobs:
         with:
           args: --target ${{ matrix.target }}
           # Skip release creation for PRs by not specifying tagName/releaseName
+
+      - name: Build the desktop app (Build only - no code signing)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Don't pass signing certificates when release is disabled
+        with:
+          args: --target ${{ matrix.target }}
+          # Skip release creation when release input is false
 
       - name: Upload artifacts (macOS)
         if: matrix.platform == 'macos-latest'
