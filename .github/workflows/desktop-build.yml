@@ -9,6 +9,8 @@ on:
     paths:
       - 'src-tauri/**'
       - 'src/lib/desktop/**'
+      - 'scripts/build-desktop.js'
+      - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
       - 'next.config.ts'
       - 'package.json'
@@ -18,6 +20,8 @@ on:
     paths:
       - 'src-tauri/**'
       - 'src/lib/desktop/**'
+      - 'scripts/build-desktop.js'
+      - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
       - 'next.config.ts'
       - 'package.json'
