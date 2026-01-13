@@ -1882,3 +1882,98 @@ describe('ChatInput stop streaming button', () => {
     expect(mockStopStream).toHaveBeenCalled();
   });
 });
+
+describe('ChatInput textarea auto-resize', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    mockIsStreaming = false;
+  });
+
+  it('should set height on textarea when input value changes', async () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Type some content
+    fireEvent.change(textarea, { target: { value: 'Test content' } });
+
+    await waitFor(() => {
+      // Height should be set (minimum 48px)
+      expect(textarea.style.height).toBe('48px');
+    });
+  });
+
+  it('should handle textarea without parentNode gracefully', async () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Store original parentNode
+    const originalParentNode = textarea.parentNode;
+
+    // Temporarily remove parentNode (simulating edge case)
+    Object.defineProperty(textarea, 'parentNode', {
+      configurable: true,
+      get: () => null,
+    });
+
+    // Should not throw when parentNode is null
+    expect(() => {
+      fireEvent.change(textarea, { target: { value: 'Test content' } });
+    }).not.toThrow();
+
+    // Restore parentNode
+    Object.defineProperty(textarea, 'parentNode', {
+      configurable: true,
+      get: () => originalParentNode,
+    });
+  });
+
+  it('should have minimum height of 48px', async () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Type short content
+    fireEvent.change(textarea, { target: { value: 'Hi' } });
+
+    await waitFor(() => {
+      // Height should be at least 48px (minimum)
+      const height = parseInt(textarea.style.height || '0', 10);
+      expect(height).toBeGreaterThanOrEqual(48);
+    });
+  });
+
+  it('should have correct CSS classes for resize behavior', () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Should have resize-none class to prevent manual resize
+    expect(textarea.className).toContain('resize-none');
+    // Should have min-h-[48px] for minimum height
+    expect(textarea.className).toContain('min-h-[48px]');
+    // Should have max-h-[150px] for maximum height
+    expect(textarea.className).toContain('max-h-[150px]');
+  });
+
+  it('should use clone-based measurement without affecting original textarea visibility', async () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Verify textarea is visible before change
+    expect(textarea).toBeVisible();
+
+    // Type content
+    fireEvent.change(textarea, { target: { value: 'Test content' } });
+
+    await waitFor(() => {
+      // Textarea should still be visible after measurement (no flicker)
+      expect(textarea).toBeVisible();
+      // Textarea should not have visibility:hidden set on it
+      expect(textarea.style.visibility).not.toBe('hidden');
+    });
+  });
+});

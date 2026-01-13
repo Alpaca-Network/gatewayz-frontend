@@ -223,24 +223,43 @@ export function ChatInput() {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
+    // Early exit if no parent node to append clone to
+    const parentNode = textarea.parentNode;
+    if (!parentNode) return;
+
     // Get current height before any changes
     const currentHeight = textarea.offsetHeight;
 
-    // Temporarily set height to auto to measure scrollHeight accurately
     // Use a clone to avoid visual flicker - measure in a hidden element
     const clone = textarea.cloneNode(true) as HTMLTextAreaElement;
+
+    // Copy the text content (cloneNode doesn't copy the value property)
+    clone.value = textarea.value;
+
+    // Copy computed styles that affect height measurement
+    const computedStyle = window.getComputedStyle(textarea);
     clone.style.position = 'absolute';
     clone.style.visibility = 'hidden';
     clone.style.height = 'auto';
     clone.style.width = `${textarea.offsetWidth}px`;
     clone.style.overflow = 'hidden';
-    textarea.parentNode?.appendChild(clone);
+    clone.style.fontSize = computedStyle.fontSize;
+    clone.style.fontFamily = computedStyle.fontFamily;
+    clone.style.lineHeight = computedStyle.lineHeight;
+    clone.style.padding = computedStyle.padding;
+    clone.style.border = computedStyle.border;
+    clone.style.boxSizing = computedStyle.boxSizing;
 
-    // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
-    const newHeight = Math.min(Math.max(clone.scrollHeight, 48), 150);
+    parentNode.appendChild(clone);
 
-    // Remove the clone
-    clone.remove();
+    let newHeight: number;
+    try {
+      // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
+      newHeight = Math.min(Math.max(clone.scrollHeight, 48), 150);
+    } finally {
+      // Always remove the clone, even if an error occurs
+      clone.remove();
+    }
 
     // Only update height if it changed to avoid unnecessary reflows
     if (currentHeight !== newHeight) {
