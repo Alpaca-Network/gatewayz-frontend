@@ -3,7 +3,7 @@ name: Desktop App Build
 on:
   push:
     branches:
-      - main
+      - master
     tags:
       - 'v*'
     paths:
@@ -12,7 +12,7 @@ on:
       - '.github/workflows/desktop-build.yml'
   pull_request:
     branches:
-      - main
+      - master
     paths:
       - 'src-tauri/**'
       - 'src/lib/desktop/**'
@@ -195,6 +195,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
 
       - name: Install frontend dependencies
         run: pnpm install
