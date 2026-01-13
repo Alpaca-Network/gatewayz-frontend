@@ -122,6 +122,7 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
+          tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
           tagName: v__VERSION__
           releaseName: 'GatewayZ Desktop v__VERSION__'
@@ -137,6 +138,7 @@ jobs:
           # Don't pass signing certificates for PRs - builds will be unsigned
           # This avoids "failed to import keychain certificate" errors
         with:
+          tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
           # Skip release creation for PRs by not specifying tagName/releaseName
 
@@ -147,6 +149,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Don't pass signing certificates when release is disabled
         with:
+          tauriScript: pnpm tauri
           args: --target ${{ matrix.target }}
           # Skip release creation when release input is false
 

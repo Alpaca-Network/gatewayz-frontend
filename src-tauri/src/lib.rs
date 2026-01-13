@@ -6,7 +6,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 mod commands;
@@ -212,24 +212,28 @@ fn handle_global_shortcut(app: &AppHandle, shortcut: &tauri_plugin_global_shortc
 
 /// Set up deep link handler for gatewayz:// protocol
 fn setup_deep_link_handler(app: &AppHandle) {
+    use tauri::Listener;
     let app_handle = app.clone();
 
     // Listen for deep link events
     app.listen("deep-link://new-url", move |event| {
-        if let Some(urls) = event.payload().as_str() {
-            log::info!("Received deep link: {}", urls);
+        let payload = event.payload();
+        log::info!("Received deep link: {}", payload);
 
-            // Parse the URL and handle it
-            if let Ok(url) = url::Url::parse(urls) {
-                handle_deep_link(&app_handle, &url);
-            } else {
-                log::warn!("Failed to parse deep link URL: {}", urls);
-            }
+        // Parse the URL and handle it - payload is JSON string of URLs
+        if let Ok(url) = url::Url::parse(payload) {
+            handle_deep_link(&app_handle, &url);
         } else {
-            log::warn!(
-                "Deep link event payload is not a string: {:?}",
-                event.payload()
-            );
+            // Try to parse as JSON array of URLs (common format for deep links)
+            if let Ok(urls) = serde_json::from_str::<Vec<String>>(payload) {
+                if let Some(first_url) = urls.first() {
+                    if let Ok(url) = url::Url::parse(first_url) {
+                        handle_deep_link(&app_handle, &url);
+                        return;
+                    }
+                }
+            }
+            log::warn!("Failed to parse deep link payload: {}", payload);
         }
     });
 }
