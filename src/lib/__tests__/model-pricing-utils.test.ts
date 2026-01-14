@@ -305,6 +305,16 @@ describe('model-pricing-utils', () => {
         'novita',
         'nebius',
         'xai',
+        // Additional per-million gateways added in pricing normalization update
+        'alibaba',
+        'alibaba-cloud',
+        'clarifai',
+        'simplismart',
+        'akash',
+        'cloudflare-workers-ai',
+        'openai',
+        'anthropic',
+        'alpaca-network',
       ];
 
       perMillionGateways.forEach((gateway) => {
