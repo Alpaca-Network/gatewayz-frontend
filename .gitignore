@@ -57,3 +57,10 @@ cypress/downloads/
 cypress/results/
 cypress.env.json
 .cypress-cache/
+
+# Tauri / Desktop
+src-tauri/target/
+src-tauri/Cargo.lock
+src-tauri/gen/
+# Desktop build temporary files
+.desktop-build-backup

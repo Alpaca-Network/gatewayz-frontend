@@ -194,9 +194,9 @@ export default function AgentPage() {
   return (
     <div className="relative flex-1 w-full h-full min-h-0 overflow-hidden">
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-background z-10" role="status" aria-live="polite" aria-label="Loading">
           <div className="flex flex-col items-center gap-4">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" aria-hidden="true"></div>
             <p className="text-muted-foreground">Loading Coding Agent...</p>
           </div>
         </div>

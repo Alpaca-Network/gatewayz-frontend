@@ -290,5 +290,35 @@ describe("AgentPage", () => {
         screen.getByText(/Network connectivity issues or firewall blocking/i)
       ).toBeInTheDocument();
     });
+
+    it("should show connection error again if retry times out", () => {
+      render(<AgentPage />);
+
+      // Fast-forward past the initial timeout to trigger connection error
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      // Verify we're in error state
+      expect(screen.getByText("Connection Failed")).toBeInTheDocument();
+
+      // Click retry
+      const retryButton = screen.getByRole("button", {
+        name: /retry connection/i,
+      });
+      fireEvent.click(retryButton);
+
+      // Should be loading again
+      expect(screen.getByText("Loading Coding Agent...")).toBeInTheDocument();
+      expect(screen.queryByText("Connection Failed")).not.toBeInTheDocument();
+
+      // Fast-forward past the retry timeout (another 15 seconds)
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      // Should show connection error again since iframe didn't load
+      expect(screen.getByText("Connection Failed")).toBeInTheDocument();
+    });
   });
 });

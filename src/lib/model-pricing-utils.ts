@@ -60,8 +60,46 @@ export interface ModelPricingInfo {
 /**
  * Gateways that return pricing in per-million-tokens format (not per-token).
  * These gateways should NOT have their pricing multiplied by 1,000,000.
+ *
+ * How to identify if a gateway uses per-million pricing:
+ * - If a model like GPT-4o-mini shows $0.15 in the API response, it's per-million
+ * - If it shows $0.00000015, it's per-token
+ *
+ * Known per-million gateways:
+ * - onerouter: Returns prices like 0.15 for $0.15/M
+ * - google/google-vertex: Returns prices like 0.075 for $0.075/M
+ * - helicone: Returns prices like 0.15 for $0.15/M
+ * - vercel-ai-gateway: Returns prices like 0.15 for $0.15/M
+ * - deepinfra: Returns prices like 0.35 for $0.35/M (from manual_pricing.json)
+ * - featherless: Returns prices like 0.35 for $0.35/M (from manual_pricing.json)
+ * - chutes: Returns prices like 0.02 for $0.02/M (from manual_pricing.json)
+ * - together: Returns prices like 0.20 for $0.20/M
+ * - near: Returns prices like 1.00 for $1.00/M (from manual_pricing.json)
+ * - fireworks: Returns prices like 0.20 for $0.20/M
+ * - groq: Returns prices like 0.05 for $0.05/M
+ * - cerebras: Returns prices like 0.10 for $0.10/M
+ * - novita: Returns prices like 0.12 for $0.12/M
+ * - nebius: Returns prices like 0.20 for $0.20/M
+ * - xai: Returns prices like 2.00 for $2.00/M
  */
-const PER_MILLION_PRICING_GATEWAYS = ['onerouter'];
+const PER_MILLION_PRICING_GATEWAYS = [
+  'onerouter',
+  'google',
+  'google-vertex',
+  'helicone',
+  'vercel-ai-gateway',
+  'deepinfra',
+  'featherless',
+  'chutes',
+  'together',
+  'near',
+  'fireworks',
+  'groq',
+  'cerebras',
+  'novita',
+  'nebius',
+  'xai',
+];
 
 /**
  * Gateways that return pricing in per-billion-tokens format.

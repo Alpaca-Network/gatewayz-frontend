@@ -1,5 +1,3 @@
-import type {Metadata, Viewport} from 'next';
-import Script from 'next/script';
 import './globals.css';
 import 'katex/dist/katex.min.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -26,6 +24,10 @@ import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
 import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
 import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
+import { DesktopProvider } from '@/components/providers/desktop-provider';
+
+// Re-export metadata and viewport from dedicated file for cleaner organization
+export { metadata, viewport } from './metadata';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -34,50 +36,6 @@ const inter = Inter({
   fallback: ['system-ui', 'arial'],
   adjustFontFallback: true,
 });
-
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 5,
-  viewportFit: 'cover',
-};
-
-export const metadata: Metadata = {
-  title: 'Gatewayz - One Interface To Work With Any LLM',
-  description: 'From Idea To Production, Gatewayz Gives AI Teams The Toolkit, Savings, And Reliability They Need.',
-  keywords: ['AI', 'LLM', 'GPT', 'Claude', 'Gemini', 'API Gateway', 'AI Router', 'Model Routing'],
-  authors: [{ name: 'Gatewayz' }],
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
-    },
-  },
-  icons: {
-    icon: [
-      { url: '/favicon.ico' },
-      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
-      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
-    ],
-    apple: [
-      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-    ],
-  },
-  metadataBase: new URL('https://beta.gatewayz.ai'),
-  openGraph: {
-    type: 'website',
-    locale: 'en_US',
-    url: 'https://beta.gatewayz.ai',
-    siteName: 'Gatewayz',
-    title: 'Gatewayz - One Interface To Work With Any LLM',
-    description: 'From Idea To Production, Gatewayz Gives AI Teams The Toolkit, Savings, And Reliability They Need.',
-  },
-};
 
 import { ReactQueryProvider } from "@/lib/providers/query-provider";
 
@@ -109,6 +67,7 @@ export default function RootLayout({
             <PreviewHostnameRestorer />
             <PrivyProviderWrapper>
               <AnalyticsProvidersWrapper>
+                <DesktopProvider>
                 {/* Session transfer from main domain - handles automatic authentication */}
                 <SessionInitializer />
                 <GTMLoader />
@@ -136,6 +95,7 @@ export default function RootLayout({
                 <Analytics />
                 <SpeedInsights />
                 <WebVitalsReporter />
+                </DesktopProvider>
               </AnalyticsProvidersWrapper>
             </PrivyProviderWrapper>
           </ReactQueryProvider>

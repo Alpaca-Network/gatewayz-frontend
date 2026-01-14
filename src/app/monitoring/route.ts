@@ -147,7 +147,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Read body as ArrayBuffer to preserve binary data (e.g., session replays)
-    const buffer = await request.arrayBuffer();
+    // Release quota if body read fails since we can't validate the request
+    let buffer: ArrayBuffer;
+    try {
+      buffer = await request.arrayBuffer();
+    } catch (error) {
+      releaseRateLimitQuota();
+      console.error("[Sentry Tunnel] Failed to read request body:", error);
+      return new NextResponse("Bad Request", { status: 400, headers: CORS_HEADERS });
+    }
     const envelope = parseEnvelopeHeader(buffer);
 
     // Validate envelope - release quota for invalid requests
@@ -220,6 +228,11 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    // Note: We intentionally do NOT release quota on unexpected errors.
+    // If we reach here, it means:
+    // 1. Validation passed (quota should count for valid requests)
+    // 2. An unexpected error occurred during forwarding
+    // Keeping quota consumed prevents potential abuse via error-triggering requests
     console.error("[Sentry Tunnel] Error:", error);
     return new NextResponse("Internal Server Error", { status: 500, headers: CORS_HEADERS });
   }
