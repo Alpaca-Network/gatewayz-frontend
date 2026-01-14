@@ -6,7 +6,7 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Listener, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 mod commands;
@@ -186,10 +186,11 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 /// Register global keyboard shortcuts
 #[cfg(desktop)]
 fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+    use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
     // Register Cmd/Ctrl+Shift+G to show/focus GatewayZ
-    let shortcut: Shortcut = "CmdOrCtrl+Shift+G".parse()?;
+    // Use Shortcut::new() instead of parse() for reliable type inference
+    let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyG);
     app.global_shortcut().register(shortcut)?;
 
     log::info!("Global shortcuts registered");
@@ -212,18 +213,28 @@ fn handle_global_shortcut(app: &AppHandle, shortcut: &tauri_plugin_global_shortc
 
 /// Set up deep link handler for gatewayz:// protocol
 fn setup_deep_link_handler(app: &AppHandle) {
+    use tauri::Listener;
     let app_handle = app.clone();
 
     // Listen for deep link events
     app.listen("deep-link://new-url", move |event| {
-        let urls = event.payload();
-        log::info!("Received deep link: {}", urls);
+        let payload = event.payload();
+        log::info!("Received deep link: {}", payload);
 
-        // Parse the URL and handle it
-        if let Ok(url) = url::Url::parse(urls) {
+        // Parse the URL and handle it - payload is JSON string of URLs
+        if let Ok(url) = url::Url::parse(payload) {
             handle_deep_link(&app_handle, &url);
         } else {
-            log::warn!("Failed to parse deep link URL: {}", urls);
+            // Try to parse as JSON array of URLs (common format for deep links)
+            if let Ok(urls) = serde_json::from_str::<Vec<String>>(payload) {
+                if let Some(first_url) = urls.first() {
+                    if let Ok(url) = url::Url::parse(first_url) {
+                        handle_deep_link(&app_handle, &url);
+                        return;
+                    }
+                }
+            }
+            log::warn!("Failed to parse deep link payload: {}", payload);
         }
     });
 }

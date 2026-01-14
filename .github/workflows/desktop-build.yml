@@ -12,7 +12,6 @@ on:
       - 'scripts/build-desktop.js'
       - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
-      - 'package.json'
   pull_request:
     branches:
       - master
@@ -22,7 +21,6 @@ on:
       - 'scripts/build-desktop.js'
       - 'next.config.ts'
       - '.github/workflows/desktop-build.yml'
-      - 'package.json'
   workflow_dispatch:
     inputs:
       release:
@@ -33,7 +31,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # Increase Node.js memory limit for Next.js build (prevents heap out of memory)
+  # Increase Node.js memory for large Next.js builds
   NODE_OPTIONS: '--max-old-space-size=8192'
 
 jobs:
@@ -114,7 +112,8 @@ jobs:
           # This creates icon.icns (macOS), icon.ico (Windows), and various PNG sizes
           pnpm tauri icon src-tauri/icons/icon.png --output src-tauri/icons
 
-      - name: Build the desktop app
+      - name: Build the desktop app (Release)
+        if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.event.inputs.release == 'true')
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -134,6 +133,41 @@ jobs:
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
+
+      - name: Build the desktop app (PR - no code signing)
+        if: github.event_name == 'pull_request'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Explicitly empty signing keys for unsigned builds
+          # This prevents Tauri from requiring private key when public key exists
+          TAURI_SIGNING_PRIVATE_KEY: ''
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        with:
+          tauriScript: pnpm tauri
+          # Disable createUpdaterArtifacts AND remove the updater pubkey to prevent
+          # "A public key has been found, but no private key" error
+          args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false},"plugins":{"updater":{"pubkey":""}}}'
+          includeUpdaterJson: false
+          # Skip release creation for PRs by not specifying tagName/releaseName
+          # Skip updater artifacts since we don't have signing keys in PRs
+
+      - name: Build the desktop app (Build only - no code signing)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.release != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Explicitly empty signing keys for unsigned builds
+          TAURI_SIGNING_PRIVATE_KEY: ''
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        with:
+          tauriScript: pnpm tauri
+          # Disable createUpdaterArtifacts AND remove the updater pubkey to prevent
+          # "A public key has been found, but no private key" error
+          args: --target ${{ matrix.target }} --config '{"bundle":{"createUpdaterArtifacts":false},"plugins":{"updater":{"pubkey":""}}}'
+          includeUpdaterJson: false
+          # Skip release creation when release input is false
+          # Skip updater artifacts since we don't have signing keys in non-release builds
 
       - name: Upload artifacts (macOS)
         if: matrix.platform == 'macos-latest'
@@ -229,8 +263,7 @@ jobs:
 
       - name: Run Clippy
         run: |
-          # Create empty out directory to satisfy frontendDist check
-          # The generate_context!() macro verifies this path exists at compile time
+          # Create empty out directory for Clippy check (it validates frontendDist path)
           mkdir -p out
           cd src-tauri
           cargo clippy -- -D warnings

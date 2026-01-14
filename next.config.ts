@@ -68,90 +68,94 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
   },
   allowedDevOrigins: ["*.cloudworkstations.dev"],
-  async redirects() {
-    return [
-      {
-        source: '/deck',
-        destination: 'https://www.canva.com/design/DAG2Dc4lQvI/P2ws7cdUnYAjdFxXpsKvUw/view?utm_content=DAG2Dc4lQvI&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h20484be5f9',
-        permanent: false,
-      },
-    ];
-  },
-  async headers() {
-    // Common security headers (excluding frame-related headers which vary by route)
-    const commonSecurityHeaders = [
-      {
-        key: 'Strict-Transport-Security',
-        value: 'max-age=31536000; includeSubDomains',
-      },
-      {
-        key: 'X-Content-Type-Options',
-        value: 'nosniff',
-      },
-      {
-        key: 'X-XSS-Protection',
-        value: '1; mode=block',
-      },
-      {
-        key: 'Referrer-Policy',
-        value: 'strict-origin-when-cross-origin',
-      },
-      {
-        // Allow microphone for speech recognition on /chat, block geolocation and camera
-        // microphone=(self) allows same-origin access needed for Web Speech API
-        key: 'Permissions-Policy',
-        value: 'geolocation=(), camera=(), microphone=(self)',
-      },
-    ];
+  // Redirects and headers are not supported with static export (output: 'export')
+  // Only include them when not building for desktop/static export
+  ...(isStaticExport ? {} : {
+    async redirects() {
+      return [
+        {
+          source: '/deck',
+          destination: 'https://www.canva.com/design/DAG2Dc4lQvI/P2ws7cdUnYAjdFxXpsKvUw/view?utm_content=DAG2Dc4lQvI&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h20484be5f9',
+          permanent: false,
+        },
+      ];
+    },
+    async headers() {
+      // Common security headers (excluding frame-related headers which vary by route)
+      const commonSecurityHeaders = [
+        {
+          key: 'Strict-Transport-Security',
+          value: 'max-age=31536000; includeSubDomains',
+        },
+        {
+          key: 'X-Content-Type-Options',
+          value: 'nosniff',
+        },
+        {
+          key: 'X-XSS-Protection',
+          value: '1; mode=block',
+        },
+        {
+          key: 'Referrer-Policy',
+          value: 'strict-origin-when-cross-origin',
+        },
+        {
+          // Allow microphone for speech recognition on /chat, block geolocation and camera
+          // microphone=(self) allows same-origin access needed for Web Speech API
+          key: 'Permissions-Policy',
+          value: 'geolocation=(), camera=(), microphone=(self)',
+        },
+      ];
 
-    // Frame protection headers for routes that should NOT be embedded
-    // Uses both X-Frame-Options (legacy) and CSP frame-ancestors (modern)
-    const frameProtectionHeaders = [
-      {
-        key: 'X-Frame-Options',
-        value: 'DENY',
-      },
-      {
-        // CSP frame-ancestors is the modern replacement for X-Frame-Options
-        // 'none' prevents this page from being embedded in any iframe
-        key: 'Content-Security-Policy',
-        value: "frame-ancestors 'none'",
-      },
-    ];
+      // Frame protection headers for routes that should NOT be embedded
+      // Uses both X-Frame-Options (legacy) and CSP frame-ancestors (modern)
+      const frameProtectionHeaders = [
+        {
+          key: 'X-Frame-Options',
+          value: 'DENY',
+        },
+        {
+          // CSP frame-ancestors is the modern replacement for X-Frame-Options
+          // 'none' prevents this page from being embedded in any iframe
+          key: 'Content-Security-Policy',
+          value: "frame-ancestors 'none'",
+        },
+      ];
 
-    return [
-      {
-        // Root path: Apply strict security headers including frame protection
-        // Note: /:path patterns don't match root, so we need an explicit rule
-        source: '/',
-        headers: [
-          ...commonSecurityHeaders,
-          ...frameProtectionHeaders,
-        ],
-      },
-      {
-        // All other routes (except /agent): Apply strict security headers including X-Frame-Options: DENY
-        // Using /:path* to match all paths including multi-segment paths like /api/health, /settings/account
-        // IMPORTANT: Must come BEFORE /agent rule so /agent can override it
-        source: '/:path*',
-        headers: [
-          ...commonSecurityHeaders,
-          ...frameProtectionHeaders,
-        ],
-      },
-      {
-        // Agent page: Allow iframe embedding from any origin (page embeds external coding agent)
-        // The agent page needs to embed external content and may receive postMessage from it
-        // IMPORTANT: Must come LAST to override the /:path* rule above
-        // In Next.js, when multiple rules match, the last one in the array wins
-        source: '/agent',
-        headers: [
-          ...commonSecurityHeaders,
-          // No X-Frame-Options or frame-ancestors CSP - allow embedding
-        ],
-      },
-    ];
-  },
+      return [
+        {
+          // Root path: Apply strict security headers including frame protection
+          // Note: /:path patterns don't match root, so we need an explicit rule
+          source: '/',
+          headers: [
+            ...commonSecurityHeaders,
+            ...frameProtectionHeaders,
+          ],
+        },
+        {
+          // All other routes (except /agent): Apply strict security headers including X-Frame-Options: DENY
+          // Using /:path* to match all paths including multi-segment paths like /api/health, /settings/account
+          // IMPORTANT: Must come BEFORE /agent rule so /agent can override it
+          source: '/:path*',
+          headers: [
+            ...commonSecurityHeaders,
+            ...frameProtectionHeaders,
+          ],
+        },
+        {
+          // Agent page: Allow iframe embedding from any origin (page embeds external coding agent)
+          // The agent page needs to embed external content and may receive postMessage from it
+          // IMPORTANT: Must come LAST to override the /:path* rule above
+          // In Next.js, when multiple rules match, the last one in the array wins
+          source: '/agent',
+          headers: [
+            ...commonSecurityHeaders,
+            // No X-Frame-Options or frame-ancestors CSP - allow embedding
+          ],
+        },
+      ];
+    },
+  }),
   webpack: (config, { isServer }) => {
     // Fix for Handlebars require.extensions issue
     config.resolve.fallback = {

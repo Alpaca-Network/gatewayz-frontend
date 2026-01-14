@@ -63,4 +63,4 @@ src-tauri/target/
 src-tauri/Cargo.lock
 src-tauri/gen/
 # Desktop build temporary files
-.api-backup
+.desktop-build-backup
