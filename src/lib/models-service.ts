@@ -9,6 +9,7 @@ import {
   isValidGateway,
   autoRegisterGatewaysFromModels,
   getAllActiveGatewayIds,
+  fetchAndRegisterGatewaysFromBackend,
 } from '@/lib/gateway-registry';
 import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
 import { isPerMillionPricingGateway, isPerBillionPricingGateway } from '@/lib/model-pricing-utils';
@@ -160,6 +161,13 @@ async function fetchModelsLogic(gateway: string, limit?: number, search?: string
   if (gateway === 'all') {
     console.log('[Models] Fetching all models from backend with gateway=all (single request)');
     try {
+      // Fetch gateway configurations from backend in parallel with models
+      // This enables auto-discovery of new gateways without frontend code changes
+      // The fetch is idempotent and cached, so subsequent calls are no-ops
+      fetchAndRegisterGatewaysFromBackend(API_BASE_URL).catch(err => {
+        console.warn('[Models] Background gateway fetch failed:', err);
+      });
+
       // Make a single API call to the backend with gateway=all
       // The backend handles fetching from all gateways and deduplication internally
       const models = await fetchModelsFromGateway('all', limit, search);

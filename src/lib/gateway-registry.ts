@@ -544,3 +544,154 @@ export function clearDynamicGateways(): void {
   }
   dynamicGateways.clear();
 }
+
+// ============================================================================
+// Backend Gateway Discovery
+// ============================================================================
+
+/** Track if we've already fetched gateways from the backend */
+let gatewaysFetchedFromBackend = false;
+
+/** Promise to prevent concurrent fetches */
+let gatewayFetchPromise: Promise<void> | null = null;
+
+/**
+ * Fetch available gateways from the backend and register them.
+ * This enables auto-discovery of new gateways without frontend code changes.
+ *
+ * The function is idempotent - it only fetches once per session.
+ * Call this early in your app initialization to ensure all gateways are available.
+ *
+ * @param apiBaseUrl - Optional API base URL override
+ * @returns Promise that resolves when gateways are registered
+ */
+export async function fetchAndRegisterGatewaysFromBackend(
+  apiBaseUrl?: string
+): Promise<void> {
+  // Only fetch once per session
+  if (gatewaysFetchedFromBackend) {
+    return;
+  }
+
+  // Prevent concurrent fetches
+  if (gatewayFetchPromise) {
+    return gatewayFetchPromise;
+  }
+
+  gatewayFetchPromise = (async () => {
+    try {
+      const baseUrl = apiBaseUrl || process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+      const response = await fetch(`${baseUrl}/gateways`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Short timeout to avoid blocking app startup
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!response.ok) {
+        console.warn(`[Gateway Registry] Failed to fetch gateways from backend: ${response.status}`);
+        return;
+      }
+
+      const result = await response.json();
+      const gateways = result.data || [];
+
+      if (!Array.isArray(gateways) || gateways.length === 0) {
+        console.warn('[Gateway Registry] No gateways returned from backend');
+        return;
+      }
+
+      let newCount = 0;
+      let updatedCount = 0;
+
+      for (const gateway of gateways) {
+        const gatewayId = gateway.id?.toLowerCase();
+        if (!gatewayId) continue;
+
+        // Check if already registered
+        const existing = GATEWAY_BY_ID[gatewayId];
+        if (existing) {
+          // Update existing gateway with backend config (backend is source of truth)
+          if (gateway.name) existing.name = gateway.name;
+          if (gateway.color) existing.color = gateway.color;
+          if (gateway.priority) existing.priority = gateway.priority;
+          if (gateway.icon) existing.icon = gateway.icon;
+
+          // Update GATEWAY_CONFIG as well
+          GATEWAY_CONFIG[gatewayId] = {
+            name: existing.name,
+            color: existing.color,
+            icon: existing.icon,
+          };
+
+          // Handle aliases
+          if (gateway.aliases) {
+            existing.aliases = gateway.aliases;
+            for (const alias of gateway.aliases) {
+              const normalizedAlias = alias.toLowerCase();
+              GATEWAY_BY_ID[normalizedAlias] = existing;
+              GATEWAY_CONFIG[normalizedAlias] = GATEWAY_CONFIG[gatewayId];
+            }
+          }
+          updatedCount++;
+        } else {
+          // Register new gateway
+          registerDynamicGateway(gatewayId, {
+            name: gateway.name,
+            color: gateway.color,
+            priority: gateway.priority || 'slow',
+            icon: gateway.icon,
+            aliases: gateway.aliases,
+          });
+
+          // Handle aliases for new gateways
+          if (gateway.aliases) {
+            const newGateway = GATEWAY_BY_ID[gatewayId];
+            for (const alias of gateway.aliases) {
+              const normalizedAlias = alias.toLowerCase();
+              GATEWAY_BY_ID[normalizedAlias] = newGateway;
+              GATEWAY_CONFIG[normalizedAlias] = {
+                name: newGateway.name,
+                color: newGateway.color,
+                icon: newGateway.icon,
+              };
+            }
+          }
+          newCount++;
+        }
+      }
+
+      gatewaysFetchedFromBackend = true;
+      console.log(`[Gateway Registry] Synced with backend: ${newCount} new, ${updatedCount} updated (total: ${gateways.length})`);
+    } catch (error) {
+      // Don't block app startup on gateway fetch failures
+      if (error instanceof Error && error.name === 'TimeoutError') {
+        console.warn('[Gateway Registry] Timeout fetching gateways from backend');
+      } else {
+        console.warn('[Gateway Registry] Error fetching gateways from backend:', error);
+      }
+    } finally {
+      gatewayFetchPromise = null;
+    }
+  })();
+
+  return gatewayFetchPromise;
+}
+
+/**
+ * Check if gateways have been fetched from the backend
+ */
+export function hasGatewaysFetchedFromBackend(): boolean {
+  return gatewaysFetchedFromBackend;
+}
+
+/**
+ * Reset the gateway fetch state (useful for testing)
+ * @internal
+ */
+export function resetGatewayFetchState(): void {
+  gatewaysFetchedFromBackend = false;
+  gatewayFetchPromise = null;
+}
