@@ -1996,6 +1996,57 @@ describe('ChatInput speech recognition', () => {
     // Should NOT update - no relationship to accumulated content
     expect(mockSetInputValue).not.toHaveBeenCalled();
   });
+
+  it('should handle partial suffix-to-prefix overlap (e.g., "hello world" -> "world how are you")', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // API sends transcript with partial overlap - suffix of accumulated matches prefix of new
+    // This tests the fallback overlap detection when no exact match is found
+    const partialOverlapResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'world how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(partialOverlapResult);
+    }
+
+    // Should recognize "world" overlap and only append "how are you"
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world how are you');
+  });
 });
 
 describe('ChatInput stop streaming button', () => {
