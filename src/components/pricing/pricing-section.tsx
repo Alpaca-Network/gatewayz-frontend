@@ -80,7 +80,7 @@ const pricingTiers: PricingTier[] = [
     name: 'Enterprise',
     description: 'Tailored for scale',
     price: 'Custom',
-    ctaText: 'Contact Sales',
+    ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
       'Dedicated infrastructure',
@@ -106,8 +106,8 @@ export function PricingSection() {
       }
 
       if (tier.id === 'enterprise') {
-        // Open contact form or email
-        window.location.href = 'mailto:sales@gatewayz.ai?subject=Enterprise Inquiry';
+        // Redirect to enterprise page
+        window.location.href = 'https://gatewayz.ai/enterprise';
         return;
       }
 

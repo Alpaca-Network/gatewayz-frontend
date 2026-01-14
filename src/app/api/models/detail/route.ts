@@ -14,7 +14,7 @@ import { models as staticModels } from '@/lib/models-data';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const TRANSFORMED_STATIC_MODELS: ModelDetailRecord[] = staticModels.map(transformStaticModel);
+const TRANSFORMED_STATIC_MODELS: ModelDetailRecord[] = staticModels.map((model) => transformStaticModel(model));
 
 export async function GET(request: NextRequest) {
   return Sentry.startSpan(

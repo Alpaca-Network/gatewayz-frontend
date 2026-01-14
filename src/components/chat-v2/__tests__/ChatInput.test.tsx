@@ -1126,6 +1126,454 @@ describe('ChatInput speech recognition', () => {
     expect(mockSetInputValue).toHaveBeenCalledWith('Existing text new words');
   });
 
+  it('should deduplicate repeated transcripts in continuous mode', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate first result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    // First transcript should be added
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+
+    // Update the store state to reflect what was added
+    mockStoreState.inputValue = 'hello world';
+
+    // Simulate second result where the API returns accumulated transcript
+    // (this is what causes duplicates - the API returns "hello world how are you"
+    // instead of just "how are you")
+    // Note: Web Speech API typically includes space at start of continuation
+    const secondResult = {
+      resultIndex: 0,
+      results: {
+        length: 2,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+        1: {
+          isFinal: true,
+          0: { transcript: ' how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(secondResult);
+    }
+
+    // Should only append the NEW portion, not the duplicate "hello world"
+    // The separator logic adds a space between existing content and new content
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world how are you');
+  });
+
+  it('should handle overlapping transcripts without duplication', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate result with accumulated transcripts (common in continuous mode)
+    const mockResultEvent = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'how long has Burkina Faso been a country', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(mockResultEvent);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('how long has Burkina Faso been a country');
+    mockSetInputValue.mockClear();
+
+    // Update store state
+    mockStoreState.inputValue = 'how long has Burkina Faso been a country';
+
+    // Simulate another event where the API re-sends the same final result
+    // (this can happen with some browsers/implementations)
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(mockResultEvent);
+    }
+
+    // Should NOT add duplicate text - setInputValue should not be called
+    // because there's no new content
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
+
+  it('should handle overlapping phrase patterns like "How are you How are you doing"', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // Simulate first result: "How are you"
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'How are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('How are you');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'How are you';
+
+    // Simulate the problematic pattern where API returns overlapping content
+    // "How are you How are you doing" - the first phrase is repeated
+    const overlappingResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'How are you doing today', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(overlappingResult);
+    }
+
+    // Should only append "doing today", not the duplicate "How are you"
+    // Result should be "How are you doing today"
+    expect(mockSetInputValue).toHaveBeenCalledWith('How are you doing today');
+  });
+
+  it('should handle word overlap with different punctuation', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result with punctuation
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'Hello, world!', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('Hello, world!');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'Hello, world!';
+
+    // Second result with overlapping words but different punctuation
+    const secondResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'Hello world how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(secondResult);
+    }
+
+    // Should recognize "Hello world" overlaps with "Hello, world!" and only append new words
+    expect(mockSetInputValue).toHaveBeenCalledWith('Hello, world! how are you');
+  });
+
+  it('should handle word overlap with different casing', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result with uppercase
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'HELLO WORLD', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('HELLO WORLD');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'HELLO WORLD';
+
+    // Second result with different casing
+    const secondResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world goodbye', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(secondResult);
+    }
+
+    // Should recognize case-insensitive overlap and only append "goodbye"
+    expect(mockSetInputValue).toHaveBeenCalledWith('HELLO WORLD goodbye');
+  });
+
+  it('should handle completely different transcript with no overlap (API glitch)', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // Completely different transcript with same word count (API glitch scenario)
+    const glitchResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'goodbye moon', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(glitchResult);
+    }
+
+    // Should NOT update - no overlap and not longer, preserves continuity
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
+
+  it('should handle new transcript shorter than accumulated', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result - longer phrase
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world how are you');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world how are you';
+
+    // Shorter transcript (possible API re-processing)
+    const shorterResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(shorterResult);
+    }
+
+    // Should NOT update - shorter transcript should be ignored
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
+
+  it('should handle transcript with extra whitespace differences', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result with normal spacing
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // New transcript with extra spaces but more words
+    const spacedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello  world  how  are  you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(spacedResult);
+    }
+
+    // Should correctly extract new words despite whitespace differences
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world how are you');
+  });
+
+  it('should skip multiple consecutive identical transcripts', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    const sameResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    // First call - should add
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(sameResult);
+    }
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // Second call with same content - should skip
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(sameResult);
+    }
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+
+    // Third call with same content - should still skip
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(sameResult);
+    }
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
+
   it('should handle synchronous start() errors and reset state', () => {
     // Make start() throw synchronously
     mockRecognition.start.mockImplementation(() => {
@@ -1432,5 +1880,100 @@ describe('ChatInput stop streaming button', () => {
     // Should not throw
     expect(() => fireEvent.click(stopButton)).not.toThrow();
     expect(mockStopStream).toHaveBeenCalled();
+  });
+});
+
+describe('ChatInput textarea auto-resize', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    mockIsStreaming = false;
+  });
+
+  it('should set height on textarea when input value changes', async () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Type some content
+    fireEvent.change(textarea, { target: { value: 'Test content' } });
+
+    await waitFor(() => {
+      // Height should be set (minimum 48px)
+      expect(textarea.style.height).toBe('48px');
+    });
+  });
+
+  it('should handle textarea without parentNode gracefully', async () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Store original parentNode
+    const originalParentNode = textarea.parentNode;
+
+    // Temporarily remove parentNode (simulating edge case)
+    Object.defineProperty(textarea, 'parentNode', {
+      configurable: true,
+      get: () => null,
+    });
+
+    // Should not throw when parentNode is null
+    expect(() => {
+      fireEvent.change(textarea, { target: { value: 'Test content' } });
+    }).not.toThrow();
+
+    // Restore parentNode
+    Object.defineProperty(textarea, 'parentNode', {
+      configurable: true,
+      get: () => originalParentNode,
+    });
+  });
+
+  it('should have minimum height of 48px', async () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Type short content
+    fireEvent.change(textarea, { target: { value: 'Hi' } });
+
+    await waitFor(() => {
+      // Height should be at least 48px (minimum)
+      const height = parseInt(textarea.style.height || '0', 10);
+      expect(height).toBeGreaterThanOrEqual(48);
+    });
+  });
+
+  it('should have correct CSS classes for resize behavior', () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Should have resize-none class to prevent manual resize
+    expect(textarea.className).toContain('resize-none');
+    // Should have min-h-[48px] for minimum height
+    expect(textarea.className).toContain('min-h-[48px]');
+    // Should have max-h-[150px] for maximum height
+    expect(textarea.className).toContain('max-h-[150px]');
+  });
+
+  it('should use clone-based measurement without affecting original textarea visibility', async () => {
+    render(<ChatInput />);
+
+    const textarea = screen.getByTestId('chat-textarea') as HTMLTextAreaElement;
+
+    // Verify textarea is visible before change
+    expect(textarea).toBeVisible();
+
+    // Type content
+    fireEvent.change(textarea, { target: { value: 'Test content' } });
+
+    await waitFor(() => {
+      // Textarea should still be visible after measurement (no flicker)
+      expect(textarea).toBeVisible();
+      // Textarea should not have visibility:hidden set on it
+      expect(textarea.style.visibility).not.toBe('hidden');
+    });
   });
 });

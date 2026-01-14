@@ -1,5 +1,16 @@
 import type { Model as StaticModelDefinition } from '@/lib/models-data';
 import { normalizeToUrlSafe } from '@/lib/utils';
+import { validateGateways, ensureValidGateways } from '@/lib/gateway-validation';
+import { isPerMillionPricingGateway } from '@/lib/model-pricing-utils';
+import * as Sentry from '@sentry/nextjs';
+
+/**
+ * Conversion constant for static model pricing.
+ * Static models-data uses per-million pricing (e.g., 0.15 = $0.15/M)
+ * API responses use per-token pricing (e.g., 0.00000015 = $0.00000015/token)
+ * formatPricingForDisplay() expects per-token format and multiplies by 1,000,000 for display.
+ */
+const PER_MILLION_TO_PER_TOKEN = 1000000;
 
 export interface ModelDetailRecord {
   id: string;
@@ -153,26 +164,67 @@ export const findModelByRouteParams = <T extends ModelDetailRecord>(
 };
 
 export const getModelGateways = (model: ModelDetailRecord): string[] => {
-  const gateways = new Set<string>();
-  const addGateway = (val?: string | null) => {
-    if (val) {
-      gateways.add(val.toLowerCase());
+  try {
+    const gateways = new Set<string>();
+    const addGateway = (val?: string | null) => {
+      if (val) {
+        gateways.add(val.toLowerCase());
+      }
+    };
+
+    if (Array.isArray(model.source_gateways)) {
+      model.source_gateways.forEach(addGateway);
     }
-  };
 
-  if (Array.isArray(model.source_gateways)) {
-    model.source_gateways.forEach(addGateway);
+    addGateway(model.source_gateway);
+
+    if (Array.isArray(model.gateways)) {
+      model.gateways.forEach(addGateway);
+    }
+
+    addGateway(model.gateway);
+
+    const gatewayArray = Array.from(gateways);
+
+    // Validate gateways and ensure at least one valid gateway
+    const validatedGateways = ensureValidGateways(gatewayArray);
+
+    if (validatedGateways.length === 0) {
+      console.warn(`[getModelGateways] No valid gateways found for model ${model.id}, using fallback`);
+      Sentry.captureMessage('Model has no valid gateways', {
+        level: 'warning',
+        tags: {
+          function: 'getModelGateways',
+          model_id: model.id,
+        },
+        contexts: {
+          model: {
+            id: model.id,
+            name: model.name,
+            raw_gateways: gatewayArray,
+          },
+        },
+      });
+    }
+
+    return validatedGateways;
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: {
+        function: 'getModelGateways',
+        error_type: 'gateway_extraction_failure',
+      },
+      contexts: {
+        model: {
+          id: model?.id,
+          name: model?.name,
+        },
+      },
+      level: 'error',
+    });
+    // Return fallback gateway on error
+    return ['gatewayz'];
   }
-
-  addGateway(model.source_gateway);
-
-  if (Array.isArray(model.gateways)) {
-    model.gateways.forEach(addGateway);
-  }
-
-  addGateway(model.gateway);
-
-  return Array.from(gateways);
 };
 
 export const getRelatedModels = <T extends ModelDetailRecord>(
@@ -210,10 +262,34 @@ export const getRelatedModels = <T extends ModelDetailRecord>(
   return related;
 };
 
-export const transformStaticModel = (staticModel: StaticModelDefinition): ModelDetailRecord => {
+/**
+ * Transform static model data to ModelDetailRecord format.
+ *
+ * @param staticModel - The static model definition from models-data.ts
+ * @param gateway - Optional gateway context. Defaults to empty string (standard per-token gateway).
+ *                  For per-million gateways (e.g., 'onerouter'), pricing is kept as-is.
+ *                  For standard gateways, pricing is converted from per-million to per-token.
+ */
+export const transformStaticModel = (
+  staticModel: StaticModelDefinition,
+  gateway: string = ''
+): ModelDetailRecord => {
   const nameParts = staticModel.name.split(':');
   const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : staticModel.name;
   const normalizedName = normalizeToUrlSafe(modelNamePart);
+
+  // Static models-data uses per-million pricing (e.g., 0.15 = $0.15/M)
+  // For standard gateways: convert to per-token format for consistency with API responses
+  // formatPricingForDisplay() will multiply by 1,000,000 for display
+  // For per-million gateways (e.g., onerouter): keep as-is since formatPricingForDisplay
+  // skips the multiplication for these gateways
+  const shouldConvertToPerToken = !isPerMillionPricingGateway(gateway);
+  const promptPrice = shouldConvertToPerToken
+    ? (staticModel.inputCost / PER_MILLION_TO_PER_TOKEN).toString()
+    : staticModel.inputCost.toString();
+  const completionPrice = shouldConvertToPerToken
+    ? (staticModel.outputCost / PER_MILLION_TO_PER_TOKEN).toString()
+    : staticModel.outputCost.toString();
 
   return {
     id: `${staticModel.developer}/${normalizedName}`,
@@ -221,8 +297,8 @@ export const transformStaticModel = (staticModel: StaticModelDefinition): ModelD
     description: staticModel.description,
     context_length: staticModel.context * 1000,
     pricing: {
-      prompt: staticModel.inputCost.toString(),
-      completion: staticModel.outputCost.toString(),
+      prompt: promptPrice,
+      completion: completionPrice,
     },
     architecture: {
       input_modalities: staticModel.modalities.map((m) => m.toLowerCase()),

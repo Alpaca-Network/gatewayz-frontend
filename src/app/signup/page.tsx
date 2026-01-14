@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, Suspense } from 'react';
+import { useEffect, Suspense, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import { Button } from '@/components/ui/button';
@@ -13,29 +13,75 @@ function SignupContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login, authenticated, ready } = usePrivy();
+  const hasAutoTriggeredLogin = useRef(false);
+
+  // Memoize query params to prevent unstable effect dependencies
+  // This prevents redirect loops when searchParams object changes
+  const returnUrl = useMemo(() => searchParams?.get('returnUrl') || '/chat', [searchParams]);
+  const refCode = useMemo(() => searchParams?.get('ref'), [searchParams]);
+
+  // Memoize redirect URL construction with proper encoding and hash handling
+  const redirectUrl = useMemo(() => {
+    if (!refCode) return returnUrl;
+
+    // Parse the URL to handle hash fragments correctly
+    // Query params must come BEFORE hash fragments per URL spec
+    const hashIndex = returnUrl.indexOf('#');
+    const hasHash = hashIndex !== -1;
+    const baseUrl = hasHash ? returnUrl.slice(0, hashIndex) : returnUrl;
+    const hashFragment = hasHash ? returnUrl.slice(hashIndex) : '';
+
+    // Clean up any trailing ? or & from the base URL (edge case handling)
+    const cleanedBaseUrl = baseUrl.replace(/[?&]+$/, '');
+
+    // Check if URL already has query params
+    const hasQueryParams = cleanedBaseUrl.includes('?');
+
+    // Check if ref param already exists to avoid duplicates
+    const urlObj = new URL(cleanedBaseUrl, 'http://dummy.com');
+    if (urlObj.searchParams.has('ref')) {
+      // Replace existing ref param
+      urlObj.searchParams.set('ref', refCode);
+      return `${urlObj.pathname}${urlObj.search}${hashFragment}`;
+    }
+
+    // Append ref param with proper encoding
+    const separator = hasQueryParams ? '&' : '?';
+    const encodedRef = encodeURIComponent(refCode);
+    return `${cleanedBaseUrl}${separator}ref=${encodedRef}${hashFragment}`;
+  }, [returnUrl, refCode]);
 
   useEffect(() => {
-    // Capture referral code from URL parameter
-    const refCode = searchParams?.get('ref');
+    // Handle referral code storage and authenticated user redirect in a single effect
+    // to prevent race condition where redirect could happen before referral code is stored
 
+    // First, capture and store referral code if present
     if (refCode) {
       console.log('Referral code detected:', refCode);
       // Store referral code using safe storage for use during authentication
       storeReferralCode(refCode, 'signup');
-
-      // Immediately redirect to chat with referral code
-      // The referral toast will be shown after authentication
-      router.push(`/chat?ref=${refCode}`);
     }
-  }, [searchParams, router]);
+
+    // Then, redirect authenticated users to the return URL
+    // This ensures referral code is stored before redirect happens
+    if (ready && authenticated) {
+      router.push(redirectUrl);
+    }
+  }, [ready, authenticated, router, redirectUrl, refCode]);
 
   useEffect(() => {
-    // Redirect authenticated users to chat (only if no ref code)
-    const refCode = searchParams?.get('ref');
-    if (ready && authenticated && !refCode) {
-      router.push('/chat');
+    // Auto-trigger Privy login modal for unauthenticated users
+    // Only trigger once to avoid repeated modal opens
+    if (ready && !authenticated && !hasAutoTriggeredLogin.current) {
+      hasAutoTriggeredLogin.current = true;
+
+      // Track Twitter conversion for ad attribution
+      trackTwitterSignupClick();
+
+      // Auto-open the Privy login modal
+      login();
     }
-  }, [ready, authenticated, router, searchParams]);
+  }, [ready, authenticated, login]);
 
   const handleSignup = () => {
     if (!ready) {
@@ -43,7 +89,8 @@ function SignupContent() {
     }
 
     if (authenticated) {
-      router.push('/chat');
+      // Use the same properly-constructed redirect URL
+      router.push(redirectUrl);
       return;
     }
 
@@ -73,8 +120,6 @@ function SignupContent() {
       </div>
     );
   }
-
-  const refCode = searchParams?.get('ref');
 
   return (
     <div className="flex min-h-[calc(100vh-200px)] items-center justify-center p-4">

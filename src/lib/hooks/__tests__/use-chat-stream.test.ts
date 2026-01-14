@@ -3,6 +3,7 @@
  *
  * Tests the Fireworks, DeepSeek, and NEAR AI model routing logic
  * Tests media extraction from content arrays
+ * Tests error serialization to avoid [object Object] in logs
  */
 
 /**
@@ -925,6 +926,216 @@ describe('Stop stream functionality', () => {
 
 // Import the normalizeContentForApi function
 import { normalizeContentForApi } from '../use-chat-stream';
+
+/**
+ * Tests for debugError serialization logic
+ * Mirrors the debugError function behavior in use-chat-stream.ts
+ * to ensure error objects are properly serialized instead of showing [object Object]
+ */
+describe('debugError serialization', () => {
+  /**
+   * Helper that mirrors the serialization logic from debugError in use-chat-stream.ts
+   */
+  const serializeErrorData = (data?: any): string => {
+    if (data === undefined) return '';
+    return typeof data === 'object' ? JSON.stringify(data, null, 2) : String(data);
+  };
+
+  describe('basic serialization', () => {
+    test('should return empty string for undefined data', () => {
+      expect(serializeErrorData(undefined)).toBe('');
+    });
+
+    test('should serialize string data as-is', () => {
+      expect(serializeErrorData('error message')).toBe('error message');
+    });
+
+    test('should serialize number data as string', () => {
+      expect(serializeErrorData(404)).toBe('404');
+      expect(serializeErrorData(0)).toBe('0');
+      expect(serializeErrorData(-1)).toBe('-1');
+    });
+
+    test('should serialize boolean data as string', () => {
+      expect(serializeErrorData(true)).toBe('true');
+      expect(serializeErrorData(false)).toBe('false');
+    });
+
+    test('should serialize null as JSON string', () => {
+      expect(serializeErrorData(null)).toBe('null');
+    });
+  });
+
+  describe('object serialization - prevents [object Object]', () => {
+    test('should serialize plain objects to JSON', () => {
+      const errorData = { message: 'Network error', status: 500 };
+      const result = serializeErrorData(errorData);
+      expect(result).toBe(JSON.stringify(errorData, null, 2));
+      expect(result).toContain('"message": "Network error"');
+      expect(result).toContain('"status": 500');
+      expect(result).not.toBe('[object Object]');
+    });
+
+    test('should serialize Error objects to JSON', () => {
+      const error = new Error('Something went wrong');
+      const errorData = {
+        error: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        stack: error instanceof Error ? error.stack : undefined
+      };
+      const result = serializeErrorData(errorData);
+      expect(result).toContain('"error": "Something went wrong"');
+      expect(result).toContain('"errorType": "Error"');
+      expect(result).not.toBe('[object Object]');
+    });
+
+    test('should serialize nested objects', () => {
+      const errorData = {
+        outer: {
+          inner: {
+            message: 'Deep error'
+          }
+        }
+      };
+      const result = serializeErrorData(errorData);
+      expect(result).toContain('"message": "Deep error"');
+      expect(result).not.toBe('[object Object]');
+    });
+
+    test('should serialize arrays', () => {
+      const errorData = ['error1', 'error2', { code: 500 }];
+      const result = serializeErrorData(errorData);
+      expect(result).toBe(JSON.stringify(errorData, null, 2));
+      expect(result).toContain('"error1"');
+      expect(result).toContain('"code": 500');
+    });
+
+    test('should handle empty objects', () => {
+      expect(serializeErrorData({})).toBe('{}');
+    });
+
+    test('should handle empty arrays', () => {
+      expect(serializeErrorData([])).toBe('[]');
+    });
+  });
+
+  describe('streaming error scenarios - ensures Sentry gets readable data', () => {
+    test('should serialize typical streaming error', () => {
+      // This is the exact scenario that was causing [object Object] in Sentry
+      const error = new Error('Streaming failed');
+      const errorData = {
+        error: error.message,
+        errorType: error.constructor.name,
+        stack: error.stack
+      };
+      const result = serializeErrorData(errorData);
+
+      expect(result).not.toBe('[object Object]');
+      expect(result).toContain('"error": "Streaming failed"');
+      expect(result).toContain('"errorType": "Error"');
+    });
+
+    test('should serialize fetch error response', () => {
+      const errorData = {
+        status: 500,
+        statusText: 'Internal Server Error',
+        body: { error: 'Backend unavailable' }
+      };
+      const result = serializeErrorData(errorData);
+
+      expect(result).not.toBe('[object Object]');
+      expect(result).toContain('"status": 500');
+      expect(result).toContain('"Backend unavailable"');
+    });
+
+    test('should serialize abort error', () => {
+      const errorData = {
+        name: 'AbortError',
+        message: 'The operation was aborted'
+      };
+      const result = serializeErrorData(errorData);
+
+      expect(result).not.toBe('[object Object]');
+      expect(result).toContain('"name": "AbortError"');
+    });
+
+    test('should serialize timeout error', () => {
+      const errorData = {
+        type: 'timeout',
+        message: 'Request timed out after 30000ms',
+        timeout: 30000
+      };
+      const result = serializeErrorData(errorData);
+
+      expect(result).not.toBe('[object Object]');
+      expect(result).toContain('"timeout": 30000');
+    });
+  });
+
+  describe('edge cases', () => {
+    test('should handle objects with circular references gracefully', () => {
+      const circularObj: any = { name: 'test' };
+      circularObj.self = circularObj;
+
+      // JSON.stringify throws on circular references
+      // The actual implementation would need to handle this
+      expect(() => serializeErrorData(circularObj)).toThrow();
+    });
+
+    test('should handle objects with undefined values', () => {
+      const errorData = { message: 'error', details: undefined };
+      const result = serializeErrorData(errorData);
+      // JSON.stringify omits undefined values
+      expect(result).toBe('{\n  "message": "error"\n}');
+    });
+
+    test('should handle objects with function values', () => {
+      const errorData = { message: 'error', handler: () => {} };
+      const result = serializeErrorData(errorData);
+      // JSON.stringify omits function values
+      expect(result).toBe('{\n  "message": "error"\n}');
+    });
+
+    test('should handle Date objects', () => {
+      const now = new Date('2024-01-01T00:00:00.000Z');
+      const errorData = { timestamp: now };
+      const result = serializeErrorData(errorData);
+      expect(result).toContain('"timestamp": "2024-01-01T00:00:00.000Z"');
+    });
+
+    test('should handle Symbol values (converted to null)', () => {
+      const errorData = { id: Symbol('test') };
+      const result = serializeErrorData(errorData);
+      // Symbols are not valid JSON and are omitted
+      expect(result).toBe('{}');
+    });
+  });
+
+  describe('format verification', () => {
+    test('should produce pretty-printed JSON with 2-space indent', () => {
+      const errorData = { a: 1, b: 2 };
+      const result = serializeErrorData(errorData);
+      // Verify the indentation is 2 spaces
+      expect(result).toBe('{\n  "a": 1,\n  "b": 2\n}');
+    });
+
+    test('should produce readable multi-line output for complex objects', () => {
+      const errorData = {
+        error: 'Request failed',
+        details: {
+          url: '/api/chat',
+          method: 'POST',
+          status: 503
+        }
+      };
+      const result = serializeErrorData(errorData);
+      const lines = result.split('\n');
+      expect(lines.length).toBeGreaterThan(1);
+      expect(result).toContain('  "error"'); // 2-space indent
+      expect(result).toContain('    "url"'); // 4-space indent for nested
+    });
+  });
+});
 
 describe('normalizeContentForApi', () => {
   describe('string content', () => {

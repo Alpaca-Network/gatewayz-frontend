@@ -1,0 +1,210 @@
+import * as Sentry from '@sentry/nextjs';
+import { isValidGateway as isValidGatewayFromRegistry } from '@/lib/gateway-registry';
+
+/**
+ * Gateway validation utilities
+ * Ensures gateway configurations are valid and handles edge cases
+ *
+ * NOTE: This module now uses the centralized gateway-registry.ts as the source of truth.
+ * New gateways are automatically supported via:
+ * 1. Static registration in GATEWAYS array in gateway-registry.ts
+ * 2. Dynamic registration via autoRegisterGatewaysFromModels() when backend returns new gateways
+ *
+ * The hardcoded KNOWN_GATEWAYS list below is kept as a fallback and for the 'gatewayz' special gateway.
+ */
+
+// Fallback list of known valid gateways (kept for backwards compatibility)
+// Primary validation now uses gateway-registry.ts
+const KNOWN_GATEWAYS = [
+  'gatewayz', // Unified gateway - special case not in registry
+];
+
+/**
+ * Validate if a gateway slug is known/supported
+ * Checks both the centralized gateway registry (including dynamically registered gateways)
+ * and the fallback list for special gateways like 'gatewayz'
+ */
+export function isValidGateway(gateway: string | undefined | null): boolean {
+  if (!gateway) return false;
+  const normalized = gateway.toLowerCase();
+
+  // Reject prototype property names to prevent prototype pollution attacks
+  // These could be interpreted as valid if we use 'in' operator on plain objects
+  if (
+    normalized === 'constructor' ||
+    normalized === '__proto__' ||
+    normalized === 'prototype' ||
+    normalized === 'tostring' ||
+    normalized === 'valueof' ||
+    normalized === 'hasownproperty'
+  ) {
+    return false;
+  }
+
+  // Check the centralized gateway registry (includes static and dynamic gateways)
+  // isValidGatewayFromRegistry uses VALID_GATEWAYS array and GATEWAY_BY_ID with hasOwnProperty check
+  if (isValidGatewayFromRegistry(normalized)) {
+    return true;
+  }
+
+  // Fallback to the local known gateways list for special cases like 'gatewayz'
+  return KNOWN_GATEWAYS.includes(normalized);
+}
+
+/**
+ * Validate a list of gateways and filter out invalid ones
+ * @param gateways - Array of gateway slugs
+ * @returns Array of valid gateway slugs
+ */
+export function validateGateways(gateways: string[] | undefined | null): string[] {
+  if (!gateways || !Array.isArray(gateways)) {
+    return [];
+  }
+
+  const validGateways = gateways
+    .map(gateway => {
+      if (!gateway) return null;
+      // Normalize to lowercase
+      const normalized = gateway.toLowerCase().trim();
+      const isValid = isValidGateway(normalized);
+
+      if (!isValid) {
+        console.warn(`[validateGateways] Unknown gateway: ${gateway}`);
+        Sentry.captureMessage(`Unknown gateway encountered: ${gateway}`, {
+          level: 'warning',
+          tags: {
+            function: 'validateGateways',
+            gateway_slug: gateway,
+          },
+        });
+        return null;
+      }
+
+      return normalized;
+    })
+    .filter((gateway): gateway is string => gateway !== null);
+
+  return validGateways;
+}
+
+/**
+ * Get a fallback gateway when none are available
+ */
+export function getFallbackGateway(): string {
+  return 'gatewayz'; // Default to unified gateway
+}
+
+/**
+ * Ensure at least one valid gateway exists, or return fallback
+ * @param gateways - Array of gateway slugs
+ * @returns Array with at least one valid gateway
+ */
+export function ensureValidGateways(gateways: string[] | undefined | null): string[] {
+  const validated = validateGateways(gateways);
+
+  if (validated.length === 0) {
+    console.warn('[ensureValidGateways] No valid gateways found, using fallback');
+    return [getFallbackGateway()];
+  }
+
+  return validated;
+}
+
+/**
+ * Check if a model has required provider information
+ */
+export function validateModelProviderInfo(model: {
+  id?: string;
+  name?: string;
+  source_gateways?: string[];
+  source_gateway?: string;
+}): boolean {
+  if (!model.id || !model.name) {
+    Sentry.captureMessage('Model missing required fields', {
+      level: 'warning',
+      tags: {
+        function: 'validateModelProviderInfo',
+      },
+      contexts: {
+        model: {
+          id: model.id,
+          name: model.name,
+          has_source_gateways: !!model.source_gateways,
+          has_source_gateway: !!model.source_gateway,
+        },
+      },
+    });
+    return false;
+  }
+
+  // Check if model has any gateway information
+  const hasGatewayInfo =
+    (model.source_gateways && model.source_gateways.length > 0) ||
+    !!model.source_gateway;
+
+  if (!hasGatewayInfo) {
+    console.warn(`[validateModelProviderInfo] Model ${model.id} has no gateway information`);
+  }
+
+  return hasGatewayInfo;
+}
+
+/**
+ * Get gateways from a model, handling both old and new formats
+ */
+export function getModelGateways(model: {
+  source_gateways?: string[];
+  source_gateway?: string;
+}): string[] {
+  // New format: source_gateways array
+  if (model.source_gateways && Array.isArray(model.source_gateways)) {
+    return validateGateways(model.source_gateways);
+  }
+
+  // Old format: single source_gateway
+  if (model.source_gateway) {
+    const validated = validateGateways([model.source_gateway]);
+    return validated.length > 0 ? validated : [];
+  }
+
+  return [];
+}
+
+/**
+ * Check if a gateway has required API key configured
+ * This is a placeholder - actual implementation would check environment variables
+ */
+export function isGatewayConfigured(gateway: string): boolean {
+  // For now, always return true
+  // In production, this would check for API keys in environment
+  return true;
+}
+
+/**
+ * Filter gateways to only those that are properly configured
+ */
+export function getConfiguredGateways(gateways: string[]): string[] {
+  return gateways.filter(gateway => {
+    const isValid = isValidGateway(gateway);
+    const isConfigured = isGatewayConfigured(gateway);
+    return isValid && isConfigured;
+  });
+}
+
+/**
+ * Validate and sanitize gateway input from user
+ */
+export function sanitizeGatewayInput(gateway: string | undefined | null): string | null {
+  if (!gateway) return null;
+
+  // Convert to lowercase and trim
+  const normalized = gateway.toLowerCase().trim();
+
+  // Check if valid
+  if (!isValidGateway(normalized)) {
+    console.warn(`[sanitizeGatewayInput] Invalid gateway input: ${gateway}`);
+    return null;
+  }
+
+  return normalized;
+}

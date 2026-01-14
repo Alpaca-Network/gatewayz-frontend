@@ -1,19 +1,29 @@
 import { useCallback } from 'react';
+import * as Sentry from '@sentry/nextjs';
 import { ModelOption } from '@/components/chat/model-select';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { useToast } from '@/hooks/use-toast';
 
+// Default model for image generation tasks
+// The Gatewayz Router supports image generation via tools and routes to the best provider
+export const DEFAULT_IMAGE_GENERATION_MODEL: ModelOption = {
+  value: 'openrouter/auto',
+  label: 'Gatewayz Router',
+  category: 'Router',
+  sourceGateway: 'openrouter',
+  developer: 'Alpaca',
+  modalities: ['Text', 'Image', 'File', 'Audio', 'Video']
+};
+
+// Get the default model for image generation
+export const getImageGenerationModel = (): ModelOption => {
+  return DEFAULT_IMAGE_GENERATION_MODEL;
+};
+
 // List of known multimodal models that support image input
 // These are prioritized in order of preference
 const MULTIMODAL_MODELS: ModelOption[] = [
-  {
-    value: 'openrouter/auto',
-    label: 'Gatewayz Router',
-    category: 'Router',
-    sourceGateway: 'openrouter',
-    developer: 'Alpaca',
-    modalities: ['Text', 'Image', 'File', 'Audio', 'Video']
-  },
+  DEFAULT_IMAGE_GENERATION_MODEL,
   {
     value: 'google/gemini-2.0-flash-001',
     label: 'Gemini 2.0 Flash',
@@ -50,23 +60,66 @@ const MULTIMODAL_MODELS: ModelOption[] = [
 
 // Helper to check if a model supports a specific modality
 export const modelSupportsModality = (
-  modelModalities: string[] | undefined,
+  modelModalities: string[] | undefined | null,
   modality: string
 ): boolean => {
-  if (!modelModalities || modelModalities.length === 0) {
-    // If no modalities specified, assume text-only
+  try {
+    if (!modelModalities || modelModalities.length === 0) {
+      // If no modalities specified, assume text-only
+      return modality.toLowerCase() === 'text';
+    }
+    return modelModalities.some(m => m.toLowerCase() === modality.toLowerCase());
+  } catch (error) {
+    // Fallback: if modality check fails, assume text-only
+    Sentry.captureException(error, {
+      tags: {
+        function: 'modelSupportsModality',
+        error_type: 'modality_check_failure',
+      },
+      contexts: {
+        model: {
+          modalities: modelModalities,
+          requested_modality: modality,
+        },
+      },
+      level: 'warning',
+    });
     return modality.toLowerCase() === 'text';
   }
-  return modelModalities.some(m => m.toLowerCase() === modality.toLowerCase());
 };
 
 // Get the best multimodal model for a given media type
 export const getMultimodalModel = (mediaType: 'image' | 'video' | 'audio' | 'file'): ModelOption => {
-  // For now, return the first model that supports the media type
-  // The Gatewayz Router is the default as it supports all modalities
-  return MULTIMODAL_MODELS.find(m =>
-    modelSupportsModality(m.modalities, mediaType)
-  ) || MULTIMODAL_MODELS[0];
+  try {
+    // For now, return the first model that supports the media type
+    // The Gatewayz Router is the default as it supports all modalities
+    const model = MULTIMODAL_MODELS.find(m =>
+      modelSupportsModality(m.modalities, mediaType)
+    );
+
+    if (!model) {
+      // Fallback to router if no suitable model found
+      console.warn(`[getMultimodalModel] No model found for ${mediaType}, using Gatewayz Router`);
+      return MULTIMODAL_MODELS[0];
+    }
+
+    return model;
+  } catch (error) {
+    // Fallback: return Gatewayz Router on any error
+    Sentry.captureException(error, {
+      tags: {
+        function: 'getMultimodalModel',
+        error_type: 'model_selection_failure',
+      },
+      contexts: {
+        media: {
+          type: mediaType,
+        },
+      },
+      level: 'error',
+    });
+    return MULTIMODAL_MODELS[0];
+  }
 };
 
 export type MediaType = 'image' | 'video' | 'audio' | 'file';
@@ -87,32 +140,63 @@ export function useAutoModelSwitch() {
     currentModel: ModelOption | null,
     mediaType: MediaType
   ): boolean => {
-    // If no model is selected, select a multimodal one
-    if (!currentModel) {
-      const newModel = getMultimodalModel(mediaType);
-      setSelectedModel(newModel);
-      toast({
-        title: 'Model switched',
-        description: `Switched to ${newModel.label} to support ${mediaType} input`,
+    try {
+      // If no model is selected, select a multimodal one
+      if (!currentModel) {
+        const newModel = getMultimodalModel(mediaType);
+        setSelectedModel(newModel);
+        toast({
+          title: 'Model switched',
+          description: `Switched to ${newModel.label} to support ${mediaType} input`,
+        });
+        return true;
+      }
+
+      // Check if current model supports the media type
+      const supportsMedia = modelSupportsModality(currentModel.modalities, mediaType);
+
+      if (!supportsMedia) {
+        // Find a model that supports this media type
+        const newModel = getMultimodalModel(mediaType);
+
+        // Validate the new model has required fields
+        if (!newModel.value || !newModel.label) {
+          throw new Error('Invalid multimodal model configuration');
+        }
+
+        setSelectedModel(newModel);
+        toast({
+          title: 'Model switched',
+          description: `Switched from ${currentModel.label} to ${newModel.label} to support ${mediaType} input`,
+        });
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      // Log error but don't crash - keep the current model
+      Sentry.captureException(error, {
+        tags: {
+          function: 'checkAndSwitchModel',
+          error_type: 'model_switch_failure',
+        },
+        contexts: {
+          model: {
+            current_model: currentModel?.value,
+            media_type: mediaType,
+          },
+        },
+        level: 'error',
       });
-      return true;
-    }
 
-    // Check if current model supports the media type
-    const supportsMedia = modelSupportsModality(currentModel.modalities, mediaType);
-
-    if (!supportsMedia) {
-      // Find a model that supports this media type
-      const newModel = getMultimodalModel(mediaType);
-      setSelectedModel(newModel);
       toast({
-        title: 'Model switched',
-        description: `Switched from ${currentModel.label} to ${newModel.label} to support ${mediaType} input`,
+        title: 'Model switch failed',
+        description: `Could not switch to ${mediaType}-compatible model. Current model may not support this media type.`,
+        variant: 'destructive',
       });
-      return true;
-    }
 
-    return false;
+      return false;
+    }
   }, [setSelectedModel, toast]);
 
   /**

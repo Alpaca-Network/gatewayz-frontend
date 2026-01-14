@@ -2,6 +2,7 @@
 "use client";
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Twitter } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -10,12 +11,16 @@ export function AppFooter() {
   const pathname = usePathname();
   const [isChatPage, setIsChatPage] = useState(false);
   const [isModelsPage, setIsModelsPage] = useState(false);
+  const [isSandboxPage, setIsSandboxPage] = useState(false);
+  const [isAgentPage, setIsAgentPage] = useState(false);
   const [showFooter, setShowFooter] = useState(false);
   const [hasScrolledPastFold, setHasScrolledPastFold] = useState(false);
 
   useEffect(() => {
     setIsChatPage(pathname?.startsWith('/chat') ?? false);
     setIsModelsPage(pathname?.startsWith('/models') ?? false);
+    setIsSandboxPage(pathname?.startsWith('/sandbox') ?? false);
+    setIsAgentPage(pathname?.startsWith('/agent') ?? false);
   }, [pathname]);
 
   // Track if user has scrolled past the initial viewport on homepage
@@ -46,6 +51,16 @@ export function AppFooter() {
 
   // Hide footer on models page (has sidebar layout)
   if (isModelsPage) {
+    return null;
+  }
+
+  // Hide footer on sandbox pages (full-screen embedded apps)
+  if (isSandboxPage) {
+    return null;
+  }
+
+  // Hide footer on agent pages (full-screen embedded coding agent)
+  if (isAgentPage) {
     return null;
   }
 
@@ -147,6 +162,32 @@ export function AppFooter() {
                 </Link>
               </li>
             </ul>
+          </div>
+
+          <div>
+            <h3 className="font-semibold mb-4 text-foreground">Security</h3>
+            <ul className="space-y-2">
+              <li>
+                <Link
+                  href="/trust"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Trust Center
+                </Link>
+              </li>
+            </ul>
+            <div className="mt-4">
+              <Link href="/trust" className="inline-block">
+                <Image
+                  src="/caan3-badge.png"
+                  alt="CAAN3 Cybersecurity Certified 2025"
+                  width={64}
+                  height={64}
+                  className="h-16 w-auto"
+                  loading="lazy"
+                />
+              </Link>
+            </div>
           </div>
         </div>
 

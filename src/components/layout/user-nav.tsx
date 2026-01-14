@@ -23,7 +23,7 @@ interface UserNavProps {
 export function UserNav({ user }: UserNavProps) {
   const { logout } = useGatewayzAuth();
   const { toast } = useToast();
-  const { tier, userData } = useTier();
+  const { tier, tierDisplayName } = useTier();
 
   const handleSignOut = async () => {
     try {
@@ -103,7 +103,7 @@ export function UserNav({ user }: UserNavProps) {
                     ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
                     : 'bg-purple-100 dark:bg-purple-900 text-purple-900 dark:text-purple-100'
                 }`}>
-                  {userData?.tier_display_name || tier.toUpperCase()}
+                  {tierDisplayName}
                 </div>
               )}
             </div>

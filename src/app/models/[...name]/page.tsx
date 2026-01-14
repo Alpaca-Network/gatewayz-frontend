@@ -28,6 +28,8 @@ import {
     transformStaticModel,
     type ModelDetailRecord,
 } from '@/lib/model-detail-utils';
+import { stripDeveloperPrefix, keepFullModelId } from '@/lib/provider-model-formats';
+import { getSourceGateway, formatPricingForDisplay } from '@/lib/model-pricing-utils';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -149,7 +151,7 @@ export default function ModelProfilePage() {
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedProvider, setSelectedProvider] = useState<string>('gatewayz');
     const [selectedPlaygroundProvider, setSelectedPlaygroundProvider] = useState<string>('gatewayz');
-    const transformedStaticModels = useMemo(() => staticModels.map(transformStaticModel), []);
+    const transformedStaticModels = useMemo(() => staticModels.map((model) => transformStaticModel(model)), []);
 
     // Extract catch-all parameter and parse it
     // For URL /models/near/deepseek-ai/deepseek-v3-1
@@ -359,6 +361,20 @@ export default function ModelProfilePage() {
                 const parts = modelId.split('/');
                 return parts[parts.length - 1];
             }
+        },
+        openai: {
+            name: 'OpenAI',
+            baseUrl: 'https://api.openai.com/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'sk-...',
+            modelIdFormat: stripDeveloperPrefix,
+        },
+        anthropic: {
+            name: 'Anthropic',
+            baseUrl: 'https://api.anthropic.com/v1',
+            requiresApiKey: true,
+            apiKeyPlaceholder: 'sk-ant-...',
+            modelIdFormat: stripDeveloperPrefix,
         },
     };
 
@@ -651,9 +667,9 @@ export default function ModelProfilePage() {
                             <span>|</span>
                             <span>{model.context_length && model.context_length > 0 ? `${(model.context_length / 1000).toLocaleString()}k` : 'N/A'} context</span>
                             <span>|</span>
-                            <span>${model.pricing && model.pricing.prompt ? (parseFloat(String(model.pricing.prompt)) * 1000000).toFixed(2) : 'N/A'}/M input tokens</span>
+                            <span>${model.pricing && model.pricing.prompt ? formatPricingForDisplay(String(model.pricing.prompt), getSourceGateway(model)) : 'N/A'}/M input tokens</span>
                             <span>|</span>
-                            <span>${model.pricing && model.pricing.completion ? (parseFloat(String(model.pricing.completion)) * 1000000).toFixed(2) : 'N/A'}/M output tokens</span>
+                            <span>${model.pricing && model.pricing.completion ? formatPricingForDisplay(String(model.pricing.completion), getSourceGateway(model)) : 'N/A'}/M output tokens</span>
                             {model.architecture && model.architecture.input_modalities && model.architecture.input_modalities.includes('audio') && (
                                 <>
                                     <span>|</span>
@@ -1016,6 +1032,8 @@ console.log(response.choices[0].message.content);`
                                 {modelProviders.map(provider => {
                                     const isRecommended = provider === selectedProvider;
                                     const providerNames: Record<string, string> = {
+                                        openai: 'OpenAI',
+                                        anthropic: 'Anthropic',
                                         openrouter: 'OpenRouter',
                                         portkey: 'Portkey',
                                         featherless: 'Featherless',
@@ -1035,6 +1053,8 @@ console.log(response.choices[0].message.content);`
                                         fal: 'FAL AI'
                                     };
                                     const providerLogos: Record<string, string> = {
+                                        openai: '/openai-logo.svg',
+                                        anthropic: '/anthropic-logo.svg',
                                         openrouter: '/openrouter-logo.svg',
                                         portkey: '/portkey-logo.svg',
                                         featherless: '/featherless-logo.svg',
@@ -1086,13 +1106,13 @@ console.log(response.choices[0].message.content);`
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Input Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${model.pricing && model.pricing.prompt ? (parseFloat(String(model.pricing.prompt)) * 1000000).toFixed(2) : 'N/A'}/M
+                                                        ${model.pricing && model.pricing.prompt ? formatPricingForDisplay(String(model.pricing.prompt), getSourceGateway(model)) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-muted-foreground">Output Cost</p>
                                                     <p className="text-lg font-semibold">
-                                                        ${model.pricing && model.pricing.completion ? (parseFloat(String(model.pricing.completion)) * 1000000).toFixed(2) : 'N/A'}/M
+                                                        ${model.pricing && model.pricing.completion ? formatPricingForDisplay(String(model.pricing.completion), getSourceGateway(model)) : 'N/A'}/M
                                                     </p>
                                                 </div>
                                                 <div>

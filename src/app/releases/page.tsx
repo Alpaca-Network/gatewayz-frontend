@@ -15,6 +15,84 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
+    date: "January 11, 2026",
+    features: [
+      "Discounted Credit Packages: New discounted credit package options are now available",
+    ],
+    bugFixes: [
+      {
+        category: "Gatewayz Chat",
+        items: [
+          "Fixed duplicate words appearing in voice transcription results",
+          "Fixed issue where account tier wasn't updating immediately after upgrading to PRO/MAX",
+        ],
+      },
+      {
+        category: "Gatewayz API",
+        items: [
+          "Added support for AiHubMix and Simplismart with highly optimized text, image, and voice models",
+          "Added developer role for enhanced API access control",
+          "Better HTTP/2 error handling and automatic retry logic for more reliable API calls",
+          "Enhanced provider failover when encountering payment-related errors (402)",
+          "Fixed issue where paid API users were incorrectly marked as trial users",
+        ],
+      },
+    ],
+    infrastructure: [],
+    documentation: [],
+  },
+  {
+    date: "January 4, 2026",
+    features: [
+      "OpenAI & Anthropic Direct Providers: Added direct API access to OpenAI (GPT models) and Anthropic (Claude models) with connection pool clients, pre-warming support, and manual pricing data",
+      "Surprise Me Feature: Added \"Surprise me\" button that generates and sends random interesting prompts from a curated list of fun questions",
+      "Image Model Auto-Switch: Automatically switches to image generation model when \"Create Image\" chip is clicked in chat",
+      "OpenCode & Claude Code Setup: Added multi-platform setup scripts and READMEs for OpenCode and Claude Code development environments",
+    ],
+    bugFixes: [
+      {
+        category: "Backend Fixes",
+        items: [
+          "Fixed streaming middleware \"No response returned\" issue with pure ASGI middleware conversion",
+          "Added AIMO circuit breaker to handle API fetch errors gracefully",
+          "Fixed Braintrust NoneType content error with deep sanitization",
+          "Fixed Vertex AI streaming issues after submodule bump",
+          "Fixed health-service column name mismatches (current_status → last_status, last_check_at → last_called_at)",
+        ],
+      },
+      {
+        category: "Frontend Fixes",
+        items: [
+          "Fixed max plan display error",
+          "Added provider configs for OpenAI and Anthropic in model detail page",
+          "Added provider names and logos for new AI providers",
+          "Extracted modelIdFormat functions to testable utility module",
+          "Fixed duplicate model definition in use-auto-model-switch.ts",
+        ],
+      },
+      {
+        category: "CI/CD Fixes",
+        items: [
+          "Fixed PR comment step in auto-merge workflow to be non-fatal",
+          "Fixed PR lookup for forked PRs with correct head_repository.owner.login",
+          "Added null check for headBranch to prevent posting to unrelated PRs",
+          "Fixed workflow names in workflow-notification.yml",
+          "Improved unknown submodule handling in subrepo-ci-notification workflow",
+        ],
+      },
+    ],
+    infrastructure: [
+      "Multiple submodule updates to keep frontend and backend in sync",
+      "Added comprehensive error reporting documentation for backend monitoring",
+      "Added CI notification workflows for enhanced visibility and automated alerting",
+      "Gateway pricing cross-reference from OpenRouter to prevent credit drain",
+    ],
+    documentation: [
+      "Added Backend Error Review documentation for January 2-4, 2026",
+      "Added ERROR_REPORT_2026-01-04 with streaming middleware analysis and fix tracking",
+    ],
+  },
+  {
     date: "December 28, 2025",
     features: [
       "Web Search Integration: Added real-time web search capability to chat with Tavily API integration, search results UI component, and toggle control",

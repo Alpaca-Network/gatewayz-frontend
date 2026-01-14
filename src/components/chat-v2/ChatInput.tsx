@@ -138,6 +138,35 @@ const generateSessionTitle = (text: string, maxLength: number = 30): string => {
     return trimmed.substring(0, maxLength - 3) + '...';
 };
 
+// Helper functions for word-level speech transcript deduplication
+// Normalizes a word for comparison (lowercase, alphanumeric only)
+const normalizeWord = (word: string): string =>
+  word.toLowerCase().replace(/[^\w]/g, '');
+
+// Splits text into words, filtering out empty strings
+const getWords = (text: string): string[] =>
+  text.trim().split(/\s+/).filter(w => w.length > 0);
+
+// Finds the overlap between the suffix of accumulated words and prefix of new words
+// Returns the number of overlapping words to skip
+const findOverlappingPrefixLength = (
+  accumulatedWords: string[],
+  newWords: string[]
+): number => {
+  // Cap search at 10 words for performance
+  const maxLen = Math.min(accumulatedWords.length, newWords.length, 10);
+
+  for (let len = maxLen; len > 0; len--) {
+    const suffix = accumulatedWords.slice(-len).map(normalizeWord);
+    const prefix = newWords.slice(0, len).map(normalizeWord);
+
+    if (suffix.every((word, i) => word === prefix[i])) {
+      return len;
+    }
+  }
+  return 0;
+};
+
 export function ChatInput() {
   const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
@@ -169,6 +198,8 @@ export function ChatInput() {
   const [transcriptBeforeRecording, setTranscriptBeforeRecording] = useState<string>('');
   // Track final transcript accumulated during recording session (separate from inputValue)
   const [finalTranscriptDuringRecording, setFinalTranscriptDuringRecording] = useState<string>('');
+  // Track if textarea has expanded to multiple lines
+  const [isMultiline, setIsMultiline] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -192,11 +223,51 @@ export function ChatInput() {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    // Reset height to auto to get the correct scrollHeight
-    textarea.style.height = 'auto';
-    // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
-    const newHeight = Math.min(Math.max(textarea.scrollHeight, 48), 150);
-    textarea.style.height = `${newHeight}px`;
+    // Early exit if no parent node to append clone to
+    const parentNode = textarea.parentNode;
+    if (!parentNode) return;
+
+    // Get current height before any changes
+    const currentHeight = textarea.offsetHeight;
+
+    // Use a clone to avoid visual flicker - measure in a hidden element
+    const clone = textarea.cloneNode(true) as HTMLTextAreaElement;
+
+    // Copy the text content (cloneNode doesn't copy the value property)
+    clone.value = textarea.value;
+
+    // Copy computed styles that affect height measurement
+    const computedStyle = window.getComputedStyle(textarea);
+    clone.style.position = 'absolute';
+    clone.style.visibility = 'hidden';
+    clone.style.height = 'auto';
+    clone.style.width = `${textarea.offsetWidth}px`;
+    clone.style.overflow = 'hidden';
+    clone.style.fontSize = computedStyle.fontSize;
+    clone.style.fontFamily = computedStyle.fontFamily;
+    clone.style.lineHeight = computedStyle.lineHeight;
+    clone.style.padding = computedStyle.padding;
+    clone.style.border = computedStyle.border;
+    clone.style.boxSizing = computedStyle.boxSizing;
+
+    parentNode.appendChild(clone);
+
+    let newHeight: number;
+    try {
+      // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
+      newHeight = Math.min(Math.max(clone.scrollHeight, 48), 150);
+    } finally {
+      // Always remove the clone, even if an error occurs
+      clone.remove();
+    }
+
+    // Only update height if it changed to avoid unnecessary reflows
+    if (currentHeight !== newHeight) {
+      textarea.style.height = `${newHeight}px`;
+    }
+
+    // Track if textarea has expanded beyond single line (48px is single line height)
+    setIsMultiline(newHeight > 48);
   }, []);
 
   // Store focus function in window for access from ChatLayout
@@ -548,6 +619,8 @@ export function ChatInput() {
   const currentRecognitionRef = useRef<SpeechRecognition | null>(null);
   // Ref to track last processed result index to prevent duplicates
   const lastProcessedIndexRef = useRef<number>(-1);
+  // Ref to track accumulated final transcript to detect and remove duplicates
+  const accumulatedFinalTranscriptRef = useRef<string>('');
 
   // Speech Recognition for transcription
   const startRecording = useCallback(() => {
@@ -574,6 +647,7 @@ export function ChatInput() {
 
     // Reset tracking state for new recording session
     lastProcessedIndexRef.current = -1;
+    accumulatedFinalTranscriptRef.current = '';
     setInterimTranscript('');
     setFinalTranscriptDuringRecording('');
     // Save the current input value before recording starts
@@ -597,8 +671,10 @@ export function ChatInput() {
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Build complete transcript from all results, only processing new finals
-      let newFinalTranscript = '';
+      // Build the complete final transcript from all final results
+      // The Web Speech API in continuous mode returns accumulated transcripts,
+      // so we need to track what we've already processed to avoid duplicates
+      let totalFinalTranscript = '';
       let currentInterim = '';
 
       for (let i = 0; i < event.results.length; i++) {
@@ -606,11 +682,9 @@ export function ChatInput() {
         const transcript = result[0].transcript;
 
         if (result.isFinal) {
-          // Only add to newFinalTranscript if this is a newly finalized result
-          if (i > lastProcessedIndexRef.current) {
-            newFinalTranscript += transcript;
-            lastProcessedIndexRef.current = i;
-          }
+          // Accumulate all final transcripts
+          totalFinalTranscript += transcript;
+          lastProcessedIndexRef.current = i;
         } else {
           // Interim results - these are still being processed
           currentInterim += transcript;
@@ -620,15 +694,56 @@ export function ChatInput() {
       // Update interim transcript display
       setInterimTranscript(currentInterim);
 
-      // Only update input if we have new final transcript
-      if (newFinalTranscript) {
+      const newTotal = totalFinalTranscript.trim();
+      if (!newTotal) return;
+
+      const accumulated = accumulatedFinalTranscriptRef.current.trim();
+
+      // Quick exit if identical (no new content)
+      if (newTotal === accumulated) return;
+
+      // Use word-level comparison to handle overlapping phrases
+      // This fixes issues where the API returns "How are you How are you doing"
+      // instead of just "How are you doing"
+      const newWords = getWords(newTotal);
+      const accWords = getWords(accumulated);
+
+      let wordsToAppend: string[] = [];
+
+      if (accWords.length === 0) {
+        // First transcript - add all words
+        wordsToAppend = newWords;
+      } else {
+        // Find overlapping words at the boundary (suffix of accumulated = prefix of new)
+        const overlapLen = findOverlappingPrefixLength(accWords, newWords);
+
+        if (overlapLen > 0) {
+          // Skip overlapping words, only take genuinely new words
+          wordsToAppend = newWords.slice(overlapLen);
+        } else if (newWords.length > accWords.length) {
+          // No word overlap found, but new is longer - use word-based extraction
+          // This handles cases where whitespace differs between accumulated and new
+          wordsToAppend = newWords.slice(accWords.length);
+        } else {
+          // No overlap and new is not longer - possible API glitch or re-send
+          // Don't update state to preserve continuity and avoid corruption
+          return;
+        }
+      }
+
+      // Update accumulated tracking with the full new transcript
+      accumulatedFinalTranscriptRef.current = newTotal;
+
+      // Only update input if we have genuinely new words
+      if (wordsToAppend.length > 0) {
+        const newText = wordsToAppend.join(' ');
         const currentValue = useChatUIStore.getState().inputValue;
         const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
-        setInputValue(currentValue + separator + newFinalTranscript);
-        // Also track final transcript separately for display (avoid doubling from inputValue slice)
+        setInputValue(currentValue + separator + newText);
+        // Also track final transcript separately for display
         setFinalTranscriptDuringRecording(prev => {
           const prevSeparator = prev && !prev.endsWith(' ') ? ' ' : '';
-          return prev + prevSeparator + newFinalTranscript;
+          return prev + prevSeparator + newText;
         });
       }
     };
@@ -702,6 +817,7 @@ export function ChatInput() {
       setInterimTranscript('');
       setFinalTranscriptDuringRecording('');
       lastProcessedIndexRef.current = -1;
+      accumulatedFinalTranscriptRef.current = '';
     }
   }, [speechRecognition]);
 
@@ -844,14 +960,14 @@ export function ChatInput() {
             )}
         </div>
 
-        <div className="flex gap-2 items-center bg-muted p-3 rounded-2xl border">
+        <div className={cn("flex gap-2 bg-muted p-3 rounded-2xl border", isMultiline ? "items-end" : "items-center")}>
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
             <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
-            <div className="flex gap-1">
+            <div className={cn("flex gap-1", isMultiline ? "flex-col self-end" : "flex-row items-center")}>
                 {/* Combined "Add photos & files" dropdown with [+] button */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
