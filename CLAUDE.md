@@ -1232,7 +1232,7 @@ New gateways are automatically discovered from the backend. No frontend code cha
 3. **The frontend will automatically discover and display the new gateway!**
 
 **Frontend gateway discovery code:**
-- `src/lib/gateway-registry.ts` - Contains `fetchAndRegisterGatewaysFromBackend()`
+- `src/lib/gateway-registry.ts` - Contains dynamic gateway registration functions (`registerDynamicGateway`, `autoRegisterGatewaysFromModels`)
 - `src/lib/models-service.ts` - Calls gateway discovery when fetching models
 - Static fallback in `GATEWAYS` array for offline/error resilience
 
