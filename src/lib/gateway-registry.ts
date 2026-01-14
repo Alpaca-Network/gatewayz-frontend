@@ -211,6 +211,12 @@ export const GATEWAYS: GatewayConfig[] = [
     color: 'bg-emerald-500',
     priority: 'slow',
   },
+  {
+    id: 'simplismart',
+    name: 'SimpliSmart',
+    color: 'bg-sky-500',
+    priority: 'slow',
+  },
 
   // Deprecated gateways (kept for backward compatibility)
   {
