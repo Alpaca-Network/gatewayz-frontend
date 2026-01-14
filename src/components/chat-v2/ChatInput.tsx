@@ -683,7 +683,11 @@ export function ChatInput() {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
+    // Language setting - could be made configurable via user preferences
     recognition.lang = 'en-US';
+    // Request multiple alternatives to improve accuracy
+    // The browser may return up to this many alternatives for each result
+    recognition.maxAlternatives = 3;
 
     // Track this recognition instance to prevent stale handlers from corrupting state
     currentRecognitionRef.current = recognition;
