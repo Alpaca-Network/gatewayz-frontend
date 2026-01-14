@@ -10,6 +10,26 @@
  * - Optional noise reduction
  * - Language hints for improved accuracy
  * - Prompt context for domain-specific vocabulary
+ *
+ * Usage Example:
+ * ```tsx
+ * const { startRecording, stopRecording, isRecording, isTranscribing } = useWhisperTranscription({
+ *   language: 'en',
+ *   prompt: 'Technical discussion about APIs',
+ * });
+ *
+ * // In ChatInput or similar component:
+ * const handleMicClick = async () => {
+ *   if (isRecording) {
+ *     const result = await stopRecording();
+ *     if (result?.text) {
+ *       setInputValue(prev => prev + ' ' + result.text);
+ *     }
+ *   } else {
+ *     await startRecording();
+ *   }
+ * };
+ * ```
  */
 
 import { useState, useCallback, useRef } from 'react';
@@ -201,9 +221,15 @@ export function useWhisperTranscription(
           formData.append('prompt', prompt);
         }
 
-        // Call backend transcription API
-        const response = await fetch('/v1/audio/transcriptions', {
+        // Get API key for authentication
+        const apiKey = typeof window !== 'undefined' ? localStorage.getItem('gatewayz_api_key') : null;
+
+        // Call backend transcription API via Next.js proxy
+        const response = await fetch('/api/audio/transcriptions', {
           method: 'POST',
+          headers: apiKey ? {
+            'Authorization': `Bearer ${apiKey}`
+          } : {},
           body: formData,
         });
 
@@ -237,7 +263,9 @@ export function useWhisperTranscription(
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1, // Mono
-          sampleRate: 16000, // Request 16kHz if supported
+          // Note: Browser may ignore sampleRate constraint and use hardware default.
+          // The preprocessAudio function will downsample to 16kHz regardless.
+          sampleRate: 16000,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
@@ -263,6 +291,11 @@ export function useWhisperTranscription(
       mediaRecorder.start(100); // Collect data every 100ms
       setIsRecording(true);
     } catch (err) {
+      // Clean up media stream on error to prevent resource leak (microphone staying active)
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
       const message = err instanceof Error ? err.message : 'Failed to start recording';
       setError(message);
       throw err;
