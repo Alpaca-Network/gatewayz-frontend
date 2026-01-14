@@ -279,11 +279,12 @@ describe('model-pricing-utils', () => {
     });
 
     it('should return false for standard per-token pricing gateways', () => {
+      // Note: 'openai' and 'anthropic' are now per-million gateways because
+      // their pricing in manual_pricing.json is stored in per-million format.
+      // Only 'openrouter' is a per-token gateway (it returns per-token from its API).
       const perTokenGateways = [
         'openrouter',
         'huggingface',
-        'openai',
-        'anthropic',
       ];
 
       perTokenGateways.forEach((gateway) => {
