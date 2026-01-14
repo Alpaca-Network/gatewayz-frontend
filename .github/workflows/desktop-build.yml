@@ -46,6 +46,9 @@ jobs:
           - platform: 'macos-latest'
             target: 'x86_64-apple-darwin'
             artifact_name: 'GatewayZ-macos-x64'
+          - platform: 'blacksmith-4vcpu-ubuntu-2204'
+            target: 'x86_64-unknown-linux-gnu'
+            artifact_name: 'GatewayZ-linux-x64'
           - platform: 'blacksmith-4vcpu-windows-2025'
             target: 'x86_64-pc-windows-msvc'
             artifact_name: 'GatewayZ-windows-x64'
@@ -66,9 +69,9 @@ jobs:
           node-version: '20'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10.17.0
 
       - name: Get pnpm store directory
         shell: bash
@@ -98,6 +101,12 @@ jobs:
         run: |
           # Install any macOS-specific dependencies if needed
           echo "macOS dependencies installed"
+
+      - name: Install dependencies (Linux)
+        if: contains(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install dependencies (Windows)
         if: contains(matrix.platform, 'windows')
@@ -182,6 +191,17 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app
           if-no-files-found: error
 
+      - name: Upload artifacts (Linux)
+        if: contains(matrix.platform, 'ubuntu')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+            src-tauri/target/${{ matrix.target }}/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+
       - name: Upload artifacts (Windows)
         if: contains(matrix.platform, 'windows')
         uses: actions/upload-artifact@v4
@@ -212,6 +232,9 @@ jobs:
           draft: true
           files: |
             artifacts/**/*.dmg
+            artifacts/**/*.deb
+            artifacts/**/*.AppImage
+            artifacts/**/*.rpm
             artifacts/**/*.exe
             artifacts/**/*.msi
           generate_release_notes: true
@@ -233,9 +256,9 @@ jobs:
           node-version: '20'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10.17.0
 
       - name: Install frontend dependencies
         run: pnpm install
