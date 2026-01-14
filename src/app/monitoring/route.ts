@@ -41,18 +41,10 @@ const rateLimitState = {
 };
 
 /**
- * Try to acquire rate limit quota.
+ * Try to acquire rate limit quota atomically.
  * Returns success status and retryAfter if limited.
- *
- * NOTE: This is "best-effort" rate limiting for a single-instance deployment.
- * While JavaScript is single-threaded, concurrent async requests can interleave
- * between the check and increment operations. This means:
- * - The limit may occasionally be exceeded by a few requests under high concurrency
- * - For strict rate limiting with multiple instances, use Redis with atomic operations
- *
- * This approach is acceptable for our use case (preventing sustained abuse while
- * allowing legitimate burst traffic) since slight over-allowance is preferable
- * to false rejections of valid Sentry events.
+ * This atomic approach prevents TOCTOU race conditions where multiple
+ * concurrent requests could bypass rate limits by checking before consuming.
  */
 function tryAcquireRateLimitQuota(): { acquired: boolean; retryAfter?: number } {
   const now = Date.now();
@@ -82,8 +74,8 @@ function tryAcquireRateLimitQuota(): { acquired: boolean; retryAfter?: number } 
     return { acquired: false, retryAfter: 1 };
   }
 
-  // Consume quota immediately after check passes
-  // Note: Concurrent requests may interleave here, allowing slight over-limit
+  // Atomically consume quota immediately after check passes
+  // This prevents race conditions in concurrent request handling
   rateLimitState.minuteCount++;
   rateLimitState.secondCount++;
 
@@ -92,12 +84,7 @@ function tryAcquireRateLimitQuota(): { acquired: boolean; retryAfter?: number } 
 
 /**
  * Release rate limit quota (call if request fails validation after quota acquired)
- * This allows malformed requests to not count against the rate limit.
- *
- * NOTE: If the rate limit window resets between acquire and release, this will
- * decrement the new window's count instead. This is acceptable for best-effort
- * rate limiting - the impact is slightly more lenient limits in rare edge cases.
- * For strict correctness, use request-specific tokens instead of global counters.
+ * This allows malformed requests to not count against the rate limit
  */
 function releaseRateLimitQuota(): void {
   if (rateLimitState.minuteCount > 0) rateLimitState.minuteCount--;
@@ -143,7 +130,8 @@ function parseEnvelopeHeader(buffer: ArrayBuffer): { projectId: string; host: st
 
 export async function POST(request: NextRequest) {
   try {
-    // Try to acquire rate limit quota (best-effort, see function comment)
+    // Try to acquire rate limit quota atomically
+    // This prevents TOCTOU race conditions in concurrent request handling
     const { acquired, retryAfter } = tryAcquireRateLimitQuota();
     if (!acquired) {
       console.warn("[Sentry Tunnel] Rate limit exceeded, rejecting request");
@@ -195,7 +183,7 @@ export async function POST(request: NextRequest) {
       return new NextResponse("Invalid host", { status: 403, headers: CORS_HEADERS });
     }
 
-    // Quota already acquired above (best-effort), proceed to forward request
+    // Quota already acquired atomically above, proceed to forward request
 
     // Build upstream URL using normalized lowercase host for consistency
     // DNS is case-insensitive, but using lowercase prevents potential issues
