@@ -1743,6 +1743,259 @@ describe('ChatInput speech recognition', () => {
     // Recognition should have been stopped
     expect(mockRecognition.stop).toHaveBeenCalled();
   });
+
+  it('should handle repeated phrases like "hello world hello world doing"', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result: "hello world"
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // Problematic API response: repeated phrase plus new content
+    // This simulates the bug where API returns "hello world hello world doing"
+    const duplicatedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world hello world doing', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(duplicatedResult);
+    }
+
+    // Should recognize the duplicate "hello world" and only append "doing"
+    // Not "hello world doing" (which would duplicate "hello world")
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world doing');
+  });
+
+  it('should handle accumulated content found in middle of new transcript', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'testing one two', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('testing one two');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'testing one two';
+
+    // API sends transcript where accumulated content appears after some prefix
+    // This can happen when API reprocesses audio
+    const reorganizedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'okay testing one two three four', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(reorganizedResult);
+    }
+
+    // Should find "testing one two" in the middle and only append "three four"
+    expect(mockSetInputValue).toHaveBeenCalledWith('testing one two three four');
+  });
+
+  it('should not duplicate when API sends same content with prefix', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('how are you');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'how are you';
+
+    // API sends exact same content as prefix plus new content
+    const extendedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'how are you doing today', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(extendedResult);
+    }
+
+    // Should recognize prefix match and only append "doing today"
+    expect(mockSetInputValue).toHaveBeenCalledWith('how are you doing today');
+  });
+
+  it('should handle longer repeated phrases without duplication', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result - longer phrase
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'the quick brown fox jumps', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('the quick brown fox jumps');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'the quick brown fox jumps';
+
+    // API sends repeated content
+    const repeatedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'the quick brown fox jumps over the lazy dog', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(repeatedResult);
+    }
+
+    // Should only append "over the lazy dog"
+    expect(mockSetInputValue).toHaveBeenCalledWith('the quick brown fox jumps over the lazy dog');
+  });
+
+  it('should reject completely unrelated longer transcripts', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // Completely unrelated but longer transcript (API glitch)
+    const unrelatedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'goodbye moon stars planets', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(unrelatedResult);
+    }
+
+    // Should NOT update - no relationship to accumulated content
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
 });
 
 describe('ChatInput stop streaming button', () => {
