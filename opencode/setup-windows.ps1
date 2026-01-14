@@ -200,26 +200,53 @@ if (-not (Test-Path $configDir)) {
 }
 
 $config = @{
+    '$schema' = "https://opencode.ai/config.json"
+    model = "gatewayz/claude-sonnet-4.5"
     provider = @{
-        type = "openai"
-        api_key = $ApiKey
-        base_url = "https://api.gatewayz.ai/v1"
+        gatewayz = @{
+            npm = "@ai-sdk/openai-compatible"
+            name = "GatewayZ AI"
+            options = @{
+                baseURL = "https://api.gatewayz.ai/v1"
+                apiKey = "{env:GATEWAYZ_API_KEY}"
+            }
+            models = @{
+                "claude-sonnet-4.5" = @{
+                    name = "Claude Sonnet 4.5 (Anthropic)"
+                    limit = @{ context = 200000; output = 65536 }
+                }
+                "claude-opus-4" = @{
+                    name = "Claude Opus 4 (Anthropic)"
+                    limit = @{ context = 200000; output = 65536 }
+                }
+                "gpt-5" = @{
+                    name = "GPT-5 (OpenAI)"
+                    limit = @{ context = 128000; output = 32768 }
+                }
+                "gpt-5-mini" = @{
+                    name = "GPT-5 Mini (OpenAI)"
+                    limit = @{ context = 128000; output = 32768 }
+                }
+                "gemini-2.5-pro" = @{
+                    name = "Gemini 2.5 Pro (Google)"
+                    limit = @{ context = 1000000; output = 65536 }
+                }
+                "gemini-2.5-flash" = @{
+                    name = "Gemini 2.5 Flash (Google)"
+                    limit = @{ context = 1000000; output = 65536 }
+                }
+                "grok-3-turbo" = @{
+                    name = "Grok 3 Turbo (xAI)"
+                    limit = @{ context = 131072; output = 32768 }
+                }
+                "deepseek-v3.1" = @{
+                    name = "DeepSeek V3.1"
+                    limit = @{ context = 128000; output = 32768 }
+                }
+            }
+        }
     }
-    model = @{
-        default = "anthropic/claude-sonnet-4.5"
-        available = @(
-            "anthropic/claude-sonnet-4.5",
-            "anthropic/claude-opus-4-20250514",
-            "openai/gpt-5",
-            "openai/gpt-5-mini",
-            "google/gemini-2.5-pro",
-            "google/gemini-2.5-flash",
-            "x-ai/grok-3-turbo-preview",
-            "x-ai/grok-code-fast-1",
-            "deepseek/deepseek-v3.1",
-            "deepseek/deepseek-chat-v3.1"
-        )
-    }
+    disabled_providers = @("opencode-zen", "anthropic", "openai", "google", "xai", "groq", "deepseek")
 }
 
 $config | ConvertTo-Json -Depth 10 | Set-Content -Path $configFile -Encoding UTF8
