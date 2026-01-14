@@ -279,11 +279,12 @@ describe('model-pricing-utils', () => {
     });
 
     it('should return false for standard per-token pricing gateways', () => {
+      // Note: 'openai' and 'anthropic' are now per-million gateways because
+      // their pricing in manual_pricing.json is stored in per-million format.
+      // Only 'openrouter' is a per-token gateway (it returns per-token from its API).
       const perTokenGateways = [
         'openrouter',
         'huggingface',
-        'openai',
-        'anthropic',
       ];
 
       perTokenGateways.forEach((gateway) => {
@@ -304,11 +305,48 @@ describe('model-pricing-utils', () => {
         'novita',
         'nebius',
         'xai',
+        // Additional per-million gateways added in pricing normalization update
+        'alibaba',
+        'alibaba-cloud',
+        'clarifai',
+        'simplismart',
+        'akash',
+        'cloudflare-workers-ai',
+        'openai',
+        'anthropic',
+        'alpaca-network',
       ];
 
       perMillionGateways.forEach((gateway) => {
         expect(isPerMillionPricingGateway(gateway)).toBe(true);
       });
+    });
+
+    it('should return true for newly added per-million pricing gateways', () => {
+      // These gateways were added because their APIs return pricing in per-million format
+      // e.g., alibaba returns 0.005 for $0.005/MTok, openai returns 2.50 for $2.50/MTok
+      const newlyAddedGateways = [
+        'alibaba',
+        'alibaba-cloud',
+        'clarifai',
+        'simplismart',
+        'akash',
+        'cloudflare-workers-ai',
+        'openai',
+        'anthropic',
+        'alpaca-network',
+      ];
+
+      newlyAddedGateways.forEach((gateway) => {
+        expect(isPerMillionPricingGateway(gateway)).toBe(true);
+      });
+    });
+
+    it('should handle case-insensitive matching for newly added gateways', () => {
+      expect(isPerMillionPricingGateway('OpenAI')).toBe(true);
+      expect(isPerMillionPricingGateway('ANTHROPIC')).toBe(true);
+      expect(isPerMillionPricingGateway('Alibaba')).toBe(true);
+      expect(isPerMillionPricingGateway('Cloudflare-Workers-AI')).toBe(true);
     });
 
     it('should return false for per-billion pricing gateways', () => {
@@ -394,6 +432,39 @@ describe('model-pricing-utils', () => {
       // Vercel AI Gateway
       expect(formatPricingForDisplay('0.15', 'vercel-ai-gateway')).toBe('0.15');
       expect(formatPricingForDisplay('5.00', 'vercel-ai-gateway')).toBe('5.00');
+    });
+
+    it('should NOT multiply for newly added per-million pricing gateways', () => {
+      // These gateways were added to PER_MILLION_PRICING_GATEWAYS because their APIs
+      // return pricing in per-million format. Verify they display correctly.
+
+      // Alibaba Cloud - e.g., Qwen models
+      expect(formatPricingForDisplay('0.005', 'alibaba')).toBe('0.01'); // $0.005/M -> $0.01/M (rounded)
+      expect(formatPricingForDisplay('0.02', 'alibaba-cloud')).toBe('0.02'); // $0.02/M
+
+      // Clarifai - e.g., hosted models
+      expect(formatPricingForDisplay('3.00', 'clarifai')).toBe('3.00'); // $3.00/M
+
+      // SimpliSmart - e.g., Llama models
+      expect(formatPricingForDisplay('0.74', 'simplismart')).toBe('0.74'); // $0.74/M
+
+      // Akash Network - decentralized compute
+      expect(formatPricingForDisplay('0.13', 'akash')).toBe('0.13'); // $0.13/M
+
+      // Cloudflare Workers AI
+      expect(formatPricingForDisplay('0.66', 'cloudflare-workers-ai')).toBe('0.66'); // $0.66/M
+
+      // OpenAI direct - uses manual_pricing.json which is per-million
+      expect(formatPricingForDisplay('2.50', 'openai')).toBe('2.50'); // GPT-4o input: $2.50/M
+      expect(formatPricingForDisplay('10.00', 'openai')).toBe('10.00'); // GPT-4o output: $10.00/M
+      expect(formatPricingForDisplay('0.15', 'openai')).toBe('0.15'); // GPT-4o-mini input: $0.15/M
+
+      // Anthropic direct - uses manual_pricing.json which is per-million
+      expect(formatPricingForDisplay('3.00', 'anthropic')).toBe('3.00'); // Claude 3.5 Sonnet input: $3.00/M
+      expect(formatPricingForDisplay('15.00', 'anthropic')).toBe('15.00'); // Claude 3.5 Sonnet output: $15.00/M
+
+      // Alpaca Network
+      expect(formatPricingForDisplay('0.27', 'alpaca-network')).toBe('0.27'); // $0.27/M
     });
 
     it('should divide by 1,000 for aihubmix gateway (per-billion format)', () => {
