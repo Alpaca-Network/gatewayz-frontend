@@ -49,6 +49,24 @@ const SUPPRESSED_ERROR_PATTERNS = {
     /explorer-api\.walletconnect\.com/i,
   ],
 
+  // DOM manipulation errors from third-party scripts (Statsig Session Replay, etc.)
+  domManipulation: [
+    /Failed to execute 'removeChild' on 'Node'.*not a child/i,
+    /Failed to execute 'insertBefore' on 'Node'.*not a child/i,
+    /Statsig.*removeChild/i,
+    /Statsig.*insertBefore/i,
+    /Node.*not a child/i,
+  ],
+
+  // IndexedDB errors from browser privacy/deletion
+  indexedDB: [
+    /undefined is not an object.*evaluating.*createObjectStore/i,
+    /createObjectStore.*undefined/i,
+    /Failed to execute 'transaction' on 'IDBDatabase'.*closing/i,
+    /Failed to execute 'transaction' on 'IDBDatabase'.*not found/i,
+    /InvalidStateError.*IDBDatabase.*closing/i,
+  ],
+
   // Rate limiting and monitoring errors
   rateLimiting: [
     /\/monitoring.*429/i,
@@ -59,6 +77,12 @@ const SUPPRESSED_ERROR_PATTERNS = {
   storageAccess: [
     /Failed to read.*localStorage.*Access is denied/i,
     /QuotaExceededError/i,
+  ],
+
+  // Build/minification errors (transient, not reproducible)
+  buildErrors: [
+    /can't access lexical declaration.*before initialization/i,
+    /ReferenceError.*tH.*before initialization/i,
   ],
 };
 
