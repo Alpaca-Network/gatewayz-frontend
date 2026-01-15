@@ -167,14 +167,16 @@ export function useChatStream() {
         sessionId,
         content,
         model,
-        messagesHistory
+        messagesHistory,
+        tools,
     }: {
         sessionId: number,
         content: any,
         model: ModelOption,
-        messagesHistory: any[]
+        messagesHistory: any[],
+        tools?: any[], // Tool definitions to pass to the API
     }) => {
-        debugLog('streamMessage called', { sessionId, model: model.value, messagesHistoryLength: messagesHistory.length });
+        debugLog('streamMessage called', { sessionId, model: model.value, messagesHistoryLength: messagesHistory.length, toolsCount: tools?.length || 0 });
 
         // IMPORTANT: Use getState() for imperative access to avoid stale closure issues
         // The previous approach captured storeApiKey at render time, which could be null
@@ -291,7 +293,12 @@ export function useChatStream() {
             stream: true,
             max_tokens: 8000,
             gateway: model.sourceGateway,
-            apiKey: apiKey  // Pass API key in request body as well as Authorization header
+            apiKey: apiKey,  // Pass API key in request body as well as Authorization header
+            // Include tools if provided and model supports them
+            ...(tools && tools.length > 0 && model.supportsTools && {
+                tools: tools,
+                tool_choice: 'auto',  // Let model decide when to use tools
+            }),
         };
         
         // Portkey provider logic (copied from original)

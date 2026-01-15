@@ -35,6 +35,7 @@ export type ModelOption = {
     };
     speedTier?: 'ultra-fast' | 'fast' | 'medium' | 'slow';
     avgLatencyMs?: number;
+    supportsTools?: boolean; // Whether model supports function calling/tools
 };
 
 interface ModelSelectProps {
@@ -151,6 +152,61 @@ export const getModelSpeedTier = (modelId: string, gateway?: string): 'ultra-fas
   }
 
   return undefined; // Unknown speed
+};
+
+// Check if model supports tool calling/function calling
+// Based on model architecture and known capabilities
+export const checkModelToolSupport = (modelId: string, supportedParams?: string[]): boolean => {
+  const id = modelId.toLowerCase();
+
+  // If we have explicit supported_parameters from the API, check for 'tools'
+  if (supportedParams && supportedParams.length > 0) {
+    return supportedParams.includes('tools') || supportedParams.includes('tool_choice');
+  }
+
+  // Pattern-based detection for known tool-capable model families
+  // GPT-4 and GPT-3.5 support tools
+  if (id.includes('gpt-4') || id.includes('gpt-3.5')) {
+    return true;
+  }
+
+  // Claude 3.x models support tools
+  if (id.includes('claude-3') || id.includes('claude-3.5') || id.includes('claude-sonnet') || id.includes('claude-opus') || id.includes('claude-haiku')) {
+    return true;
+  }
+
+  // Gemini models support tools
+  if (id.includes('gemini-pro') || id.includes('gemini-flash') || id.includes('gemini-2')) {
+    return true;
+  }
+
+  // Llama 3.x instruct models support tools
+  if ((id.includes('llama-3') || id.includes('llama3')) && id.includes('instruct')) {
+    return true;
+  }
+
+  // Qwen 2.x models support tools
+  if (id.includes('qwen2') || id.includes('qwen-2') || id.includes('qwen3') || id.includes('qwen-3')) {
+    return true;
+  }
+
+  // Mistral and Mixtral support tools
+  if (id.includes('mistral') || id.includes('mixtral')) {
+    return true;
+  }
+
+  // DeepSeek V3 supports tools
+  if (id.includes('deepseek-v3') || id.includes('deepseek-chat')) {
+    return true;
+  }
+
+  // Command R models support tools
+  if (id.includes('command-r')) {
+    return true;
+  }
+
+  // Default to false for unknown models
+  return false
 };
 
 export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = false }: ModelSelectProps) {
@@ -382,6 +438,9 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           // Get speed tier for performance indicators
           const speedTier = getModelSpeedTier(model.id, sourceGateway);
 
+          // Check if model supports tool calling
+          const supportsTools = checkModelToolSupport(model.id, model.supported_parameters);
+
           return {
             value: model.id,
             label: cleanModelName(model.name),
@@ -390,6 +449,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
             developer,
             modalities,
             speedTier,
+            supportsTools,
             huggingfaceMetrics: model.huggingface_metrics ? {
               downloads: model.huggingface_metrics.downloads || 0,
               likes: model.huggingface_metrics.likes || 0,
@@ -852,6 +912,9 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
               m.charAt(0).toUpperCase() + m.slice(1)
             ) || ['Text'];
 
+            // Check if model supports tool calling
+            const supportsTools = checkModelToolSupport(model.id, model.supported_parameters);
+
             return {
               value: model.id,
               label: cleanModelName(model.name),
@@ -859,6 +922,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
               sourceGateway,
               developer,
               modalities,
+              supportsTools,
               huggingfaceMetrics: model.huggingface_metrics ? {
                 downloads: model.huggingface_metrics.downloads || 0,
                 likes: model.huggingface_metrics.likes || 0,
