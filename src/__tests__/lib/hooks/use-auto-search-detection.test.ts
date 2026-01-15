@@ -193,8 +193,9 @@ describe('useAutoSearchDetection', () => {
       const { result } = renderHook(() => useAutoSearchDetection());
 
       // Use a query that matches pattern but doesn't contain keywords
+      // "When was" matches /when (did|will|is|was|does)/i but doesn't contain search keywords
       const reason = result.current.getAutoEnableReason(
-        'Who won the game last night?'
+        'When was the building constructed?'
       );
 
       expect(reason).toBe('Query appears to need current information');
