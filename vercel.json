@@ -1,5 +1,5 @@
 {
-  "installCommand": "corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --frozen-lockfile",
+  "installCommand": "echo 'Build: 2026-01-15-v2' && corepack enable && corepack prepare pnpm@9.15.4 --activate && pnpm install --frozen-lockfile",
   "buildCommand": "pnpm run build",
   "git": {
     "submodules": false
