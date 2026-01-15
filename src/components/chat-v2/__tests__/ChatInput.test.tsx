@@ -14,6 +14,8 @@ jest.mock('lucide-react', () => ({
   Paperclip: () => <span data-testid="paperclip-icon">Paperclip</span>,
   Square: () => <span data-testid="square-icon">Square</span>,
   Camera: () => <span data-testid="camera-icon">Camera</span>,
+  Globe: () => <span data-testid="globe-icon">Globe</span>,
+  Search: () => <span data-testid="search-icon">Search</span>,
 }));
 
 // Mock the UI components
@@ -72,6 +74,12 @@ jest.mock('@/lib/store/chat-ui-store', () => {
     inputValue: mockStoreState.inputValue,
     setInputValue: mockSetInputValue,
     setMessageStartTime: mockSetMessageStartTime,
+    // Tools state
+    enabledTools: [],
+    autoEnableSearch: false,
+    setEnabledTools: jest.fn(),
+    toggleTool: jest.fn(),
+    setAutoEnableSearch: jest.fn(),
   });
 
   // Add getState method to the function
@@ -110,6 +118,24 @@ jest.mock('@/lib/hooks/use-auto-model-switch', () => ({
   }),
 }));
 
+// Mock tool definitions hook
+jest.mock('@/lib/hooks/use-tool-definitions', () => ({
+  useToolDefinitions: () => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+  }),
+  filterEnabledTools: () => [],
+}));
+
+// Mock auto search detection hook
+jest.mock('@/lib/hooks/use-auto-search-detection', () => ({
+  useAutoSearchDetection: () => ({
+    shouldAutoEnableSearch: jest.fn(() => false),
+    getAutoEnableReason: jest.fn(() => null),
+  }),
+}));
+
 jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
@@ -143,6 +169,20 @@ jest.mock('@/lib/guest-chat', () => ({
   hasReachedGuestLimit: jest.fn(() => false),
   getRemainingGuestMessages: jest.fn(() => 10),
   getGuestMessageLimit: jest.fn(() => 10),
+}));
+
+// Mock Switch component
+jest.mock('@/components/ui/switch', () => ({
+  Switch: ({ checked, onCheckedChange, disabled, ...props }: any) => (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => onCheckedChange?.(e.target.checked)}
+      disabled={disabled}
+      data-testid="switch"
+      {...props}
+    />
+  ),
 }));
 
 // Mock Alert component

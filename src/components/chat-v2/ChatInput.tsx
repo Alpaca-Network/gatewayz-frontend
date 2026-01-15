@@ -40,7 +40,7 @@ interface SpeechRecognition extends EventTarget {
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera, Globe, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -52,6 +52,8 @@ import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useCreateSession, useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { useAutoModelSwitch } from "@/lib/hooks/use-auto-model-switch";
+import { useAutoSearchDetection } from "@/lib/hooks/use-auto-search-detection";
+import { useToolDefinitions, filterEnabledTools } from "@/lib/hooks/use-tool-definitions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/auth-store";
@@ -62,6 +64,7 @@ import {
   getGuestMessageLimit
 } from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { usePrivy } from "@privy-io/react-auth";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 
@@ -195,11 +198,13 @@ const findAccumulatedEndIndex = (
 };
 
 export function ChatInput() {
-  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime } = useChatUIStore();
+  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime, enabledTools, toggleTool, autoEnableSearch, setAutoEnableSearch } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
   const { isStreaming, streamMessage, stopStream } = useChatStream();
   const { checkImageSupport, checkVideoSupport, checkAudioSupport, checkFileSupport } = useAutoModelSwitch();
+  const { shouldAutoEnableSearch } = useAutoSearchDetection();
+  const { data: toolDefinitions } = useToolDefinitions();
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const { login } = usePrivy();
@@ -342,6 +347,19 @@ export function ChatInput() {
       }
     }
 
+    // Auto-enable search if the query needs real-time information
+    // Get fresh tools state from store
+    const freshEnabledTools = storeState.enabledTools;
+    const freshAutoEnableSearch = storeState.autoEnableSearch;
+
+    // Check if we should auto-enable web search for this query
+    if (shouldAutoEnableSearch(currentInputValue, freshSelectedModel, freshAutoEnableSearch)) {
+      // Auto-enable web search if not already enabled
+      if (!freshEnabledTools.includes('web_search')) {
+        toggleTool('web_search');
+      }
+    }
+
     // Capture current input values before any async operations
     const messageText = currentInputValue;
     const currentImage = selectedImage;
@@ -405,11 +423,16 @@ export function ChatInput() {
         // Start the timer when message is sent
         setMessageStartTime(Date.now());
 
+        // Get the current enabled tools (may have been auto-enabled above)
+        const currentEnabledTools = useChatUIStore.getState().enabledTools;
+        const toolsToSend = filterEnabledTools(toolDefinitions, currentEnabledTools);
+
         await streamMessage({
             sessionId,
             content,
             model: freshSelectedModel,
-            messagesHistory: currentMessages
+            messagesHistory: currentMessages,
+            tools: toolsToSend.length > 0 ? toolsToSend : undefined,
         });
 
         // Clear the timer when streaming completes
@@ -1003,8 +1026,27 @@ export function ChatInput() {
                 {/* Combined "Add photos & files" dropdown with [+] button */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost" title="Add photos & files" className="h-10 w-10 rounded-full border border-border hover:bg-accent">
-                            <Plus className="h-5 w-5 text-muted-foreground" />
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            title={enabledTools.length > 0 ? `Tools enabled: ${enabledTools.join(', ')}` : "Add photos & files"}
+                            className={cn(
+                                "h-10 w-10 rounded-full border hover:bg-accent relative",
+                                enabledTools.length > 0
+                                    ? "border-blue-500 bg-blue-500/10"
+                                    : "border-border"
+                            )}
+                        >
+                            <Plus className={cn(
+                                "h-5 w-5",
+                                enabledTools.length > 0 ? "text-blue-500" : "text-muted-foreground"
+                            )} />
+                            {/* Badge indicator when tools are enabled */}
+                            {enabledTools.length > 0 && (
+                                <span className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 rounded-full flex items-center justify-center text-[10px] text-white font-medium">
+                                    {enabledTools.length}
+                                </span>
+                            )}
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" side="top" className="w-80 p-4">
@@ -1049,6 +1091,55 @@ export function ChatInput() {
                                 <p className="text-xs text-muted-foreground">Add audio files</p>
                             </div>
                         </DropdownMenuItem>
+
+                        {/* Tools Section */}
+                        <div className="border-t border-border my-3" />
+                        <div className="px-1">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-2">
+                                Tools
+                            </p>
+                            {/* Web Search Toggle */}
+                            <div className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-accent transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                        <Globe className="h-5 w-5 text-blue-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">Web Search</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {selectedModel?.supportsTools
+                                                ? "Search for current info"
+                                                : "Model doesn't support tools"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Switch
+                                    checked={enabledTools.includes('web_search')}
+                                    onCheckedChange={() => toggleTool('web_search')}
+                                    disabled={!selectedModel?.supportsTools}
+                                    aria-label="Toggle web search"
+                                />
+                            </div>
+                            {/* Auto-enable search preference */}
+                            <div className="flex items-center justify-between py-2 px-2 mt-1 rounded-md hover:bg-accent transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                        <Search className="h-5 w-5 text-purple-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">Auto Search</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Auto-enable for relevant queries
+                                        </p>
+                                    </div>
+                                </div>
+                                <Switch
+                                    checked={autoEnableSearch}
+                                    onCheckedChange={setAutoEnableSearch}
+                                    aria-label="Toggle auto search detection"
+                                />
+                            </div>
+                        </div>
                     </DropdownMenuContent>
                 </DropdownMenu>
 
