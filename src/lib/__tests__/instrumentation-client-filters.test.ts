@@ -555,6 +555,109 @@ describe('Client-side Sentry Error Filtering (instrumentation-client.ts)', () =>
     });
   });
 
+  describe('IndexedDB Error Filtering', () => {
+    it('should filter IndexedDB createObjectStore undefined errors', () => {
+      const event: Sentry.ErrorEvent = {
+        message: "undefined is not an object (evaluating 'i.result.createObjectStore')",
+      };
+      const hint: Sentry.EventHint = {
+        originalException: new Error("undefined is not an object (evaluating 'i.result.createObjectStore')"),
+      };
+
+      const result = sentryConfig.beforeSend(event, hint);
+      expect(result).toBeNull(); // Should be filtered
+    });
+
+    it('should filter IndexedDB transaction closing errors', () => {
+      const event: Sentry.ErrorEvent = {
+        exception: {
+          values: [{
+            type: 'InvalidStateError',
+            value: "Failed to execute 'transaction' on 'IDBDatabase': The database connection is closing.",
+          }],
+        },
+      };
+      const hint: Sentry.EventHint = {
+        originalException: new Error("Failed to execute 'transaction' on 'IDBDatabase': The database connection is closing."),
+      };
+
+      const result = sentryConfig.beforeSend(event, hint);
+      expect(result).toBeNull();
+    });
+
+    it('should filter IndexedDB transaction not found errors', () => {
+      const event: Sentry.ErrorEvent = {
+        message: "Failed to execute 'transaction' on 'IDBDatabase': One of the specified object stores was not found.",
+      };
+      const hint: Sentry.EventHint = {
+        originalException: new Error("Failed to execute 'transaction' on 'IDBDatabase': One of the specified object stores was not found."),
+      };
+
+      const result = sentryConfig.beforeSend(event, hint);
+      expect(result).toBeNull();
+    });
+
+    it('should filter generic IndexedDB undefined errors', () => {
+      const event: Sentry.ErrorEvent = {
+        message: "IndexedDB createObjectStore returned undefined",
+      };
+      const hint: Sentry.EventHint = {
+        originalException: new Error("IndexedDB createObjectStore returned undefined"),
+      };
+
+      const result = sentryConfig.beforeSend(event, hint);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('Build/Minification Error Filtering', () => {
+    it('should filter lexical declaration before initialization errors', () => {
+      const event: Sentry.ErrorEvent = {
+        message: "ReferenceError: can't access lexical declaration 'tH' before initialization",
+      };
+      const hint: Sentry.EventHint = {
+        originalException: new Error("can't access lexical declaration 'tH' before initialization"),
+      };
+
+      const result = sentryConfig.beforeSend(event, hint);
+      expect(result).toBeNull(); // Should be filtered
+    });
+
+    it('should filter "cannot access" before initialization errors', () => {
+      const event: Sentry.ErrorEvent = {
+        message: "ReferenceError: cannot access 'eR' before initialization",
+      };
+      const hint: Sentry.EventHint = {
+        originalException: new Error("cannot access 'eR' before initialization"),
+      };
+
+      const result = sentryConfig.beforeSend(event, hint);
+      expect(result).toBeNull();
+    });
+
+    it('should filter build errors from event message (not just hint)', () => {
+      const event: Sentry.ErrorEvent = {
+        message: "can't access lexical declaration 'xY' before initialization",
+      };
+      const hint: Sentry.EventHint = {};
+
+      const result = sentryConfig.beforeSend(event, hint);
+      expect(result).toBeNull();
+    });
+
+    it('should NOT filter legitimate ReferenceError (not build-related)', () => {
+      const event: Sentry.ErrorEvent = {
+        message: "ReferenceError: myVariable is not defined",
+      };
+      const hint: Sentry.EventHint = {
+        originalException: new ReferenceError("myVariable is not defined"),
+      };
+
+      const result = sentryConfig.beforeSend(event, hint);
+      expect(result).not.toBeNull(); // Should NOT be filtered
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle events with no message or exception', () => {
       const event: Sentry.ErrorEvent = {};

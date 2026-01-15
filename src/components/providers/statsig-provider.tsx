@@ -90,8 +90,17 @@ class StatsigErrorBoundary extends React.Component<
       error.message?.includes('CORS') ||
       error.message?.includes('blocked');
 
+    // Check if this is a DOM manipulation error (from Session Replay plugin)
+    const isDOMError =
+      error.message?.includes('removeChild') ||
+      error.message?.includes('insertBefore') ||
+      error.message?.includes('Node') ||
+      error.message?.includes('not a child');
+
     if (isNetworkError) {
       console.warn('[Statsig] Network/ad blocker error caught - analytics will be disabled:', error.message);
+    } else if (isDOMError) {
+      console.warn('[Statsig] DOM manipulation error caught (likely from session replay) - analytics will be disabled:', error.message);
     } else {
       console.error('[Statsig] Unexpected error in Statsig initialization:', error.message, errorInfo);
     }
