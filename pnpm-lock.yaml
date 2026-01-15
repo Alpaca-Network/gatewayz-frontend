@@ -31,7 +31,7 @@ importers:
         version: 3.10.2(@solana-program/system@0.10.0(@solana/kit@5.4.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)))(@solana-program/token@0.9.0(@solana/kit@5.4.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)))(@solana/kit@5.4.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(@solana/sysvars@5.4.0(typescript@5.9.3))(@tanstack/query-core@5.90.17)(@tanstack/react-query@5.90.17(react@18.3.1))(@types/react@18.3.27)(bufferutil@4.1.0)(ioredis@5.9.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@18.3.1))(utf-8-validate@5.0.10)(zod@3.25.76)
       '@privy-io/wagmi':
         specifier: ^2.0.0
-        version: 2.1.3(2sav4xmulyemdow6nk7w53fxs4)
+        version: 2.1.3(43351e15c7399453bb2e75106651f0c1)
       '@radix-ui/react-accordion':
         specifier: ^1.2.3
         version: 1.2.12(@types/react-dom@18.3.7(@types/react@18.3.27))(@types/react@18.3.27)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -12001,7 +12001,7 @@ snapshots:
 
   '@privy-io/urls@0.0.2': {}
 
-  '@privy-io/wagmi@2.1.3(2sav4xmulyemdow6nk7w53fxs4)':
+  '@privy-io/wagmi@2.1.3(43351e15c7399453bb2e75106651f0c1)':
     dependencies:
       '@privy-io/react-auth': 3.10.2(@solana-program/system@0.10.0(@solana/kit@5.4.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)))(@solana-program/token@0.9.0(@solana/kit@5.4.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)))(@solana/kit@5.4.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(@solana/sysvars@5.4.0(typescript@5.9.3))(@tanstack/query-core@5.90.17)(@tanstack/react-query@5.90.17(react@18.3.1))(@types/react@18.3.27)(bufferutil@4.1.0)(ioredis@5.9.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@18.3.1))(utf-8-validate@5.0.10)(zod@3.25.76)
       react: 18.3.1
