@@ -9,6 +9,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
+import { sentryMetrics } from '@/lib/sentry-metrics';
 
 // Stream stopped error for clean cancellation
 class StreamStoppedError extends Error {
@@ -391,6 +392,8 @@ export function useChatStream() {
             let chunkCount = 0;
             let totalContentLength = 0;
             let wasStopped = false;
+            const streamStartTime = Date.now();
+            let timeToFirstToken: number | null = null;
 
             debugLog('Starting stream loop', { url, apiKeyPrefix: apiKey.substring(0, 15) + '...' });
 
@@ -405,11 +408,14 @@ export function useChatStream() {
                 chunkCount++;
 
                 if (chunkCount === 1) {
+                    // Track time to first token
+                    timeToFirstToken = Date.now() - streamStartTime;
                     debugLog('First chunk received', {
                         hasContent: !!chunk.content,
                         hasReasoning: !!chunk.reasoning,
                         isDone: chunk.done,
-                        status: chunk.status
+                        status: chunk.status,
+                        timeToFirstTokenMs: timeToFirstToken
                     });
                 }
 
@@ -467,13 +473,51 @@ export function useChatStream() {
             const finalContent = streamHandlerRef.current.getFinalContent();
             const finalReasoning = streamHandlerRef.current.getFinalReasoning();
 
+            const streamDuration = Date.now() - streamStartTime;
+
             debugLog(wasStopped ? 'Stream stopped by user' : 'Stream completed successfully', {
                 totalChunks: chunkCount,
                 finalContentLength: finalContent.length,
                 hasReasoning: !!finalReasoning,
                 reasoningLength: finalReasoning?.length || 0,
-                wasStopped
+                wasStopped,
+                streamDurationMs: streamDuration,
+                timeToFirstTokenMs: timeToFirstToken
             });
+
+            // Track streaming metrics with Sentry
+            const provider = model.sourceGateway || 'unknown';
+            if (timeToFirstToken !== null) {
+                sentryMetrics.trackChatStreaming(
+                    model.value,
+                    provider,
+                    timeToFirstToken,
+                    streamDuration,
+                    chunkCount,
+                    {
+                        is_streaming: 'true',
+                        message_type: wasStopped ? 'stopped' : 'completed'
+                    }
+                );
+            }
+
+            // Estimate token count from content length (rough: ~4 chars per token)
+            // This is an approximation since we don't have exact token counts from streaming
+            const estimatedInputTokens = Math.ceil(JSON.stringify(apiMessages).length / 4);
+            const estimatedOutputTokens = Math.ceil(finalContent.length / 4);
+
+            sentryMetrics.trackChatCompletion(
+                model.value,
+                provider,
+                estimatedInputTokens,
+                estimatedOutputTokens,
+                streamDuration,
+                {
+                    is_streaming: 'true',
+                    has_tools: 'false',
+                    message_type: wasStopped ? 'stopped' : 'completed'
+                }
+            );
 
             // Save Assistant Message - for authenticated users OR guest sessions (negative IDs)
             // Guest messages are saved to localStorage, authenticated to backend
@@ -512,6 +556,17 @@ export function useChatStream() {
             console.error("Streaming failed", e);
             const errorMessage = e instanceof Error ? e.message : "Failed to complete response";
             setStreamError(errorMessage);
+
+            // Track chat error with Sentry
+            const provider = model.sourceGateway || 'unknown';
+            const errorType = e instanceof TypeError ? 'network' :
+                             e instanceof Error && e.message.includes('timeout') ? 'timeout' :
+                             e instanceof Error && e.message.includes('401') ? 'auth' :
+                             e instanceof Error && e.message.includes('429') ? 'rate_limit' :
+                             'stream_error';
+            sentryMetrics.trackChatError(model.value, provider, errorType, {
+                is_streaming: 'true'
+            });
 
             // Mark the assistant message as failed with error metadata, not appended to content
             flushSync(() => {

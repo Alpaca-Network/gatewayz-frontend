@@ -130,6 +130,67 @@ describe('Sentry Error Filters', () => {
       expect(shouldSuppressError(event)).toBe(true);
     });
 
+    it('should suppress DOM manipulation removeChild errors', () => {
+      const event: ErrorEvent = {
+        message: "Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.",
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress DOM manipulation insertBefore errors', () => {
+      const event: ErrorEvent = {
+        message: "Failed to execute 'insertBefore' on 'Node': The node before which the new node is to be inserted is not a child of this node.",
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress Statsig DOM manipulation errors', () => {
+      const event: ErrorEvent = {
+        message: 'Statsig initialization error: removeChild failed',
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress IndexedDB createObjectStore errors', () => {
+      const event: ErrorEvent = {
+        message: "undefined is not an object (evaluating 'i.result.createObjectStore')",
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress IndexedDB transaction closing errors', () => {
+      const event: ErrorEvent = {
+        exception: {
+          values: [{
+            value: "Failed to execute 'transaction' on 'IDBDatabase': The database connection is closing.",
+            type: 'InvalidStateError',
+          }],
+        },
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress IndexedDB transaction not found errors', () => {
+      const event: ErrorEvent = {
+        message: "Failed to execute 'transaction' on 'IDBDatabase': One of the specified object stores was not found.",
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress build/minification lexical declaration errors', () => {
+      const event: ErrorEvent = {
+        message: "ReferenceError: can't access lexical declaration 'tH' before initialization",
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
     it('should handle events with only exception values', () => {
       const event: ErrorEvent = {
         exception: {
@@ -432,6 +493,33 @@ describe('Sentry Error Filters', () => {
         pattern.test("Failed to read the 'localStorage' property from 'Window': Access is denied")
       );
       expect(hasLocalStorage).toBe(true);
+    });
+
+    it('should include DOM manipulation error patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      const hasRemoveChild = ignoreErrors.some(pattern =>
+        pattern.test("Failed to execute 'removeChild' on 'Node': The node to be removed is not a child of this node.")
+      );
+      expect(hasRemoveChild).toBe(true);
+    });
+
+    it('should include IndexedDB error patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      const hasIndexedDB = ignoreErrors.some(pattern =>
+        pattern.test("undefined is not an object (evaluating 'i.result.createObjectStore')")
+      );
+      expect(hasIndexedDB).toBe(true);
+    });
+
+    it('should include build error patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      const hasBuildError = ignoreErrors.some(pattern =>
+        pattern.test("ReferenceError: can't access lexical declaration 'tH' before initialization")
+      );
+      expect(hasBuildError).toBe(true);
     });
   });
 });
