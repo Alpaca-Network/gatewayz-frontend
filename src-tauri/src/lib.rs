@@ -188,9 +188,16 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
-    // Register Cmd/Ctrl+Shift+G to show/focus GatewayZ
-    // Use Shortcut::new() instead of parse() for reliable type inference
+    // Register platform-specific shortcuts to show/focus GatewayZ:
+    // - macOS: Cmd+G (Super+G)
+    // - Windows: Win+Shift+G (to avoid Xbox Game Bar conflict)
+    // - Linux: Super+G
+    #[cfg(target_os = "windows")]
     let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyG);
+
+    #[cfg(not(target_os = "windows"))]
+    let shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyG);
+
     app.global_shortcut().register(shortcut)?;
 
     log::info!("Global shortcuts registered");

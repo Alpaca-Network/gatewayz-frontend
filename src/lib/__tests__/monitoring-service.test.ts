@@ -1,5 +1,14 @@
 import { monitoringService } from '../monitoring-service';
 
+// Mock Sentry before importing monitoring-service
+jest.mock('@sentry/nextjs', () => ({
+  metrics: {
+    count: jest.fn(),
+    gauge: jest.fn(),
+    distribution: jest.fn(),
+  },
+}));
+
 // Mock global fetch
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
