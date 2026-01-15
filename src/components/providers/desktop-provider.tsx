@@ -11,6 +11,11 @@ import {
   useNavigateEvent,
 } from "@/lib/desktop";
 import { useRouter } from "next/navigation";
+import {
+  ShortcutInfoDialog,
+  hasShownShortcutInfo,
+  showShortcutInfoDialog,
+} from "@/components/dialogs/shortcut-info-dialog";
 
 interface DesktopProviderProps {
   children: ReactNode;
@@ -101,7 +106,24 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
     }
   }, [updateInfo, isTauri]);
 
-  return <>{children}</>;
+  // Show shortcut info dialog on first launch (desktop only)
+  useEffect(() => {
+    if (isTauri && !hasShownShortcutInfo()) {
+      // Show after a short delay to let the app settle
+      const timer = setTimeout(() => {
+        showShortcutInfoDialog();
+      }, 1500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [isTauri]);
+
+  return (
+    <>
+      {children}
+      {isTauri && <ShortcutInfoDialog />}
+    </>
+  );
 }
 
 /**

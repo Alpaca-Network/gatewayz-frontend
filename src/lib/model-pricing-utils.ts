@@ -8,16 +8,16 @@
  * Pricing Unit Normalization:
  * Different gateways return pricing in different units:
  * - Most gateways (OpenRouter, Groq, etc.): per-token (e.g., 0.00000015 = $0.00000015/token)
- * - OneRouter: per-million-tokens (e.g., 0.15 = $0.15/M tokens)
+ * - OneRouter: per-million-tokens (e.g., 0.15 = $0.15/MTok)
  *
  * The formatPricingForDisplay function normalizes all pricing to per-million-tokens for display.
  *
  * Pricing Unit Mismatch Detection:
  * When a gateway returns pricing in an unexpected format, we detect this using heuristics:
- * 1. If calculated per-million price exceeds a reasonable threshold (e.g., $1000/M),
+ * 1. If calculated per-million price exceeds a reasonable threshold (e.g., $1000/MTok),
  *    the gateway likely returns per-million instead of per-token
  * 2. We auto-correct by dividing by the appropriate factor
- * 3. Final prices are capped at MAX_PRICE_PER_MILLION ($100/M) as a safety net
+ * 3. Final prices are capped at MAX_PRICE_PER_MILLION ($100/MTok) as a safety net
  *
  * This approach prevents order-of-magnitude errors from reaching users while
  * allowing the system to gracefully handle unknown gateways.
@@ -35,8 +35,8 @@ export const MAX_PRICE_PER_MILLION = 100;
  * If calculated per-million price exceeds this, we assume the gateway
  * returns per-million (not per-token) and auto-correct.
  *
- * Set to $1000/M - no legitimate model costs more than this per million tokens.
- * GPT-4o is ~$15/M, Claude 3.5 Opus is ~$75/M, so $1000 provides headroom.
+ * Set to $1000/MTok - no legitimate model costs more than this per million tokens.
+ * GPT-4o is ~$15/MTok, Claude 3.5 Opus is ~$75/MTok, so $1000 provides headroom.
  */
 const PRICE_MISMATCH_THRESHOLD = 1000;
 
@@ -65,22 +65,30 @@ export interface ModelPricingInfo {
  * - If a model like GPT-4o-mini shows $0.15 in the API response, it's per-million
  * - If it shows $0.00000015, it's per-token
  *
- * Known per-million gateways:
- * - onerouter: Returns prices like 0.15 for $0.15/M
- * - google/google-vertex: Returns prices like 0.075 for $0.075/M
- * - helicone: Returns prices like 0.15 for $0.15/M
- * - vercel-ai-gateway: Returns prices like 0.15 for $0.15/M
- * - deepinfra: Returns prices like 0.35 for $0.35/M (from manual_pricing.json)
- * - featherless: Returns prices like 0.35 for $0.35/M (from manual_pricing.json)
- * - chutes: Returns prices like 0.02 for $0.02/M (from manual_pricing.json)
- * - together: Returns prices like 0.20 for $0.20/M
- * - near: Returns prices like 1.00 for $1.00/M (from manual_pricing.json)
- * - fireworks: Returns prices like 0.20 for $0.20/M
- * - groq: Returns prices like 0.05 for $0.05/M
- * - cerebras: Returns prices like 0.10 for $0.10/M
- * - novita: Returns prices like 0.12 for $0.12/M
- * - nebius: Returns prices like 0.20 for $0.20/M
- * - xai: Returns prices like 2.00 for $2.00/M
+ * Known per-million gateways (from manual_pricing.json and API responses):
+ * - onerouter: Returns prices like 0.15 for $0.15/MTok
+ * - google/google-vertex: Returns prices like 0.075 for $0.075/MTok
+ * - helicone: Returns prices like 0.15 for $0.15/MTok
+ * - vercel-ai-gateway: Returns prices like 0.15 for $0.15/MTok
+ * - deepinfra: Returns prices like 0.35 for $0.35/MTok
+ * - featherless: Returns prices like 0.35 for $0.35/MTok
+ * - chutes: Returns prices like 0.02 for $0.02/MTok
+ * - together: Returns prices like 0.20 for $0.20/MTok
+ * - near: Returns prices like 1.00 for $1.00/MTok
+ * - fireworks: Returns prices like 0.20 for $0.20/MTok
+ * - groq: Returns prices like 0.05 for $0.05/MTok
+ * - cerebras: Returns prices like 0.10 for $0.10/MTok
+ * - novita: Returns prices like 0.12 for $0.12/MTok
+ * - nebius: Returns prices like 0.20 for $0.20/MTok
+ * - xai: Returns prices like 2.00 for $2.00/MTok
+ * - alibaba/alibaba-cloud: Returns prices like 0.005 for $0.005/MTok
+ * - clarifai: Returns prices like 3.00 for $3.00/MTok
+ * - simplismart: Returns prices like 0.74 for $0.74/MTok
+ * - akash: Returns prices like 0.13 for $0.13/MTok
+ * - cloudflare-workers-ai: Returns prices like 0.66 for $0.66/MTok
+ * - openai: Returns prices like 2.50 for $2.50/MTok
+ * - anthropic: Returns prices like 3.00 for $3.00/MTok
+ * - alpaca-network: Returns prices like 0.27 for $0.27/MTok
  */
 const PER_MILLION_PRICING_GATEWAYS = [
   'onerouter',
@@ -99,12 +107,21 @@ const PER_MILLION_PRICING_GATEWAYS = [
   'novita',
   'nebius',
   'xai',
+  'alibaba',
+  'alibaba-cloud',
+  'clarifai',
+  'simplismart',
+  'akash',
+  'cloudflare-workers-ai',
+  'openai',
+  'anthropic',
+  'alpaca-network',
 ];
 
 /**
  * Gateways that return pricing in per-billion-tokens format.
  * These prices need to be divided by 1,000 to convert to per-million for display.
- * Example: aihubmix returns 150.0 for GPT-4o mini which should display as $0.15/M
+ * Example: aihubmix returns 150.0 for GPT-4o mini which should display as $0.15/MTok
  */
 const PER_BILLION_PRICING_GATEWAYS = ['aihubmix'];
 
@@ -173,9 +190,9 @@ export function getModelPricingCategory(model: ModelPricingInfo): 'Free' | 'Paid
  *
  * Detection Logic:
  * 1. Apply known gateway format (per-token, per-million, per-billion)
- * 2. If result exceeds PRICE_MISMATCH_THRESHOLD ($1000/M), assume the gateway
+ * 2. If result exceeds PRICE_MISMATCH_THRESHOLD ($1000/MTok), assume the gateway
  *    returns per-million instead of per-token and auto-correct
- * 3. Cap final result at MAX_PRICE_PER_MILLION ($100/M)
+ * 3. Cap final result at MAX_PRICE_PER_MILLION ($100/MTok)
  *
  * @param numPrice - Numeric price value from the API
  * @param sourceGateway - Gateway the model comes from
@@ -203,7 +220,7 @@ function normalizeToPerMillion(numPrice: number, sourceGateway: string): number 
       warnedGateways.add(sourceGateway);
       console.warn(
         `[model-pricing-utils] Detected pricing unit mismatch for gateway "${sourceGateway}". ` +
-        `Price ${numPrice} converted to $${perMillionPrice.toFixed(2)}/M which exceeds threshold. ` +
+        `Price ${numPrice} converted to $${perMillionPrice.toFixed(2)}/MTok which exceeds threshold. ` +
         `Consider adding "${sourceGateway}" to PER_MILLION_PRICING_GATEWAYS if it returns per-million prices.`
       );
     }
@@ -229,9 +246,9 @@ function normalizeToPerMillion(numPrice: number, sourceGateway: string): number 
  *   → divide by 1,000 to get per-million
  *
  * Automatic Mismatch Detection:
- * If the calculated price exceeds $1000/M, we assume the gateway returns
+ * If the calculated price exceeds $1000/MTok, we assume the gateway returns
  * per-million instead of per-token and log a warning. Final prices are
- * always capped at MAX_PRICE_PER_MILLION ($100/M) as a safety net.
+ * always capped at MAX_PRICE_PER_MILLION ($100/MTok) as a safety net.
  *
  * @param price - Price string from the API
  * @param sourceGateway - Gateway the model comes from
@@ -251,8 +268,8 @@ export function formatPricingForDisplay(price: string | undefined, sourceGateway
  * Returns price in per-token format regardless of gateway pricing convention.
  *
  * Uses the same normalization logic as formatPricingForDisplay to ensure
- * consistent behavior between display and filtering. A model showing $X/M
- * will be filtered/sorted using the same $X/M value.
+ * consistent behavior between display and filtering. A model showing $X/MTok
+ * will be filtered/sorted using the same $X/MTok value.
  *
  * @param price - Price string from the API
  * @param sourceGateway - Gateway the model comes from

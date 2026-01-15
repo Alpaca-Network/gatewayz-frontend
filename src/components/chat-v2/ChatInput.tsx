@@ -147,24 +147,51 @@ const normalizeWord = (word: string): string =>
 const getWords = (text: string): string[] =>
   text.trim().split(/\s+/).filter(w => w.length > 0);
 
-// Finds the overlap between the suffix of accumulated words and prefix of new words
-// Returns the number of overlapping words to skip
-const findOverlappingPrefixLength = (
+// Finds the LAST occurrence of accumulated content within the new transcript
+// This handles cases where the API returns duplicated content like "hello world hello world doing"
+// Returns the index in newWords where genuinely new content begins, or -1 if no match found
+const findAccumulatedEndIndex = (
   accumulatedWords: string[],
   newWords: string[]
 ): number => {
-  // Cap search at 10 words for performance
-  const maxLen = Math.min(accumulatedWords.length, newWords.length, 10);
+  if (accumulatedWords.length === 0) return 0;
+  if (newWords.length < accumulatedWords.length) return -1;
 
-  for (let len = maxLen; len > 0; len--) {
-    const suffix = accumulatedWords.slice(-len).map(normalizeWord);
-    const prefix = newWords.slice(0, len).map(normalizeWord);
+  // Search for the LAST occurrence of accumulated content in newWords
+  // This handles the case where API sends "hello world hello world doing"
+  // We want to find the LAST "hello world" and append only "doing"
+  let lastMatchEndIndex = -1;
 
-    if (suffix.every((word, i) => word === prefix[i])) {
-      return len;
+  for (let startIdx = 0; startIdx <= newWords.length - accumulatedWords.length; startIdx++) {
+    const slice = newWords.slice(startIdx, startIdx + accumulatedWords.length);
+    const matches = slice.every((w, i) =>
+      normalizeWord(w) === normalizeWord(accumulatedWords[i])
+    );
+    if (matches) {
+      // Found a match - record where it ends
+      lastMatchEndIndex = startIdx + accumulatedWords.length;
+      // Continue searching for later occurrences
     }
   }
-  return 0;
+
+  if (lastMatchEndIndex >= 0) {
+    return lastMatchEndIndex;
+  }
+
+  // No exact match found - check for partial overlap where suffix of accumulated
+  // matches prefix of new (e.g., accumulated: "hello world", new: "world how are you")
+  const maxOverlapCheck = Math.min(accumulatedWords.length, newWords.length, 10);
+
+  for (let overlapLen = maxOverlapCheck; overlapLen > 0; overlapLen--) {
+    const accSuffix = accumulatedWords.slice(-overlapLen).map(normalizeWord);
+    const newPrefix = newWords.slice(0, overlapLen).map(normalizeWord);
+
+    if (accSuffix.every((word, i) => word === newPrefix[i])) {
+      return overlapLen;
+    }
+  }
+
+  return -1;
 };
 
 export function ChatInput() {
@@ -656,7 +683,11 @@ export function ChatInput() {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
+    // Language setting - could be made configurable via user preferences
     recognition.lang = 'en-US';
+    // Request multiple alternatives to improve accuracy
+    // The browser may return up to this many alternatives for each result
+    recognition.maxAlternatives = 3;
 
     // Track this recognition instance to prevent stale handlers from corrupting state
     currentRecognitionRef.current = recognition;
@@ -714,19 +745,20 @@ export function ChatInput() {
         // First transcript - add all words
         wordsToAppend = newWords;
       } else {
-        // Find overlapping words at the boundary (suffix of accumulated = prefix of new)
-        const overlapLen = findOverlappingPrefixLength(accWords, newWords);
+        // Find where accumulated content ends within the new transcript
+        // This handles:
+        // 1. Accumulated is prefix of new: "hello" -> "hello world"
+        // 2. Duplicated content: "hello world" -> "hello world hello world doing"
+        // 3. Suffix overlap: "hello world" -> "world how are you"
+        const newContentStartIndex = findAccumulatedEndIndex(accWords, newWords);
 
-        if (overlapLen > 0) {
-          // Skip overlapping words, only take genuinely new words
-          wordsToAppend = newWords.slice(overlapLen);
-        } else if (newWords.length > accWords.length) {
-          // No word overlap found, but new is longer - use word-based extraction
-          // This handles cases where whitespace differs between accumulated and new
-          wordsToAppend = newWords.slice(accWords.length);
+        if (newContentStartIndex >= 0) {
+          // Found where new content begins - take everything after that point
+          wordsToAppend = newWords.slice(newContentStartIndex);
         } else {
-          // No overlap and new is not longer - possible API glitch or re-send
-          // Don't update state to preserve continuity and avoid corruption
+          // No overlap found at all - the new transcript is completely unrelated
+          // or shorter than what we have. Ignore to preserve existing content
+          // and avoid random duplicates.
           return;
         }
       }
