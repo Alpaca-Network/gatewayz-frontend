@@ -106,7 +106,8 @@ async function fetchWithOptionalAuth<T>(
     const response = await fetch(url, { headers });
     const durationMs = Date.now() - startTime;
 
-    // Track API request metrics
+    // Track API request metrics for all responses (success and HTTP errors)
+    // This is the single point of tracking for completed HTTP requests
     sentryMetrics.trackApiRequest(url, 'GET', durationMs, response.status);
 
     // Handle 429 - Rate limit with retry
@@ -194,11 +195,19 @@ async function fetchWithOptionalAuth<T>(
 
     return await response.json();
   } catch (error) {
-    // Track network/fetch errors
-    const durationMs = Date.now() - startTime;
-    const errorType = error instanceof TypeError ? 'network' : 'unknown';
-    sentryMetrics.trackApiError(url, errorType);
-    sentryMetrics.trackApiRequest(url, 'GET', durationMs, 0, { error_type: errorType });
+    // Only track errors here for actual network/fetch failures (not HTTP error responses)
+    // HTTP error responses (4xx, 5xx) are already tracked at line 110 with the real status code
+    // This catch block handles: network failures, DNS errors, connection timeouts, JSON parse errors, etc.
+    const isNetworkError = error instanceof TypeError;
+    const isJsonParseError = error instanceof SyntaxError;
+
+    // Only track if this is a true network/parsing failure (not an error thrown from HTTP status handling)
+    if (isNetworkError || isJsonParseError) {
+      const durationMs = Date.now() - startTime;
+      const errorType = isNetworkError ? 'network' : 'json_parse';
+      sentryMetrics.trackApiError(url, errorType);
+      sentryMetrics.trackApiRequest(url, 'GET', durationMs, 0, { error_type: errorType });
+    }
 
     // Network errors, JSON parse errors, etc.
     if (error instanceof Error) {
