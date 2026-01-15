@@ -1,10 +1,19 @@
 /**
  * Sentry error filtering configuration
  *
- * This module provides comprehensive error filtering for Sentry to reduce noise
- * from third-party errors, browser extension conflicts, and known non-blocking issues.
+ * This module provides centralized error pattern definitions for Sentry filtering.
+ * These patterns are:
+ * 1. Used as a reference/specification for what errors should be filtered
+ * 2. Tested comprehensively in sentry-error-filters.test.ts
+ * 3. Can be imported and used in custom beforeSend handlers if needed
  *
- * Usage: Import and apply filters in instrumentation-client.ts and sentry.server.config.ts
+ * NOTE: The actual runtime filtering is done INLINE in instrumentation-client.ts
+ * (see shouldFilterEvent function) for two reasons:
+ * - Better performance (no extra module import during error handling)
+ * - Direct integration with Sentry SDK initialization
+ *
+ * The patterns here mirror those in instrumentation-client.ts and serve as
+ * documentation and a testable specification of our error filtering rules.
  */
 
 import type * as Sentry from '@sentry/nextjs';
