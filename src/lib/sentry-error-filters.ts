@@ -240,7 +240,10 @@ export function getIgnoreErrors(): RegExp[] {
     ...SUPPRESSED_ERROR_PATTERNS.walletExtensions,
     ...SUPPRESSED_ERROR_PATTERNS.hydration,
     ...SUPPRESSED_ERROR_PATTERNS.thirdParty,
+    ...SUPPRESSED_ERROR_PATTERNS.domManipulation,
+    ...SUPPRESSED_ERROR_PATTERNS.indexedDB,
     ...SUPPRESSED_ERROR_PATTERNS.rateLimiting,
     ...SUPPRESSED_ERROR_PATTERNS.storageAccess,
+    ...SUPPRESSED_ERROR_PATTERNS.buildErrors,
   ];
 }
