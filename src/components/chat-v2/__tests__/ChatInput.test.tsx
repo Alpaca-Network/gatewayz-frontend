@@ -72,6 +72,12 @@ jest.mock('@/lib/store/chat-ui-store', () => {
     inputValue: mockStoreState.inputValue,
     setInputValue: mockSetInputValue,
     setMessageStartTime: mockSetMessageStartTime,
+    // Tools state
+    enabledTools: [],
+    autoEnableSearch: false,
+    setEnabledTools: jest.fn(),
+    toggleTool: jest.fn(),
+    setAutoEnableSearch: jest.fn(),
   });
 
   // Add getState method to the function
@@ -107,6 +113,24 @@ jest.mock('@/lib/hooks/use-auto-model-switch', () => ({
     checkFileSupport: jest.fn(() => false),
     checkAndSwitchModel: jest.fn(() => false),
     modelSupportsModality: jest.fn(() => true),
+  }),
+}));
+
+// Mock tool definitions hook
+jest.mock('@/lib/hooks/use-tool-definitions', () => ({
+  useToolDefinitions: () => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+  }),
+  filterEnabledTools: () => [],
+}));
+
+// Mock auto search detection hook
+jest.mock('@/lib/hooks/use-auto-search-detection', () => ({
+  useAutoSearchDetection: () => ({
+    shouldAutoEnableSearch: jest.fn(() => false),
+    getAutoEnableReason: jest.fn(() => null),
   }),
 }));
 
