@@ -14,6 +14,8 @@ jest.mock('lucide-react', () => ({
   Paperclip: () => <span data-testid="paperclip-icon">Paperclip</span>,
   Square: () => <span data-testid="square-icon">Square</span>,
   Camera: () => <span data-testid="camera-icon">Camera</span>,
+  Globe: () => <span data-testid="globe-icon">Globe</span>,
+  Search: () => <span data-testid="search-icon">Search</span>,
 }));
 
 // Mock the UI components
@@ -167,6 +169,20 @@ jest.mock('@/lib/guest-chat', () => ({
   hasReachedGuestLimit: jest.fn(() => false),
   getRemainingGuestMessages: jest.fn(() => 10),
   getGuestMessageLimit: jest.fn(() => 10),
+}));
+
+// Mock Switch component
+jest.mock('@/components/ui/switch', () => ({
+  Switch: ({ checked, onCheckedChange, disabled, ...props }: any) => (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => onCheckedChange?.(e.target.checked)}
+      disabled={disabled}
+      data-testid="switch"
+      {...props}
+    />
+  ),
 }));
 
 // Mock Alert component
