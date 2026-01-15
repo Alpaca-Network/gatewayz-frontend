@@ -192,8 +192,9 @@ describe('useAutoSearchDetection', () => {
     it('should return reason for pattern match', () => {
       const { result } = renderHook(() => useAutoSearchDetection());
 
+      // Use a query that matches pattern but doesn't contain keywords
       const reason = result.current.getAutoEnableReason(
-        "What's the current temperature outside?"
+        'Who won the game last night?'
       );
 
       expect(reason).toBe('Query appears to need current information');

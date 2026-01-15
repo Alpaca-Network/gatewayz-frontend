@@ -90,28 +90,36 @@ describe('useToolDefinitions', () => {
     });
 
     it('should handle fetch error', async () => {
-      mockFetch.mockResolvedValueOnce({
+      // Mock multiple failures for retry
+      mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
       });
 
       const { result } = renderHook(() => useToolDefinitions(), { wrapper });
 
-      await waitFor(() => {
-        expect(result.current.isError).toBe(true);
-      });
+      await waitFor(
+        () => {
+          expect(result.current.isError).toBe(true);
+        },
+        { timeout: 5000 }
+      );
 
       expect(result.current.error).toBeDefined();
     });
 
     it('should handle network error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      // Mock multiple failures for retry
+      mockFetch.mockRejectedValue(new Error('Network error'));
 
       const { result } = renderHook(() => useToolDefinitions(), { wrapper });
 
-      await waitFor(() => {
-        expect(result.current.isError).toBe(true);
-      });
+      await waitFor(
+        () => {
+          expect(result.current.isError).toBe(true);
+        },
+        { timeout: 5000 }
+      );
 
       expect(result.current.error).toBeInstanceOf(Error);
     });
