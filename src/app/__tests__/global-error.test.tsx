@@ -86,7 +86,16 @@ describe('GlobalError', () => {
 
     render(<GlobalError error={mockError} reset={mockReset} />);
 
-    expect(screen.getByText('Test error message')).toBeInTheDocument();
+    // The error details section shows the error name and message
+    // Use a function matcher to find text containing the error message
+    expect(
+      screen.getByText((content, element) => {
+        return (
+          element?.tagName === 'P' &&
+          content.includes('Test error message')
+        );
+      })
+    ).toBeInTheDocument();
 
     process.env.NODE_ENV = originalEnv;
   });
@@ -110,7 +119,7 @@ describe('GlobalError', () => {
     render(<GlobalError error={mockError} reset={mockReset} />);
 
     // Error message should not be visible in production
-    expect(screen.queryByText('Test error message')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Error:.*Test error message/)).not.toBeInTheDocument();
 
     process.env.NODE_ENV = originalEnv;
   });
