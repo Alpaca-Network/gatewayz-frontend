@@ -12,12 +12,38 @@ use tauri::{
 mod commands;
 pub use commands::*;
 
+/// Simple timestamp for logging (avoids adding chrono dependency)
+#[cfg(all(target_os = "windows", not(debug_assertions)))]
+fn chrono_lite() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("{}", secs)
+}
+
 /// Initialize and run the Tauri application
 ///
 /// This function sets up all plugins, system tray, global shortcuts,
 /// and IPC command handlers for the desktop application.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logging - on Windows release builds, logs go to a file
+    // since there's no console window
+    #[cfg(all(target_os = "windows", not(debug_assertions)))]
+    {
+        use std::io::Write;
+        // Try to create a log file for debugging Windows launch issues
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(std::env::temp_dir().join("gatewayz-desktop.log"))
+        {
+            let _ = writeln!(file, "[{}] GatewayZ Desktop starting...", chrono_lite());
+        }
+    }
+
     env_logger::init();
 
     let builder = tauri::Builder::default();
@@ -97,7 +123,21 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running GatewayZ Desktop");
+        .unwrap_or_else(|e| {
+            // Log error to file on Windows since there's no console
+            #[cfg(all(target_os = "windows", not(debug_assertions)))]
+            {
+                use std::io::Write;
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(std::env::temp_dir().join("gatewayz-desktop.log"))
+                {
+                    let _ = writeln!(file, "[{}] FATAL: {}", chrono_lite(), e);
+                }
+            }
+            panic!("error while running GatewayZ Desktop: {}", e);
+        });
 }
 
 /// Set up the system tray icon and menu
@@ -129,8 +169,14 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         ],
     )?;
 
+    // Get the default icon, with fallback handling for Windows
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .ok_or("Failed to get default window icon")?;
+
     let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(icon)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
