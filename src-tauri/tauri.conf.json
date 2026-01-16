@@ -96,9 +96,6 @@
     "shell": {
       "open": true
     },
-    "notification": {
-      "all": true
-    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc5MUIyNUM4NkE1NUJFMzQKUldRMHZsVnF5Q1ViZWROUW5oNEQ2MG4ycWFZelVkKy8zUzBFSFNwWmZ6NjRncE9MV2hsVDNJZUUK",
       "endpoints": [
