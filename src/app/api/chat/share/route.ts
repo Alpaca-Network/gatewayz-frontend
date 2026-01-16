@@ -57,11 +57,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Construct base URL with proper protocol
-    // Always use the production URL for share links to ensure they work correctly
-    // Fall back to NEXT_PUBLIC_APP_URL or localhost for development
-    const baseUrl = process.env.NEXT_PUBLIC_SHARE_BASE_URL ||
-                    process.env.NEXT_PUBLIC_APP_URL ||
-                    (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://beta.gatewayz.ai');
+    // Priority: NEXT_PUBLIC_SHARE_BASE_URL > NEXT_PUBLIC_APP_URL > default
+    // For staging/other environments, set NEXT_PUBLIC_SHARE_BASE_URL or NEXT_PUBLIC_APP_URL
+    let baseUrl: string;
+    if (process.env.NEXT_PUBLIC_SHARE_BASE_URL) {
+      baseUrl = process.env.NEXT_PUBLIC_SHARE_BASE_URL;
+    } else if (process.env.NEXT_PUBLIC_APP_URL) {
+      baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    } else if (process.env.NODE_ENV === 'development') {
+      baseUrl = 'http://localhost:3000';
+    } else {
+      // Default to production URL - set NEXT_PUBLIC_SHARE_BASE_URL for other environments
+      baseUrl = 'https://beta.gatewayz.ai';
+      console.warn('Share link using default base URL. Set NEXT_PUBLIC_SHARE_BASE_URL for custom environments.');
+    }
     const absoluteShareUrl = `${baseUrl}/share/${data.share_token}`;
 
     return NextResponse.json({
