@@ -13,14 +13,19 @@ const SEARCH_KEYWORDS = [
   // Time-sensitive
   'latest', 'current', 'today', 'now', 'recent', 'new', 'just',
   'this week', 'this month', 'this year', 'yesterday', 'tomorrow',
+  'right now', 'currently', 'at the moment', 'these days',
   // News and events
   'news', 'update', 'breaking', 'happening', 'announced', 'released',
+  'headline', 'report', 'coverage',
   // Live data
   'price', 'stock', 'weather', 'forecast', 'score', 'results',
-  'live', 'trending', 'popular', 'viral',
+  'live', 'trending', 'popular', 'viral', 'rate', 'exchange',
   // Questions about current state
   'who won', 'what happened', 'who is', 'where is', 'how much',
-  'is it', 'are there', 'did it', 'has it',
+  'is it', 'are there', 'did it', 'has it', 'what is happening',
+  // Explicit search requests
+  'search for', 'look up', 'find out', 'google', 'search the web',
+  'search online', 'web search', 'find information',
   // Years (recent)
   '2024', '2025', '2026', '2027',
 ];
@@ -61,7 +66,7 @@ export function useAutoSearchDetection() {
    * Determines if web search should be auto-enabled based on the input
    *
    * @param input - The user's message/query
-   * @param model - The selected model (to check tool support)
+   * @param model - The selected model (no longer required for tool support check)
    * @param autoEnableSearch - User's preference for auto-detection
    * @returns boolean indicating if search should be auto-enabled
    */
@@ -75,10 +80,8 @@ export function useAutoSearchDetection() {
       return false;
     }
 
-    // Model must support tools
-    if (!model?.supportsTools) {
-      return false;
-    }
+    // No longer check for tool support - we support search augmentation for all models
+    // Models with tool support use native tool calling, others use search augmentation
 
     // Skip very short queries (likely incomplete)
     if (input.length < 10) {

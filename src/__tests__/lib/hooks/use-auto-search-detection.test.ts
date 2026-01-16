@@ -39,7 +39,7 @@ describe('useAutoSearchDetection', () => {
       expect(shouldEnable).toBe(false);
     });
 
-    it('should return false when model does not support tools', () => {
+    it('should return true for search query even when model does not support tools (uses search augmentation)', () => {
       const { result } = renderHook(() => useAutoSearchDetection());
 
       const shouldEnable = result.current.shouldAutoEnableSearch(
@@ -48,10 +48,11 @@ describe('useAutoSearchDetection', () => {
         true
       );
 
-      expect(shouldEnable).toBe(false);
+      // Now returns true because search augmentation works for all models
+      expect(shouldEnable).toBe(true);
     });
 
-    it('should return false when model is null', () => {
+    it('should return true for search query even when model is null (uses search augmentation)', () => {
       const { result } = renderHook(() => useAutoSearchDetection());
 
       const shouldEnable = result.current.shouldAutoEnableSearch(
@@ -60,7 +61,8 @@ describe('useAutoSearchDetection', () => {
         true
       );
 
-      expect(shouldEnable).toBe(false);
+      // Now returns true because search augmentation works for all models
+      expect(shouldEnable).toBe(true);
     });
 
     it('should return false for very short queries', () => {
