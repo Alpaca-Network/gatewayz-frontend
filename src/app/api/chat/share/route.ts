@@ -57,9 +57,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Construct base URL with proper protocol
-    // VERCEL_URL doesn't include protocol, so we need to add it
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
-                    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    // Always use the production URL for share links to ensure they work correctly
+    // Fall back to NEXT_PUBLIC_APP_URL or localhost for development
+    const baseUrl = process.env.NEXT_PUBLIC_SHARE_BASE_URL ||
+                    process.env.NEXT_PUBLIC_APP_URL ||
+                    (process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : 'https://beta.gatewayz.ai');
     const absoluteShareUrl = `${baseUrl}/share/${data.share_token}`;
 
     return NextResponse.json({
