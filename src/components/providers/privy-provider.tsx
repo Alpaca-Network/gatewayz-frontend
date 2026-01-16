@@ -16,7 +16,7 @@ import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
 import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
 import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
 import { isIndexedDBError } from "@/lib/indexeddb-check";
-import { shouldDisableEmbeddedWallets } from "@/lib/browser-detection";
+import { shouldDisableEmbeddedWallets, isTauriDesktop } from "@/lib/browser-detection";
 
 interface PrivyProviderWrapperProps {
   children: ReactNode;
@@ -503,6 +503,43 @@ const PrivyProviderNoSSR = dynamic<PrivyProviderWrapperInnerProps>(
   { ssr: false }
 );
 
+/**
+ * Desktop-only provider that bypasses Privy entirely.
+ *
+ * Tauri desktop apps use tauri.localhost which is HTTP, not HTTPS.
+ * The Privy SDK checks for HTTPS during initialization and throws
+ * "Embedded wallet is only available over HTTPS" before any config
+ * is applied. This provider skips Privy entirely and provides a
+ * minimal auth context for desktop that uses stored credentials.
+ *
+ * Desktop auth flow:
+ * 1. User clicks login -> opens browser to gatewayz.ai/login
+ * 2. After login, browser redirects with deep link gatewayz://auth/callback?token=xxx
+ * 3. Desktop app receives token via deep link handler in desktop-provider.tsx
+ * 4. Token is stored in Tauri secure store and used for API calls
+ */
+function DesktopAuthProvider({ children, storageStatus }: PrivyProviderWrapperInnerProps) {
+  useEffect(() => {
+    console.info("[Auth] Running in Tauri desktop mode - Privy SDK bypassed");
+  }, []);
+
+  // For desktop, we provide a minimal wrapper that just passes through children
+  // The actual auth is handled by:
+  // 1. Tauri secure store for token storage (src-tauri/src/commands.rs)
+  // 2. Desktop deep link handler for OAuth callbacks (desktop-provider.tsx)
+  // 3. Direct API calls with stored token
+  return (
+    <StorageStatusContext.Provider value={storageStatus}>
+      {children}
+    </StorageStatusContext.Provider>
+  );
+}
+
+const DesktopAuthProviderNoSSR = dynamic<PrivyProviderWrapperInnerProps>(
+  () => Promise.resolve(DesktopAuthProvider),
+  { ssr: false }
+);
+
 function StorageDisabledNotice() {
   return (
     <div className="flex min-h-[60vh] w-full flex-col items-center justify-center gap-4 px-6 text-center">
@@ -521,8 +558,13 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
   // Always start with "checking" during SSR to ensure consistent hydration
   // This prevents server/client mismatch since canUseLocalStorage() returns false on server
   const [status, setStatus] = useState<StorageStatus>("checking");
+  const [isTauri, setIsTauri] = useState(false);
 
   useEffect(() => {
+    // Check if we're running in Tauri desktop
+    // This must be done client-side as __TAURI__ is injected by Tauri
+    setIsTauri(isTauriDesktop());
+
     // Check localStorage availability after mount (client-side only)
     if (canUseLocalStorage()) {
       setStatus("ready");
@@ -541,12 +583,18 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
     };
   }, []);
 
+  // For Tauri desktop, use the desktop-specific provider that bypasses Privy
+  // This avoids the "Embedded wallet is only available over HTTPS" error
+  if (isTauri) {
+    return <DesktopAuthProviderNoSSR {...props} storageStatus={status} />;
+  }
+
   // Always render the provider to ensure the context chain is never broken.
   // This fixes the "Invalid hook call" error that occurred when hooks like usePrivy
   // were called while the provider was conditionally unmounted during "checking" state.
   // The storageStatus prop allows child components to know the current state and
   // render appropriate loading/blocked UI as needed.
-  
+
   // When storage is blocked, show the notice instead of children
   if (status === "blocked") {
     return (
