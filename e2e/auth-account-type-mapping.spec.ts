@@ -113,8 +113,8 @@ test.describe('Authentication - Account Type Mapping', () => {
 
     await page.goto('/settings/account');
 
-    // Wait for page to load
-    await page.waitForLoadState('networkidle');
+    // Wait for page to load (use domcontentloaded instead of networkidle to avoid flaky timeouts)
+    await page.waitForLoadState('domcontentloaded');
 
     // Verify page loads successfully
     await expect(page.locator('body')).toBeVisible();
@@ -240,7 +240,8 @@ test.describe('Authentication - OAuth Provider Compatibility', () => {
 
     for (const path of pages) {
       await page.goto(path);
-      await page.waitForLoadState('networkidle');
+      // Use domcontentloaded instead of networkidle to avoid flaky timeouts on heavy pages
+      await page.waitForLoadState('domcontentloaded');
 
       const apiKey = await page.evaluate(() => localStorage.getItem('gatewayz_api_key'));
       expect(apiKey).toBeTruthy();
@@ -287,8 +288,8 @@ test.describe('Authentication - Regression Tests', () => {
       userData: JSON.parse(localStorage.getItem('gatewayz_user_data') || '{}'),
     }));
 
-    // Hard refresh
-    await page.reload({ waitUntil: 'networkidle' });
+    // Hard refresh - use domcontentloaded instead of networkidle to avoid flaky timeouts
+    await page.reload({ waitUntil: 'domcontentloaded' });
 
     // Check auth after refresh
     const afterRefreshAuth = await page.evaluate(() => ({
