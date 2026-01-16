@@ -69,6 +69,7 @@ jest.mock('@sentry/nextjs', () => ({
 const mockCanUseLocalStorage = jest.fn(() => true);
 const mockWaitForLocalStorageAccess = jest.fn(() => Promise.resolve(true));
 const mockShouldDisableEmbeddedWallets = jest.fn(() => false);
+const mockIsTauriDesktop = jest.fn(() => false);
 
 jest.mock('@/lib/safe-storage', () => ({
   canUseLocalStorage: () => mockCanUseLocalStorage(),
@@ -77,6 +78,7 @@ jest.mock('@/lib/safe-storage', () => ({
 
 jest.mock('@/lib/browser-detection', () => ({
   shouldDisableEmbeddedWallets: () => mockShouldDisableEmbeddedWallets(),
+  isTauriDesktop: () => mockIsTauriDesktop(),
 }));
 
 describe('PrivyProviderWrapper', () => {
@@ -89,6 +91,7 @@ describe('PrivyProviderWrapper', () => {
     mockCanUseLocalStorage.mockReturnValue(true);
     mockWaitForLocalStorageAccess.mockResolvedValue(true);
     mockShouldDisableEmbeddedWallets.mockReturnValue(false);
+    mockIsTauriDesktop.mockReturnValue(false);
     mockIsVercelPreviewDeployment.mockReturnValue(false);
     mockUsePathname.mockReturnValue('/');
     mockUseSearchParams.mockReturnValue({
@@ -253,6 +256,47 @@ describe('PrivyProviderWrapper', () => {
         );
 
         consoleSpy.mockRestore();
+      });
+    });
+
+    describe('Tauri Desktop Mode', () => {
+      it('should bypass Privy SDK entirely when running in Tauri desktop', () => {
+        process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+        mockIsTauriDesktop.mockReturnValue(true);
+        const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+        render(
+          <PrivyProviderWrapper>
+            <div>Test Child</div>
+          </PrivyProviderWrapper>
+        );
+
+        // Should NOT render the Privy provider
+        expect(screen.queryByTestId('privy-provider')).not.toBeInTheDocument();
+
+        // Should log that we're in desktop mode
+        expect(consoleSpy).toHaveBeenCalledWith(
+          "[Auth] Running in Tauri desktop mode - Privy SDK bypassed"
+        );
+
+        // Should still render children
+        expect(screen.getByText('Test Child')).toBeInTheDocument();
+
+        consoleSpy.mockRestore();
+      });
+
+      it('should render Privy provider when not in Tauri desktop', () => {
+        process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+        mockIsTauriDesktop.mockReturnValue(false);
+
+        render(
+          <PrivyProviderWrapper>
+            <div>Test Child</div>
+          </PrivyProviderWrapper>
+        );
+
+        // Should render the Privy provider
+        expect(screen.getByTestId('privy-provider')).toBeInTheDocument();
       });
     });
 
