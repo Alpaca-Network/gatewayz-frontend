@@ -40,7 +40,7 @@ interface SpeechRecognition extends EventTarget {
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera, Globe, Search } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera, Globe, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -54,6 +54,7 @@ import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { useAutoModelSwitch } from "@/lib/hooks/use-auto-model-switch";
 import { useAutoSearchDetection } from "@/lib/hooks/use-auto-search-detection";
 import { useToolDefinitions, filterEnabledTools } from "@/lib/hooks/use-tool-definitions";
+import { useSearchAugmentation } from "@/lib/hooks/use-search-augmentation";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/auth-store";
@@ -205,6 +206,7 @@ export function ChatInput() {
   const { checkImageSupport, checkVideoSupport, checkAudioSupport, checkFileSupport } = useAutoModelSwitch();
   const { shouldAutoEnableSearch } = useAutoSearchDetection();
   const { data: toolDefinitions } = useToolDefinitions();
+  const { augmentWithSearch, isSearching } = useSearchAugmentation();
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const { login } = usePrivy();
@@ -407,11 +409,35 @@ export function ChatInput() {
       }
     }
 
+    // Check if we need search augmentation (search enabled but model doesn't support tools)
+    let finalMessageText = messageText;
+    const currentEnabledTools = useChatUIStore.getState().enabledTools ?? [];
+    const searchEnabled = currentEnabledTools.includes('web_search');
+    const modelSupportsTools = freshSelectedModel?.supportsTools ?? false;
+
+    // If search is enabled but model doesn't support native tools, use search augmentation
+    if (searchEnabled && !modelSupportsTools) {
+        try {
+            const searchContext = await augmentWithSearch(messageText);
+            if (searchContext) {
+                // Prepend search results to the user's message
+                finalMessageText = `${searchContext}\nUser's question: ${messageText}`;
+                toast({
+                    title: "Search augmentation",
+                    description: "Web search results added to your message",
+                });
+            }
+        } catch (e) {
+            console.error('[ChatInput] Search augmentation failed:', e);
+            // Continue without search augmentation - don't block the message
+        }
+    }
+
     // Combine message and attachments
-    let content: any = messageText;
+    let content: any = finalMessageText;
     if (currentImage || currentVideo || currentAudio || currentDocument) {
         content = [
-            { type: "text", text: messageText },
+            { type: "text", text: finalMessageText },
             ...(currentImage ? [{ type: "image_url", image_url: { url: currentImage } }] : []),
             ...(currentVideo ? [{ type: "video_url", video_url: { url: currentVideo } }] : []),
             ...(currentAudio ? [{ type: "audio_url", audio_url: { url: currentAudio } }] : []),
@@ -423,9 +449,11 @@ export function ChatInput() {
         // Start the timer when message is sent
         setMessageStartTime(Date.now());
 
-        // Get the current enabled tools (may have been auto-enabled above)
-        const currentEnabledTools = useChatUIStore.getState().enabledTools;
-        const toolsToSend = filterEnabledTools(toolDefinitions, currentEnabledTools);
+        // Only send tools to models that support them
+        // For non-tool models, search augmentation was already applied above
+        const toolsToSend = modelSupportsTools
+            ? filterEnabledTools(toolDefinitions, currentEnabledTools)
+            : [];
 
         await streamMessage({
             sessionId,
@@ -1109,14 +1137,13 @@ export function ChatInput() {
                                         <p className="text-xs text-muted-foreground">
                                             {selectedModel?.supportsTools
                                                 ? "Search for current info"
-                                                : "Model doesn't support tools"}
+                                                : "Search augmentation mode"}
                                         </p>
                                     </div>
                                 </div>
                                 <Switch
                                     checked={enabledTools.includes('web_search')}
                                     onCheckedChange={() => toggleTool('web_search')}
-                                    disabled={!selectedModel?.supportsTools}
                                     aria-label="Toggle web search"
                                 />
                             </div>
@@ -1207,10 +1234,14 @@ export function ChatInput() {
                         e.preventDefault();
                         handleSend();
                     }}
-                    disabled={isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument}
+                    disabled={isSearching || (isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument)}
                     className="bg-primary"
                 >
-                    <Send className="h-4 w-4" />
+                    {isSearching ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Send className="h-4 w-4" />
+                    )}
                 </Button>
             )}
         </div>
