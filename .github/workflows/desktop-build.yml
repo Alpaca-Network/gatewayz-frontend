@@ -33,6 +33,10 @@ env:
   CARGO_TERM_COLOR: always
   # Increase Node.js memory for large Next.js builds
   NODE_OPTIONS: '--max-old-space-size=8192'
+  # Privy authentication - required for desktop app to work
+  NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+  NEXT_PUBLIC_API_BASE_URL: https://api.gatewayz.ai
+  NEXT_PUBLIC_CHAT_HISTORY_API_URL: https://api.gatewayz.ai
 
 jobs:
   build:
