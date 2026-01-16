@@ -1186,6 +1186,23 @@ export function ChatInput() {
                 </Button>
             </div>
 
+            {/* Pill indicators for enabled tools */}
+            {enabledTools.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                    {enabledTools.includes('web_search') && (
+                        <button
+                            onClick={() => toggleTool('web_search')}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 transition-colors"
+                            title="Click to disable web search"
+                        >
+                            <Globe className="h-3 w-3" />
+                            <span>Search</span>
+                            <X className="h-3 w-3 opacity-60 hover:opacity-100" />
+                        </button>
+                    )}
+                </div>
+            )}
+
             <textarea
                 ref={textareaRef}
                 value={inputValue}
