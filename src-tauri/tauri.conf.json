@@ -33,12 +33,6 @@
         "acceptFirstMouse": true
       }
     ],
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true,
-      "menuOnLeftClick": false,
-      "title": "GatewayZ"
-    },
     "security": {
       "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://auth.privy.io https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; frame-src 'self' https://auth.privy.io https://verify.walletconnect.com https://challenges.cloudflare.com; child-src 'self' https://auth.privy.io https://verify.walletconnect.com; connect-src 'self' https://api.gatewayz.ai https://*.gatewayz.ai wss://*.gatewayz.ai https://*.privy.io https://*.sentry.io https://*.walletconnect.com wss://*.walletconnect.com",
       "freezePrototype": false,
