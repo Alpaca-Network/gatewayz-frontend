@@ -94,8 +94,7 @@
   },
   "plugins": {
     "shell": {
-      "open": true,
-      "scope": []
+      "open": true
     },
     "notification": {
       "all": true
