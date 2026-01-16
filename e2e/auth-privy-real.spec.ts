@@ -20,7 +20,12 @@ import { test, expect } from './fixtures';
  * Headed: pnpm test:e2e:headed -g "Real Privy Authentication"
  */
 
+// Skip these tests in CI unless explicitly enabled with valid credentials
+// The OTP expires after 10 hours, so these tests are inherently flaky without fresh credentials
+const shouldSkipRealAuthTests = process.env.CI && !process.env.PRIVY_REAL_AUTH_ENABLED;
+
 test.describe('Real Privy Authentication', () => {
+  test.skip(shouldSkipRealAuthTests, 'Skipping real Privy auth tests in CI - set PRIVY_REAL_AUTH_ENABLED=true with valid OTP to run');
   test('can log in with valid email and OTP', async ({ realAuthPage: page }) => {
     // After real auth setup, verify we're authenticated
     await page.goto('/');
@@ -141,6 +146,7 @@ test.describe('Real Privy Authentication', () => {
 });
 
 test.describe('Real Privy Authentication - API Integration', () => {
+  test.skip(shouldSkipRealAuthTests, 'Skipping real Privy auth tests in CI - set PRIVY_REAL_AUTH_ENABLED=true with valid OTP to run');
   test('authenticated API requests are made with credentials', async ({ realAuthPage: page }) => {
     const interceptedRequests: any[] = [];
 
@@ -184,6 +190,7 @@ test.describe('Real Privy Authentication - API Integration', () => {
 });
 
 test.describe('Real Privy Authentication - Error Handling', () => {
+  test.skip(shouldSkipRealAuthTests, 'Skipping real Privy auth tests in CI - set PRIVY_REAL_AUTH_ENABLED=true with valid OTP to run');
   test('handles network errors gracefully', async ({ realAuthPage: page }) => {
     // Simulate network issues by going offline
     await page.context().setOffline(true);
