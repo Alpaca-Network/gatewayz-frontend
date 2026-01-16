@@ -233,7 +233,7 @@ describe('PrivyProviderWrapper', () => {
         expect(config.embeddedWallets.ethereum.createOnLogin).toBe('users-without-wallets');
       });
 
-      it('should disable embedded wallets on iOS in-app browsers', () => {
+      it('should disable embedded wallets on iOS in-app browsers or Tauri desktop', () => {
         process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
         mockShouldDisableEmbeddedWallets.mockReturnValue(true);
         const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
@@ -245,9 +245,11 @@ describe('PrivyProviderWrapper', () => {
         );
 
         const config = (global as any).__PRIVY_CONFIG__;
-        expect(config.embeddedWallets).toBeUndefined();
+        // When disabled, createOnLogin is set to 'off' instead of undefined
+        expect(config.embeddedWallets).toBeDefined();
+        expect(config.embeddedWallets.ethereum.createOnLogin).toBe('off');
         expect(consoleSpy).toHaveBeenCalledWith(
-          '[Auth] Embedded wallets disabled due to iOS in-app browser environment'
+          "[Auth] Embedded wallets disabled (createOnLogin: 'off') - Tauri desktop or iOS in-app browser detected"
         );
 
         consoleSpy.mockRestore();

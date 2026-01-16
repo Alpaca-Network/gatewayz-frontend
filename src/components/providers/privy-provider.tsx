@@ -461,13 +461,13 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
       // Only enable embedded wallets if not in a problematic environment
       // iOS in-app browsers (Twitter, Facebook, etc.) have IndexedDB issues
       // that cause "Database deleted by request of the user" errors
-      embeddedWallets: disableEmbeddedWallets
-        ? undefined
-        : {
-            ethereum: {
-              createOnLogin: "users-without-wallets",
-            },
-          },
+      // Tauri desktop apps use tauri.localhost (HTTP) which causes HTTPS errors
+      // Setting createOnLogin: 'off' explicitly disables embedded wallet initialization
+      embeddedWallets: {
+        ethereum: {
+          createOnLogin: disableEmbeddedWallets ? "off" : "users-without-wallets",
+        },
+      },
       defaultChain: base,
     };
 
@@ -477,7 +477,7 @@ function PrivyProviderWrapperInner({ children, className, storageStatus }: Privy
 
     // Log when embedded wallets are disabled for debugging
     if (disableEmbeddedWallets) {
-      console.info("[Auth] Embedded wallets disabled due to iOS in-app browser environment");
+      console.info("[Auth] Embedded wallets disabled (createOnLogin: 'off') - Tauri desktop or iOS in-app browser detected");
     }
 
     return config;
