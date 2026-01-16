@@ -86,7 +86,11 @@ describe('GlobalError', () => {
 
     render(<GlobalError error={mockError} reset={mockReset} />);
 
-    expect(screen.getByText('Test error message')).toBeInTheDocument();
+    // The component renders error.name and error.message together
+    // Format: "Error: <name>: <message>" e.g., "Error: Error: Test error message"
+    // Use getAllByText since the message appears in both the error display and stack trace
+    const errorMessages = screen.getAllByText(/Test error message/i);
+    expect(errorMessages.length).toBeGreaterThan(0);
 
     process.env.NODE_ENV = originalEnv;
   });
