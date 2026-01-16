@@ -1,13 +1,15 @@
 /**
  * Browser detection utilities for handling problematic environments
- * 
+ *
  * Certain browsers (especially iOS in-app browsers) have issues with IndexedDB
  * that can cause the Privy SDK's embedded wallet initialization to fail.
- * 
+ *
  * Known issues:
  * - iOS WebKit can delete IndexedDB databases due to storage eviction (ITP)
  * - In-app browsers (Twitter, Facebook, Instagram, etc.) use restricted WebViews
  * - This causes "Database deleted by request of the user" errors
+ * - Tauri desktop apps use tauri.localhost which is not HTTPS, causing
+ *   "Embedded wallet is only available over HTTPS" errors
  */
 
 /**
@@ -118,10 +120,42 @@ export async function checkIndexedDBAvailable(): Promise<boolean> {
 }
 
 /**
+ * Check if we're running in a Tauri desktop app
+ * Tauri uses tauri.localhost which is treated as HTTP, not HTTPS
+ */
+export function isTauriDesktop(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  // Check for Tauri global object
+  if ("__TAURI__" in window) {
+    return true;
+  }
+
+  // Also check for tauri.localhost hostname
+  if (
+    typeof window.location !== "undefined" &&
+    window.location.hostname === "tauri.localhost"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Synchronously check if we should disable embedded wallets
  * This is a quick check that doesn't require async operations
  */
 export function shouldDisableEmbeddedWallets(): boolean {
+  // Disable embedded wallets on Tauri desktop apps
+  // Tauri uses tauri.localhost which is not HTTPS, causing
+  // "Embedded wallet is only available over HTTPS" error
+  if (isTauriDesktop()) {
+    return true;
+  }
+
   // Disable embedded wallets on iOS in-app browsers
   // These environments have unreliable IndexedDB storage
   return isIOSInAppBrowser();
@@ -132,11 +166,16 @@ export function shouldDisableEmbeddedWallets(): boolean {
  * This includes an IndexedDB availability check
  */
 export async function shouldDisableEmbeddedWalletsAsync(): Promise<boolean> {
-  // Quick check first
+  // Quick check for Tauri desktop first
+  if (isTauriDesktop()) {
+    return true;
+  }
+
+  // Quick check for iOS in-app browsers
   if (isIOSInAppBrowser()) {
     return true;
   }
-  
+
   // If not an obvious problematic browser, verify IndexedDB works
   const idbAvailable = await checkIndexedDBAvailable();
   return !idbAvailable;
@@ -148,6 +187,7 @@ export async function shouldDisableEmbeddedWalletsAsync(): Promise<boolean> {
 export function getBrowserEnvironmentInfo(): {
   isIOS: boolean;
   isInAppBrowser: boolean;
+  isTauri: boolean;
   userAgent: string;
   indexedDBSupported: boolean;
 } {
@@ -155,17 +195,19 @@ export function getBrowserEnvironmentInfo(): {
     return {
       isIOS: false,
       isInAppBrowser: false,
+      isTauri: false,
       userAgent: "",
       indexedDBSupported: false,
     };
   }
-  
+
   const ua = navigator.userAgent || "";
   const isIOS = /iPhone|iPad|iPod/i.test(ua);
-  
+
   return {
     isIOS,
     isInAppBrowser: isIOSInAppBrowser(),
+    isTauri: isTauriDesktop(),
     userAgent: ua,
     indexedDBSupported: typeof indexedDB !== "undefined",
   };
