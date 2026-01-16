@@ -1206,6 +1206,38 @@ dev/
 
 ---
 
+## Adding a New Gateway
+
+New gateways are automatically discovered from the backend. No frontend code changes required!
+
+**How it works:**
+1. The backend has a `GATEWAY_REGISTRY` in `backend/src/routes/catalog.py` that defines all gateways
+2. The frontend calls `GET /gateways` to fetch available gateway configurations
+3. New gateways automatically appear in the UI with proper name, color, and priority
+
+**To add a new gateway:**
+
+1. **Add to backend `GATEWAY_REGISTRY`** in `backend/src/routes/catalog.py`:
+```python
+"new-gateway": {
+    "name": "New Gateway",
+    "color": "bg-purple-500",
+    "priority": "slow",
+    "site_url": "https://newgateway.com",
+},
+```
+
+2. **Ensure models include `source_gateway: "new-gateway"`** in the backend model fetch function
+
+3. **The frontend will automatically discover and display the new gateway!**
+
+**Frontend gateway discovery code:**
+- `src/lib/gateway-registry.ts` - Contains dynamic gateway registration functions (`registerDynamicGateway`, `autoRegisterGatewaysFromModels`)
+- `src/lib/models-service.ts` - Calls gateway discovery when fetching models
+- Static fallback in `GATEWAYS` array for offline/error resilience
+
+---
+
 ## Additional Resources
 
 - [Next.js Documentation](https://nextjs.org/docs)

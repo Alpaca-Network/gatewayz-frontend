@@ -15,6 +15,7 @@ jest.mock('@/context/gatewayz-auth-context', () => ({
 jest.mock('@/hooks/use-tier', () => ({
   useTier: () => ({
     tier: 'basic',
+    tierDisplayName: 'Basic',
     tierInfo: null,
     userData: null,
   }),
@@ -205,3 +206,9 @@ describe('UserNav', () => {
     });
   });
 });
+
+// Note: Tests for tier correction logic (basic tier + active subscription -> pro/max)
+// are covered in src/lib/__tests__/tier-utils.test.ts which tests:
+// - getUserTier() returns 'pro' when tier='basic' but subscription_status='active'
+// - getUserTier() uses tier_display_name to infer correct tier (pro or max)
+// - useTier hook provides tierDisplayName that matches the corrected tier

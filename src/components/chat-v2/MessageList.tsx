@@ -149,6 +149,11 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
             model={msg.model}
             error={msg.error}
             hasError={msg.hasError}
+            // Search/tool call state
+            isSearching={msg.isSearching}
+            searchQuery={msg.searchQuery}
+            searchResults={msg.searchResults}
+            searchError={msg.searchError}
             showActions={msg.role === 'assistant'}
             onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
             onRetry={idx === lastMessageIndex && msg.hasError ? onRetry : undefined}

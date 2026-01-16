@@ -1,5 +1,38 @@
 import type { UserTier, SubscriptionStatus, UserData } from './api';
 
+// Track logged warnings to prevent duplicate console spam
+// Limited to MAX_LOGGED_WARNINGS entries to prevent memory leaks in long-running apps
+const MAX_LOGGED_WARNINGS = 100;
+const loggedWarnings = new Set<string>();
+
+/**
+ * Log a warning only once per unique key to prevent console spam
+ */
+const warnOnce = (key: string, message: string, data?: Record<string, unknown>) => {
+  if (loggedWarnings.has(key)) return;
+
+  // Prevent unbounded growth - clear oldest entries when limit reached
+  if (loggedWarnings.size >= MAX_LOGGED_WARNINGS) {
+    const firstKey = loggedWarnings.values().next().value;
+    if (firstKey) loggedWarnings.delete(firstKey);
+  }
+
+  loggedWarnings.add(key);
+  if (data) {
+    console.warn(message, data);
+  } else {
+    console.warn(message);
+  }
+};
+
+/**
+ * Reset logged warnings (for testing purposes)
+ * @internal
+ */
+export const _resetLoggedWarnings = () => {
+  loggedWarnings.clear();
+};
+
 /**
  * Tier configuration and metadata
  */
@@ -13,8 +46,8 @@ export const TIER_CONFIG = {
   },
   pro: {
     name: 'Pro',
-    description: '$15/month subscription',
-    monthlyPrice: 1500, // $15.00 in cents
+    description: '$10/month subscription',
+    monthlyPrice: 1000, // $10.00 in cents
     creditAllocation: 0, // Credits determined by separate balance
     isSubscription: true,
   },
@@ -26,6 +59,20 @@ export const TIER_CONFIG = {
     isSubscription: true,
   },
 } as const;
+
+/**
+ * Helper to infer tier from tier_display_name
+ * @param tierDisplayName - Display name string from backend (e.g., "Pro", "MAX", "Max")
+ * @returns The inferred tier or null if cannot be determined
+ */
+const inferTierFromDisplayName = (tierDisplayName: string | undefined): UserTier | null => {
+  if (!tierDisplayName) return null;
+  const normalized = tierDisplayName.toLowerCase();
+  if (normalized === 'max') return 'max';
+  if (normalized === 'pro') return 'pro';
+  if (normalized === 'basic') return 'basic';
+  return null;
+};
 
 /**
  * Determines the user's current tier based on subscription status and credits
@@ -42,6 +89,27 @@ export const getUserTier = (userData: UserData | null): UserTier => {
     const normalizedTier = (userData.tier as string).toLowerCase() as UserTier;
     // Validate the tier is a recognized value
     if (normalizedTier === 'basic' || normalizedTier === 'pro' || normalizedTier === 'max') {
+      // IMPORTANT: If user has an active subscription, they cannot be on basic tier
+      // This handles cases where tier wasn't properly updated after subscription purchase
+      if (normalizedTier === 'basic' && userData.subscription_status === 'active') {
+        // Try to determine actual tier from tier_display_name if available
+        const inferredTier = inferTierFromDisplayName(userData.tier_display_name);
+        if (inferredTier && inferredTier !== 'basic') {
+          warnOnce(
+            `tier-mismatch-${userData.user_id}-${inferredTier}`,
+            `getUserTier: User has active subscription but tier is "basic". Correcting to "${inferredTier}" based on tier_display_name.`,
+            { tier: normalizedTier, tier_display_name: userData.tier_display_name, subscription_status: userData.subscription_status }
+          );
+          return inferredTier;
+        }
+        // If tier_display_name doesn't help, default to 'pro' (safer than assuming 'max')
+        warnOnce(
+          `tier-mismatch-${userData.user_id}-pro`,
+          'getUserTier: User has active subscription but tier is "basic". Correcting to "pro".',
+          { tier: normalizedTier, subscription_status: userData.subscription_status }
+        );
+        return 'pro';
+      }
       return normalizedTier;
     }
   }
@@ -50,9 +118,20 @@ export const getUserTier = (userData: UserData | null): UserTier => {
   // Note: When tier is missing from backend response, we cannot safely determine if user is 'pro' or 'max'
   // The backend should always return explicit tier for subscribed users
   if (userData.subscription_status === 'active') {
+    // Try to determine tier from tier_display_name if available
+    const inferredTier = inferTierFromDisplayName(userData.tier_display_name);
+    if (inferredTier && inferredTier !== 'basic') {
+      warnOnce(
+        `tier-missing-${userData.user_id}-${inferredTier}`,
+        `getUserTier: User has active subscription but no tier field. Using "${inferredTier}" from tier_display_name.`,
+        { tier_display_name: userData.tier_display_name, subscription_status: userData.subscription_status }
+      );
+      return inferredTier;
+    }
     // Cannot safely determine tier without explicit backend data
     // Default to 'pro' for backward compatibility, but log this edge case
-    console.warn(
+    warnOnce(
+      `tier-missing-${userData.user_id}-pro`,
       'getUserTier: User has active subscription but no tier field. Defaulting to pro. User ID may need manual verification.',
       { subscription_status: userData.subscription_status }
     );

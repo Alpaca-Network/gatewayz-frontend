@@ -1,10 +1,13 @@
 /**
  * Server-side layout for model detail pages
  * Handles generateStaticParams for static generation and ISR configuration
+ *
+ * Note: For static export (desktop builds), only pre-generated models will be
+ * available. For server mode (web), all models are accessible via ISR.
  */
 
 import { ReactNode } from 'react';
-import { generateStaticParamsForModels, MODEL_CACHE_TAGS } from './utils';
+import { generateStaticParamsForModels } from './utils';
 
 /**
  * Generate static parameters for popular models at build time
@@ -14,10 +17,12 @@ import { generateStaticParamsForModels, MODEL_CACHE_TAGS } from './utils';
  * - All static models (from models-data.ts)
  * - Top 30-50 models from popular gateways
  *
- * For any model not in this list, Next.js will:
+ * For server mode (web), any model not in this list will:
  * 1. Generate the page on first request (with `fallback: 'blocking'`)
  * 2. Cache it
  * 3. Revalidate after 1 hour
+ *
+ * For static export (desktop), only pre-generated models are accessible.
  */
 export async function generateStaticParams() {
   return await generateStaticParamsForModels();
@@ -25,22 +30,14 @@ export async function generateStaticParams() {
 
 /**
  * Configure ISR (Incremental Static Regeneration) for model pages
+ * (Only applies in server mode, not static export)
  *
  * revalidate: 3600 (1 hour)
  * - Pages will be revalidated every hour
  * - When accessed after expiry, serves stale page while regenerating in background
  * - New models added to providers will be visible on their detail page within 1 hour of addition
- *
- * dynamic: 'force-dynamic'
- * - Override for homepage, but detail pages benefit from ISR
  */
 export const revalidate = 3600; // 1 hour in seconds
-
-/**
- * Configure on-demand ISR
- * Webhook at /api/webhooks/models-updated can trigger immediate regeneration
- */
-export const dynamicParams = true; // Allow dynamic params not in generateStaticParams
 
 interface LayoutProps {
   children: ReactNode;
@@ -64,17 +61,18 @@ export default async function ModelDetailLayout({
  *    - Reduces build time by being selective
  *    - Provides instant page loads for most users
  *
- * 2. ISR REVALIDATION (revalidate):
+ * 2. ISR REVALIDATION (revalidate) - Server mode only:
  *    - Every model page is revalidated every 1 hour
  *    - Ensures pricing and model info stay current
  *    - New models from providers visible after revalidation
  *
- * 3. DYNAMIC FALLBACK (dynamicParams):
+ * 3. DYNAMIC FALLBACK - Server mode only:
  *    - Any model not pre-generated will render on first request
  *    - Subsequent requests serve cached version
  *    - User doesn't wait for regeneration (unless first visitor)
+ *    - Note: Not available in static export mode (desktop builds)
  *
- * 4. ON-DEMAND ISR (Webhook):
+ * 4. ON-DEMAND ISR (Webhook) - Server mode only:
  *    - Webhook at /api/webhooks/models-updated can trigger immediate refresh
  *    - When backends add new models, webhook regenerates pages instantly
  *    - See /api/webhooks/models-updated for implementation

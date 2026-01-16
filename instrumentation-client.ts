@@ -440,6 +440,52 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
+  // Filter out IndexedDB errors from browser privacy modes or database cleanup
+  // These occur when:
+  // - Users browse in private/incognito mode (iOS Safari, Firefox)
+  // - Browser privacy extensions clean up storage
+  // - Database is deleted while operations are in progress
+  // These are not application bugs and cannot be fixed in our code
+  const isIndexedDBError =
+    (errorMessageLower.includes('indexeddb') ||
+     errorMessageLower.includes('idbdatabase') ||
+     errorMessageLower.includes('createobjectstore') ||
+     eventMessageLower.includes('indexeddb') ||
+     eventMessageLower.includes('idbdatabase') ||
+     eventMessageLower.includes('createobjectstore')) &&
+    (errorMessageLower.includes('undefined') ||
+     errorMessageLower.includes('closing') ||
+     errorMessageLower.includes('not found') ||
+     errorMessageLower.includes('invalidstateerror') ||
+     eventMessageLower.includes('undefined') ||
+     eventMessageLower.includes('closing') ||
+     eventMessageLower.includes('not found') ||
+     eventMessageLower.includes('invalidstateerror'));
+
+  if (isIndexedDBError) {
+    console.debug('[Sentry] Filtered out IndexedDB error (browser privacy mode or database cleanup)');
+    return true;
+  }
+
+  // Filter out build/minification lexical declaration errors
+  // These occur when minified code (variable names like 'tH', 'eR') has initialization issues
+  // These are rare edge cases in the build process that:
+  // - Are not reproducible
+  // - Don't indicate actual code bugs
+  // - Often resolve on page refresh
+  const isBuildError =
+    (errorMessageLower.includes("can't access lexical declaration") ||
+     errorMessageLower.includes("cannot access") ||
+     eventMessageLower.includes("can't access lexical declaration") ||
+     eventMessageLower.includes("cannot access")) &&
+    (errorMessageLower.includes('before initialization') ||
+     eventMessageLower.includes('before initialization'));
+
+  if (isBuildError) {
+    console.debug('[Sentry] Filtered out build/minification lexical declaration error (transient edge case)');
+    return true;
+  }
+
   return false;
 }
 

@@ -663,6 +663,164 @@ describe('Feedback API error handling', () => {
   });
 });
 
+// Tests for unauthenticated user feedback
+describe('Feedback for unauthenticated users', () => {
+  let mockToast: jest.Mock;
+
+  beforeEach(() => {
+    mockToast = jest.fn();
+    jest.spyOn(require('@/hooks/use-toast'), 'useToast').mockReturnValue({ toast: mockToast });
+    Object.keys(mockMessageListProps).forEach(key => delete mockMessageListProps[key]);
+
+    // Mock getApiKey to return null (unauthenticated user)
+    jest.spyOn(require('@/lib/api'), 'getApiKey').mockReturnValue(null);
+
+    // Mock with active session and messages
+    const mockMessages = [
+      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
+      { id: 2, role: 'assistant', content: 'Hi there!', model: 'gpt-4', isStreaming: false },
+    ];
+    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
+      activeSessionId: 123,
+      setActiveSessionId: mockSetActiveSessionId,
+      selectedModel: { value: 'test-model', label: 'Test Model' },
+      setSelectedModel: mockSetSelectedModel,
+      inputValue: '',
+      setInputValue: mockSetInputValue,
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: mockSetMobileSidebarOpen,
+      isIncognitoMode: false,
+      setIncognitoMode: mockSetIncognitoMode,
+      toggleIncognitoMode: mockToggleIncognitoMode,
+      syncIncognitoState: jest.fn(),
+    });
+    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
+      data: mockMessages,
+      isLoading: false,
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('should show sign in required toast when user is not authenticated (like)', async () => {
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onLike).toBeDefined();
+
+    await mockMessageListProps.onLike(2);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Sign in required',
+          description: 'Please sign in to submit feedback.',
+          variant: 'destructive',
+        })
+      );
+    });
+  });
+
+  it('should show sign in required toast when user is not authenticated (dislike)', async () => {
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onDislike).toBeDefined();
+
+    await mockMessageListProps.onDislike(2);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Sign in required',
+          description: 'Please sign in to submit feedback.',
+          variant: 'destructive',
+        })
+      );
+    });
+  });
+
+  it('should not call fetch API when user is not authenticated', async () => {
+    const mockFetch = jest.fn();
+    global.fetch = mockFetch;
+
+    render(<ChatLayout />);
+
+    await mockMessageListProps.onLike(2);
+
+    // Fetch should NOT be called since we return early for unauthenticated users
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+// Tests for 401 response handling
+describe('Feedback 401 response handling', () => {
+  const originalFetch = global.fetch;
+  let mockToast: jest.Mock;
+
+  beforeEach(() => {
+    mockToast = jest.fn();
+    jest.spyOn(require('@/hooks/use-toast'), 'useToast').mockReturnValue({ toast: mockToast });
+    Object.keys(mockMessageListProps).forEach(key => delete mockMessageListProps[key]);
+
+    // Mock getApiKey to return a valid key (but backend returns 401)
+    jest.spyOn(require('@/lib/api'), 'getApiKey').mockReturnValue('test-api-key');
+
+    // Mock with active session and messages
+    const mockMessages = [
+      { id: 1, role: 'user', content: 'Hello', isStreaming: false },
+      { id: 2, role: 'assistant', content: 'Hi there!', model: 'gpt-4', isStreaming: false },
+    ];
+    jest.spyOn(require('@/lib/store/chat-ui-store'), 'useChatUIStore').mockReturnValue({
+      activeSessionId: 123,
+      setActiveSessionId: mockSetActiveSessionId,
+      selectedModel: { value: 'test-model', label: 'Test Model' },
+      setSelectedModel: mockSetSelectedModel,
+      inputValue: '',
+      setInputValue: mockSetInputValue,
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: mockSetMobileSidebarOpen,
+      isIncognitoMode: false,
+      setIncognitoMode: mockSetIncognitoMode,
+      toggleIncognitoMode: mockToggleIncognitoMode,
+      syncIncognitoState: jest.fn(),
+    });
+    jest.spyOn(require('@/lib/hooks/use-chat-queries'), 'useSessionMessages').mockReturnValue({
+      data: mockMessages,
+      isLoading: false,
+    });
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  it('should show sign in required toast when API returns 401', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+    });
+
+    render(<ChatLayout />);
+
+    expect(mockMessageListProps.onLike).toBeDefined();
+
+    await mockMessageListProps.onLike(2);
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Sign in required',
+          description: 'Please sign in to submit feedback.',
+          variant: 'destructive',
+        })
+      );
+    });
+  });
+});
+
 // Tests for handlers with active session and messages
 // These use jest.doMock to override the default mocks
 describe('Handlers with active session', () => {

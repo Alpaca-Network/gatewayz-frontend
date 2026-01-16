@@ -397,8 +397,8 @@ console.log(completion.choices[0].message);`,
 
             <PathChooserModal open={showPathChooser} onOpenChange={setShowPathChooser} />
 
-            {/* Three Path Cards - Above the Fold */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 xs:gap-4 sm:gap-5 md:gap-6 mt-4 xs:mt-5 sm:mt-8 md:mt-10 mb-3 xs:mb-4 sm:mb-6 md:mb-8">
+            {/* Four Path Cards - Above the Fold */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 xs:gap-4 sm:gap-5 md:gap-6 mt-4 xs:mt-5 sm:mt-8 md:mt-10 mb-3 xs:mb-4 sm:mb-6 md:mb-8">
             {/* API Path Card */}
             <Link href="/start/api" className="group">
               <div className="bg-card border-2 border-border hover:border-blue-500 rounded-lg p-3 xs:p-4 sm:p-5 md:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
@@ -455,8 +455,36 @@ console.log(completion.choices[0].message);`,
               </div>
             </Link>
 
+            {/* OpenCode Path Card */}
+            <Link href="/start/opencode" className="group">
+              <div className="bg-card border-2 border-border hover:border-orange-500 rounded-lg p-3 xs:p-4 sm:p-5 md:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
+                {/* Mobile: Icon + Title + Get Started on one line */}
+                <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-0">
+                  <div className="w-8 h-8 xs:w-9 xs:h-9 sm:w-12 sm:h-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+                    <Terminal className="w-4 h-4 sm:w-6 sm:h-6 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <h3 className="text-sm xs:text-base sm:text-xl font-bold flex-grow">Install OpenCode</h3>
+                  <div className="text-xs font-medium text-orange-600 dark:text-orange-400 group-hover:underline flex-shrink-0 sm:hidden">
+                    Get Started →
+                  </div>
+                </div>
+
+                {/* Description - hidden on mobile, visible on larger screens */}
+                <p className="hidden sm:block text-sm text-muted-foreground mb-4 mt-4 flex-grow leading-relaxed">
+                  Open-source AI coding agent for your terminal
+                </p>
+
+                {/* Get Started - only visible on larger screens */}
+                <div className="hidden sm:block mt-auto">
+                  <div className="text-sm font-medium text-orange-600 dark:text-orange-400 group-hover:underline">
+                    Get Started →
+                  </div>
+                </div>
+              </div>
+            </Link>
+
             {/* Chat Path Card */}
-            <Link href="/start/chat" className="group sm:col-span-2 md:col-span-1">
+            <Link href="/start/chat" className="group">
               <div className="bg-card border-2 border-border hover:border-green-500 rounded-lg p-3 xs:p-4 sm:p-5 md:p-6 shadow-sm hover:shadow-md transition-all h-full flex flex-col">
                 {/* Mobile: Icon + Title + Get Started on one line */}
                 <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-0">

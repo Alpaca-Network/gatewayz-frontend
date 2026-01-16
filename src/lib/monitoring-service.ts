@@ -10,6 +10,7 @@
  * - Gateway/server error handling with retry (502/503/504 errors)
  * - Type-safe request/response handling
  * - Consistent error handling
+ * - Sentry metrics integration for monitoring API performance
  *
  * Usage:
  *   // Without authentication (public access)
@@ -19,6 +20,8 @@
  *   const apiKey = getApiKey();
  *   const health = await monitoringService.getProviderHealth(apiKey);
  */
+
+import { sentryMetrics } from './sentry-metrics';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -90,6 +93,7 @@ async function fetchWithOptionalAuth<T>(
   options: FetchOptions = {}
 ): Promise<T> {
   const { apiKey, retryWithoutAuth = true, retryCount = 0 } = options;
+  const startTime = Date.now();
 
   const headers: HeadersInit = {};
 
@@ -100,6 +104,10 @@ async function fetchWithOptionalAuth<T>(
 
   try {
     const response = await fetch(url, { headers });
+    const durationMs = Date.now() - startTime;
+
+    // Track API request metrics
+    sentryMetrics.trackApiRequest(url, 'GET', durationMs, response.status);
 
     // Handle 429 - Rate limit with retry
     if (response.status === 429) {
@@ -186,6 +194,12 @@ async function fetchWithOptionalAuth<T>(
 
     return await response.json();
   } catch (error) {
+    // Track network/fetch errors
+    const durationMs = Date.now() - startTime;
+    const errorType = error instanceof TypeError ? 'network' : 'unknown';
+    sentryMetrics.trackApiError(url, errorType);
+    sentryMetrics.trackApiRequest(url, 'GET', durationMs, 0, { error_type: errorType });
+
     // Network errors, JSON parse errors, etc.
     if (error instanceof Error) {
       throw error;

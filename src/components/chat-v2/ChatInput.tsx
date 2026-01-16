@@ -40,7 +40,7 @@ interface SpeechRecognition extends EventTarget {
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera, Globe, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -52,6 +52,9 @@ import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useCreateSession, useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { useAutoModelSwitch } from "@/lib/hooks/use-auto-model-switch";
+import { useAutoSearchDetection } from "@/lib/hooks/use-auto-search-detection";
+import { useToolDefinitions, filterEnabledTools } from "@/lib/hooks/use-tool-definitions";
+import { useSearchAugmentation } from "@/lib/hooks/use-search-augmentation";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/auth-store";
@@ -62,6 +65,7 @@ import {
   getGuestMessageLimit
 } from "@/lib/guest-chat";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { usePrivy } from "@privy-io/react-auth";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 
@@ -138,12 +142,71 @@ const generateSessionTitle = (text: string, maxLength: number = 30): string => {
     return trimmed.substring(0, maxLength - 3) + '...';
 };
 
+// Helper functions for word-level speech transcript deduplication
+// Normalizes a word for comparison (lowercase, alphanumeric only)
+const normalizeWord = (word: string): string =>
+  word.toLowerCase().replace(/[^\w]/g, '');
+
+// Splits text into words, filtering out empty strings
+const getWords = (text: string): string[] =>
+  text.trim().split(/\s+/).filter(w => w.length > 0);
+
+// Finds the LAST occurrence of accumulated content within the new transcript
+// This handles cases where the API returns duplicated content like "hello world hello world doing"
+// Returns the index in newWords where genuinely new content begins, or -1 if no match found
+const findAccumulatedEndIndex = (
+  accumulatedWords: string[],
+  newWords: string[]
+): number => {
+  if (accumulatedWords.length === 0) return 0;
+  if (newWords.length < accumulatedWords.length) return -1;
+
+  // Search for the LAST occurrence of accumulated content in newWords
+  // This handles the case where API sends "hello world hello world doing"
+  // We want to find the LAST "hello world" and append only "doing"
+  let lastMatchEndIndex = -1;
+
+  for (let startIdx = 0; startIdx <= newWords.length - accumulatedWords.length; startIdx++) {
+    const slice = newWords.slice(startIdx, startIdx + accumulatedWords.length);
+    const matches = slice.every((w, i) =>
+      normalizeWord(w) === normalizeWord(accumulatedWords[i])
+    );
+    if (matches) {
+      // Found a match - record where it ends
+      lastMatchEndIndex = startIdx + accumulatedWords.length;
+      // Continue searching for later occurrences
+    }
+  }
+
+  if (lastMatchEndIndex >= 0) {
+    return lastMatchEndIndex;
+  }
+
+  // No exact match found - check for partial overlap where suffix of accumulated
+  // matches prefix of new (e.g., accumulated: "hello world", new: "world how are you")
+  const maxOverlapCheck = Math.min(accumulatedWords.length, newWords.length, 10);
+
+  for (let overlapLen = maxOverlapCheck; overlapLen > 0; overlapLen--) {
+    const accSuffix = accumulatedWords.slice(-overlapLen).map(normalizeWord);
+    const newPrefix = newWords.slice(0, overlapLen).map(normalizeWord);
+
+    if (accSuffix.every((word, i) => word === newPrefix[i])) {
+      return overlapLen;
+    }
+  }
+
+  return -1;
+};
+
 export function ChatInput() {
-  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime } = useChatUIStore();
+  const { activeSessionId, setActiveSessionId, selectedModel, inputValue, setInputValue, setMessageStartTime, enabledTools, toggleTool, autoEnableSearch, setAutoEnableSearch } = useChatUIStore();
   const { data: messages = [], isLoading: isHistoryLoading } = useSessionMessages(activeSessionId);
   const createSession = useCreateSession();
   const { isStreaming, streamMessage, stopStream } = useChatStream();
   const { checkImageSupport, checkVideoSupport, checkAudioSupport, checkFileSupport } = useAutoModelSwitch();
+  const { shouldAutoEnableSearch } = useAutoSearchDetection();
+  const { data: toolDefinitions } = useToolDefinitions();
+  const { augmentWithSearch, isSearching } = useSearchAugmentation();
   const { toast } = useToast();
   const { isAuthenticated } = useAuthStore();
   const { login } = usePrivy();
@@ -194,11 +257,48 @@ export function ChatInput() {
     const textarea = textareaRef.current;
     if (!textarea) return;
 
-    // Reset height to auto to get the correct scrollHeight
-    textarea.style.height = 'auto';
-    // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
-    const newHeight = Math.min(Math.max(textarea.scrollHeight, 48), 150);
-    textarea.style.height = `${newHeight}px`;
+    // Early exit if no parent node to append clone to
+    const parentNode = textarea.parentNode;
+    if (!parentNode) return;
+
+    // Get current height before any changes
+    const currentHeight = textarea.offsetHeight;
+
+    // Use a clone to avoid visual flicker - measure in a hidden element
+    const clone = textarea.cloneNode(true) as HTMLTextAreaElement;
+
+    // Copy the text content (cloneNode doesn't copy the value property)
+    clone.value = textarea.value;
+
+    // Copy computed styles that affect height measurement
+    const computedStyle = window.getComputedStyle(textarea);
+    clone.style.position = 'absolute';
+    clone.style.visibility = 'hidden';
+    clone.style.height = 'auto';
+    clone.style.width = `${textarea.offsetWidth}px`;
+    clone.style.overflow = 'hidden';
+    clone.style.fontSize = computedStyle.fontSize;
+    clone.style.fontFamily = computedStyle.fontFamily;
+    clone.style.lineHeight = computedStyle.lineHeight;
+    clone.style.padding = computedStyle.padding;
+    clone.style.border = computedStyle.border;
+    clone.style.boxSizing = computedStyle.boxSizing;
+
+    parentNode.appendChild(clone);
+
+    let newHeight: number;
+    try {
+      // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
+      newHeight = Math.min(Math.max(clone.scrollHeight, 48), 150);
+    } finally {
+      // Always remove the clone, even if an error occurs
+      clone.remove();
+    }
+
+    // Only update height if it changed to avoid unnecessary reflows
+    if (currentHeight !== newHeight) {
+      textarea.style.height = `${newHeight}px`;
+    }
 
     // Track if textarea has expanded beyond single line (48px is single line height)
     setIsMultiline(newHeight > 48);
@@ -249,6 +349,19 @@ export function ChatInput() {
       }
     }
 
+    // Auto-enable search if the query needs real-time information
+    // Get fresh tools state from store
+    const freshEnabledTools = storeState.enabledTools;
+    const freshAutoEnableSearch = storeState.autoEnableSearch;
+
+    // Check if we should auto-enable web search for this query
+    if (shouldAutoEnableSearch(currentInputValue, freshSelectedModel, freshAutoEnableSearch)) {
+      // Auto-enable web search if not already enabled
+      if (!freshEnabledTools.includes('web_search')) {
+        toggleTool('web_search');
+      }
+    }
+
     // Capture current input values before any async operations
     const messageText = currentInputValue;
     const currentImage = selectedImage;
@@ -296,11 +409,35 @@ export function ChatInput() {
       }
     }
 
+    // Check if we need search augmentation (search enabled but model doesn't support tools)
+    let finalMessageText = messageText;
+    const currentEnabledTools = useChatUIStore.getState().enabledTools ?? [];
+    const searchEnabled = currentEnabledTools.includes('web_search');
+    const modelSupportsTools = freshSelectedModel?.supportsTools ?? false;
+
+    // If search is enabled but model doesn't support native tools, use search augmentation
+    if (searchEnabled && !modelSupportsTools) {
+        try {
+            const searchContext = await augmentWithSearch(messageText);
+            if (searchContext) {
+                // Prepend search results to the user's message
+                finalMessageText = `${searchContext}\nUser's question: ${messageText}`;
+                toast({
+                    title: "Search augmentation",
+                    description: "Web search results added to your message",
+                });
+            }
+        } catch (e) {
+            console.error('[ChatInput] Search augmentation failed:', e);
+            // Continue without search augmentation - don't block the message
+        }
+    }
+
     // Combine message and attachments
-    let content: any = messageText;
+    let content: any = finalMessageText;
     if (currentImage || currentVideo || currentAudio || currentDocument) {
         content = [
-            { type: "text", text: messageText },
+            { type: "text", text: finalMessageText },
             ...(currentImage ? [{ type: "image_url", image_url: { url: currentImage } }] : []),
             ...(currentVideo ? [{ type: "video_url", video_url: { url: currentVideo } }] : []),
             ...(currentAudio ? [{ type: "audio_url", audio_url: { url: currentAudio } }] : []),
@@ -312,11 +449,18 @@ export function ChatInput() {
         // Start the timer when message is sent
         setMessageStartTime(Date.now());
 
+        // Only send tools to models that support them
+        // For non-tool models, search augmentation was already applied above
+        const toolsToSend = modelSupportsTools
+            ? filterEnabledTools(toolDefinitions, currentEnabledTools)
+            : [];
+
         await streamMessage({
             sessionId,
             content,
             model: freshSelectedModel,
-            messagesHistory: currentMessages
+            messagesHistory: currentMessages,
+            tools: toolsToSend.length > 0 ? toolsToSend : undefined,
         });
 
         // Clear the timer when streaming completes
@@ -590,7 +734,11 @@ export function ChatInput() {
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
+    // Language setting - could be made configurable via user preferences
     recognition.lang = 'en-US';
+    // Request multiple alternatives to improve accuracy
+    // The browser may return up to this many alternatives for each result
+    recognition.maxAlternatives = 3;
 
     // Track this recognition instance to prevent stale handlers from corrupting state
     currentRecognitionRef.current = recognition;
@@ -628,39 +776,57 @@ export function ChatInput() {
       // Update interim transcript display
       setInterimTranscript(currentInterim);
 
-      // Calculate the truly NEW portion of the transcript by comparing
-      // against what we've already accumulated. This handles the case where
-      // the Speech API returns overlapping/repeated content in continuous mode.
-      const previousLength = accumulatedFinalTranscriptRef.current.length;
+      const newTotal = totalFinalTranscript.trim();
+      if (!newTotal) return;
 
-      // Check if the new total transcript starts with what we already have
-      // If so, extract only the new portion
-      let newPortionOfTranscript = '';
-      if (totalFinalTranscript.length > previousLength) {
-        if (totalFinalTranscript.startsWith(accumulatedFinalTranscriptRef.current)) {
-          // Normal case: new transcript is an extension of the previous
-          newPortionOfTranscript = totalFinalTranscript.slice(previousLength);
+      const accumulated = accumulatedFinalTranscriptRef.current.trim();
+
+      // Quick exit if identical (no new content)
+      if (newTotal === accumulated) return;
+
+      // Use word-level comparison to handle overlapping phrases
+      // This fixes issues where the API returns "How are you How are you doing"
+      // instead of just "How are you doing"
+      const newWords = getWords(newTotal);
+      const accWords = getWords(accumulated);
+
+      let wordsToAppend: string[] = [];
+
+      if (accWords.length === 0) {
+        // First transcript - add all words
+        wordsToAppend = newWords;
+      } else {
+        // Find where accumulated content ends within the new transcript
+        // This handles:
+        // 1. Accumulated is prefix of new: "hello" -> "hello world"
+        // 2. Duplicated content: "hello world" -> "hello world hello world doing"
+        // 3. Suffix overlap: "hello world" -> "world how are you"
+        const newContentStartIndex = findAccumulatedEndIndex(accWords, newWords);
+
+        if (newContentStartIndex >= 0) {
+          // Found where new content begins - take everything after that point
+          wordsToAppend = newWords.slice(newContentStartIndex);
         } else {
-          // Edge case: transcript was modified (shouldn't happen, but handle it)
-          // Fall back to the full new transcript
-          newPortionOfTranscript = totalFinalTranscript;
+          // No overlap found at all - the new transcript is completely unrelated
+          // or shorter than what we have. Ignore to preserve existing content
+          // and avoid random duplicates.
+          return;
         }
       }
 
-      // Update our accumulated tracking
-      if (totalFinalTranscript.length > previousLength) {
-        accumulatedFinalTranscriptRef.current = totalFinalTranscript;
-      }
+      // Update accumulated tracking with the full new transcript
+      accumulatedFinalTranscriptRef.current = newTotal;
 
-      // Only update input if we have genuinely new content
-      if (newPortionOfTranscript) {
+      // Only update input if we have genuinely new words
+      if (wordsToAppend.length > 0) {
+        const newText = wordsToAppend.join(' ');
         const currentValue = useChatUIStore.getState().inputValue;
         const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
-        setInputValue(currentValue + separator + newPortionOfTranscript);
+        setInputValue(currentValue + separator + newText);
         // Also track final transcript separately for display
         setFinalTranscriptDuringRecording(prev => {
           const prevSeparator = prev && !prev.endsWith(' ') ? ' ' : '';
-          return prev + prevSeparator + newPortionOfTranscript;
+          return prev + prevSeparator + newText;
         });
       }
     };
@@ -888,8 +1054,27 @@ export function ChatInput() {
                 {/* Combined "Add photos & files" dropdown with [+] button */}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost" title="Add photos & files" className="h-10 w-10 rounded-full border border-border hover:bg-accent">
-                            <Plus className="h-5 w-5 text-muted-foreground" />
+                        <Button
+                            size="icon"
+                            variant="ghost"
+                            title={enabledTools.length > 0 ? `Tools enabled: ${enabledTools.join(', ')}` : "Add photos & files"}
+                            className={cn(
+                                "h-10 w-10 rounded-full border hover:bg-accent relative",
+                                enabledTools.length > 0
+                                    ? "border-blue-500 bg-blue-500/10"
+                                    : "border-border"
+                            )}
+                        >
+                            <Plus className={cn(
+                                "h-5 w-5",
+                                enabledTools.length > 0 ? "text-blue-500" : "text-muted-foreground"
+                            )} />
+                            {/* Badge indicator when tools are enabled */}
+                            {enabledTools.length > 0 && (
+                                <span className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 rounded-full flex items-center justify-center text-[10px] text-white font-medium">
+                                    {enabledTools.length}
+                                </span>
+                            )}
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" side="top" className="w-80 p-4">
@@ -934,6 +1119,54 @@ export function ChatInput() {
                                 <p className="text-xs text-muted-foreground">Add audio files</p>
                             </div>
                         </DropdownMenuItem>
+
+                        {/* Tools Section */}
+                        <div className="border-t border-border my-3" />
+                        <div className="px-1">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-2">
+                                Tools
+                            </p>
+                            {/* Web Search Toggle */}
+                            <div className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-accent transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                        <Globe className="h-5 w-5 text-blue-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">Web Search</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {selectedModel?.supportsTools
+                                                ? "Search for current info"
+                                                : "Search augmentation mode"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <Switch
+                                    checked={enabledTools.includes('web_search')}
+                                    onCheckedChange={() => toggleTool('web_search')}
+                                    aria-label="Toggle web search"
+                                />
+                            </div>
+                            {/* Auto-enable search preference */}
+                            <div className="flex items-center justify-between py-2 px-2 mt-1 rounded-md hover:bg-accent transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                        <Search className="h-5 w-5 text-purple-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">Auto Search</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            Auto-enable for relevant queries
+                                        </p>
+                                    </div>
+                                </div>
+                                <Switch
+                                    checked={autoEnableSearch}
+                                    onCheckedChange={setAutoEnableSearch}
+                                    aria-label="Toggle auto search detection"
+                                />
+                            </div>
+                        </div>
                     </DropdownMenuContent>
                 </DropdownMenu>
 
@@ -952,6 +1185,23 @@ export function ChatInput() {
                     )}
                 </Button>
             </div>
+
+            {/* Pill indicators for enabled tools */}
+            {enabledTools.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                    {enabledTools.includes('web_search') && (
+                        <button
+                            onClick={() => toggleTool('web_search')}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 transition-colors"
+                            title="Click to disable web search"
+                        >
+                            <Globe className="h-3 w-3" />
+                            <span>Search</span>
+                            <X className="h-3 w-3 opacity-60 hover:opacity-100" />
+                        </button>
+                    )}
+                </div>
+            )}
 
             <textarea
                 ref={textareaRef}
@@ -1001,10 +1251,14 @@ export function ChatInput() {
                         e.preventDefault();
                         handleSend();
                     }}
-                    disabled={isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument}
+                    disabled={isSearching || (isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument)}
                     className="bg-primary"
                 >
-                    <Send className="h-4 w-4" />
+                    {isSearching ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Send className="h-4 w-4" />
+                    )}
                 </Button>
             )}
         </div>

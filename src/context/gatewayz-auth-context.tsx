@@ -28,6 +28,7 @@ import {
 import { getReferralCode, clearReferralCode } from "@/lib/referral";
 import { resetGuestMessageCount } from "@/lib/guest-chat";
 import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
+import { trackSignupConversion } from "@/components/analytics/google-analytics";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -602,15 +603,24 @@ export function GatewayzAuthProvider({
       if (authData.is_new_user ?? isNewUserExpected) {
         console.log("[Auth] New user detected");
 
-        // If beta redirect is enabled, redirect there instead of onboarding
-        if (enableBetaRedirect) {
-          console.log("[Auth] Redirecting new user to beta domain");
-          redirectToBetaIfEnabled("/onboarding");
-        } else {
-          console.log("[Auth] Redirecting new user to onboarding");
-          // Redirect immediately - localStorage writes are synchronous
-          window.location.href = "/onboarding";
-        }
+        // Track Google Ads sign-up conversion for new users
+        // Use callback to ensure redirect happens after conversion is sent
+        // If gtag isn't loaded, callback executes immediately (graceful degradation)
+        const performRedirect = () => {
+          console.log("[Auth] Google Ads sign-up conversion tracked");
+
+          // If beta redirect is enabled, redirect there instead of onboarding
+          if (enableBetaRedirect) {
+            console.log("[Auth] Redirecting new user to beta domain");
+            redirectToBetaIfEnabled("/onboarding");
+          } else {
+            console.log("[Auth] Redirecting new user to onboarding");
+            // Redirect immediately - localStorage writes are synchronous
+            window.location.href = "/onboarding";
+          }
+        };
+
+        trackSignupConversion(performRedirect);
       }
     },
     [updateStateFromStorage, enableBetaRedirect, redirectToBetaIfEnabled]
