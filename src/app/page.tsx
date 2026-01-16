@@ -24,6 +24,7 @@ import Benefits from "@/components/sections/Benefits";
 import {FeaturesModern} from "@/components/sections/FeaturesModern";
 import ProblemSolution from "@/components/sections/ProblemSolution";
 import FAQ from "@/components/sections/FAQ";
+import { isTauri } from '@/lib/desktop/tauri';
 
 interface FeaturedModel {
   name: string;
@@ -71,6 +72,13 @@ export default function Home() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Redirect to chat page on desktop app
+  useEffect(() => {
+    if (isTauri()) {
+      router.replace('/chat');
+    }
+  }, [router]);
 
   // Load the actual API key when user is authenticated
   useEffect(() => {

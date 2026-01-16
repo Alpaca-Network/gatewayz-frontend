@@ -24,6 +24,7 @@ import {Copy} from "lucide-react";
 import {useToast} from "@/hooks/use-toast";
 import {useGatewayzAuth} from "@/context/gatewayz-auth-context";
 import {trackTwitterSignupClick} from "@/components/analytics/twitter-pixel";
+import {useIsTauri} from "@/lib/desktop/hooks";
 
 const getWalletAddress = (user: any) => {
   try {
@@ -54,6 +55,7 @@ export function AppHeader() {
   const isAuthenticating = status === "authenticating";
   const authToastShownRef = useRef(false);
   const slowAuthToastShownRef = useRef(false);
+  const isDesktop = useIsTauri();
 
   // Show toast when authentication starts and completes
   // Skip showing toast on chat page to avoid clutter
@@ -204,7 +206,7 @@ export function AppHeader() {
       <div className="w-full max-w-7xl mx-auto flex h-full items-center px-3 sm:px-6 lg:px-8 gap-2 sm:gap-4">
         <div className="flex items-center gap-2 sm:gap-4 shrink-0">
           <Link
-            href="/"
+            href={isDesktop ? "/chat" : "/"}
             className="flex items-center gap-1.5 sm:gap-2 shrink-0"
           >
             {/* Light mode logo and text */}
@@ -245,38 +247,48 @@ export function AppHeader() {
             >
               Models
             </Link>
-            <Link
-              href="/chat"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Chat
-            </Link>
-            <Link
-              href="/developers"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Researchers
-            </Link>
-            <Link
-              href="/sandbox"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Sandbox
-            </Link>
-            <Link
-              href="/rankings"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Ranking
-            </Link>
-            <Link
-              href="https://blog.gatewayz.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Insights
-            </Link>
+            {!isDesktop && (
+              <Link
+                href="/chat"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Chat
+              </Link>
+            )}
+            {!isDesktop && (
+              <Link
+                href="/developers"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Researchers
+              </Link>
+            )}
+            {!isDesktop && (
+              <Link
+                href="/sandbox"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Sandbox
+              </Link>
+            )}
+            {!isDesktop && (
+              <Link
+                href="/rankings"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Ranking
+              </Link>
+            )}
+            {!isDesktop && (
+              <Link
+                href="https://blog.gatewayz.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Insights
+              </Link>
+            )}
             <Link
               href="https://docs.gatewayz.ai/"
               target="_blank"
@@ -285,6 +297,22 @@ export function AppHeader() {
             >
               Docs
             </Link>
+            {isDesktop && (
+              <Link
+                href="/settings/credits"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Credits
+              </Link>
+            )}
+            {isDesktop && (
+              <Link
+                href="/settings/account"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Account
+              </Link>
+            )}
           </nav>
 
           <div className="lg:hidden shrink-0">
@@ -365,43 +393,53 @@ export function AppHeader() {
                     >
                       Models
                     </Link>
-                    <Link
-                      href="/chat"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Chat
-                    </Link>
-                    <Link
-                      href="/developers"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Researchers
-                    </Link>
-                    <Link
-                      href="/sandbox"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Sandbox
-                    </Link>
-                    <Link
-                      href="/rankings"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Ranking
-                    </Link>
-                    <Link
-                      href="https://blog.gatewayz.ai"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Insights
-                    </Link>
+                    {!isDesktop && (
+                      <Link
+                        href="/chat"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Chat
+                      </Link>
+                    )}
+                    {!isDesktop && (
+                      <Link
+                        href="/developers"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Researchers
+                      </Link>
+                    )}
+                    {!isDesktop && (
+                      <Link
+                        href="/sandbox"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Sandbox
+                      </Link>
+                    )}
+                    {!isDesktop && (
+                      <Link
+                        href="/rankings"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Ranking
+                      </Link>
+                    )}
+                    {!isDesktop && (
+                      <Link
+                        href="https://blog.gatewayz.ai"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Insights
+                      </Link>
+                    )}
                     <Link
                       href="https://docs.gatewayz.ai/"
                       target="_blank"
@@ -411,6 +449,24 @@ export function AppHeader() {
                     >
                       Docs
                     </Link>
+                    {isDesktop && (
+                      <Link
+                        href="/settings/credits"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Credits
+                      </Link>
+                    )}
+                    {isDesktop && (
+                      <Link
+                        href="/settings/account"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Account
+                      </Link>
+                    )}
                   </nav>
 
                   {user && (
