@@ -1,7 +1,7 @@
 'use client';
 
 import * as Sentry from '@sentry/nextjs';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -23,6 +23,9 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const isDesktop = typeof window !== 'undefined' && '__TAURI__' in window;
+
   useEffect(() => {
     // Capture the error in Sentry with relevant context
     Sentry.captureException(error, {
@@ -38,6 +41,12 @@ export default function GlobalError({
       // Root-level errors are always critical
       level: 'error',
     });
+
+    // Log error details to console for desktop debugging
+    console.error('[GlobalError] Error caught:', error);
+    console.error('[GlobalError] Error name:', error.name);
+    console.error('[GlobalError] Error message:', error.message);
+    console.error('[GlobalError] Error stack:', error.stack);
   }, [error]);
 
   return (
@@ -76,18 +85,35 @@ export default function GlobalError({
             </p>
           </div>
 
-          {/* Error Details (for development) */}
-          {process.env.NODE_ENV === 'development' && (
+          {/* Error Details - shown in development or on desktop with toggle */}
+          {(process.env.NODE_ENV === 'development' || showDetails) && (
             <div className="p-4 bg-muted rounded-lg text-left">
               <p className="text-xs font-mono text-destructive break-all">
-                {error.message}
+                <strong>Error:</strong> {error.name}: {error.message}
               </p>
+              {error.stack && (
+                <pre className="text-xs font-mono text-muted-foreground mt-2 whitespace-pre-wrap overflow-auto max-h-40">
+                  {error.stack}
+                </pre>
+              )}
               {error.digest && (
                 <p className="text-xs text-muted-foreground mt-2">
                   Error ID: {error.digest}
                 </p>
               )}
             </div>
+          )}
+
+          {/* Show Details button for desktop users */}
+          {isDesktop && !showDetails && process.env.NODE_ENV !== 'development' && (
+            <Button
+              onClick={() => setShowDetails(true)}
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+            >
+              Show error details
+            </Button>
           )}
 
           {/* Action Buttons */}
