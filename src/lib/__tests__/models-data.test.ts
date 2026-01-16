@@ -1,5 +1,6 @@
 import { models } from '../models-data';
 import type { Model } from '../models-data';
+import { FEATURED_MODELS } from '../config';
 
 describe('models-data', () => {
   describe('Model data structure', () => {
@@ -395,6 +396,115 @@ describe('models-data', () => {
       visionModels.forEach((model) => {
         expect(model.modalities).toContain('Image');
       });
+    });
+  });
+
+  describe('Config synchronization', () => {
+    it('should have all featured models from config.ts present in models-data.ts', () => {
+      const featuredModelIds = Object.values(FEATURED_MODELS).map(m => m.id);
+
+      featuredModelIds.forEach((featuredId) => {
+        // Extract model name from provider/model format (e.g., "openai/gpt-5.2" -> "gpt-5.2")
+        const modelName = featuredId.includes('/')
+          ? featuredId.split('/').pop()
+          : featuredId;
+
+        // Check if the model exists in models-data.ts
+        const modelExists = models.some(m => {
+          // Handle both direct name matches and provider/name format
+          const normalizedModelName = m.name.toLowerCase().replace(/[:\s]/g, '-');
+          const normalizedFeaturedName = modelName?.toLowerCase().replace(/[:\s]/g, '-');
+
+          return normalizedModelName === normalizedFeaturedName ||
+                 m.name.toLowerCase() === modelName?.toLowerCase();
+        });
+
+        expect(modelExists).toBe(true);
+
+        if (!modelExists) {
+          throw new Error(
+            `Featured model "${featuredId}" from config.ts not found in models-data.ts. ` +
+            `Please ensure the model name matches between config.ts and models-data.ts. ` +
+            `Expected to find a model with name "${modelName}".`
+          );
+        }
+      });
+    });
+
+    it('should have consistent model names between config.ts and models-data.ts', () => {
+      const featuredModelIds = Object.values(FEATURED_MODELS).map(m => m.id);
+
+      featuredModelIds.forEach((featuredId) => {
+        const modelName = featuredId.includes('/')
+          ? featuredId.split('/').pop()
+          : featuredId;
+
+        const matchingModels = models.filter(m => {
+          const normalizedModelName = m.name.toLowerCase().replace(/[:\s]/g, '-');
+          const normalizedFeaturedName = modelName?.toLowerCase().replace(/[:\s]/g, '-');
+
+          return normalizedModelName === normalizedFeaturedName ||
+                 m.name.toLowerCase() === modelName?.toLowerCase();
+        });
+
+        if (matchingModels.length > 0) {
+          // Verify that at least one matching model has the correct developer
+          const provider = featuredId.split('/')[0];
+          const hasMatchingProvider = matchingModels.some(m =>
+            m.developer.toLowerCase() === provider.toLowerCase()
+          );
+
+          expect(hasMatchingProvider).toBe(true);
+
+          if (!hasMatchingProvider) {
+            throw new Error(
+              `Featured model "${featuredId}" found in models-data.ts but with wrong provider. ` +
+              `Expected provider "${provider}" but found: ${matchingModels.map(m => m.developer).join(', ')}`
+            );
+          }
+        }
+      });
+    });
+
+    it('should have featured models with valid metadata', () => {
+      const featuredModelIds = Object.values(FEATURED_MODELS).map(m => m.id);
+
+      featuredModelIds.forEach((featuredId) => {
+        const modelName = featuredId.includes('/')
+          ? featuredId.split('/').pop()
+          : featuredId;
+
+        const matchingModels = models.filter(m => {
+          const normalizedModelName = m.name.toLowerCase().replace(/[:\s]/g, '-');
+          const normalizedFeaturedName = modelName?.toLowerCase().replace(/[:\s]/g, '-');
+
+          return normalizedModelName === normalizedFeaturedName ||
+                 m.name.toLowerCase() === modelName?.toLowerCase();
+        });
+
+        if (matchingModels.length > 0) {
+          const model = matchingModels[0];
+
+          // Validate that the featured model has all required metadata
+          expect(model.name).toBeTruthy();
+          expect(model.description).toBeTruthy();
+          expect(model.description.length).toBeGreaterThan(10);
+          expect(model.developer).toBeTruthy();
+          expect(model.category).toBeTruthy();
+          expect(model.modalities.length).toBeGreaterThan(0);
+          expect(model.supportedParameters.length).toBeGreaterThan(0);
+        }
+      });
+    });
+
+    it('should document the synchronization requirement', () => {
+      // This test serves as documentation that config.ts and models-data.ts must be kept in sync
+      // When adding a new featured model to config.ts:
+      // 1. Ensure the model exists in models-data.ts with the correct name
+      // 2. Update the model name in models-data.ts if the provider releases a new version
+      // 3. Run this test to verify synchronization
+
+      expect(true).toBe(true); // Always passes, serves as documentation
     });
   });
 });
