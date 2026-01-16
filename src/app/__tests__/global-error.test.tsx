@@ -84,9 +84,13 @@ describe('GlobalError', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
 
-    render(<GlobalError error={mockError} reset={mockReset} />);
+    const { container } = render(<GlobalError error={mockError} reset={mockReset} />);
 
-    expect(screen.getByText('Test error message')).toBeInTheDocument();
+    // The error message is displayed as "Error: {error.name}: {error.message}"
+    // which renders split across elements, so we check the error details container exists
+    const errorDetailsSection = container.querySelector('.bg-muted');
+    expect(errorDetailsSection).toBeInTheDocument();
+    expect(errorDetailsSection?.textContent).toContain('Test error message');
 
     process.env.NODE_ENV = originalEnv;
   });
