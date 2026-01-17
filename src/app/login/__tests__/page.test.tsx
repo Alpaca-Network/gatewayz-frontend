@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 // Mock next/navigation
 const mockPush = jest.fn();
@@ -228,6 +229,72 @@ describe('LoginPage', () => {
           'mock-access-token',
           null
         );
+      });
+    });
+
+    it('should show error message when backend sync fails', async () => {
+      const { syncPrivyToGatewayz } = require('@/integrations/privy/auth-sync');
+      syncPrivyToGatewayz.mockRejectedValueOnce(new Error('Network error'));
+
+      mockAuthenticated = true;
+      mockUser = mockUserObj;
+      mockSearchParams.set('desktop', 'true');
+
+      render(<LoginPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Authentication Failed')).toBeInTheDocument();
+        expect(screen.getByText('Network error')).toBeInTheDocument();
+      });
+    });
+
+    it('should show error when API key is missing from response', async () => {
+      const { syncPrivyToGatewayz } = require('@/integrations/privy/auth-sync');
+      syncPrivyToGatewayz.mockResolvedValueOnce({
+        authResponse: { user_id: 123, api_key: null },
+        privyAccessToken: 'mock-token',
+      });
+
+      mockAuthenticated = true;
+      mockUser = mockUserObj;
+      mockSearchParams.set('desktop', 'true');
+
+      render(<LoginPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Authentication Failed')).toBeInTheDocument();
+        expect(screen.getByText('No API key received from backend')).toBeInTheDocument();
+      });
+    });
+
+    it('should allow retry after error', async () => {
+      const { syncPrivyToGatewayz } = require('@/integrations/privy/auth-sync');
+      syncPrivyToGatewayz.mockRejectedValueOnce(new Error('Network error'));
+
+      mockAuthenticated = true;
+      mockUser = mockUserObj;
+      mockSearchParams.set('desktop', 'true');
+
+      render(<LoginPage />);
+
+      // Wait for error to show
+      await waitFor(() => {
+        expect(screen.getByText('Authentication Failed')).toBeInTheDocument();
+      });
+
+      // Reset mock to succeed on retry
+      syncPrivyToGatewayz.mockResolvedValueOnce({
+        authResponse: { api_key: 'mock-api-key', user_id: 123 },
+        privyAccessToken: 'mock-token',
+      });
+
+      // Click retry button
+      const retryButton = screen.getByText('Try again');
+      await userEvent.click(retryButton);
+
+      // Should show connecting message again
+      await waitFor(() => {
+        expect(screen.queryByText('Authentication Failed')).not.toBeInTheDocument();
       });
     });
   });

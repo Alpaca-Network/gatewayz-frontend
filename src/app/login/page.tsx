@@ -26,14 +26,27 @@ function buildRedirectUrl(baseUrl: string, refCode: string | null): string {
 /**
  * Build desktop deep link callback URL with auth data
  */
-function buildDesktopCallbackUrl(apiKey: string, userId: number, email: string | null): string {
+function buildDesktopCallbackUrl(
+  apiKey: string,
+  userId: number,
+  email: string | null,
+  privyUserId: string
+): string {
   const params = new URLSearchParams({
     token: apiKey,
     user_id: String(userId),
+    privy_user_id: privyUserId,
     ...(email && { email }),
   });
   return `gatewayz://auth/callback?${params.toString()}`;
 }
+
+/**
+ * Deep link redirect timeout in milliseconds.
+ * If the deep link doesn't trigger app navigation within this time,
+ * we show an error to the user.
+ */
+const DEEP_LINK_TIMEOUT_MS = 5000;
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -82,10 +95,30 @@ function LoginContent() {
             const callbackUrl = buildDesktopCallbackUrl(
               authResponse.api_key,
               authResponse.user_id,
-              email
+              email,
+              user.id
             );
 
             console.log('[Login] Desktop auth: redirecting to deep link...');
+
+            // Set a timeout to show an error if the deep link doesn't work
+            // This handles cases where the protocol handler isn't registered
+            const timeoutId = setTimeout(() => {
+              console.error('[Login] Desktop auth: deep link redirect timed out');
+              setDesktopAuthError(
+                'Could not connect to desktop app. Please ensure GatewayZ is installed and running.'
+              );
+              setIsProcessingDesktopAuth(false);
+            }, DEEP_LINK_TIMEOUT_MS);
+
+            // Store timeout ID in window so we can clear it if page unloads (successful redirect)
+            (window as any).__desktopAuthTimeoutId = timeoutId;
+
+            // Clear timeout if page unloads (indicates successful redirect)
+            const handleUnload = () => {
+              clearTimeout(timeoutId);
+            };
+            window.addEventListener('beforeunload', handleUnload);
 
             // Redirect to the desktop app via deep link
             window.location.href = callbackUrl;

@@ -56,14 +56,15 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
   });
 
   // Handle OAuth callbacks from deep links
-  // The callback URL format is: gatewayz://auth/callback?token=xxx&user_id=xxx&email=xxx
+  // The callback URL format is: gatewayz://auth/callback?token=xxx&user_id=xxx&privy_user_id=xxx&email=xxx
   useAuthCallback(async (query) => {
     // Parse the query string and handle the OAuth callback
     const params = new URLSearchParams(query);
 
-    // New format from login page: token, user_id, email
+    // New format from login page: token, user_id, privy_user_id, email
     const token = params.get("token");
     const userId = params.get("user_id");
+    const privyUserId = params.get("privy_user_id");
     const email = params.get("email");
 
     // Legacy format: code, state (for backwards compatibility)
@@ -83,7 +84,7 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
           user_id: parseInt(userId, 10),
           api_key: token,
           auth_method: "desktop_deep_link",
-          privy_user_id: "", // Will be populated on next sync
+          privy_user_id: privyUserId || "",
           display_name: email || "",
           email: email || "",
           credits: 0, // Will be populated on next sync
