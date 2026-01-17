@@ -29,7 +29,7 @@ interface OnboardingTask {
  */
 function getShortcutText(): string {
   if (isMacOS()) return '⌘+G';
-  if (isWindows()) return 'Win+Shift+G';
+  if (isWindows()) return 'Ctrl+G';
   return 'Super+G';
 }
 

@@ -22,7 +22,7 @@ describe('getShortcutText', () => {
   // Test the shortcut text logic directly
   function getShortcutText(): string {
     if (mockIsMacOS()) return '⌘+G';
-    if (mockIsWindows()) return 'Win+Shift+G';
+    if (mockIsWindows()) return 'Ctrl+G';
     return 'Super+G';
   }
 
@@ -33,7 +33,7 @@ describe('getShortcutText', () => {
 
   it('should return Windows shortcut for Windows', () => {
     mockIsWindows.mockReturnValue(true);
-    expect(getShortcutText()).toBe('Win+Shift+G');
+    expect(getShortcutText()).toBe('Ctrl+G');
   });
 
   it('should return Linux shortcut for other platforms', () => {

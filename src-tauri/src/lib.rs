@@ -236,10 +236,10 @@ fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
 
     // Register platform-specific shortcuts to show/focus GatewayZ:
     // - macOS: Cmd+G (Super+G)
-    // - Windows: Win+Shift+G (to avoid Xbox Game Bar conflict)
+    // - Windows: Ctrl+G
     // - Linux: Super+G
     #[cfg(target_os = "windows")]
-    let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyG);
+    let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyG);
 
     #[cfg(not(target_os = "windows"))]
     let shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyG);
@@ -256,10 +256,23 @@ fn handle_global_shortcut(app: &AppHandle, shortcut: &tauri_plugin_global_shortc
     use tauri_plugin_global_shortcut::Code;
 
     if shortcut.key == Code::KeyG {
-        // Show and focus the main window
+        // Toggle the main window: show if hidden, minimize if visible
         if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.set_focus();
+            // Check if window is visible and focused
+            let is_visible = window.is_visible().unwrap_or(false);
+            let is_focused = window.is_focused().unwrap_or(false);
+
+            if is_visible && is_focused {
+                // Window is visible and focused - hide it
+                let _ = window.hide();
+            } else if is_visible {
+                // Window is visible but not focused - bring it to focus
+                let _ = window.set_focus();
+            } else {
+                // Window is hidden - show and focus it
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
         }
     }
 }
