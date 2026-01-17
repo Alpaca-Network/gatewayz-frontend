@@ -46,6 +46,20 @@ jest.mock('@/context/gatewayz-auth-context', () => {
   };
 });
 
+// Mock the new privy-web-provider module - use actual implementation
+// This ensures the tests verify real behavior including error handlers
+jest.mock('../privy-web-provider', () => {
+  const actual = jest.requireActual('../privy-web-provider');
+  return actual;
+});
+
+// Mock the desktop-auth-provider module - uses the actual implementation
+// This ensures the tests verify real behavior
+jest.mock('../desktop-auth-provider', () => {
+  const actual = jest.requireActual('../desktop-auth-provider');
+  return actual;
+});
+
 // Mock PreviewHostnameInterceptor
 jest.mock('@/components/auth/preview-hostname-interceptor', () => ({
   PreviewHostnameInterceptor: () => null,
@@ -274,7 +288,7 @@ describe('PrivyProviderWrapper', () => {
         expect(config.embeddedWallets).toBeDefined();
         expect(config.embeddedWallets.ethereum.createOnLogin).toBe('off');
         expect(consoleSpy).toHaveBeenCalledWith(
-          "[Auth] Embedded wallets disabled (createOnLogin: 'off') - Tauri desktop or iOS in-app browser detected"
+          "[Auth] Embedded wallets disabled (createOnLogin: 'off') - iOS in-app browser detected"
         );
 
         consoleSpy.mockRestore();
