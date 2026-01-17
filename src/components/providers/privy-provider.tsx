@@ -515,7 +515,7 @@ const PrivyProviderNoSSR = dynamic<PrivyProviderWrapperInnerProps>(
  * minimal auth context for desktop that uses stored credentials.
  *
  * Desktop auth flow:
- * 1. User clicks login -> opens browser to gatewayz.ai/login
+ * 1. User clicks login -> opens browser to beta.gatewayz.ai/login
  * 2. After login, browser redirects with deep link gatewayz://auth/callback?token=xxx
  * 3. Desktop app receives token via deep link handler in desktop-provider.tsx
  * 4. Token is stored in Tauri secure store and used for API calls
@@ -612,7 +612,7 @@ function DesktopAuthProvider({ children, storageStatus }: PrivyProviderWrapperIn
       error: null,
       authTiming: defaultAuthTiming,
       login: async () => {
-        // Desktop login opens external browser to gatewayz.ai/login
+        // Desktop login opens external browser to beta.gatewayz.ai/login
         // The deep link handler will receive the callback
         console.info("[Auth] Desktop: Opening external browser for login");
         if (typeof window !== "undefined") {
@@ -620,16 +620,16 @@ function DesktopAuthProvider({ children, storageStatus }: PrivyProviderWrapperIn
             // Use Tauri shell API to open external browser
             try {
               const { open } = await import("@tauri-apps/plugin-shell");
-              await open("https://gatewayz.ai/login?desktop=true");
+              await open("https://beta.gatewayz.ai/login?desktop=true");
             } catch (err) {
               console.error("[Auth] Desktop: Failed to open browser via Tauri shell", err);
               // Fallback to window.open
-              window.open("https://gatewayz.ai/login?desktop=true", "_blank");
+              window.open("https://beta.gatewayz.ai/login?desktop=true", "_blank");
             }
           } else {
             // Fallback for when __TAURI__ isn't available yet
             console.info("[Auth] Desktop: __TAURI__ not available, using window.open fallback");
-            window.open("https://gatewayz.ai/login?desktop=true", "_blank");
+            window.open("https://beta.gatewayz.ai/login?desktop=true", "_blank");
           }
         }
       },
