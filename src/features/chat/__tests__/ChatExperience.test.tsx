@@ -12,6 +12,7 @@ jest.mock('lucide-react', () => ({
   Loader2: () => <span data-testid="loader-icon">Loader</span>,
   MessageSquare: () => <span data-testid="message-icon">Message</span>,
   Check: () => <span data-testid="check-icon">Check</span>,
+  Search: () => <span data-testid="search-icon">Search</span>,
 }));
 
 // Mock all the dependencies
@@ -59,6 +60,17 @@ jest.mock('@/components/ui/scroll-area', () => ({
 
 jest.mock('@/components/ui/badge', () => ({
   Badge: ({ children }: any) => <span>{children}</span>,
+}));
+
+jest.mock('@/components/ui/switch', () => ({
+  Switch: (props: any) => <button data-testid="switch" {...props}>Switch</button>,
+}));
+
+jest.mock('@/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: any) => <div>{children}</div>,
+  TooltipContent: ({ children }: any) => <div>{children}</div>,
+  TooltipTrigger: ({ children }: any) => <div>{children}</div>,
+  TooltipProvider: ({ children }: any) => <div>{children}</div>,
 }));
 
 jest.mock('@/components/chat/ChatMessage', () => ({
