@@ -296,7 +296,7 @@ describe('PrivyProviderWrapper', () => {
     });
 
     describe('Tauri Desktop Mode', () => {
-      it('should bypass Privy SDK entirely when running in Tauri desktop', () => {
+      it('should use DesktopAuthProvider with stub PrivyProvider when running in Tauri desktop', () => {
         process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
         mockIsTauriDesktop.mockReturnValue(true);
         const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
@@ -307,8 +307,10 @@ describe('PrivyProviderWrapper', () => {
           </PrivyProviderWrapper>
         );
 
-        // Should NOT render the Privy provider
-        expect(screen.queryByTestId('privy-provider')).not.toBeInTheDocument();
+        // Should render the Privy provider (as a stub to prevent usePrivy() hooks from crashing)
+        // This is intentional - we wrap in PrivyProvider so components that call usePrivy()
+        // directly don't throw errors, but actual auth is handled by GatewayzAuthContext
+        expect(screen.queryByTestId('privy-provider')).toBeInTheDocument();
 
         // Should log that we're in desktop mode
         expect(consoleSpy).toHaveBeenCalledWith(
