@@ -139,70 +139,40 @@ class StatsigErrorBoundary extends React.Component<
   }
 }
 
-function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
-  const { user, authenticated } = usePrivySafe();
-  const [userId, setUserId] = React.useState<string>('anonymous');
+// Inner component that actually initializes the Statsig SDK
+// This is only rendered when we have a valid SDK key, preventing
+// the useClientAsyncInit hook from making network requests with an invalid key
+function StatsigClientProvider({ children, userId }: { children: React.ReactNode; userId: string }) {
   const [shouldBypassStatsig, setShouldBypassStatsig] = React.useState(false);
   const initTimeoutRef = React.useRef<NodeJS.Timeout>();
-  // Use a ref to track bypass state to avoid stale closures in setTimeout
   const bypassRef = React.useRef(false);
   // Memoize plugins to prevent re-creation on every render
-  // CRITICAL: Only create plugins when SDK key is valid to prevent DOM manipulation conflicts
   const pluginsRef = React.useRef(createPlugins());
 
-  // Get user ID from Privy or backend user data
-  React.useEffect(() => {
-    if (authenticated && user) {
-      setUserId(user.id || 'anonymous');
-    } else {
-      const userData = getUserData();
-      if (userData?.user_id) {
-        setUserId(String(userData.user_id));
-      }
-    }
-  }, [authenticated, user]);
-
-  const sdkKey = process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
-  const isValidKey = hasValidSdkKey();
-
-  // Early exit: bypass Statsig entirely if SDK key is missing or invalid
-  // This prevents Statsig from trying to initialize and emitting warnings
-  React.useEffect(() => {
-    if (!isValidKey) {
-      console.warn('[Statsig] SDK key not found or invalid in environment - analytics disabled');
-      bypassRef.current = true;
-      setShouldBypassStatsig(true);
-    }
-  }, [isValidKey]);
+  const sdkKey = process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY!; // Safe: only called when hasValidSdkKey() is true
 
   // Initialize Statsig client with enhanced error handling and caching
   // CRITICAL: Plugins are only created when SDK key is valid (see pluginsRef above)
   // This prevents StatsigSessionReplayPlugin from manipulating the DOM when analytics is disabled,
   // which was causing React VDOM desynchronization and removeChild errors.
   // disableStorage: false enables localStorage caching which persists feature flags across sessions
-  // Note: The 429 rate limit errors on /monitoring endpoint are from Statsig's servers
-  // and are handled gracefully by the SDK - they don't affect application functionality
   const { client } = useClientAsyncInit(
-    sdkKey || 'disabled',
+    sdkKey,
     { userID: userId },
     {
-      plugins: pluginsRef.current, // Only contains plugins when SDK key is valid
+      plugins: pluginsRef.current,
       disableStorage: false, // Enable localStorage caching for feature flags (reduces API calls by ~50%)
     },
   );
 
   // Timeout: if Statsig doesn't initialize within 2 seconds, bypass it
   // This prevents ad blocker/network delays from blocking app rendering
-  // IMPORTANT: Do NOT include shouldBypassStatsig in the dependency array - it would cause an infinite loop
-  // because this effect sets that state. Use bypassRef to check the current bypass status instead.
   React.useEffect(() => {
-    // If already bypassed, don't set up another timeout
     if (bypassRef.current) {
       return;
     }
 
     initTimeoutRef.current = setTimeout(() => {
-      // Use ref to check current bypass status (avoids stale closure issues)
       if (!client && !bypassRef.current) {
         console.warn('[Statsig] Initialization timeout (likely ad blocker or slow network) - bypassing analytics');
         bypassRef.current = true;
@@ -215,11 +185,10 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
         clearTimeout(initTimeoutRef.current);
       }
     };
-  }, [client]); // Removed shouldBypassStatsig from deps to prevent infinite loop
+  }, [client]);
 
-  // Bypass Statsig if SDK key missing/invalid, timeout, client not ready, or initialization failed
-  if (!isValidKey || shouldBypassStatsig || !client) {
-    // Mark analytics as unavailable
+  // Bypass if timeout or client not ready
+  if (shouldBypassStatsig || !client) {
     if (typeof window !== 'undefined') {
       window.statsigAvailable = false;
     }
@@ -235,6 +204,42 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
     <StatsigProvider client={client}>
       {children}
     </StatsigProvider>
+  );
+}
+
+function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
+  const { user, authenticated } = usePrivySafe();
+  const [userId, setUserId] = React.useState<string>('anonymous');
+
+  // Get user ID from Privy or backend user data
+  React.useEffect(() => {
+    if (authenticated && user) {
+      setUserId(user.id || 'anonymous');
+    } else {
+      const userData = getUserData();
+      if (userData?.user_id) {
+        setUserId(String(userData.user_id));
+      }
+    }
+  }, [authenticated, user]);
+
+  const isValidKey = hasValidSdkKey();
+
+  // If SDK key is missing or invalid, bypass Statsig entirely
+  // This prevents the Statsig SDK from making network requests with an invalid key
+  // which would result in 401 errors to prodregistryv2.org
+  if (!isValidKey) {
+    if (typeof window !== 'undefined') {
+      window.statsigAvailable = false;
+    }
+    return <>{children}</>;
+  }
+
+  // Only render the client provider (which calls useClientAsyncInit) when we have a valid key
+  return (
+    <StatsigClientProvider userId={userId}>
+      {children}
+    </StatsigClientProvider>
   );
 }
 
