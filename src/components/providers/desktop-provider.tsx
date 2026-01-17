@@ -56,13 +56,55 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
   });
 
   // Handle OAuth callbacks from deep links
+  // The callback URL format is: gatewayz://auth/callback?token=xxx&user_id=xxx&privy_user_id=xxx&email=xxx
   useAuthCallback(async (query) => {
     // Parse the query string and handle the OAuth callback
     const params = new URLSearchParams(query);
-    const code = params.get("code");
-    const state = params.get("state");
 
-    if (code) {
+    // New format from login page: token, user_id, privy_user_id, email
+    const token = params.get("token");
+    const userId = params.get("user_id");
+    const privyUserId = params.get("privy_user_id");
+    const email = params.get("email");
+
+    // Legacy format: code, state (for backwards compatibility)
+    const code = params.get("code");
+
+    if (token && userId) {
+      // New format: direct token from web login
+      try {
+        console.log("[Desktop Auth] Received auth callback with token");
+
+        // Import storage functions
+        const { saveApiKey, saveUserData, AUTH_REFRESH_EVENT } = await import("@/lib/api");
+
+        // Save the API key and user data
+        saveApiKey(token);
+        saveUserData({
+          user_id: parseInt(userId, 10),
+          api_key: token,
+          auth_method: "desktop_deep_link",
+          privy_user_id: privyUserId || "",
+          display_name: email || "",
+          email: email || "",
+          credits: 0, // Will be populated on next sync
+        });
+
+        console.log("[Desktop Auth] Credentials saved, dispatching refresh event");
+
+        // Dispatch refresh event to update auth context
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+        }
+
+        // Navigate to chat
+        router.refresh();
+        router.push("/chat");
+      } catch (error) {
+        console.error("[Desktop Auth] Error handling token callback:", error);
+      }
+    } else if (code) {
+      // Legacy format: OAuth code exchange (kept for backwards compatibility)
       try {
         // Use the desktop-specific auth callback endpoint
         const { handleDesktopOAuthCallback } = await import("@/lib/desktop");
@@ -78,6 +120,8 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
       } catch (error) {
         console.error("[Desktop Auth] Error handling callback:", error);
       }
+    } else {
+      console.error("[Desktop Auth] Invalid callback: missing token or code");
     }
   });
 
