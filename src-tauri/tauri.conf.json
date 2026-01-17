@@ -30,7 +30,8 @@
         "titleBarStyle": "Visible",
         "hiddenTitle": false,
         "tabbingIdentifier": "GatewayZ",
-        "acceptFirstMouse": true
+        "acceptFirstMouse": true,
+        "devtools": true
       }
     ],
     "security": {
