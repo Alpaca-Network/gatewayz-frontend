@@ -592,14 +592,20 @@ function DesktopAuthProvider({ children, storageStatus }: PrivyProviderWrapperIn
         // Desktop login opens external browser to gatewayz.ai/login
         // The deep link handler will receive the callback
         console.info("[Auth] Desktop: Opening external browser for login");
-        if (typeof window !== "undefined" && "__TAURI__" in window) {
-          // Use Tauri shell API to open external browser
-          try {
-            const { open } = await import("@tauri-apps/plugin-shell");
-            await open("https://gatewayz.ai/login?desktop=true");
-          } catch (err) {
-            console.error("[Auth] Desktop: Failed to open browser", err);
-            // Fallback to window.open
+        if (typeof window !== "undefined") {
+          if ("__TAURI__" in window) {
+            // Use Tauri shell API to open external browser
+            try {
+              const { open } = await import("@tauri-apps/plugin-shell");
+              await open("https://gatewayz.ai/login?desktop=true");
+            } catch (err) {
+              console.error("[Auth] Desktop: Failed to open browser via Tauri shell", err);
+              // Fallback to window.open
+              window.open("https://gatewayz.ai/login?desktop=true", "_blank");
+            }
+          } else {
+            // Fallback for when __TAURI__ isn't available yet
+            console.info("[Auth] Desktop: __TAURI__ not available, using window.open fallback");
             window.open("https://gatewayz.ai/login?desktop=true", "_blank");
           }
         }
