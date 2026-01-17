@@ -23,7 +23,7 @@ function usePrivySafe(): { user: { id?: string } | null; authenticated: boolean 
   }
 
   // In web mode, use the actual Privy hook
-  // eslint-disable-next-line @typescript-eslint/no-var-requires, react-hooks/rules-of-hooks
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const { usePrivy } = require('@privy-io/react-auth') as typeof import('@privy-io/react-auth');
   // eslint-disable-next-line react-hooks/rules-of-hooks
   return usePrivy();
