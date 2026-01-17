@@ -4,8 +4,30 @@ import React from "react";
 import { StatsigProvider, useClientAsyncInit } from '@statsig/react-bindings';
 import { StatsigAutoCapturePlugin } from '@statsig/web-analytics';
 import { StatsigSessionReplayPlugin } from '@statsig/session-replay';
-import { usePrivy } from '@privy-io/react-auth';
 import { getUserData } from '@/lib/api';
+import { isTauriDesktop } from '@/lib/browser-detection';
+
+// Check if running in Tauri desktop mode at module level
+// This is checked once and cached for the lifetime of the app
+const IS_TAURI_DESKTOP = typeof window !== 'undefined' && isTauriDesktop();
+
+// Custom hook that safely gets Privy user info
+// Returns null values when running in Tauri desktop (where PrivyProvider is not used)
+// IMPORTANT: This hook pattern is intentionally conditional on a module-level constant
+// to avoid calling usePrivy() in desktop mode where PrivyProvider doesn't exist
+function usePrivySafe(): { user: { id?: string } | null; authenticated: boolean } {
+  // In desktop mode, never try to use Privy - just return empty values
+  // The getUserData() fallback in the effect will provide user info from localStorage
+  if (IS_TAURI_DESKTOP) {
+    return { user: null, authenticated: false };
+  }
+
+  // In web mode, use the actual Privy hook
+  // eslint-disable-next-line @typescript-eslint/no-var-requires, react-hooks/rules-of-hooks
+  const { usePrivy } = require('@privy-io/react-auth') as typeof import('@privy-io/react-auth');
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return usePrivy();
+}
 
 // Check if SDK key is valid (exists and is not a placeholder)
 const hasValidSdkKey = (): boolean => {
@@ -118,7 +140,7 @@ class StatsigErrorBoundary extends React.Component<
 }
 
 function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
-  const { user, authenticated } = usePrivy();
+  const { user, authenticated } = usePrivySafe();
   const [userId, setUserId] = React.useState<string>('anonymous');
   const [shouldBypassStatsig, setShouldBypassStatsig] = React.useState(false);
   const initTimeoutRef = React.useRef<NodeJS.Timeout>();
