@@ -107,10 +107,11 @@ describe('StatsigProviderWrapper', () => {
   });
 
   describe('SDK Key Validation', () => {
-    // Note: Plugin instantiation is tested via the useClientAsyncInit mock
-    // which receives the plugins array. We verify the plugins parameter.
+    // Note: When SDK key is invalid, useClientAsyncInit is NOT called at all
+    // to prevent the SDK from making network requests with an invalid key.
+    // This prevents 401 errors to prodregistryv2.org.
 
-    it('should pass empty plugins array when SDK key is missing', () => {
+    it('should NOT call useClientAsyncInit when SDK key is missing', () => {
       delete process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
 
       render(
@@ -119,13 +120,12 @@ describe('StatsigProviderWrapper', () => {
         </StatsigProviderWrapper>
       );
 
-      // Verify useClientAsyncInit was called with empty plugins array
-      expect(mockUseClientAsyncInit).toHaveBeenCalled();
-      const callArgs = mockUseClientAsyncInit.mock.calls[0];
-      expect(callArgs[2].plugins).toEqual([]);
+      // useClientAsyncInit should NOT be called when SDK key is missing
+      // This prevents network requests with invalid key
+      expect(mockUseClientAsyncInit).not.toHaveBeenCalled();
     });
 
-    it('should pass empty plugins array when SDK key is "disabled"', () => {
+    it('should NOT call useClientAsyncInit when SDK key is "disabled"', () => {
       process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'disabled';
 
       render(
@@ -134,12 +134,11 @@ describe('StatsigProviderWrapper', () => {
         </StatsigProviderWrapper>
       );
 
-      expect(mockUseClientAsyncInit).toHaveBeenCalled();
-      const callArgs = mockUseClientAsyncInit.mock.calls[0];
-      expect(callArgs[2].plugins).toEqual([]);
+      // useClientAsyncInit should NOT be called when SDK key is "disabled"
+      expect(mockUseClientAsyncInit).not.toHaveBeenCalled();
     });
 
-    it('should pass empty plugins array when SDK key is too short', () => {
+    it('should NOT call useClientAsyncInit when SDK key is too short', () => {
       process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'short';
 
       render(
@@ -148,9 +147,8 @@ describe('StatsigProviderWrapper', () => {
         </StatsigProviderWrapper>
       );
 
-      expect(mockUseClientAsyncInit).toHaveBeenCalled();
-      const callArgs = mockUseClientAsyncInit.mock.calls[0];
-      expect(callArgs[2].plugins).toEqual([]);
+      // useClientAsyncInit should NOT be called when SDK key is too short
+      expect(mockUseClientAsyncInit).not.toHaveBeenCalled();
     });
 
     it('should pass plugins array when SDK key is valid', () => {
@@ -272,7 +270,7 @@ describe('StatsigProviderWrapper', () => {
   });
 
   describe('Console Warning Suppression', () => {
-    it('should log warning when SDK key is missing', async () => {
+    it('should not log excessive warnings when SDK key is missing', async () => {
       delete process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
       const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
@@ -282,11 +280,18 @@ describe('StatsigProviderWrapper', () => {
         </StatsigProviderWrapper>
       );
 
+      // Wait for any potential async operations
       await waitFor(() => {
-        expect(consoleWarnSpy).toHaveBeenCalledWith(
-          expect.stringContaining('SDK key not found or invalid')
-        );
+        expect(screen.getByText('Test')).toBeInTheDocument();
       });
+
+      // When SDK key is invalid, we skip initialization entirely
+      // so there should be no Statsig-related warnings about missing SDK key
+      // (the SDK is never invoked in the first place)
+      const statsigNetworkWarnings = consoleWarnSpy.mock.calls.filter(
+        call => call[0]?.toString().includes('Unable to make request without an SDK key')
+      );
+      expect(statsigNetworkWarnings).toHaveLength(0);
 
       consoleWarnSpy.mockRestore();
     });
@@ -476,10 +481,11 @@ describe('StatsigProviderWrapper', () => {
   });
 
   describe('DOM Manipulation Prevention (Root Cause Fix)', () => {
-    it('should NOT instantiate plugins when SDK key is missing', () => {
+    it('should NOT call useClientAsyncInit when SDK key is missing', () => {
       // This is the critical test for the root cause fix
       // SessionReplayPlugin uses rrweb which manipulates DOM directly
       // When initialized with invalid key, it causes VDOM desync with React
+      // Now we don't even call useClientAsyncInit when SDK key is invalid
 
       delete process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY;
 
@@ -489,16 +495,12 @@ describe('StatsigProviderWrapper', () => {
         </StatsigProviderWrapper>
       );
 
-      // Verify useClientAsyncInit was called with empty plugins array
-      expect(mockUseClientAsyncInit).toHaveBeenCalled();
-      const callArgs = mockUseClientAsyncInit.mock.calls[0];
-
-      // Plugins array should be empty when SDK key is missing
-      // This prevents DOM manipulation that was causing removeChild errors
-      expect(callArgs[2].plugins).toEqual([]);
+      // useClientAsyncInit should NOT be called when SDK key is missing
+      // This prevents network requests and DOM manipulation entirely
+      expect(mockUseClientAsyncInit).not.toHaveBeenCalled();
     });
 
-    it('should NOT instantiate plugins when SDK key is "disabled"', () => {
+    it('should NOT call useClientAsyncInit when SDK key is "disabled"', () => {
       process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'disabled';
 
       render(
@@ -507,10 +509,8 @@ describe('StatsigProviderWrapper', () => {
         </StatsigProviderWrapper>
       );
 
-      // Verify useClientAsyncInit was called with empty plugins array
-      expect(mockUseClientAsyncInit).toHaveBeenCalled();
-      const callArgs = mockUseClientAsyncInit.mock.calls[0];
-      expect(callArgs[2].plugins).toEqual([]);
+      // useClientAsyncInit should NOT be called when SDK key is "disabled"
+      expect(mockUseClientAsyncInit).not.toHaveBeenCalled();
     });
 
     it('should create plugins only when SDK key is valid', () => {
