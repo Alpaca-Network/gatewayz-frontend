@@ -93,6 +93,19 @@ const SUPPRESSED_ERROR_PATTERNS = {
     /can't access lexical declaration.*before initialization/i,
     /ReferenceError.*tH.*before initialization/i,
   ],
+
+  // Safari/browser compatibility errors
+  browserCompat: [
+    /Invalid regular expression.*invalid group specifier/i,
+    /Invalid regular expression.*group specifier name/i,
+  ],
+
+  // External service timeouts (Privy, etc.)
+  externalServiceTimeouts: [
+    /auth\.privy\.io.*timeouterror/i,
+    /auth\.privy\.io.*timeout/i,
+    /auth\.privy\.io.*no response/i,
+  ],
 };
 
 /**
@@ -254,5 +267,7 @@ export function getIgnoreErrors(): RegExp[] {
     ...SUPPRESSED_ERROR_PATTERNS.rateLimiting,
     ...SUPPRESSED_ERROR_PATTERNS.storageAccess,
     ...SUPPRESSED_ERROR_PATTERNS.buildErrors,
+    ...SUPPRESSED_ERROR_PATTERNS.browserCompat,
+    ...SUPPRESSED_ERROR_PATTERNS.externalServiceTimeouts,
   ];
 }

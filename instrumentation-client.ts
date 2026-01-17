@@ -486,6 +486,40 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
+  // Filter out Safari regex errors (browser compatibility)
+  // Safari doesn't support certain regex features like named capture groups in some versions
+  // This is a browser limitation, not an application bug
+  const isSafariRegexError =
+    (errorMessageLower.includes('invalid regular expression') ||
+     eventMessageLower.includes('invalid regular expression')) &&
+    (errorMessageLower.includes('invalid group specifier') ||
+     errorMessageLower.includes('group specifier name') ||
+     eventMessageLower.includes('invalid group specifier') ||
+     eventMessageLower.includes('group specifier name'));
+
+  if (isSafariRegexError) {
+    console.debug('[Sentry] Filtered out Safari regex error (browser compatibility issue)');
+    return true;
+  }
+
+  // Filter out Privy session timeout errors (external service)
+  // These occur when the Privy authentication service times out
+  // This is an external service issue, not an application bug
+  const isPrivySessionTimeout =
+    (errorMessageLower.includes('auth.privy.io') ||
+     eventMessageLower.includes('auth.privy.io')) &&
+    (errorMessageLower.includes('timeouterror') ||
+     errorMessageLower.includes('timeout') ||
+     errorMessageLower.includes('no response') ||
+     eventMessageLower.includes('timeouterror') ||
+     eventMessageLower.includes('timeout') ||
+     eventMessageLower.includes('no response'));
+
+  if (isPrivySessionTimeout) {
+    console.debug('[Sentry] Filtered out Privy session timeout error (external service timeout)');
+    return true;
+  }
+
   return false;
 }
 
