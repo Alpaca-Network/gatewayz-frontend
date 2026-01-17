@@ -309,6 +309,19 @@ fn setup_deep_link_handler(app: &AppHandle) {
 fn handle_deep_link(app: &AppHandle, url: &url::Url) {
     log::info!("Handling deep link: {}", url);
 
+    // Log to file on Windows for debugging
+    #[cfg(all(target_os = "windows", not(debug_assertions)))]
+    {
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(std::env::temp_dir().join("gatewayz-desktop.log"))
+        {
+            let _ = writeln!(file, "[{}] Deep link received: {}", chrono_lite(), url);
+        }
+    }
+
     // Get the main window
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -326,6 +339,18 @@ fn handle_deep_link(app: &AppHandle, url: &url::Url) {
             }
             "/auth/callback" => {
                 // Handle OAuth callback
+                log::info!("Auth callback received, emitting auth-callback event");
+                #[cfg(all(target_os = "windows", not(debug_assertions)))]
+                {
+                    use std::io::Write;
+                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(std::env::temp_dir().join("gatewayz-desktop.log"))
+                    {
+                        let _ = writeln!(file, "[{}] Auth callback - emitting event", chrono_lite());
+                    }
+                }
                 let query = url.query().unwrap_or("");
                 let _ = window.emit("auth-callback", query);
             }
@@ -335,5 +360,7 @@ fn handle_deep_link(app: &AppHandle, url: &url::Url) {
                 let _ = window.emit("navigate", path);
             }
         }
+    } else {
+        log::error!("Failed to get main window for deep link handling");
     }
 }
