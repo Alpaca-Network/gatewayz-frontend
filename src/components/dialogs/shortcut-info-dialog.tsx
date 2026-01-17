@@ -27,8 +27,8 @@ function getShortcutDisplay(): { keys: string; description: string } {
   }
   if (isWindows()) {
     return {
-      keys: '⊞ Win + Shift + G',
-      description: 'Press Windows + Shift + G anytime to quickly open GatewayZ'
+      keys: 'Ctrl + G',
+      description: 'Press Ctrl + G anytime to quickly open or hide GatewayZ'
     };
   }
   // Linux

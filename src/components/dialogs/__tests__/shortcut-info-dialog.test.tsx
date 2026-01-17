@@ -132,7 +132,7 @@ describe('ShortcutInfoDialog', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('⊞ Win + Shift + G')).toBeInTheDocument();
+        expect(screen.getByText('Ctrl + G')).toBeInTheDocument();
       });
     });
   });
