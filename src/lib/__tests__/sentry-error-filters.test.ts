@@ -521,5 +521,54 @@ describe('Sentry Error Filters', () => {
       );
       expect(hasBuildError).toBe(true);
     });
+
+    it('should include Safari regex error patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      const hasSafariRegex = ignoreErrors.some(pattern =>
+        pattern.test("Invalid regular expression: invalid group specifier name")
+      );
+      expect(hasSafariRegex).toBe(true);
+    });
+
+    it('should include Privy timeout error patterns', () => {
+      const ignoreErrors = getIgnoreErrors();
+
+      const hasPrivyTimeout = ignoreErrors.some(pattern =>
+        pattern.test("auth.privy.io TimeoutError")
+      );
+      expect(hasPrivyTimeout).toBe(true);
+    });
+  });
+
+  describe('Safari and external service error suppression', () => {
+    it('should suppress Safari regex compatibility errors', () => {
+      const event: ErrorEvent = {
+        message: "SyntaxError: Invalid regular expression: invalid group specifier name",
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress Privy session timeout errors', () => {
+      const event: ErrorEvent = {
+        message: '[POST] "https://auth.privy.io/api/v1/sessions": <no response> [TimeoutError]',
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
+
+    it('should suppress Privy authentication timeout errors', () => {
+      const event: ErrorEvent = {
+        exception: {
+          values: [{
+            value: 'auth.privy.io request timeout',
+            type: 'TimeoutError',
+          }],
+        },
+      };
+
+      expect(shouldSuppressError(event)).toBe(true);
+    });
   });
 });
