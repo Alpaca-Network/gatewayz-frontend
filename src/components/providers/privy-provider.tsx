@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
@@ -12,7 +12,8 @@ import { RateLimitHandler } from "@/components/auth/rate-limit-handler";
 import { OriginErrorHandler } from "@/components/auth/origin-error-handler";
 import { GatewayzAuthProvider, GatewayzAuthContext, type AuthTimingInfo } from "@/context/gatewayz-auth-context";
 import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-interceptor";
-import { getApiKey, getUserData, type UserData } from "@/lib/api";
+import { AUTH_REFRESH_EVENT, getApiKey, getUserData, type UserData } from "@/lib/api";
+import { signOutDesktop } from "@/lib/desktop/auth";
 import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
 import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
 import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
@@ -524,10 +525,8 @@ function DesktopAuthProvider({ children, storageStatus }: PrivyProviderWrapperIn
   const [userData, setUserData] = useState<UserData | null>(null);
   const [status, setStatus] = useState<"idle" | "unauthenticated" | "authenticating" | "authenticated" | "error">("idle");
 
-  useEffect(() => {
-    console.info("[Auth] Running in Tauri desktop mode - Privy SDK bypassed");
-
-    // Check for stored credentials from Tauri secure store
+  // Helper function to refresh credentials from storage
+  const refreshCredentials = useCallback(() => {
     const storedKey = getApiKey();
     const storedUser = getUserData();
 
@@ -537,10 +536,36 @@ function DesktopAuthProvider({ children, storageStatus }: PrivyProviderWrapperIn
       setStatus("authenticated");
       console.info("[Auth] Desktop: Found stored credentials");
     } else {
+      setApiKey(null);
+      setUserData(null);
       setStatus("unauthenticated");
       console.info("[Auth] Desktop: No stored credentials found");
     }
   }, []);
+
+  useEffect(() => {
+    console.info("[Auth] Running in Tauri desktop mode - Privy SDK bypassed");
+    refreshCredentials();
+  }, [refreshCredentials]);
+
+  // Listen for AUTH_REFRESH_EVENT to update state after OAuth login callback
+  // This ensures the UI updates when handleDesktopOAuthCallback stores the token
+  useEffect(() => {
+    const handleAuthRefresh = () => {
+      console.info("[Auth] Desktop: AUTH_REFRESH_EVENT received, refreshing credentials");
+      refreshCredentials();
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener(AUTH_REFRESH_EVENT, handleAuthRefresh);
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener(AUTH_REFRESH_EVENT, handleAuthRefresh);
+      }
+    };
+  }, [refreshCredentials]);
 
   // Desktop auth context value - provides the same interface as GatewayzAuthProvider
   // but without Privy dependencies
@@ -581,24 +606,21 @@ function DesktopAuthProvider({ children, storageStatus }: PrivyProviderWrapperIn
       },
       logout: async () => {
         console.info("[Auth] Desktop: Logging out");
-        // Clear stored credentials
+        // Use signOutDesktop to properly clear all credentials including Tauri secure store
+        await signOutDesktop();
+        // Also clear localStorage credentials
         if (typeof window !== "undefined") {
           localStorage.removeItem("gatewayz_api_key");
           localStorage.removeItem("gatewayz_user_data");
+          localStorage.removeItem("gatewayz_auth_token");
         }
         setApiKey(null);
         setUserData(null);
         setStatus("unauthenticated");
       },
       refresh: async () => {
-        // Re-check stored credentials
-        const storedKey = getApiKey();
-        const storedUser = getUserData();
-        if (storedKey && storedUser) {
-          setApiKey(storedKey);
-          setUserData(storedUser);
-          setStatus("authenticated");
-        }
+        // Re-check stored credentials using the shared helper
+        refreshCredentials();
       },
     };
   }, [status, apiKey, userData]);
