@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import { PrivyProviderWrapper } from '../privy-provider';
 
 const mockUsePathname = jest.fn(() => '/');
@@ -35,12 +35,16 @@ jest.mock('@privy-io/react-auth', () => ({
   },
 }));
 
-// Mock the GatewayzAuthProvider
-jest.mock('@/context/gatewayz-auth-context', () => ({
-  GatewayzAuthProvider: ({ children }: any) => (
-    <div data-testid="gatewayz-auth-provider">{children}</div>
-  ),
-}));
+// Mock the GatewayzAuthProvider and GatewayzAuthContext
+jest.mock('@/context/gatewayz-auth-context', () => {
+  const { createContext } = require('react');
+  return {
+    GatewayzAuthProvider: ({ children }: any) => (
+      <div data-testid="gatewayz-auth-provider">{children}</div>
+    ),
+    GatewayzAuthContext: createContext(undefined),
+  };
+});
 
 // Mock PreviewHostnameInterceptor
 jest.mock('@/components/auth/preview-hostname-interceptor', () => ({
@@ -81,6 +85,21 @@ jest.mock('@/lib/browser-detection', () => ({
   isTauriDesktop: () => mockIsTauriDesktop(),
 }));
 
+// Mock the api module for desktop auth
+const mockGetApiKey = jest.fn(() => null);
+const mockGetUserData = jest.fn(() => null);
+jest.mock('@/lib/api', () => ({
+  AUTH_REFRESH_EVENT: 'gatewayz:refresh-auth',
+  getApiKey: () => mockGetApiKey(),
+  getUserData: () => mockGetUserData(),
+}));
+
+// Mock the desktop auth module
+const mockSignOutDesktop = jest.fn(() => Promise.resolve());
+jest.mock('@/lib/desktop/auth', () => ({
+  signOutDesktop: () => mockSignOutDesktop(),
+}));
+
 describe('PrivyProviderWrapper', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -98,6 +117,9 @@ describe('PrivyProviderWrapper', () => {
       toString: () => '',
     });
     mockBuildPreviewSafeRedirectUrl.mockReset();
+    mockGetApiKey.mockReturnValue(null);
+    mockGetUserData.mockReturnValue(null);
+    mockSignOutDesktop.mockClear();
   });
 
   afterEach(() => {
@@ -688,5 +710,92 @@ describe('PrivyProviderWrapper', () => {
 
     // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
     // which is loaded earlier in the component tree (layout.tsx) to centralize error suppression
+  });
+
+  describe('DesktopAuthProvider', () => {
+    beforeEach(() => {
+      mockIsTauriDesktop.mockReturnValue(true);
+    });
+
+    it('should set status to authenticated when credentials exist', () => {
+      mockGetApiKey.mockReturnValue('test-api-key');
+      mockGetUserData.mockReturnValue({ id: '123', email: 'test@example.com' });
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: Found stored credentials');
+      consoleSpy.mockRestore();
+    });
+
+    it('should set status to unauthenticated when no credentials exist', () => {
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: No stored credentials found');
+      consoleSpy.mockRestore();
+    });
+
+    it('should listen for AUTH_REFRESH_EVENT and refresh credentials', async () => {
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Simulate OAuth callback storing credentials
+      mockGetApiKey.mockReturnValue('new-api-key');
+      mockGetUserData.mockReturnValue({ id: '456', email: 'new@example.com' });
+
+      // Dispatch AUTH_REFRESH_EVENT wrapped in act
+      await act(async () => {
+        window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: AUTH_REFRESH_EVENT received, refreshing credentials');
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: Found stored credentials');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should set status to unauthenticated when refresh finds no credentials', async () => {
+      // Start with credentials
+      mockGetApiKey.mockReturnValue('test-api-key');
+      mockGetUserData.mockReturnValue({ id: '123', email: 'test@example.com' });
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Simulate credentials being cleared
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+
+      // Dispatch AUTH_REFRESH_EVENT wrapped in act
+      await act(async () => {
+        window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: No stored credentials found');
+      consoleSpy.mockRestore();
+    });
   });
 });
