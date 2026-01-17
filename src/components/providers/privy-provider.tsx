@@ -10,8 +10,9 @@ import type { PrivyClientConfig } from "@privy-io/react-auth";
 import { base } from "viem/chains";
 import { RateLimitHandler } from "@/components/auth/rate-limit-handler";
 import { OriginErrorHandler } from "@/components/auth/origin-error-handler";
-import { GatewayzAuthProvider } from "@/context/gatewayz-auth-context";
+import { GatewayzAuthProvider, GatewayzAuthContext, type AuthTimingInfo } from "@/context/gatewayz-auth-context";
 import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-interceptor";
+import { getApiKey, getUserData, type UserData } from "@/lib/api";
 import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
 import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
 import { waitForLocalStorageAccess, canUseLocalStorage } from "@/lib/safe-storage";
@@ -519,18 +520,96 @@ const PrivyProviderNoSSR = dynamic<PrivyProviderWrapperInnerProps>(
  * 4. Token is stored in Tauri secure store and used for API calls
  */
 function DesktopAuthProvider({ children, storageStatus }: PrivyProviderWrapperInnerProps) {
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [status, setStatus] = useState<"idle" | "unauthenticated" | "authenticating" | "authenticated" | "error">("idle");
+
   useEffect(() => {
     console.info("[Auth] Running in Tauri desktop mode - Privy SDK bypassed");
+
+    // Check for stored credentials from Tauri secure store
+    const storedKey = getApiKey();
+    const storedUser = getUserData();
+
+    if (storedKey && storedUser) {
+      setApiKey(storedKey);
+      setUserData(storedUser);
+      setStatus("authenticated");
+      console.info("[Auth] Desktop: Found stored credentials");
+    } else {
+      setStatus("unauthenticated");
+      console.info("[Auth] Desktop: No stored credentials found");
+    }
   }, []);
 
-  // For desktop, we provide a minimal wrapper that just passes through children
-  // The actual auth is handled by:
-  // 1. Tauri secure store for token storage (src-tauri/src/commands.rs)
-  // 2. Desktop deep link handler for OAuth callbacks (desktop-provider.tsx)
-  // 3. Direct API calls with stored token
+  // Desktop auth context value - provides the same interface as GatewayzAuthProvider
+  // but without Privy dependencies
+  const desktopAuthValue = useMemo(() => {
+    const defaultAuthTiming: AuthTimingInfo = {
+      startTime: null,
+      elapsedMs: 0,
+      retryCount: 0,
+      maxRetries: 3,
+      isSlowAuth: false,
+      phase: "idle",
+    };
+
+    return {
+      status,
+      apiKey,
+      userData,
+      privyUser: null, // No Privy user on desktop
+      privyReady: true, // Always "ready" since we're not using Privy
+      privyAuthenticated: false, // Not using Privy auth
+      error: null,
+      authTiming: defaultAuthTiming,
+      login: async () => {
+        // Desktop login opens external browser to gatewayz.ai/login
+        // The deep link handler will receive the callback
+        console.info("[Auth] Desktop: Opening external browser for login");
+        if (typeof window !== "undefined" && "__TAURI__" in window) {
+          // Use Tauri shell API to open external browser
+          try {
+            const { open } = await import("@tauri-apps/plugin-shell");
+            await open("https://gatewayz.ai/login?desktop=true");
+          } catch (err) {
+            console.error("[Auth] Desktop: Failed to open browser", err);
+            // Fallback to window.open
+            window.open("https://gatewayz.ai/login?desktop=true", "_blank");
+          }
+        }
+      },
+      logout: async () => {
+        console.info("[Auth] Desktop: Logging out");
+        // Clear stored credentials
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("gatewayz_api_key");
+          localStorage.removeItem("gatewayz_user_data");
+        }
+        setApiKey(null);
+        setUserData(null);
+        setStatus("unauthenticated");
+      },
+      refresh: async () => {
+        // Re-check stored credentials
+        const storedKey = getApiKey();
+        const storedUser = getUserData();
+        if (storedKey && storedUser) {
+          setApiKey(storedKey);
+          setUserData(storedUser);
+          setStatus("authenticated");
+        }
+      },
+    };
+  }, [status, apiKey, userData]);
+
+  // For desktop, we provide both StorageStatusContext and GatewayzAuthContext
+  // This ensures that useGatewayzAuth() works throughout the app
   return (
     <StorageStatusContext.Provider value={storageStatus}>
-      {children}
+      <GatewayzAuthContext.Provider value={desktopAuthValue}>
+        {children}
+      </GatewayzAuthContext.Provider>
     </StorageStatusContext.Provider>
   );
 }

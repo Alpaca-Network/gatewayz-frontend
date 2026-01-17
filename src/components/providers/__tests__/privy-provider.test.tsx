@@ -35,12 +35,16 @@ jest.mock('@privy-io/react-auth', () => ({
   },
 }));
 
-// Mock the GatewayzAuthProvider
-jest.mock('@/context/gatewayz-auth-context', () => ({
-  GatewayzAuthProvider: ({ children }: any) => (
-    <div data-testid="gatewayz-auth-provider">{children}</div>
-  ),
-}));
+// Mock the GatewayzAuthProvider and GatewayzAuthContext
+jest.mock('@/context/gatewayz-auth-context', () => {
+  const { createContext } = require('react');
+  return {
+    GatewayzAuthProvider: ({ children }: any) => (
+      <div data-testid="gatewayz-auth-provider">{children}</div>
+    ),
+    GatewayzAuthContext: createContext(undefined),
+  };
+});
 
 // Mock PreviewHostnameInterceptor
 jest.mock('@/components/auth/preview-hostname-interceptor', () => ({
@@ -79,6 +83,12 @@ jest.mock('@/lib/safe-storage', () => ({
 jest.mock('@/lib/browser-detection', () => ({
   shouldDisableEmbeddedWallets: () => mockShouldDisableEmbeddedWallets(),
   isTauriDesktop: () => mockIsTauriDesktop(),
+}));
+
+// Mock the api module for desktop auth
+jest.mock('@/lib/api', () => ({
+  getApiKey: jest.fn(() => null),
+  getUserData: jest.fn(() => null),
 }));
 
 describe('PrivyProviderWrapper', () => {
