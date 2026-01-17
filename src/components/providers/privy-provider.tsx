@@ -521,9 +521,32 @@ const PrivyProviderNoSSR = dynamic<PrivyProviderWrapperInnerProps>(
  * 4. Token is stored in Tauri secure store and used for API calls
  */
 function DesktopAuthProvider({ children, storageStatus }: PrivyProviderWrapperInnerProps) {
-  const [apiKey, setApiKey] = useState<string | null>(null);
-  const [userData, setUserData] = useState<UserData | null>(null);
-  const [status, setStatus] = useState<"idle" | "unauthenticated" | "authenticating" | "authenticated" | "error">("idle");
+  // Initialize state synchronously by checking localStorage immediately
+  // This avoids the "idle" state that causes loading screens
+  const [apiKey, setApiKey] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return getApiKey();
+    }
+    return null;
+  });
+  const [userData, setUserData] = useState<UserData | null>(() => {
+    if (typeof window !== "undefined") {
+      return getUserData();
+    }
+    return null;
+  });
+  const [status, setStatus] = useState<"idle" | "unauthenticated" | "authenticating" | "authenticated" | "error">(() => {
+    // Initialize status based on whether we have credentials
+    if (typeof window !== "undefined") {
+      const storedKey = getApiKey();
+      const storedUser = getUserData();
+      if (storedKey && storedUser) {
+        return "authenticated";
+      }
+      return "unauthenticated";
+    }
+    return "idle";
+  });
 
   // Helper function to refresh credentials from storage
   const refreshCredentials = useCallback(() => {
