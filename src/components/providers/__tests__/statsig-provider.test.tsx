@@ -38,6 +38,13 @@ jest.mock('@privy-io/react-auth', () => ({
   }),
 }));
 
+// Mock browser-detection module - returns false by default (web mode)
+// This mock must return a static value because IS_TAURI_DESKTOP is
+// evaluated at module load time, not at runtime
+jest.mock('@/lib/browser-detection', () => ({
+  isTauriDesktop: () => false,
+}));
+
 jest.mock('@/lib/api', () => ({
   getUserData: () => null,
 }));
@@ -521,6 +528,67 @@ describe('StatsigProviderWrapper', () => {
 
       // Plugins array should have 2 entries when SDK key is valid
       expect(callArgs[2].plugins).toHaveLength(2);
+    });
+  });
+
+  describe('Desktop Mode (Tauri) Compatibility', () => {
+    // Note: IS_TAURI_DESKTOP is evaluated at module load time, so we can't
+    // dynamically change it in tests. These tests verify the web mode path
+    // works correctly. Desktop mode behavior is tested via integration tests.
+
+    it('should render children in web mode (default)', () => {
+      // isTauriDesktop mock returns false, so this tests the web path
+      // which uses the actual usePrivy hook (mocked)
+      render(
+        <StatsigProviderWrapper>
+          <div data-testid="child">Test Child</div>
+        </StatsigProviderWrapper>
+      );
+
+      expect(screen.getByTestId('child')).toBeInTheDocument();
+    });
+
+    it('should work with valid SDK key in web mode', () => {
+      process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'client-valid-sdk-key-12345';
+      mockUseClientAsyncInit.mockReturnValue({ client: { initialized: true } });
+
+      render(
+        <StatsigProviderWrapper>
+          <div data-testid="child">Test</div>
+        </StatsigProviderWrapper>
+      );
+
+      // Should still render children
+      expect(screen.getByTestId('child')).toBeInTheDocument();
+    });
+
+    it('should use anonymous userId when Privy user is not available', () => {
+      process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'client-valid-sdk-key-12345';
+
+      // usePrivy mock returns null user, so getUserData fallback is used
+      // The getUserData mock also returns null, testing the anonymous fallback path
+      render(
+        <StatsigProviderWrapper>
+          <div data-testid="child">Test</div>
+        </StatsigProviderWrapper>
+      );
+
+      expect(screen.getByTestId('child')).toBeInTheDocument();
+      // useClientAsyncInit should be called with 'anonymous' user ID
+      expect(mockUseClientAsyncInit).toHaveBeenCalled();
+      const callArgs = mockUseClientAsyncInit.mock.calls[0];
+      expect(callArgs[1].userID).toBe('anonymous');
+    });
+
+    it('should not throw when usePrivy returns null user', () => {
+      // Render should not throw even when usePrivy returns null user
+      expect(() => {
+        render(
+          <StatsigProviderWrapper>
+            <div>Test</div>
+          </StatsigProviderWrapper>
+        );
+      }).not.toThrow();
     });
   });
 });
