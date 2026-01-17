@@ -245,6 +245,33 @@ describe('StatsigProviderWrapper', () => {
       jest.useRealTimers();
     });
 
+    it('should set window.statsigAvailable to false after timeout bypass', async () => {
+      jest.useFakeTimers();
+      process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'client-valid-sdk-key-12345';
+      mockUseClientAsyncInit.mockReturnValue({ client: null });
+
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      render(
+        <StatsigProviderWrapper>
+          <div data-testid="child">Test</div>
+        </StatsigProviderWrapper>
+      );
+
+      // Fast-forward past the timeout
+      act(() => {
+        jest.advanceTimersByTime(2100);
+      });
+
+      // After timeout, statsigAvailable should be false
+      await waitFor(() => {
+        expect((window as any).statsigAvailable).toBe(false);
+      });
+
+      consoleWarnSpy.mockRestore();
+      jest.useRealTimers();
+    });
+
     it('should cleanup timeout on unmount', () => {
       jest.useFakeTimers();
       process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'client-valid-sdk-key-12345';
@@ -265,6 +292,50 @@ describe('StatsigProviderWrapper', () => {
         });
       }).not.toThrow();
 
+      jest.useRealTimers();
+    });
+
+    it('should not trigger timeout when client initializes before timeout', async () => {
+      jest.useFakeTimers();
+      process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'client-valid-sdk-key-12345';
+
+      // Start with null client
+      mockUseClientAsyncInit.mockReturnValue({ client: null });
+
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      const { rerender } = render(
+        <StatsigProviderWrapper>
+          <div data-testid="child">Test</div>
+        </StatsigProviderWrapper>
+      );
+
+      // Advance time but not past timeout
+      act(() => {
+        jest.advanceTimersByTime(1000);
+      });
+
+      // Client becomes ready before timeout
+      mockUseClientAsyncInit.mockReturnValue({ client: { initialized: true } });
+
+      rerender(
+        <StatsigProviderWrapper>
+          <div data-testid="child">Test</div>
+        </StatsigProviderWrapper>
+      );
+
+      // Advance past original timeout
+      act(() => {
+        jest.advanceTimersByTime(1500);
+      });
+
+      // Timeout warning should not have been called since client initialized
+      const timeoutWarnings = consoleWarnSpy.mock.calls.filter(
+        call => call[0]?.toString().includes('Initialization timeout')
+      );
+      expect(timeoutWarnings).toHaveLength(0);
+
+      consoleWarnSpy.mockRestore();
       jest.useRealTimers();
     });
   });
@@ -315,6 +386,25 @@ describe('StatsigProviderWrapper', () => {
       expect(screen.getByTestId('child')).toBeInTheDocument();
     });
 
+    it('should set window.statsigAvailable to true when wrapped in StatsigProvider', async () => {
+      process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'client-valid-sdk-key-12345';
+      const mockClient = { initialized: true };
+      mockUseClientAsyncInit.mockReturnValue({ client: mockClient });
+
+      render(
+        <StatsigProviderWrapper>
+          <div data-testid="child">Test</div>
+        </StatsigProviderWrapper>
+      );
+
+      // When client is ready and StatsigProvider wraps children,
+      // window.statsigAvailable should be true
+      await waitFor(() => {
+        expect(screen.getByTestId('statsig-provider')).toBeInTheDocument();
+        expect((window as any).statsigAvailable).toBe(true);
+      });
+    });
+
     it('should NOT wrap in StatsigProvider when SDK key is invalid', () => {
       process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'disabled';
       mockUseClientAsyncInit.mockReturnValue({ client: null });
@@ -327,6 +417,25 @@ describe('StatsigProviderWrapper', () => {
 
       expect(screen.queryByTestId('statsig-provider')).not.toBeInTheDocument();
       expect(screen.getByTestId('child')).toBeInTheDocument();
+    });
+
+    it('should NOT wrap in StatsigProvider when client is null (not ready)', () => {
+      process.env.NEXT_PUBLIC_STATSIG_CLIENT_KEY = 'client-valid-sdk-key-12345';
+      // Client returns null - not initialized yet
+      mockUseClientAsyncInit.mockReturnValue({ client: null });
+
+      render(
+        <StatsigProviderWrapper>
+          <div data-testid="child">Test</div>
+        </StatsigProviderWrapper>
+      );
+
+      // Should not wrap in StatsigProvider when client is null
+      expect(screen.queryByTestId('statsig-provider')).not.toBeInTheDocument();
+      // But children should still render
+      expect(screen.getByTestId('child')).toBeInTheDocument();
+      // And analytics should be marked unavailable
+      expect((window as any).statsigAvailable).toBe(false);
     });
   });
 
