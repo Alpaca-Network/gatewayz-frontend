@@ -289,14 +289,6 @@ export function AppHeader() {
                 Insights
               </Link>
             )}
-            <Link
-              href="https://docs.gatewayz.ai/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Docs
-            </Link>
             {isDesktop && (
               <Link
                 href="/settings/credits"
@@ -440,15 +432,6 @@ export function AppHeader() {
                         Insights
                       </Link>
                     )}
-                    <Link
-                      href="https://docs.gatewayz.ai/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Docs
-                    </Link>
                     {isDesktop && (
                       <Link
                         href="/settings/credits"
