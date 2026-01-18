@@ -2,15 +2,44 @@
  * Custom React hooks for Web Vitals data fetching
  *
  * Provides real-time Web Vitals data with automatic polling and caching.
+ * Optimized for performance with:
+ * - Request deduplication
+ * - Debounced search
+ * - Stable callback references
+ * - Efficient re-render prevention
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type {
   WebVitalsSummary,
   PagePerformanceData,
   PageWebVitals,
   DeviceType,
 } from '@/lib/web-vitals-types';
+
+// ============================================================================
+// Utility: Debounce Hook
+// ============================================================================
+
+/**
+ * Custom hook for debouncing values
+ * Prevents excessive API calls when search input changes rapidly
+ */
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 // ============================================================================
 // Types
@@ -67,11 +96,27 @@ export function useWebVitalsSummary(
   const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<Error | null>(null);
 
+  // Track in-flight requests to prevent duplicate fetches
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+
+  // Stable fetch function that doesn't change on every render
   const fetchSummary = useCallback(async () => {
     if (!enabled) {
       setLoading(false);
       return;
     }
+
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     setLoading(true);
 
     try {
@@ -84,29 +129,55 @@ export function useWebVitalsSummary(
         params.append('path', path);
       }
 
-      const response = await fetch(`/api/vitals?${params.toString()}`);
+      const response = await fetch(`/api/vitals?${params.toString()}`, {
+        signal: abortController.signal,
+      });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch Web Vitals summary: ${response.statusText}`);
       }
 
       const result = await response.json();
-      setData(result);
-      setError(null);
+
+      // Only update state if component is still mounted and request wasn't aborted
+      if (isMountedRef.current && !abortController.signal.aborted) {
+        setData(result);
+        setError(null);
+      }
     } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       console.error('[useWebVitalsSummary] Error:', err);
-      setError(err instanceof Error ? err : new Error('Unknown error'));
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err : new Error('Unknown error'));
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [hours, device, path, enabled]);
+
+  // Track mount state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Cleanup: abort any in-flight request on unmount
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   // Initial fetch
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
 
-  // Polling
+  // Polling with cleanup
   useEffect(() => {
     if (!enabled || pollingInterval === 0) return;
 
@@ -143,11 +214,30 @@ export function usePagePerformance(
   const [loading, setLoading] = useState<boolean>(enabled);
   const [error, setError] = useState<Error | null>(null);
 
+  // Debounce search input to prevent excessive API calls while typing
+  // 300ms delay provides good balance between responsiveness and efficiency
+  const debouncedSearch = useDebouncedValue(search, 300);
+
+  // Track in-flight requests to prevent duplicate fetches
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+
   const fetchPages = useCallback(async () => {
     if (!enabled) {
       setLoading(false);
       return;
     }
+
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     setLoading(true);
 
     try {
@@ -158,33 +248,59 @@ export function usePagePerformance(
         sortOrder,
       });
 
-      if (search) {
-        params.append('search', search);
+      if (debouncedSearch) {
+        params.append('search', debouncedSearch);
       }
 
-      const response = await fetch(`/api/vitals/pages?${params.toString()}`);
+      const response = await fetch(`/api/vitals/pages?${params.toString()}`, {
+        signal: abortController.signal,
+      });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch page performance: ${response.statusText}`);
       }
 
       const result = await response.json();
-      setData(result);
-      setError(null);
+
+      // Only update state if component is still mounted and request wasn't aborted
+      if (isMountedRef.current && !abortController.signal.aborted) {
+        setData(result);
+        setError(null);
+      }
     } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       console.error('[usePagePerformance] Error:', err);
-      setError(err instanceof Error ? err : new Error('Unknown error'));
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err : new Error('Unknown error'));
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
-  }, [limit, offset, sortBy, sortOrder, search, enabled]);
+  }, [limit, offset, sortBy, sortOrder, debouncedSearch, enabled]);
+
+  // Track mount state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Cleanup: abort any in-flight request on unmount
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   // Initial fetch
   useEffect(() => {
     fetchPages();
   }, [fetchPages]);
 
-  // Polling
+  // Polling with cleanup
   useEffect(() => {
     if (!enabled || pollingInterval === 0) return;
 
