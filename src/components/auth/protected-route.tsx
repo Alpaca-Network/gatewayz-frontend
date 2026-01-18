@@ -11,16 +11,27 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, privyReady } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
+    // Only redirect when:
+    // 1. Not in a loading state (auth context has resolved)
+    // 2. Privy SDK is ready (so we know the true auth state)
+    // 3. No user is authenticated
+    //
+    // This prevents redirecting users who have a valid Privy session but no
+    // cached Gatewayz credentials (e.g., after clearing localStorage).
+    // Without waiting for privyReady, we would redirect before Privy has a
+    // chance to restore the session.
+    if (!loading && privyReady && !user) {
       router.push('/signin');
     }
-  }, [user, loading, router]);
+  }, [user, loading, privyReady, router]);
 
-  if (loading) {
+  // Show loading state while auth is resolving OR while waiting for Privy
+  // This gives Privy time to restore sessions for returning users
+  if (loading || !privyReady) {
     return fallback || (
       <div className="container mx-auto px-4 py-8">
         <div className="space-y-4">
