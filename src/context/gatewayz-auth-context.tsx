@@ -67,6 +67,7 @@ const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
 const MAX_AUTH_RETRIES = 3;
 const AUTHENTICATING_TIMEOUT_MS = 60000; // 60 seconds - increased to handle slow backend responses
 const TOKEN_TIMEOUT_BASE_MS = 8000; // Base 8 seconds, adaptive up to 15s
+const PRIVY_READY_TIMEOUT_MS = 15000; // 15 seconds - timeout for Privy SDK to initialize
 
 interface GatewayzAuthContextValue {
   status: AuthStatus;
@@ -1498,6 +1499,48 @@ export function GatewayzAuthProvider({
       return;
     }
   }, [authenticated, clearStoredCredentials, privyReady, setAuthStatus, syncWithBackend, user]);
+
+  // Timeout for when Privy never becomes ready - prevents stuck "idle" state
+  // This handles edge cases like network issues, CSP blocks, or Privy SDK failures
+  useEffect(() => {
+    // Only set timeout if we're in idle state and Privy is not ready
+    if (status !== "idle" || privyReady) {
+      return;
+    }
+
+    // Check if we have cached credentials - if so, we can use them without Privy
+    const storedKey = getApiKey();
+    const storedUser = getUserData();
+    if (storedKey && storedUser && storedUser.user_id && storedUser.email) {
+      // We have valid cached credentials, use them
+      console.log("[Auth] Privy not ready but cached credentials found - using cached auth");
+      setAuthStatus("authenticated", "cached credentials while waiting for Privy");
+      return;
+    }
+
+    console.log("[Auth] Starting Privy ready timeout - will transition to unauthenticated if Privy doesn't initialize");
+
+    const timeoutId = setTimeout(() => {
+      // Double-check Privy is still not ready (may have changed during timeout)
+      if (!privyReady && status === "idle") {
+        console.warn(`[Auth] Privy SDK did not become ready within ${PRIVY_READY_TIMEOUT_MS / 1000}s - transitioning to unauthenticated`);
+
+        rateLimitedCaptureMessage("Privy SDK initialization timeout", {
+          level: 'warning',
+          tags: {
+            auth_error: 'privy_init_timeout',
+          },
+          extra: {
+            timeout_ms: PRIVY_READY_TIMEOUT_MS,
+          },
+        });
+
+        setAuthStatus("unauthenticated", "Privy init timeout");
+      }
+    }, PRIVY_READY_TIMEOUT_MS);
+
+    return () => clearTimeout(timeoutId);
+  }, [status, privyReady, setAuthStatus]);
 
   useEffect(() => {
     const handler = () => {
