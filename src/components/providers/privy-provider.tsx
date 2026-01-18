@@ -76,14 +76,24 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
     return isTauriDesktop();
   });
 
-  // Initialize storage status to "checking" consistently on both server and client
-  // to prevent hydration mismatch. The actual status is determined in useEffect.
-  const [status, setStatus] = useState<StorageStatus>("checking");
+  // Initialize storage status - on desktop, localStorage is always available
+  // so we can skip the "checking" state and set to "ready" immediately.
+  // This prevents the chat from getting stuck on "Initializing" on desktop.
+  const [status, setStatus] = useState<StorageStatus>(() => {
+    if (typeof window === "undefined") {
+      return "checking"; // SSR - will be re-evaluated on client
+    }
+    // On desktop (Tauri), localStorage is always available
+    if (isTauriDesktop()) {
+      return "ready";
+    }
+    // On web, check immediately and return "ready" if available
+    return canUseLocalStorage() ? "ready" : "checking";
+  });
 
   useEffect(() => {
-    // On desktop (Tauri), localStorage is always available - set to ready immediately
+    // On desktop (Tauri), storage is always ready - skip the check
     if (isTauri) {
-      setStatus("ready");
       return;
     }
 
