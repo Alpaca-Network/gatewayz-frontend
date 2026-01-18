@@ -328,7 +328,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
   });
 
   describe('Privy SDK Initialization Timeout', () => {
-    it('should transition from idle to unauthenticated if Privy never becomes ready', async () => {
+    it('should immediately transition to unauthenticated if no cached credentials (guest mode)', async () => {
       // Mock Privy as not ready (simulating slow or failed SDK load)
       mockUsePrivy.mockReturnValue({
         ready: false,
@@ -345,28 +345,19 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
       const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
 
-      // Should start in idle state
-      expect(result.current.status).toBe('idle');
-
-      // Fast-forward 10 seconds (PRIVY_READY_TIMEOUT_MS)
-      act(() => {
-        jest.advanceTimersByTime(10000);
-      });
-
-      // Should transition to unauthenticated after timeout
+      // FIX: Should immediately transition to unauthenticated when no cached credentials
+      // This allows guest users to access the chat without waiting for Privy SDK
+      // (matching the behavior of DesktopAuthProvider)
       await waitFor(() => {
         expect(result.current.status).toBe('unauthenticated');
       });
 
-      // Verify Sentry was called for timeout
-      expect(Sentry.captureMessage).toHaveBeenCalledWith(
+      // Sentry should NOT be called for Privy timeout since we transitioned immediately
+      // The backup timeout may still be running but since status is already 'unauthenticated',
+      // the timeout handler will be a no-op
+      expect(Sentry.captureMessage).not.toHaveBeenCalledWith(
         'Privy SDK initialization timeout',
-        expect.objectContaining({
-          level: 'warning',
-          tags: {
-            auth_error: 'privy_init_timeout',
-          },
-        })
+        expect.anything()
       );
     });
 
@@ -411,7 +402,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
       );
     });
 
-    it('should NOT timeout if Privy becomes ready before timeout', async () => {
+    it('should already be unauthenticated when Privy becomes ready (no timeout needed)', async () => {
       // Start with Privy not ready
       mockUsePrivy.mockReturnValue({
         ready: false,
@@ -422,18 +413,24 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
         getAccessToken: jest.fn(),
       } as any);
 
+      // No cached credentials
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+
       const { result, rerender } = renderHook(() => useGatewayzAuth(), { wrapper });
 
-      // Should start in idle state
-      expect(result.current.status).toBe('idle');
+      // FIX: Should immediately be unauthenticated (no cached credentials = guest mode)
+      await waitFor(() => {
+        expect(result.current.status).toBe('unauthenticated');
+      });
 
       // Advance time but not past the timeout
       act(() => {
         jest.advanceTimersByTime(5000);
       });
 
-      // Still idle
-      expect(result.current.status).toBe('idle');
+      // Still unauthenticated (not idle)
+      expect(result.current.status).toBe('unauthenticated');
 
       // Now Privy becomes ready and user is not authenticated
       mockUsePrivy.mockReturnValue({
@@ -447,7 +444,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
       rerender();
 
-      // Should transition to unauthenticated (not via timeout, via normal flow)
+      // Should still be unauthenticated (no change needed)
       await waitFor(() => {
         expect(result.current.status).toBe('unauthenticated');
       });
@@ -459,7 +456,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
       );
     });
 
-    it('should allow login after Privy timeout transitions to unauthenticated', async () => {
+    it('should allow login immediately in guest mode (no wait needed)', async () => {
       const mockLogin = jest.fn();
 
       // Mock Privy as not ready
@@ -478,20 +475,12 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
       const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
 
-      // Should start in idle state
-      expect(result.current.status).toBe('idle');
-
-      // Fast-forward past timeout
-      act(() => {
-        jest.advanceTimersByTime(10000);
-      });
-
-      // Should be unauthenticated
+      // FIX: Should immediately be unauthenticated (guest mode), not idle
       await waitFor(() => {
         expect(result.current.status).toBe('unauthenticated');
       });
 
-      // User should be able to try logging in
+      // User should be able to try logging in immediately (no timeout wait needed)
       act(() => {
         result.current.login();
       });
