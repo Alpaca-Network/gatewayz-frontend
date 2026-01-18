@@ -1,6 +1,7 @@
 "use client";
 
 import Script from 'next/script';
+import { isTauriDesktop } from '@/lib/browser-detection';
 
 // Primary GA4 ID (managed by GTM, but keep for direct initialization if GTM fails)
 const GA_MEASUREMENT_ID = 'G-NCWGNQ7981';
@@ -10,6 +11,12 @@ const GOOGLE_ADS_ID = 'AW-17515449277';
 const GTM_ID = 'GTM-5VPXMFRW';
 
 export function GoogleAnalytics() {
+  // Skip analytics on desktop app to avoid CSP violations
+  // Google Tag Manager and Google Analytics scripts are blocked by Tauri's CSP
+  if (typeof window !== 'undefined' && isTauriDesktop()) {
+    return null;
+  }
+
   return (
     <>
       {/* Google Tag Manager Container - loads GTM, which manages GA via tags */}

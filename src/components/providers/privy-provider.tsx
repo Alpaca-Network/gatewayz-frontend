@@ -97,14 +97,15 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isTauri]);
 
   // For Tauri desktop, use the desktop-specific provider that bypasses Privy
   // This avoids the "Embedded wallet is only available over HTTPS" error
   // The DesktopAuthProviderNoSSR dynamically imports from desktop-auth-provider.tsx
   // which has NO Privy imports, ensuring the Privy SDK is never loaded on desktop
+  // Desktop always has localStorage available, so we pass "ready" status directly
   if (isTauri) {
-    return <DesktopAuthProviderNoSSR {...props} storageStatus={status} />;
+    return <DesktopAuthProviderNoSSR {...props} storageStatus="ready" />;
   }
 
   // Always render the provider to ensure the context chain is never broken.
