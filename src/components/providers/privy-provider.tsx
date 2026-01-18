@@ -121,10 +121,11 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
   // which has NO Privy imports, ensuring the Privy SDK is never loaded on desktop
   // IMPORTANT: We wrap with StorageStatusContext.Provider so that useStorageStatus()
   // (imported from this file by useAuth) gets the correct value on desktop
+  // Desktop always has localStorage available, so we pass "ready" status directly
   if (isTauri) {
     return (
-      <StorageStatusContext.Provider value={status}>
-        <DesktopAuthProviderNoSSR {...props} storageStatus={status} />
+      <StorageStatusContext.Provider value="ready">
+        <DesktopAuthProviderNoSSR {...props} storageStatus="ready" />
       </StorageStatusContext.Provider>
     );
   }
