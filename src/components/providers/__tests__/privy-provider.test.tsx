@@ -307,7 +307,8 @@ describe('PrivyProviderWrapper', () => {
           </PrivyProviderWrapper>
         );
 
-        // Should NOT render the Privy provider
+        // Should NOT render the Privy provider - on desktop we bypass it entirely
+        // to avoid the Privy SDK's HTTPS requirement check during module initialization
         expect(screen.queryByTestId('privy-provider')).not.toBeInTheDocument();
 
         // Should log that we're in desktop mode
