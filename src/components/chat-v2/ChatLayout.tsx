@@ -127,7 +127,7 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect, onSurpriseMe }: { o
                  </button>
              </div>
 
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-4xl w-full">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-w-2xl lg:max-w-4xl w-full">
                  {prompts.map((p) => (
                      <Card
                         key={p.title}
@@ -713,7 +713,7 @@ export function ChatLayout() {
                            }
                        </Button>
 
-                       <div className="w-[180px] sm:w-[250px]">
+                       <div className="w-[140px] sm:w-[180px] lg:w-[250px]">
                            <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} isIncognitoMode={isIncognitoMode} />
                        </div>
                    </div>

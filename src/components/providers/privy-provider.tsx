@@ -63,10 +63,6 @@ function StorageDisabledNotice() {
 }
 
 export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
-  // Always start with "checking" during SSR to ensure consistent hydration
-  // This prevents server/client mismatch since canUseLocalStorage() returns false on server
-  const [status, setStatus] = useState<StorageStatus>("checking");
-
   // CRITICAL: Detect Tauri synchronously during initial state to prevent race condition.
   // The Privy SDK checks for HTTPS during import/initialization, BEFORE useEffect runs.
   // If we use useState(false) + useEffect to detect Tauri, the first render will
@@ -80,7 +76,27 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
     return isTauriDesktop();
   });
 
+  // Initialize storage status - on desktop, localStorage is always available
+  // so we can skip the "checking" state and set to "ready" immediately.
+  // This prevents the chat from getting stuck on "Initializing" on desktop.
+  const [status, setStatus] = useState<StorageStatus>(() => {
+    if (typeof window === "undefined") {
+      return "checking"; // SSR - will be re-evaluated on client
+    }
+    // On desktop (Tauri), localStorage is always available
+    if (isTauriDesktop()) {
+      return "ready";
+    }
+    // On web, check immediately and return "ready" if available
+    return canUseLocalStorage() ? "ready" : "checking";
+  });
+
   useEffect(() => {
+    // On desktop (Tauri), storage is always ready - skip the check
+    if (isTauri) {
+      return;
+    }
+
     // Check localStorage availability after mount (client-side only)
     if (canUseLocalStorage()) {
       setStatus("ready");
@@ -97,14 +113,20 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isTauri]);
 
   // For Tauri desktop, use the desktop-specific provider that bypasses Privy
   // This avoids the "Embedded wallet is only available over HTTPS" error
   // The DesktopAuthProviderNoSSR dynamically imports from desktop-auth-provider.tsx
   // which has NO Privy imports, ensuring the Privy SDK is never loaded on desktop
+  // IMPORTANT: We wrap with StorageStatusContext.Provider so that useStorageStatus()
+  // (imported from this file by useAuth) gets the correct value on desktop
   if (isTauri) {
-    return <DesktopAuthProviderNoSSR {...props} storageStatus={status} />;
+    return (
+      <StorageStatusContext.Provider value={status}>
+        <DesktopAuthProviderNoSSR {...props} storageStatus={status} />
+      </StorageStatusContext.Provider>
+    );
   }
 
   // Always render the provider to ensure the context chain is never broken.
