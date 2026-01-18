@@ -63,10 +63,23 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             log::info!("Single instance triggered with args: {:?}", args);
+
             // Focus the main window when another instance tries to launch
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
+
+                // On Windows/Linux, deep links are passed as CLI arguments
+                // Check if any argument is a deep link URL and handle it
+                for arg in args.iter() {
+                    if arg.starts_with("gatewayz://") {
+                        log::info!("Deep link from CLI args: {}", arg);
+                        if let Ok(url) = url::Url::parse(arg) {
+                            handle_deep_link(app, &url);
+                        }
+                        break;
+                    }
+                }
             }
         }))
         .plugin(
@@ -88,8 +101,32 @@ pub fn run() {
             #[cfg(desktop)]
             register_shortcuts(app.handle())?;
 
-            // Handle deep links
+            // Handle deep links from events (macOS/iOS/Android)
             setup_deep_link_handler(app.handle());
+
+            // Handle deep links from CLI arguments on initial launch (Windows/Linux)
+            // This handles the case when the app is opened via a deep link URL
+            #[cfg(desktop)]
+            {
+                let args: Vec<String> = std::env::args().collect();
+                log::info!("App started with args: {:?}", args);
+                for arg in args.iter().skip(1) {
+                    // Skip the first arg (executable path)
+                    if arg.starts_with("gatewayz://") {
+                        log::info!("Deep link from startup args: {}", arg);
+                        if let Ok(url) = url::Url::parse(arg) {
+                            // Delay the deep link handling to ensure the window is ready
+                            let app_handle = app.handle().clone();
+                            std::thread::spawn(move || {
+                                // Wait a bit for the window to initialize
+                                std::thread::sleep(std::time::Duration::from_millis(500));
+                                handle_deep_link(&app_handle, &url);
+                            });
+                        }
+                        break;
+                    }
+                }
+            }
 
             log::info!("GatewayZ Desktop initialized successfully");
             Ok(())
