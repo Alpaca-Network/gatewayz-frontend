@@ -354,7 +354,8 @@ fn handle_deep_link(app: &AppHandle, url: &url::Url) {
                         .append(true)
                         .open(std::env::temp_dir().join("gatewayz-desktop.log"))
                     {
-                        let _ = writeln!(file, "[{}] Auth callback - emitting event", chrono_lite());
+                        let _ =
+                            writeln!(file, "[{}] Auth callback - emitting event", chrono_lite());
                     }
                 }
                 let query = url.query().unwrap_or("");
