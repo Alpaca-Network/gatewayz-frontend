@@ -74,7 +74,22 @@
         "type": "embedBootstrapper",
         "silent": false
       },
-      "wix": null,
+      "wix": {
+        "language": "en-US",
+        "template": null,
+        "bannerPath": null,
+        "dialogImagePath": null,
+        "license": null,
+        "enableElevatedUpdateTask": false,
+        "fragmentPaths": [],
+        "componentGroupRefs": [],
+        "componentRefs": [],
+        "customActionRefs": [],
+        "featureGroupRefs": [],
+        "featureRefs": [],
+        "mergeRefs": [],
+        "skipWebviewInstall": false
+      },
       "nsis": {
         "template": null,
         "headerImage": null,
