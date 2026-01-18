@@ -131,9 +131,37 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
           window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
         }
 
-        // Navigate to chat
-        router.refresh();
-        router.push("/chat");
+        // Wait for the next frame to ensure React has processed the state updates
+        // Use requestAnimationFrame + setTimeout to ensure we're after React's commit phase
+        await new Promise(resolve => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 50);
+          });
+        });
+
+        // Verify credentials were saved before navigating
+        const { getApiKey } = await import("@/lib/api");
+        const savedKey = getApiKey();
+        if (savedKey) {
+          console.log("[Desktop Auth] Credentials verified, navigating to chat");
+          router.push("/chat");
+        } else {
+          console.error("[Desktop Auth] Credentials not found after save - retrying save");
+          // Retry saving credentials
+          saveApiKey(token);
+          saveUserData({
+            user_id: parseInt(userId, 10),
+            api_key: token,
+            auth_method: "desktop_deep_link",
+            privy_user_id: privyUserId || "",
+            display_name: email || "",
+            email: email || "",
+            credits: 0,
+          });
+          window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+          await new Promise(resolve => setTimeout(resolve, 100));
+          router.push("/chat");
+        }
       } catch (error) {
         console.error("[Desktop Auth] Error handling token callback:", error);
         // Clear the processed flag on error so retry can work
@@ -149,8 +177,8 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
         const result = await handleDesktopOAuthCallback(query);
 
         if (result.success) {
-          // Refresh the page to pick up the new auth state
-          router.refresh();
+          // Wait a tick to ensure React state has updated before navigation
+          await new Promise(resolve => setTimeout(resolve, 100));
           router.push("/chat");
         } else {
           console.error("[Desktop Auth] Callback failed:", result.error);
