@@ -348,9 +348,9 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
       // Should start in idle state
       expect(result.current.status).toBe('idle');
 
-      // Fast-forward 15 seconds (PRIVY_READY_TIMEOUT_MS)
+      // Fast-forward 10 seconds (PRIVY_READY_TIMEOUT_MS)
       act(() => {
-        jest.advanceTimersByTime(15000);
+        jest.advanceTimersByTime(10000);
       });
 
       // Should transition to unauthenticated after timeout
@@ -398,7 +398,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
       // Privy timeout should NOT fire since we have cached credentials
       act(() => {
-        jest.advanceTimersByTime(15000);
+        jest.advanceTimersByTime(10000);
       });
 
       // Should still be authenticated
@@ -483,7 +483,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
       // Fast-forward past timeout
       act(() => {
-        jest.advanceTimersByTime(15000);
+        jest.advanceTimersByTime(10000);
       });
 
       // Should be unauthenticated
