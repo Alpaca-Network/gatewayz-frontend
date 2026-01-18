@@ -79,17 +79,14 @@
         "template": null,
         "bannerPath": null,
         "dialogImagePath": null,
-        "license": null,
         "enableElevatedUpdateTask": false,
         "fragmentPaths": [],
         "componentGroupRefs": [],
         "componentRefs": [],
-        "customActionRefs": [],
         "featureGroupRefs": [],
         "featureRefs": [],
         "mergeRefs": [],
-        "fipsCompliant": false,
-        "skipWebviewInstall": false
+        "fipsCompliant": false
       },
       "nsis": {
         "template": null,
