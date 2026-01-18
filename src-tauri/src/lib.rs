@@ -256,13 +256,19 @@ fn handle_global_shortcut(app: &AppHandle, shortcut: &tauri_plugin_global_shortc
     use tauri_plugin_global_shortcut::Code;
 
     if shortcut.key == Code::KeyG {
-        // Toggle the main window: show if hidden, minimize if visible
+        // Toggle the main window: show if hidden/minimized, hide if visible and focused
         if let Some(window) = app.get_webview_window("main") {
-            // Check if window is visible and focused
+            // Check window state
             let is_visible = window.is_visible().unwrap_or(false);
             let is_focused = window.is_focused().unwrap_or(false);
+            let is_minimized = window.is_minimized().unwrap_or(false);
 
-            if is_visible && is_focused {
+            if is_minimized {
+                // Window is minimized - unminimize, show, and focus it
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            } else if is_visible && is_focused {
                 // Window is visible and focused - hide it
                 let _ = window.hide();
             } else if is_visible {
@@ -348,7 +354,8 @@ fn handle_deep_link(app: &AppHandle, url: &url::Url) {
                         .append(true)
                         .open(std::env::temp_dir().join("gatewayz-desktop.log"))
                     {
-                        let _ = writeln!(file, "[{}] Auth callback - emitting event", chrono_lite());
+                        let _ =
+                            writeln!(file, "[{}] Auth callback - emitting event", chrono_lite());
                     }
                 }
                 let query = url.query().unwrap_or("");
