@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   useIsTauri,
   useDesktopShortcuts,
@@ -16,6 +16,7 @@ import {
   hasShownShortcutInfo,
   showShortcutInfoDialog,
 } from "@/components/dialogs/shortcut-info-dialog";
+import { isTauriDesktop } from "@/lib/browser-detection";
 
 interface DesktopProviderProps {
   children: ReactNode;
@@ -36,15 +37,24 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
   const isTauri = useIsTauri();
   const router = useRouter();
 
+  // Synchronously detect Tauri for immediate CSS styling
+  // This prevents flash of wrong styles (scrollbars visible, wrong viewport)
+  // before useIsTauri's useEffect runs
+  const [isTauriSync] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return isTauriDesktop();
+  });
+
   // Add data-tauri attribute to body for CSS styling when running in Tauri
+  // Use synchronous detection to avoid flash of unstyled content
   useEffect(() => {
-    if (isTauri && typeof document !== "undefined") {
+    if (isTauriSync && typeof document !== "undefined") {
       document.body.setAttribute("data-tauri", "true");
       return () => {
         document.body.removeAttribute("data-tauri");
       };
     }
-  }, [isTauri]);
+  }, [isTauriSync]);
 
   // Register desktop keyboard shortcuts
   useDesktopShortcuts();
