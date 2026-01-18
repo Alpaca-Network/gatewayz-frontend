@@ -63,10 +63,23 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             log::info!("Single instance triggered with args: {:?}", args);
+
             // Focus the main window when another instance tries to launch
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
+
+                // On Windows/Linux, deep links are passed as CLI arguments
+                // Check if any argument is a deep link URL and handle it
+                for arg in args.iter() {
+                    if arg.starts_with("gatewayz://") {
+                        log::info!("Deep link from CLI args: {}", arg);
+                        if let Ok(url) = url::Url::parse(arg) {
+                            handle_deep_link(app, &url);
+                        }
+                        break;
+                    }
+                }
             }
         }))
         .plugin(
@@ -88,8 +101,53 @@ pub fn run() {
             #[cfg(desktop)]
             register_shortcuts(app.handle())?;
 
-            // Handle deep links
+            // Handle deep links from events (macOS/iOS/Android)
             setup_deep_link_handler(app.handle());
+
+            // Handle deep links from CLI arguments on initial launch (Windows/Linux)
+            // This handles the case when the app is opened via a deep link URL
+            #[cfg(desktop)]
+            {
+                let args: Vec<String> = std::env::args().collect();
+                log::info!("App started with args: {:?}", args);
+                for arg in args.iter().skip(1) {
+                    // Skip the first arg (executable path)
+                    if arg.starts_with("gatewayz://") {
+                        log::info!("Deep link from startup args: {}", arg);
+                        if let Ok(url) = url::Url::parse(arg) {
+                            // Use retry mechanism to ensure JS listeners are ready
+                            // This handles slower machines where React may not have mounted yet
+                            let app_handle = app.handle().clone();
+                            std::thread::spawn(move || {
+                                // Retry with exponential backoff: 200ms, 400ms, 800ms, 1600ms
+                                let delays = [200, 400, 800, 1600];
+                                for (attempt, delay_ms) in delays.iter().enumerate() {
+                                    std::thread::sleep(std::time::Duration::from_millis(*delay_ms));
+                                    log::info!(
+                                        "Deep link emit attempt {} after {}ms",
+                                        attempt + 1,
+                                        delay_ms
+                                    );
+                                    if let Some(window) = app_handle.get_webview_window("main") {
+                                        // Emit the event - if JS listener catches it, we're done
+                                        // The JS side will ignore duplicate events
+                                        let query = url.query().unwrap_or("");
+                                        if window.emit("auth-callback", query).is_ok() {
+                                            log::info!(
+                                                "Deep link auth-callback emitted on attempt {}",
+                                                attempt + 1
+                                            );
+                                            // Continue retrying in case JS wasn't ready
+                                            // The frontend handles duplicate events gracefully
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                        break;
+                    }
+                }
+            }
 
             log::info!("GatewayZ Desktop initialized successfully");
             Ok(())
