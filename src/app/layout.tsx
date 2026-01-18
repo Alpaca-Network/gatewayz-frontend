@@ -24,7 +24,7 @@ import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
 import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
 import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
-import { DesktopProvider } from '@/components/providers/desktop-provider';
+import { DesktopProvider, WebOnly } from '@/components/providers/desktop-provider';
 
 // Re-export metadata and viewport from dedicated file for cleaner organization
 export { metadata, viewport } from './metadata';
@@ -56,8 +56,11 @@ export default function RootLayout({
           <SafeStorageShim />
         <ErrorSuppressor />
         {/* ... (script) */}
-        <GoogleAnalytics />
-        <TwitterPixel />
+        {/* Analytics components wrapped in WebOnly to prevent CSP issues on desktop */}
+        <WebOnly>
+          <GoogleAnalytics />
+          <TwitterPixel />
+        </WebOnly>
         <ThemeProvider
           defaultTheme="system"
           storageKey="ui-theme"
@@ -70,7 +73,10 @@ export default function RootLayout({
                 <DesktopProvider>
                 {/* Session transfer from main domain - handles automatic authentication */}
                 <SessionInitializer />
-                <GTMLoader />
+                {/* GTM wrapped in WebOnly to prevent CSP issues on desktop */}
+                <WebOnly>
+                  <GTMLoader />
+                </WebOnly>
                 <AppHeader />
                 <OnboardingBanner />
                 <div data-header-spacer aria-hidden="true" className="flex-shrink-0 h-[65px] has-onboarding-banner:h-[115px]" style={{ transition: 'height 0.3s ease' }} />
