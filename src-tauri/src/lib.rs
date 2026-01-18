@@ -115,12 +115,33 @@ pub fn run() {
                     if arg.starts_with("gatewayz://") {
                         log::info!("Deep link from startup args: {}", arg);
                         if let Ok(url) = url::Url::parse(arg) {
-                            // Delay the deep link handling to ensure the window is ready
+                            // Use retry mechanism to ensure JS listeners are ready
+                            // This handles slower machines where React may not have mounted yet
                             let app_handle = app.handle().clone();
                             std::thread::spawn(move || {
-                                // Wait a bit for the window to initialize
-                                std::thread::sleep(std::time::Duration::from_millis(500));
-                                handle_deep_link(&app_handle, &url);
+                                // Retry with exponential backoff: 200ms, 400ms, 800ms, 1600ms
+                                let delays = [200, 400, 800, 1600];
+                                for (attempt, delay_ms) in delays.iter().enumerate() {
+                                    std::thread::sleep(std::time::Duration::from_millis(*delay_ms));
+                                    log::info!(
+                                        "Deep link emit attempt {} after {}ms",
+                                        attempt + 1,
+                                        delay_ms
+                                    );
+                                    if let Some(window) = app_handle.get_webview_window("main") {
+                                        // Emit the event - if JS listener catches it, we're done
+                                        // The JS side will ignore duplicate events
+                                        let query = url.query().unwrap_or("");
+                                        if window.emit("auth-callback", query).is_ok() {
+                                            log::info!(
+                                                "Deep link auth-callback emitted on attempt {}",
+                                                attempt + 1
+                                            );
+                                            // Continue retrying in case JS wasn't ready
+                                            // The frontend handles duplicate events gracefully
+                                        }
+                                    }
+                                }
                             });
                         }
                         break;

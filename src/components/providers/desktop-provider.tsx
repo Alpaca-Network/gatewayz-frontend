@@ -77,6 +77,8 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
 
   // Handle OAuth callbacks from deep links
   // The callback URL format is: gatewayz://auth/callback?token=xxx&user_id=xxx&privy_user_id=xxx&email=xxx
+  // Note: The Rust backend may emit multiple events with retry logic for reliability,
+  // so we track processed tokens to prevent duplicate handling
   useAuthCallback(async (query) => {
     // Parse the query string and handle the OAuth callback
     const params = new URLSearchParams(query);
@@ -91,9 +93,21 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
     const code = params.get("code");
 
     if (token && userId) {
+      // Deduplicate: check if we've already processed this token
+      const processedKey = `desktop_auth_processed_${token.slice(0, 16)}`;
+      if (typeof window !== "undefined" && window.sessionStorage.getItem(processedKey)) {
+        console.log("[Desktop Auth] Ignoring duplicate auth callback");
+        return;
+      }
+
       // New format: direct token from web login
       try {
         console.log("[Desktop Auth] Received auth callback with token");
+
+        // Mark as processed immediately to prevent race conditions
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(processedKey, "true");
+        }
 
         // Import storage functions
         const { saveApiKey, saveUserData, AUTH_REFRESH_EVENT } = await import("@/lib/api");
@@ -122,6 +136,10 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
         router.push("/chat");
       } catch (error) {
         console.error("[Desktop Auth] Error handling token callback:", error);
+        // Clear the processed flag on error so retry can work
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(processedKey);
+        }
       }
     } else if (code) {
       // Legacy format: OAuth code exchange (kept for backwards compatibility)
