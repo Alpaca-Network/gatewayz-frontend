@@ -6,6 +6,12 @@ import {
   trackConversion,
   trackSignupConversion,
 } from '../google-analytics';
+import { isTauriDesktop } from '@/lib/browser-detection';
+
+// Mock browser-detection module
+jest.mock('@/lib/browser-detection', () => ({
+  isTauriDesktop: jest.fn(() => false),
+}));
 
 // Mock next/script
 jest.mock('next/script', () => {
@@ -34,11 +40,19 @@ describe('GoogleAnalytics', () => {
   beforeEach(() => {
     delete (window as any).gtag;
     delete (window as any).dataLayer;
+    // Reset mock to default (not Tauri)
+    (isTauriDesktop as jest.Mock).mockReturnValue(false);
   });
 
   it('should render the Google Analytics scripts', () => {
     const { getByTestId } = render(<GoogleAnalytics />);
     expect(getByTestId('google-analytics')).toBeInTheDocument();
+  });
+
+  it('should return null when running in Tauri desktop', () => {
+    (isTauriDesktop as jest.Mock).mockReturnValue(true);
+    const { container } = render(<GoogleAnalytics />);
+    expect(container.firstChild).toBeNull();
   });
 
   it('should initialize dataLayer array', () => {

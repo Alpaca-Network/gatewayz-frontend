@@ -5,6 +5,12 @@ import {
   trackTwitterSignupClick,
   TWITTER_CONVERSION_EVENT_ID,
 } from '../twitter-pixel';
+import { isTauriDesktop } from '@/lib/browser-detection';
+
+// Mock browser-detection module
+jest.mock('@/lib/browser-detection', () => ({
+  isTauriDesktop: jest.fn(() => false),
+}));
 
 // Mock next/script to capture the inline script
 jest.mock('next/script', () => {
@@ -26,11 +32,19 @@ describe('TwitterPixel', () => {
   beforeEach(() => {
     // Reset window.twq before each test
     delete (window as any).twq;
+    // Reset mock to default (not Tauri)
+    (isTauriDesktop as jest.Mock).mockReturnValue(false);
   });
 
   it('should render the Twitter pixel script', () => {
     const { getByTestId } = render(<TwitterPixel />);
     expect(getByTestId('twitter-pixel')).toBeInTheDocument();
+  });
+
+  it('should return null when running in Tauri desktop', () => {
+    (isTauriDesktop as jest.Mock).mockReturnValue(true);
+    const { container } = render(<TwitterPixel />);
+    expect(container.firstChild).toBeNull();
   });
 
   it('should initialize twq function from inline script', () => {

@@ -45,16 +45,26 @@ jest.mock('@/components/dialogs/shortcut-info-dialog', () => ({
   showShortcutInfoDialog: () => mockShowShortcutInfoDialog(),
 }));
 
+// Mock browser-detection for synchronous Tauri detection
+const mockIsTauriDesktop = jest.fn(() => false);
+jest.mock('@/lib/browser-detection', () => ({
+  isTauriDesktop: () => mockIsTauriDesktop(),
+}));
+
 describe('DesktopProvider', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useFakeTimers();
     mockUseIsTauri.mockReturnValue(false);
     mockHasShownShortcutInfo.mockReturnValue(true);
+    mockIsTauriDesktop.mockReturnValue(false);
+    // Remove data-tauri attribute before each test
+    document.body.removeAttribute('data-tauri');
   });
 
   afterEach(() => {
     jest.useRealTimers();
+    document.body.removeAttribute('data-tauri');
   });
 
   describe('Web Environment', () => {
@@ -111,6 +121,32 @@ describe('DesktopProvider', () => {
       );
 
       expect(getByText('Test Content')).toBeInTheDocument();
+    });
+
+    it('should add data-tauri attribute to body when running in Tauri', () => {
+      mockIsTauriDesktop.mockReturnValue(true);
+      mockUseIsTauri.mockReturnValue(true);
+
+      render(
+        <DesktopProvider>
+          <div>Test Content</div>
+        </DesktopProvider>
+      );
+
+      expect(document.body.getAttribute('data-tauri')).toBe('true');
+    });
+
+    it('should not add data-tauri attribute in web environment', () => {
+      mockIsTauriDesktop.mockReturnValue(false);
+      mockUseIsTauri.mockReturnValue(false);
+
+      render(
+        <DesktopProvider>
+          <div>Test Content</div>
+        </DesktopProvider>
+      );
+
+      expect(document.body.getAttribute('data-tauri')).toBeNull();
     });
 
     it('should render shortcut dialog in desktop environment', () => {
