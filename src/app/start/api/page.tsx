@@ -5,15 +5,62 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Copy, Check, ExternalLink, Play } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiKey } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import posthog from 'posthog-js';
 import Link from 'next/link';
 import { API_BASE_URL } from '@/lib/config';
-import { CodeHighlighter } from '@/components/code-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+// PERFORMANCE OPTIMIZATION: Lazy load the heavy syntax highlighter component
+// This reduces initial bundle size and improves FCP on mobile
+const CodeHighlighter = lazy(() => import('@/components/code-highlighter').then(mod => ({ default: mod.CodeHighlighter })));
+
+// Dynamically import the style only when needed
+const getVscDarkPlus = () => import('react-syntax-highlighter/dist/esm/styles/prism').then(mod => mod.vscDarkPlus);
+
+// Skeleton for code block while loading
+function CodeSkeleton() {
+  return (
+    <div className="bg-slate-950/80 p-6 animate-pulse">
+      <div className="space-y-2">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div key={i} className="h-4 bg-slate-700/50 rounded" style={{ width: `${60 + (i % 4) * 10}%` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Wrapper component that handles lazy loading of both the highlighter and its styles
+function LazyCodeHighlighter({ language, code }: { language: string; code: string }) {
+  const [style, setStyle] = useState<Record<string, React.CSSProperties> | null>(null);
+
+  useEffect(() => {
+    getVscDarkPlus().then(setStyle);
+  }, []);
+
+  if (!style) {
+    return <CodeSkeleton />;
+  }
+
+  return (
+    <CodeHighlighter
+      language={language}
+      style={style}
+      customStyle={{
+        margin: 0,
+        padding: '1.5rem',
+        fontSize: '0.875rem',
+        lineHeight: '1.625',
+        backgroundColor: 'transparent'
+      }}
+    >
+      {code}
+    </CodeHighlighter>
+  );
+}
 
 interface ModelData {
   id: number;
@@ -90,21 +137,15 @@ export default function StartApiPage() {
     fetchModels();
   }, []);
 
-  // Load API key
+  // Load API key (don't block page load - just load when available)
   useEffect(() => {
-    if (!ready) return;
-
-    if (!user) {
-      // Redirect to login if not authenticated
-      login();
-      return;
-    }
+    if (!ready || !user) return;
 
     const userApiKey = getApiKey();
     if (userApiKey) {
       setApiKey(userApiKey);
     }
-  }, [user, ready, login]);
+  }, [user, ready]);
 
   const handleCopyApiKey = () => {
     if (apiKey) {
@@ -187,13 +228,9 @@ const completion = await client.chat.completions.create({
 console.log(completion.choices[0].message.content);`
   };
 
-  if (!ready || !user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
+  // PERFORMANCE OPTIMIZATION: Show page structure immediately for better FCP/LCP
+  // The loading state is shown inline within the API key section instead of blocking the entire page
+  const isLoading = !ready;
 
   return (
     <div className="min-h-screen bg-background">
@@ -218,7 +255,12 @@ console.log(completion.choices[0].message.content);`
           <div className="bg-card border rounded-lg p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-2">
               <label className="text-sm font-medium">Your API Key</label>
-              {!apiKey && (
+              {!isLoading && !user && (
+                <button onClick={login} className="text-sm text-blue-500 hover:underline">
+                  Sign in to get your key →
+                </button>
+              )}
+              {!isLoading && user && !apiKey && (
                 <Link href="/settings/credits" className="text-sm text-blue-500 hover:underline">
                   Generate one here →
                 </Link>
@@ -226,34 +268,47 @@ console.log(completion.choices[0].message.content);`
             </div>
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Input
-                  className="h-12 pr-12 font-mono text-sm"
-                  value={apiKey || 'No API key yet - claim your trial credits first'}
-                  type={showApiKey ? "text" : "password"}
-                  readOnly
-                />
-                <button
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded"
-                >
-                  {showApiKey ? (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
-                </button>
+                {isLoading ? (
+                  <div className="h-12 bg-muted animate-pulse rounded-md" />
+                ) : (
+                  <Input
+                    className="h-12 pr-12 font-mono text-sm"
+                    value={!user ? 'Sign in to view your API key' : (apiKey || 'No API key yet - claim your trial credits first')}
+                    type={showApiKey ? "text" : "password"}
+                    readOnly
+                  />
+                )}
+                {!isLoading && (
+                  <button
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-muted rounded"
+                  >
+                    {showApiKey ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                )}
               </div>
               <Button
-                onClick={handleCopyApiKey}
-                disabled={!apiKey}
+                onClick={!user ? login : handleCopyApiKey}
+                disabled={isLoading || (user && !apiKey)}
                 className="h-12 px-6"
               >
-                {copied ? (
+                {isLoading ? (
+                  <span className="flex items-center">
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></span>
+                    Loading...
+                  </span>
+                ) : !user ? (
+                  'Sign In'
+                ) : copied ? (
                   <>
                     <Check className="w-4 h-4 mr-2" />
                     Copied!
@@ -405,21 +460,14 @@ console.log(completion.choices[0].message.content);`
               </button>
             </div>
 
-            {/* Code Display */}
+            {/* Code Display - Lazy loaded for better mobile FCP */}
             <div className="bg-slate-950/80 overflow-x-auto">
-              <CodeHighlighter
-                language={activeTab === 'curl' ? 'bash' : activeTab}
-                style={vscDarkPlus}
-                customStyle={{
-                  margin: 0,
-                  padding: '1.5rem',
-                  fontSize: '0.875rem',
-                  lineHeight: '1.625',
-                  backgroundColor: 'transparent'
-                }}
-              >
-                {codeExamples[activeTab]}
-              </CodeHighlighter>
+              <Suspense fallback={<CodeSkeleton />}>
+                <LazyCodeHighlighter
+                  language={activeTab === 'curl' ? 'bash' : activeTab}
+                  code={codeExamples[activeTab]}
+                />
+              </Suspense>
             </div>
 
             {/* Bottom gradient */}
