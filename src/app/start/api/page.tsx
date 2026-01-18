@@ -298,7 +298,7 @@ console.log(completion.choices[0].message.content);`
               </div>
               <Button
                 onClick={!user ? login : handleCopyApiKey}
-                disabled={isLoading || (user && !apiKey)}
+                disabled={isLoading || (!!user && !apiKey)}
                 className="h-12 px-6"
               >
                 {isLoading ? (
