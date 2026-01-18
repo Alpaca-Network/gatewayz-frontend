@@ -1518,7 +1518,18 @@ export function GatewayzAuthProvider({
       return;
     }
 
-    console.log("[Auth] Starting Privy ready timeout - will transition to unauthenticated if Privy doesn't initialize");
+    // FIX: For unauthenticated users without cached credentials, transition immediately
+    // to "unauthenticated" instead of waiting for the Privy timeout.
+    // This allows guest users to use the chat immediately without waiting for Privy SDK
+    // to initialize (which can take up to 10 seconds or fail entirely).
+    // This matches the behavior of DesktopAuthProvider which immediately sets
+    // status to "unauthenticated" when no credentials are found.
+    console.log("[Auth] No cached credentials found - transitioning to unauthenticated for guest access");
+    setAuthStatus("unauthenticated", "no cached credentials - guest mode");
+
+    // Still set a backup timeout in case we need to handle edge cases
+    // where Privy becomes ready and we need to re-evaluate
+    console.log("[Auth] Starting Privy ready timeout as backup");
 
     const timeoutId = setTimeout(() => {
       // Double-check Privy is still not ready (may have changed during timeout)
