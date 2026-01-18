@@ -67,7 +67,7 @@ const AUTH_STATE_TRANSITIONS: Record<AuthStatus, AuthStatus[]> = {
 const MAX_AUTH_RETRIES = 3;
 const AUTHENTICATING_TIMEOUT_MS = 60000; // 60 seconds - increased to handle slow backend responses
 const TOKEN_TIMEOUT_BASE_MS = 8000; // Base 8 seconds, adaptive up to 15s
-const PRIVY_READY_TIMEOUT_MS = 15000; // 15 seconds - timeout for Privy SDK to initialize
+const PRIVY_READY_TIMEOUT_MS = 10000; // 10 seconds - timeout for Privy SDK to initialize
 
 interface GatewayzAuthContextValue {
   status: AuthStatus;
