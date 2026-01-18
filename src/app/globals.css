@@ -453,6 +453,13 @@ body {
     overflow: hidden;
     height: 100vh;
     max-height: 100vh;
+    max-width: 100vw;
+  }
+
+  /* Desktop: constrain main content to viewport */
+  body[data-tauri="true"] main {
+    overflow: hidden;
+    max-width: 100%;
   }
 
   /* Hide scrollbars on desktop app for cleaner appearance */
