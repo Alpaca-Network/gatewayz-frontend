@@ -21,6 +21,7 @@ export function useAuth() {
       user: null,
       loading: true,
       isAuthenticated: false,
+      privyReady: false,
       login: () => {
         console.warn('[useAuth] Login called while storage is still being checked');
       },
@@ -50,6 +51,10 @@ export function useAuth() {
     user,
     loading,
     isAuthenticated,
+    // Expose privyReady so protected routes can wait for Privy before redirecting.
+    // This prevents kicking out users who have a valid Privy session but no cached
+    // Gatewayz credentials (e.g., after clearing localStorage).
+    privyReady: gatewayzAuth.privyReady,
     login: gatewayzAuth.login,
   };
 }
