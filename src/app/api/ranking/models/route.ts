@@ -27,7 +27,36 @@ export async function GET() {
       );
     }
 
-    const data = await response.json();
+    // Check content-type to ensure we're receiving JSON, not HTML error pages
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const responseText = await response.text();
+      console.error(
+        `[Ranking Models API] Expected JSON but got ${contentType}:`,
+        responseText.substring(0, 200)
+      );
+      return NextResponse.json(
+        { success: false, error: 'Backend returned non-JSON response', data: [] },
+        { status: 502 }
+      );
+    }
+
+    // Safely parse JSON response
+    const responseText = await response.text();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error(
+        '[Ranking Models API] Failed to parse JSON response:',
+        responseText.substring(0, 200)
+      );
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON response from backend', data: [] },
+        { status: 502 }
+      );
+    }
+
     return NextResponse.json(data);
   } catch (error) {
     return handleApiError(error, 'Ranking Models API');

@@ -13,6 +13,7 @@ import { Check, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getApiKey } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
+import { safeParseJson } from '@/lib/http';
 import Image from 'next/image';
 import { PathChooserModal } from '@/components/onboarding/path-chooser-modal';
 import posthog from 'posthog-js';
@@ -194,8 +195,13 @@ console.log(completion.choices[0].message);`,
           }
         });
 
-        if (response.ok) {
-          const result = await response.json();
+        // Use safeParseJson to handle HTML error responses gracefully
+        const result = await safeParseJson<{ data?: RankingModelData[] }>(
+          response,
+          '[Home] fetchRankingModels'
+        );
+
+        if (result && result.data) {
           const rankingModels: RankingModelData[] = result.data || [];
 
           // Map ranking data to featured model format
