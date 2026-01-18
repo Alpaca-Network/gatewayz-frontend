@@ -688,12 +688,26 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
   // Always start with "checking" during SSR to ensure consistent hydration
   // This prevents server/client mismatch since canUseLocalStorage() returns false on server
   const [status, setStatus] = useState<StorageStatus>("checking");
-  const [isTauri, setIsTauri] = useState(false);
+
+  // Initialize isTauri synchronously to avoid flash of wrong provider
+  // On desktop, hostname is tauri.localhost which we can detect immediately
+  // This prevents the race condition where PrivyProvider renders before we detect Tauri
+  const [isTauri, setIsTauri] = useState(() => {
+    if (typeof window === "undefined") return false;
+    // Check hostname first (synchronous, always available)
+    if (window.location?.hostname === "tauri.localhost") return true;
+    // Check __TAURI__ global (may be available depending on load order)
+    if ("__TAURI__" in window) return true;
+    return false;
+  });
 
   useEffect(() => {
-    // Check if we're running in Tauri desktop
-    // This must be done client-side as __TAURI__ is injected by Tauri
-    setIsTauri(isTauriDesktop());
+    // Re-check for Tauri in case __TAURI__ wasn't available during initial render
+    // This handles edge cases where the global is injected slightly after hydration
+    const isDesktop = isTauriDesktop();
+    if (isDesktop && !isTauri) {
+      setIsTauri(true);
+    }
 
     // Check localStorage availability after mount (client-side only)
     if (canUseLocalStorage()) {
@@ -711,12 +725,13 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isTauri]);
 
   // For Tauri desktop, use the desktop-specific provider that bypasses Privy
   // This avoids the "Embedded wallet is only available over HTTPS" error
+  // Desktop always has localStorage available, so we pass "ready" status directly
   if (isTauri) {
-    return <DesktopAuthProviderNoSSR {...props} storageStatus={status} />;
+    return <DesktopAuthProviderNoSSR {...props} storageStatus="ready" />;
   }
 
   // Always render the provider to ensure the context chain is never broken.

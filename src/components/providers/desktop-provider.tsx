@@ -36,6 +36,16 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
   const isTauri = useIsTauri();
   const router = useRouter();
 
+  // Add data-tauri attribute to body for CSS styling when running in Tauri
+  useEffect(() => {
+    if (isTauri && typeof document !== "undefined") {
+      document.body.setAttribute("data-tauri", "true");
+      return () => {
+        document.body.removeAttribute("data-tauri");
+      };
+    }
+  }, [isTauri]);
+
   // Register desktop keyboard shortcuts
   useDesktopShortcuts();
 

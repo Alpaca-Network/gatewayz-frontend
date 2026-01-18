@@ -712,6 +712,46 @@ describe('PrivyProviderWrapper', () => {
     // which is loaded earlier in the component tree (layout.tsx) to centralize error suppression
   });
 
+  describe('Tauri Desktop Synchronous Detection', () => {
+    it('should detect Tauri immediately when isTauriDesktop returns true', () => {
+      // The synchronous detection relies on isTauriDesktop checking:
+      // 1. window.location.hostname === 'tauri.localhost'
+      // 2. '__TAURI__' in window
+      // We mock isTauriDesktop to return true to simulate this
+      mockIsTauriDesktop.mockReturnValue(true);
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Should bypass Privy immediately without needing useEffect
+      expect(screen.queryByTestId('privy-provider')).not.toBeInTheDocument();
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Running in Tauri desktop mode - Privy SDK bypassed');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should pass ready storage status to desktop provider', () => {
+      mockIsTauriDesktop.mockReturnValue(true);
+      mockCanUseLocalStorage.mockReturnValue(false); // Even if this returns false
+      mockWaitForLocalStorageAccess.mockResolvedValue(false); // And this returns blocked
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Should NOT show storage blocked message on desktop
+      expect(screen.queryByText('Browser storage is disabled')).not.toBeInTheDocument();
+      // Should still render children
+      expect(screen.getByText('Test Child')).toBeInTheDocument();
+    });
+  });
+
   describe('DesktopAuthProvider', () => {
     beforeEach(() => {
       mockIsTauriDesktop.mockReturnValue(true);

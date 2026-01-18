@@ -1,6 +1,7 @@
 "use client";
 
 import Script from 'next/script';
+import { isTauriDesktop } from '@/lib/browser-detection';
 
 // Twitter Pixel ID
 const TWITTER_PIXEL_ID = 'pwpwh';
@@ -9,6 +10,11 @@ const TWITTER_PIXEL_ID = 'pwpwh';
 export const TWITTER_CONVERSION_EVENT_ID = 'tw-pwpwh-qxzjl';
 
 export function TwitterPixel() {
+  // Skip Twitter pixel on desktop app to avoid CSP violations
+  if (typeof window !== 'undefined' && isTauriDesktop()) {
+    return null;
+  }
+
   return (
     <>
       {/* Twitter universal website tag code */}
