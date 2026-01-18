@@ -332,20 +332,43 @@ describe('SignupPage', () => {
   });
 
   describe('Loading state', () => {
-    it('should show loading spinner when Privy is not ready', () => {
+    it('should show loading state in button when Privy is not ready', () => {
       mockReady = false;
 
       render(<SignupPage />);
 
+      // PERFORMANCE OPTIMIZATION: The card structure is always rendered for better FCP
+      // The loading state is now shown in the button, not as a separate page
+      const button = screen.getByTestId('signup-button');
+      expect(button).toBeDisabled();
       expect(screen.getByText('Loading...')).toBeInTheDocument();
+
+      // Card structure should still be visible for better FCP/LCP
+      expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
     });
 
-    it('should show redirecting message when authenticated', () => {
+    it('should show redirecting message in button when authenticated', () => {
       mockAuthenticated = true;
 
       render(<SignupPage />);
 
+      // The button shows "Redirecting..." when authenticated
       expect(screen.getByText('Redirecting...')).toBeInTheDocument();
+
+      // Card structure should still be visible
+      expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
+    });
+
+    it('should always render card structure for good FCP/LCP (performance optimization)', () => {
+      mockReady = false;
+
+      render(<SignupPage />);
+
+      // Core card elements should always be visible
+      expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
+      expect(screen.getByText("What you'll get:")).toBeInTheDocument();
+      expect(screen.getByText('Access to 10,000+ AI models')).toBeInTheDocument();
+      expect(screen.getByText('$3 in free trial credits')).toBeInTheDocument();
     });
   });
 
@@ -404,14 +427,16 @@ describe('SignupPage', () => {
       expect(mockLogin).toHaveBeenCalledTimes(1);
     });
 
-    it('should show loading state when Privy is not ready (button not visible)', () => {
+    it('should show loading state in button when Privy is not ready', () => {
       mockReady = false;
 
       render(<SignupPage />);
 
-      // When Privy is not ready, the loading state is shown instead of the form
+      // PERFORMANCE OPTIMIZATION: Button is always visible for better FCP/LCP
+      // But it shows loading state and is disabled
+      const button = screen.getByTestId('signup-button');
+      expect(button).toBeDisabled();
       expect(screen.getByText('Loading...')).toBeInTheDocument();
-      expect(screen.queryByTestId('signup-button')).not.toBeInTheDocument();
     });
 
     it('should track Twitter signup click on manual button click', async () => {
