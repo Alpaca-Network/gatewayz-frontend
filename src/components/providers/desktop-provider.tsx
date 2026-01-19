@@ -109,31 +109,50 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
           window.sessionStorage.setItem(processedKey, "true");
         }
 
-        // Import storage functions
-        const { saveApiKey, saveUserData, AUTH_REFRESH_EVENT } = await import("@/lib/api");
+        // Import storage functions once at the top
+        const { saveApiKey, saveUserData, AUTH_REFRESH_EVENT, getApiKey } = await import("@/lib/api");
 
-        // Save the API key and user data
-        saveApiKey(token);
-        saveUserData({
-          user_id: parseInt(userId, 10),
-          api_key: token,
-          auth_method: "desktop_deep_link",
-          privy_user_id: privyUserId || "",
-          display_name: email || "",
-          email: email || "",
-          credits: 0, // Will be populated on next sync
-        });
+        // Helper to save credentials and dispatch refresh event
+        const saveCredentialsAndDispatch = () => {
+          saveApiKey(token);
+          saveUserData({
+            user_id: parseInt(userId, 10),
+            api_key: token,
+            auth_method: "desktop_deep_link",
+            privy_user_id: privyUserId || "",
+            display_name: email || "",
+            email: email || "",
+            credits: 0, // Will be populated on next sync
+          });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+          }
+        };
 
+        // Save credentials and dispatch refresh event
+        saveCredentialsAndDispatch();
         console.log("[Desktop Auth] Credentials saved, dispatching refresh event");
 
-        // Dispatch refresh event to update auth context
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
-        }
+        // Wait for the next frame to ensure React has processed the state updates
+        // Use requestAnimationFrame + setTimeout to ensure we're after React's commit phase
+        await new Promise(resolve => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 50);
+          });
+        });
 
-        // Navigate to chat
-        router.refresh();
-        router.push("/chat");
+        // Verify credentials were saved before navigating
+        const savedKey = getApiKey();
+        if (savedKey) {
+          console.log("[Desktop Auth] Credentials verified, navigating to chat");
+          router.push("/chat");
+        } else {
+          console.error("[Desktop Auth] Credentials not found after save - retrying save");
+          // Retry saving credentials
+          saveCredentialsAndDispatch();
+          await new Promise(resolve => setTimeout(resolve, 100));
+          router.push("/chat");
+        }
       } catch (error) {
         console.error("[Desktop Auth] Error handling token callback:", error);
         // Clear the processed flag on error so retry can work
@@ -149,8 +168,8 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
         const result = await handleDesktopOAuthCallback(query);
 
         if (result.success) {
-          // Refresh the page to pick up the new auth state
-          router.refresh();
+          // Wait a tick to ensure React state has updated before navigation
+          await new Promise(resolve => setTimeout(resolve, 100));
           router.push("/chat");
         } else {
           console.error("[Desktop Auth] Callback failed:", result.error);
