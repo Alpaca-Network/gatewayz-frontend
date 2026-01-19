@@ -812,10 +812,10 @@ describe('MessageList', () => {
       });
       mockRequestAnimationFrame.mockClear();
 
-      // Simulate rapid streaming updates (faster than throttle interval of 50ms)
+      // Simulate rapid streaming updates (faster than throttle interval of 75ms)
       // Don't advance time - stay within same throttle window
       for (let i = 0; i < 5; i++) {
-        // Only increment by 5ms each time (within 50ms throttle)
+        // Only increment by 5ms each time (within 75ms throttle)
         currentTime = 1000 + (i * 5);
 
         const updatedMessages = [
@@ -836,8 +836,8 @@ describe('MessageList', () => {
         });
       }
 
-      // Due to throttling (50ms), not all updates should trigger RAF
-      // The first update always goes through, subsequent ones within 50ms are throttled
+      // Due to throttling (75ms), not all updates should trigger RAF
+      // The first update always goes through, subsequent ones within 75ms are throttled
       expect(mockRequestAnimationFrame.mock.calls.length).toBeLessThan(5);
     });
 
