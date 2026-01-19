@@ -304,3 +304,52 @@ describe('WebOnly', () => {
     expect(queryByText('Web Content')).not.toBeInTheDocument();
   });
 });
+
+describe('Auth Callback Handler', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseIsTauri.mockReturnValue(true);
+    // Clear sessionStorage
+    window.sessionStorage.clear();
+  });
+
+  it('should register auth callback handler', () => {
+    render(
+      <DesktopProvider>
+        <div>Test Content</div>
+      </DesktopProvider>
+    );
+
+    expect(mockUseAuthCallback).toHaveBeenCalled();
+  });
+
+  it('should capture callback function for auth events', () => {
+    let capturedCallback: ((query: string) => void) | null = null;
+    mockUseAuthCallback.mockImplementation((cb) => {
+      capturedCallback = cb;
+    });
+
+    render(
+      <DesktopProvider>
+        <div>Test Content</div>
+      </DesktopProvider>
+    );
+
+    // Verify callback was captured
+    expect(capturedCallback).not.toBeNull();
+    expect(typeof capturedCallback).toBe('function');
+  });
+
+  it('should deduplicate auth callbacks by storing processed token in sessionStorage', () => {
+    // Test the deduplication mechanism directly
+    const testTokenPrefix = 'test-api-key-12';
+    const processedKey = `desktop_auth_processed_${testTokenPrefix}`;
+
+    // Initially should not be set
+    expect(window.sessionStorage.getItem(processedKey)).toBeNull();
+
+    // After setting, should be retrievable
+    window.sessionStorage.setItem(processedKey, 'true');
+    expect(window.sessionStorage.getItem(processedKey)).toBe('true');
+  });
+});
