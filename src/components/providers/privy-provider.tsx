@@ -129,13 +129,21 @@ export function PrivyProviderWrapper(props: PrivyProviderWrapperProps) {
   // When storage is blocked, show the notice instead of children
   if (status === "blocked") {
     return (
-      <WebPrivyProviderNoSSR {...props} storageStatus={status}>
-        <StorageDisabledNotice />
-      </WebPrivyProviderNoSSR>
+      <StorageStatusContext.Provider value={status}>
+        <WebPrivyProviderNoSSR {...props} storageStatus={status}>
+          <StorageDisabledNotice />
+        </WebPrivyProviderNoSSR>
+      </StorageStatusContext.Provider>
     );
   }
 
   // For "checking" and "ready" states, always render the provider with children
   // Children can use useStorageStatus() to show loading states if needed
-  return <WebPrivyProviderNoSSR {...props} storageStatus={status} />;
+  // IMPORTANT: Wrap with StorageStatusContext.Provider so that useStorageStatus()
+  // (exported from this file and imported by useAuth) gets the correct value on web
+  return (
+    <StorageStatusContext.Provider value={status}>
+      <WebPrivyProviderNoSSR {...props} storageStatus={status} />
+    </StorageStatusContext.Provider>
+  );
 }
