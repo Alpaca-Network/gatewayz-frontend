@@ -21,11 +21,11 @@ export type Model = {
 
 export const models: Model[] = [
   {
-    name: 'gpt-5.1',
+    name: 'gpt-5.2',
     isFree: false,
     tokens: '200B+ tokens',
     category: 'Multimodal',
-    description: 'GPT-5.1 is the latest frontier-grade model in the GPT-5 series, offering stronger general-purpose reasoning, improved instruction adherence, and a more natural conversational style compared to GPT-5. It uses adaptive reasoning to allocate computation dynamically, responding quickly to simple queries while spending more depth on complex tasks. The model produces clearer, more grounded explanations with reduced jargon, making it easier to follow even on technical or multi-step problems.',
+    description: 'GPT-5.2 is the latest frontier-grade model in the GPT-5 series, offering stronger general-purpose reasoning, improved instruction adherence, and a more natural conversational style compared to GPT-5. It uses adaptive reasoning to allocate computation dynamically, responding quickly to simple queries while spending more depth on complex tasks. The model produces clearer, more grounded explanations with reduced jargon, making it easier to follow even on technical or multi-step problems.',
     developer: 'openai',
     context: 400,
     inputCost: 1.25,

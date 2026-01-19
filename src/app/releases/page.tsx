@@ -15,6 +15,33 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
+    date: "January 18, 2026",
+    features: [
+      "Automatic Web Search: Chat now automatically searches the web for queries that benefit from real-time information (travel questions, current prices, news) without any manual toggle needed",
+      "Desktop App Improvements: Beta testing Desktop apps for MacOS, Windows and Linux. Improved overall desktop stability",
+      "New Provider - Morpheus API: Added Morpheus as a new model provider with optimized inference capabilities",
+      "FAL Models Integration: Dynamic FAL model fetching from REST API for up-to-date model availability",
+    ],
+    bugFixes: [
+      {
+        category: "Gatewayz Chat",
+        items: [
+          "Credits now properly removed after trial expiration without payment",
+        ],
+      },
+      {
+        category: "Gatewayz API",
+        items: [
+          "Fixed pricing normalization to consistently display $/million tokens across all providers",
+          "Fixed Statsig 401 errors when client key is missing or disabled",
+          "Fixed CORS for Tauri desktop application requests",
+        ],
+      },
+    ],
+    infrastructure: [],
+    documentation: [],
+  },
+  {
     date: "January 11, 2026",
     features: [
       "Discounted Credit Packages: New discounted credit package options are now available",

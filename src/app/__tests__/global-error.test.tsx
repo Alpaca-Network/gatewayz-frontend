@@ -80,39 +80,51 @@ describe('GlobalError', () => {
     expect(window.location.pathname).toBe('/');
   });
 
-  it('should display error message in development mode', () => {
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'development';
+  it('should display error message when show details is clicked', () => {
+    // Mock Tauri desktop environment to make the "Show error details" button visible
+    // In test environment, NODE_ENV is 'test', so we need to use the showDetails path
+    (window as any).__TAURI__ = {};
 
     render(<GlobalError error={mockError} reset={mockReset} />);
 
-    expect(screen.getByText('Test error message')).toBeInTheDocument();
+    // Click the "Show error details" button to reveal error details
+    const showDetailsButton = screen.getByText('Show error details');
+    fireEvent.click(showDetailsButton);
 
-    process.env.NODE_ENV = originalEnv;
+    // Error details are now shown with format: "Error: {name}: {message}"
+    // The error message appears in both the error display and stack trace,
+    // so we use getAllByText and check that at least one match exists
+    const errorMessages = screen.getAllByText(/Test error message/i);
+    expect(errorMessages.length).toBeGreaterThan(0);
+
+    // Clean up the mock
+    delete (window as any).__TAURI__;
   });
 
   it('should display error digest when present', () => {
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'development';
+    // Mock Tauri desktop environment to make the "Show error details" button visible
+    (window as any).__TAURI__ = {};
 
     const errorWithDigest = Object.assign(mockError, { digest: 'abc123' });
     render(<GlobalError error={errorWithDigest} reset={mockReset} />);
 
+    // Click the "Show error details" button to reveal error details
+    const showDetailsButton = screen.getByText('Show error details');
+    fireEvent.click(showDetailsButton);
+
     expect(screen.getByText(/Error ID: abc123/i)).toBeInTheDocument();
 
-    process.env.NODE_ENV = originalEnv;
+    // Clean up the mock
+    delete (window as any).__TAURI__;
   });
 
-  it('should not display error details in production mode', () => {
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-
+  it('should not display error details by default (without clicking show details)', () => {
     render(<GlobalError error={mockError} reset={mockReset} />);
 
-    // Error message should not be visible in production
-    expect(screen.queryByText('Test error message')).not.toBeInTheDocument();
-
-    process.env.NODE_ENV = originalEnv;
+    // Error message should not be visible by default (unless user clicks "Show error details")
+    // In test environment, NODE_ENV is 'test', which is neither 'development' nor 'production'
+    // but the behavior should be the same as production - no error details shown by default
+    expect(screen.queryByText(/Test error message/i)).not.toBeInTheDocument();
   });
 
   it('should render support contact link', () => {

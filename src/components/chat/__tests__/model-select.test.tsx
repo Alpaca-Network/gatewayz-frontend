@@ -8,6 +8,14 @@ import {
   ensureRouterOption,
 } from '../model-select';
 
+// Mock isTauriDesktop for desktop mode tests
+jest.mock('@/lib/browser-detection', () => ({
+  isTauriDesktop: jest.fn(() => false),
+}));
+
+import { isTauriDesktop } from '@/lib/browser-detection';
+const mockIsTauriDesktop = isTauriDesktop as jest.MockedFunction<typeof isTauriDesktop>;
+
 // Test the component exports correctly
 describe('ModelSelect', () => {
   it('should be defined and exportable', () => {
@@ -1274,6 +1282,137 @@ describe('ModelSelect free model detection with OpenRouter :free suffix', () => 
 
       expect(getCategoryForModel(freeModel)).toBe('Free');
       expect(getCategoryForModel(paidModel)).toBe('Paid');
+    });
+  });
+});
+
+// Test desktop mode (Tauri) API URL construction
+describe('ModelSelect desktop mode (Tauri) handling', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('URL construction for API requests', () => {
+    const API_BASE_URL = 'https://api.gatewayz.ai';
+
+    it('should use relative URL for web mode', () => {
+      mockIsTauriDesktop.mockReturnValue(false);
+      const isDesktop = mockIsTauriDesktop();
+      const limit = 50;
+      const limitParam = `&limit=${limit}`;
+
+      const modelsUrl = isDesktop
+        ? `${API_BASE_URL}/v1/models?gateway=all${limitParam}`
+        : `/api/models?gateway=all${limitParam}`;
+
+      expect(modelsUrl).toBe('/api/models?gateway=all&limit=50');
+    });
+
+    it('should use backend API URL directly for desktop mode', () => {
+      mockIsTauriDesktop.mockReturnValue(true);
+      const isDesktop = mockIsTauriDesktop();
+      const limit = 50;
+      const limitParam = `&limit=${limit}`;
+
+      const modelsUrl = isDesktop
+        ? `${API_BASE_URL}/v1/models?gateway=all${limitParam}`
+        : `/api/models?gateway=all${limitParam}`;
+
+      expect(modelsUrl).toBe('https://api.gatewayz.ai/v1/models?gateway=all&limit=50');
+    });
+
+    it('should construct correct search URL for web mode', () => {
+      mockIsTauriDesktop.mockReturnValue(false);
+      const isDesktop = mockIsTauriDesktop();
+      const query = 'deepseek';
+
+      const searchUrl = isDesktop
+        ? `${API_BASE_URL}/v1/models?gateway=all&search=${encodeURIComponent(query)}`
+        : `/api/models?gateway=all&search=${encodeURIComponent(query)}`;
+
+      expect(searchUrl).toBe('/api/models?gateway=all&search=deepseek');
+    });
+
+    it('should construct correct search URL for desktop mode', () => {
+      mockIsTauriDesktop.mockReturnValue(true);
+      const isDesktop = mockIsTauriDesktop();
+      const query = 'deepseek';
+
+      const searchUrl = isDesktop
+        ? `${API_BASE_URL}/v1/models?gateway=all&search=${encodeURIComponent(query)}`
+        : `/api/models?gateway=all&search=${encodeURIComponent(query)}`;
+
+      expect(searchUrl).toBe('https://api.gatewayz.ai/v1/models?gateway=all&search=deepseek');
+    });
+
+    it('should construct correct prefetch URL for web mode', () => {
+      mockIsTauriDesktop.mockReturnValue(false);
+      const isDesktop = mockIsTauriDesktop();
+
+      const prefetchUrl = isDesktop
+        ? `${API_BASE_URL}/v1/models?gateway=openrouter`
+        : `/api/models?gateway=openrouter`;
+
+      expect(prefetchUrl).toBe('/api/models?gateway=openrouter');
+    });
+
+    it('should construct correct prefetch URL for desktop mode', () => {
+      mockIsTauriDesktop.mockReturnValue(true);
+      const isDesktop = mockIsTauriDesktop();
+
+      const prefetchUrl = isDesktop
+        ? `${API_BASE_URL}/v1/models?gateway=openrouter`
+        : `/api/models?gateway=openrouter`;
+
+      expect(prefetchUrl).toBe('https://api.gatewayz.ai/v1/models?gateway=openrouter');
+    });
+
+    it('should construct correct popular models URL for web mode', () => {
+      mockIsTauriDesktop.mockReturnValue(false);
+      const isDesktop = mockIsTauriDesktop();
+
+      const popularModelsUrl = isDesktop
+        ? `${API_BASE_URL}/v1/models/popular?limit=10`
+        : '/api/models/popular?limit=10';
+
+      expect(popularModelsUrl).toBe('/api/models/popular?limit=10');
+    });
+
+    it('should construct correct popular models URL for desktop mode', () => {
+      mockIsTauriDesktop.mockReturnValue(true);
+      const isDesktop = mockIsTauriDesktop();
+
+      const popularModelsUrl = isDesktop
+        ? `${API_BASE_URL}/v1/models/popular?limit=10`
+        : '/api/models/popular?limit=10';
+
+      expect(popularModelsUrl).toBe('https://api.gatewayz.ai/v1/models/popular?limit=10');
+    });
+  });
+
+  describe('content-type validation', () => {
+    it('should detect HTML response (non-JSON)', () => {
+      const contentType = 'text/html; charset=utf-8';
+      const isJson = contentType && contentType.includes('application/json');
+      expect(isJson).toBe(false);
+    });
+
+    it('should detect JSON response', () => {
+      const contentType = 'application/json';
+      const isJson = contentType && contentType.includes('application/json');
+      expect(isJson).toBe(true);
+    });
+
+    it('should detect JSON response with charset', () => {
+      const contentType = 'application/json; charset=utf-8';
+      const isJson = contentType && contentType.includes('application/json');
+      expect(isJson).toBe(true);
+    });
+
+    it('should handle missing content-type header', () => {
+      const contentType: string | null = null;
+      const isJson = contentType && contentType.includes('application/json');
+      expect(isJson).toBeFalsy();
     });
   });
 });

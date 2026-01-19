@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   useIsTauri,
   useDesktopShortcuts,
@@ -16,6 +16,7 @@ import {
   hasShownShortcutInfo,
   showShortcutInfoDialog,
 } from "@/components/dialogs/shortcut-info-dialog";
+import { isTauriDesktop } from "@/lib/browser-detection";
 
 interface DesktopProviderProps {
   children: ReactNode;
@@ -35,6 +36,25 @@ interface DesktopProviderProps {
 export function DesktopProvider({ children }: DesktopProviderProps) {
   const isTauri = useIsTauri();
   const router = useRouter();
+
+  // Synchronously detect Tauri for immediate CSS styling
+  // This prevents flash of wrong styles (scrollbars visible, wrong viewport)
+  // before useIsTauri's useEffect runs
+  const [isTauriSync] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return isTauriDesktop();
+  });
+
+  // Add data-tauri attribute to body for CSS styling when running in Tauri
+  // Use synchronous detection to avoid flash of unstyled content
+  useEffect(() => {
+    if (isTauriSync && typeof document !== "undefined") {
+      document.body.setAttribute("data-tauri", "true");
+      return () => {
+        document.body.removeAttribute("data-tauri");
+      };
+    }
+  }, [isTauriSync]);
 
   // Register desktop keyboard shortcuts
   useDesktopShortcuts();
@@ -56,21 +76,100 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
   });
 
   // Handle OAuth callbacks from deep links
+  // The callback URL format is: gatewayz://auth/callback?token=xxx&user_id=xxx&privy_user_id=xxx&email=xxx
+  // Note: The Rust backend may emit multiple events with retry logic for reliability,
+  // so we track processed tokens to prevent duplicate handling
   useAuthCallback(async (query) => {
     // Parse the query string and handle the OAuth callback
     const params = new URLSearchParams(query);
-    const code = params.get("code");
-    const state = params.get("state");
 
-    if (code) {
+    // New format from login page: token, user_id, privy_user_id, email
+    const token = params.get("token");
+    const userId = params.get("user_id");
+    const privyUserId = params.get("privy_user_id");
+    const email = params.get("email");
+
+    // Legacy format: code, state (for backwards compatibility)
+    const code = params.get("code");
+
+    if (token && userId) {
+      // Deduplicate: check if we've already processed this token
+      const processedKey = `desktop_auth_processed_${token.slice(0, 16)}`;
+      if (typeof window !== "undefined" && window.sessionStorage.getItem(processedKey)) {
+        console.log("[Desktop Auth] Ignoring duplicate auth callback");
+        return;
+      }
+
+      // New format: direct token from web login
+      try {
+        console.log("[Desktop Auth] Received auth callback with token");
+
+        // Mark as processed immediately to prevent race conditions
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(processedKey, "true");
+        }
+
+        // Import storage functions once at the top
+        const { saveApiKey, saveUserData, AUTH_REFRESH_EVENT, getApiKey } = await import("@/lib/api");
+
+        // Helper to save credentials and dispatch refresh event
+        const saveCredentialsAndDispatch = () => {
+          saveApiKey(token);
+          saveUserData({
+            user_id: parseInt(userId, 10),
+            api_key: token,
+            auth_method: "desktop_deep_link",
+            privy_user_id: privyUserId || "",
+            display_name: email || "",
+            email: email || "",
+            credits: 0, // Will be populated on next sync
+          });
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+          }
+        };
+
+        // Save credentials and dispatch refresh event
+        saveCredentialsAndDispatch();
+        console.log("[Desktop Auth] Credentials saved, dispatching refresh event");
+
+        // Wait for the next frame to ensure React has processed the state updates
+        // Use requestAnimationFrame + setTimeout to ensure we're after React's commit phase
+        await new Promise(resolve => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 50);
+          });
+        });
+
+        // Verify credentials were saved before navigating
+        const savedKey = getApiKey();
+        if (savedKey) {
+          console.log("[Desktop Auth] Credentials verified, navigating to chat");
+          router.push("/chat");
+        } else {
+          console.error("[Desktop Auth] Credentials not found after save - retrying save");
+          // Retry saving credentials
+          saveCredentialsAndDispatch();
+          await new Promise(resolve => setTimeout(resolve, 100));
+          router.push("/chat");
+        }
+      } catch (error) {
+        console.error("[Desktop Auth] Error handling token callback:", error);
+        // Clear the processed flag on error so retry can work
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(processedKey);
+        }
+      }
+    } else if (code) {
+      // Legacy format: OAuth code exchange (kept for backwards compatibility)
       try {
         // Use the desktop-specific auth callback endpoint
         const { handleDesktopOAuthCallback } = await import("@/lib/desktop");
         const result = await handleDesktopOAuthCallback(query);
 
         if (result.success) {
-          // Refresh the page to pick up the new auth state
-          router.refresh();
+          // Wait a tick to ensure React state has updated before navigation
+          await new Promise(resolve => setTimeout(resolve, 100));
           router.push("/chat");
         } else {
           console.error("[Desktop Auth] Callback failed:", result.error);
@@ -78,6 +177,8 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
       } catch (error) {
         console.error("[Desktop Auth] Error handling callback:", error);
       }
+    } else {
+      console.error("[Desktop Auth] Invalid callback: missing token or code");
     }
   });
 

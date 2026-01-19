@@ -15,8 +15,8 @@
       {
         "label": "main",
         "title": "GatewayZ",
-        "width": 1200,
-        "height": 800,
+        "width": 800,
+        "height": 700,
         "minWidth": 800,
         "minHeight": 600,
         "resizable": true,
@@ -30,17 +30,12 @@
         "titleBarStyle": "Visible",
         "hiddenTitle": false,
         "tabbingIdentifier": "GatewayZ",
-        "acceptFirstMouse": true
+        "acceptFirstMouse": true,
+        "devtools": true
       }
     ],
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "iconAsTemplate": true,
-      "menuOnLeftClick": false,
-      "title": "GatewayZ"
-    },
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://auth.privy.io https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; frame-src 'self' https://auth.privy.io https://verify.walletconnect.com https://challenges.cloudflare.com; child-src 'self' https://auth.privy.io https://verify.walletconnect.com; connect-src 'self' https://api.gatewayz.ai https://*.gatewayz.ai wss://*.gatewayz.ai https://*.privy.io https://*.sentry.io https://*.walletconnect.com wss://*.walletconnect.com",
+      "csp": "default-src 'self' ipc: http://ipc.localhost tauri: http://tauri.localhost; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://auth.privy.io https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; frame-src 'self' https://auth.privy.io https://verify.walletconnect.com https://challenges.cloudflare.com; child-src 'self' https://auth.privy.io https://verify.walletconnect.com; connect-src 'self' ipc: http://ipc.localhost tauri: http://tauri.localhost https://api.gatewayz.ai https://*.gatewayz.ai wss://*.gatewayz.ai https://*.privy.io https://*.sentry.io https://*.walletconnect.com wss://*.walletconnect.com https://*.statsig.com https://prodregistryv2.org https://featureassets.org https://cloudflare-dns.com https://statsigapi.net",
       "freezePrototype": false,
       "dangerousDisableAssetCspModification": false
     },
@@ -79,7 +74,20 @@
         "type": "embedBootstrapper",
         "silent": false
       },
-      "wix": null,
+      "wix": {
+        "language": "en-US",
+        "template": null,
+        "bannerPath": null,
+        "dialogImagePath": null,
+        "enableElevatedUpdateTask": false,
+        "fragmentPaths": [],
+        "componentGroupRefs": [],
+        "componentRefs": [],
+        "featureGroupRefs": [],
+        "featureRefs": [],
+        "mergeRefs": [],
+        "fipsCompliant": false
+      },
       "nsis": {
         "template": null,
         "headerImage": null,
