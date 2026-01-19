@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Sparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { SURPRISE_PROMPTS } from '@/lib/surprise-prompts';
 
 interface MiniChatWidgetProps {
   className?: string;
@@ -19,6 +20,13 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
       // Navigate to chat page with the message
       router.push(`/chat?message=${encodeURIComponent(message)}`);
     }
+  };
+
+  const handleSurpriseMe = () => {
+    // Pick a random surprise prompt
+    const randomPrompt = SURPRISE_PROMPTS[Math.floor(Math.random() * SURPRISE_PROMPTS.length)];
+    // Navigate to chat page with the surprise prompt
+    router.push(`/chat?message=${encodeURIComponent(randomPrompt)}`);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -54,14 +62,18 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
               className="flex-1 border-0 bg-transparent text-sm xs:text-base sm:text-lg focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60"
             />
 
-            {/* Send button */}
+            {/* Send button - shows Send icon when message is entered, Sparkles when empty */}
             <Button
-              onClick={handleSendMessage}
-              disabled={!message.trim()}
+              onClick={message.trim() ? handleSendMessage : handleSurpriseMe}
               size="icon"
-              className="flex-shrink-0 w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
+              className="flex-shrink-0 w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 shadow-md transition-all"
+              title={message.trim() ? "Send message" : "Surprise me!"}
             >
-              <Send className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white" />
+              {message.trim() ? (
+                <Send className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white" />
+              )}
             </Button>
           </div>
         </div>
