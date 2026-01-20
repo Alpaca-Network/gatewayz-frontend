@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send, Sparkles } from 'lucide-react';
@@ -16,6 +16,25 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
   const [isMagicAnimating, setIsMagicAnimating] = useState(false);
   const router = useRouter();
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const isMountedRef = useRef(true);
+  const activeAnimationsRef = useRef<Animation[]>([]);
+
+  // Cleanup animations on unmount to prevent memory leaks
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // Cancel all active animations and remove sparkle elements
+      activeAnimationsRef.current.forEach(animation => {
+        animation.cancel();
+        const effect = animation.effect;
+        if (effect && effect instanceof KeyframeEffect && effect.target) {
+          effect.target.remove();
+        }
+      });
+      activeAnimationsRef.current = [];
+    };
+  }, []);
 
   const handleSendMessage = () => {
     if (message.trim()) {
@@ -47,6 +66,9 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
     const sparkleCount = 12;
     let completedCount = 0;
 
+    // Clear any previous animations
+    activeAnimationsRef.current = [];
+
     for (let i = 0; i < sparkleCount; i++) {
       const sparkle = document.createElement('div');
       sparkle.className = 'sparkle-particle';
@@ -70,7 +92,7 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
       const distance = 60 + Math.random() * 40;
       const duration = 600 + Math.random() * 200;
 
-      sparkle.animate([
+      const animation = sparkle.animate([
         {
           transform: 'translate(0, 0) scale(1)',
           opacity: 1
@@ -82,10 +104,16 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
       ], {
         duration,
         easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
-      }).onfinish = () => {
+      });
+
+      // Track animation for cleanup
+      activeAnimationsRef.current.push(animation);
+
+      animation.onfinish = () => {
         sparkle.remove();
         completedCount++;
-        if (completedCount === sparkleCount) {
+        // Only update state if component is still mounted
+        if (completedCount === sparkleCount && isMountedRef.current) {
           setIsMagicAnimating(false);
         }
       };
