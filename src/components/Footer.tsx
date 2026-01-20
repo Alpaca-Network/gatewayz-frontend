@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Twitter, Linkedin } from "lucide-react";
 
 export function Footer() {
   return (
@@ -57,6 +58,34 @@ export function Footer() {
                 <Link href="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                   Contact
                 </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h3 className="font-semibold mb-4 text-gray-900">Connect</h3>
+            <ul className="space-y-2">
+              <li>
+                <a
+                  href="https://x.com/GatewayzAI"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                >
+                  <Twitter className="h-4 w-4" />
+                  <span>X</span>
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://www.linkedin.com/company/gatewayz-ai/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                >
+                  <Linkedin className="h-4 w-4" />
+                  <span>LinkedIn</span>
+                </a>
               </li>
             </ul>
           </div>
