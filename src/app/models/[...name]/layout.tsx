@@ -39,6 +39,15 @@ export async function generateStaticParams() {
  */
 export const revalidate = 3600; // 1 hour in seconds
 
+/**
+ * For static export (desktop), dynamicParams must be false
+ * This tells Next.js to only generate pages for paths returned by generateStaticParams
+ * and return 404 for any other paths (instead of trying to generate them on-demand)
+ *
+ * For server mode, this is true by default to enable ISR fallback
+ */
+export const dynamicParams = process.env.NEXT_STATIC_EXPORT !== 'true';
+
 interface LayoutProps {
   children: ReactNode;
   params: Promise<{ name: string[] }>;

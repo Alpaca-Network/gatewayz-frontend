@@ -83,58 +83,83 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
     // Parse the query string and handle the OAuth callback
     const params = new URLSearchParams(query);
 
-    // New format from login page: token, user_id, privy_user_id, email
+    // New format from login page: token, user_id, privy_user_id, email, credits, display_name, tier, tier_display_name
     const token = params.get("token");
     const userId = params.get("user_id");
     const privyUserId = params.get("privy_user_id");
     const email = params.get("email");
+    const creditsStr = params.get("credits");
+    const displayName = params.get("display_name");
+    const tier = params.get("tier");
+    const tierDisplayName = params.get("tier_display_name");
+
+    // Parse credits as number, default to 0 if not provided
+    const credits = creditsStr ? parseInt(creditsStr, 10) : 0;
 
     // Legacy format: code, state (for backwards compatibility)
     const code = params.get("code");
 
     if (token && userId) {
-      // Deduplicate: check if we've already processed this token
-      const processedKey = `desktop_auth_processed_${token.slice(0, 16)}`;
-      if (typeof window !== "undefined" && window.sessionStorage.getItem(processedKey)) {
-        console.log("[Desktop Auth] Ignoring duplicate auth callback");
-        return;
-      }
-
-      // New format: direct token from web login
+      // Process the callback - always allow credentials to be updated/overwritten
       try {
-        console.log("[Desktop Auth] Received auth callback with token");
-
-        // Mark as processed immediately to prevent race conditions
-        if (typeof window !== "undefined") {
-          window.sessionStorage.setItem(processedKey, "true");
-        }
-
-        // Import storage functions once at the top
+        // Import storage functions
         const { saveApiKey, saveUserData, AUTH_REFRESH_EVENT, getApiKey } = await import("@/lib/api");
 
-        // Helper to save credentials and dispatch refresh event
-        const saveCredentialsAndDispatch = () => {
-          saveApiKey(token);
-          saveUserData({
-            user_id: parseInt(userId, 10),
-            api_key: token,
-            auth_method: "desktop_deep_link",
-            privy_user_id: privyUserId || "",
-            display_name: email || "",
-            email: email || "",
-            credits: 0, // Will be populated on next sync
-          });
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
-          }
+        // First, save the API key so we can make authenticated requests
+        saveApiKey(token);
+
+        // Fetch full user profile from backend to get display_name, credits, tier, etc.
+        // The callback URL may not include all fields
+        let fullUserData = {
+          user_id: parseInt(userId, 10),
+          api_key: token,
+          auth_method: "desktop_deep_link",
+          privy_user_id: privyUserId || "",
+          display_name: displayName || email || "",
+          email: email || "",
+          credits: credits,
+          tier: tier || undefined,
+          tier_display_name: tierDisplayName || undefined,
         };
 
-        // Save credentials and dispatch refresh event
-        saveCredentialsAndDispatch();
-        console.log("[Desktop Auth] Credentials saved, dispatching refresh event");
+        try {
+          const profileResponse = await fetch("/api/user/me", {
+            method: "GET",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (profileResponse.ok) {
+            const profileData = await profileResponse.json();
+
+            // Merge profile data with callback data (profile data takes precedence)
+            fullUserData = {
+              user_id: profileData.user_id || fullUserData.user_id,
+              api_key: token,
+              auth_method: "desktop_deep_link",
+              privy_user_id: profileData.privy_user_id || fullUserData.privy_user_id,
+              display_name: profileData.display_name || profileData.email || fullUserData.display_name,
+              email: profileData.email || fullUserData.email,
+              credits: profileData.credits ?? fullUserData.credits,
+              tier: profileData.tier || fullUserData.tier,
+              tier_display_name: profileData.tier_display_name || fullUserData.tier_display_name,
+            };
+          }
+        } catch {
+          // Failed to fetch profile, use callback data
+        }
+
+        // Save the full user data
+        saveUserData(fullUserData);
+
+        // Dispatch refresh event to update UI
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event(AUTH_REFRESH_EVENT));
+        }
 
         // Wait for the next frame to ensure React has processed the state updates
-        // Use requestAnimationFrame + setTimeout to ensure we're after React's commit phase
         await new Promise(resolve => {
           requestAnimationFrame(() => {
             setTimeout(resolve, 50);
@@ -143,39 +168,36 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
 
         // Verify credentials were saved before navigating
         const savedKey = getApiKey();
+
         if (savedKey) {
-          console.log("[Desktop Auth] Credentials verified, navigating to chat");
           router.push("/chat");
+          // Fallback: force navigation via window.location after a short delay
+          setTimeout(() => {
+            if (window.location.pathname !== "/chat") {
+              window.location.href = "/chat";
+            }
+          }, 500);
         } else {
-          console.error("[Desktop Auth] Credentials not found after save - retrying save");
-          // Retry saving credentials
-          saveCredentialsAndDispatch();
-          await new Promise(resolve => setTimeout(resolve, 100));
-          router.push("/chat");
+          console.error("[Desktop Auth] Credentials not found after save");
+          window.location.href = "/chat";
         }
       } catch (error) {
         console.error("[Desktop Auth] Error handling token callback:", error);
-        // Clear the processed flag on error so retry can work
-        if (typeof window !== "undefined") {
-          window.sessionStorage.removeItem(processedKey);
-        }
       }
     } else if (code) {
       // Legacy format: OAuth code exchange (kept for backwards compatibility)
       try {
-        // Use the desktop-specific auth callback endpoint
         const { handleDesktopOAuthCallback } = await import("@/lib/desktop");
         const result = await handleDesktopOAuthCallback(query);
 
         if (result.success) {
-          // Wait a tick to ensure React state has updated before navigation
           await new Promise(resolve => setTimeout(resolve, 100));
           router.push("/chat");
         } else {
-          console.error("[Desktop Auth] Callback failed:", result.error);
+          console.error("[Desktop Auth] Legacy callback failed:", result.error);
         }
       } catch (error) {
-        console.error("[Desktop Auth] Error handling callback:", error);
+        console.error("[Desktop Auth] Error handling legacy callback:", error);
       }
     } else {
       console.error("[Desktop Auth] Invalid callback: missing token or code");
