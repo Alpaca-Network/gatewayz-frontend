@@ -68,6 +68,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { usePrivy } from "@privy-io/react-auth";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
+import { useWhisperTranscription } from "@/lib/hooks/use-whisper-transcription";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -226,7 +227,27 @@ export function ChatInput() {
   const [selectedDocumentName, setSelectedDocumentName] = useState<string | null>(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
+  // Whisper transcription - high quality backend-based transcription
+  const userLanguage = typeof navigator !== 'undefined' ? navigator.language?.split('-')[0] || 'en' : 'en';
+  const {
+    startRecording: whisperStartRecording,
+    stopRecording: whisperStopRecording,
+    isRecording: whisperIsRecording,
+    isTranscribing,
+    error: whisperError,
+  } = useWhisperTranscription({
+    language: userLanguage,
+    preprocess: true,
+    targetSampleRate: 16000,
+  });
+
+  // Recording state - combines Whisper recording state with local UI state
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [transcriptionStatus, setTranscriptionStatus] = useState<'idle' | 'recording' | 'transcribing'>('idle');
+
+  // Fallback: Web Speech API state (used when Whisper is unavailable)
+  const [useWebSpeechFallback, setUseWebSpeechFallback] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
   const [interimTranscript, setInterimTranscript] = useState<string>('');
   const [transcriptBeforeRecording, setTranscriptBeforeRecording] = useState<string>('');
@@ -243,6 +264,8 @@ export function ChatInput() {
 
   // Ref for synchronous recording state check to prevent race conditions on rapid clicks
   const isRecordingRef = useRef(false);
+  // Ref for recording duration interval
+  const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Derive input empty state directly from inputValue to avoid desync issues
   const isInputEmpty = !inputValue.trim();
@@ -693,21 +716,22 @@ export function ChatInput() {
       if (documentInputRef.current) documentInputRef.current.value = '';
   };
 
-  // Ref to track current recognition instance for race condition prevention
+  // Ref to track current recognition instance for race condition prevention (fallback mode)
   const currentRecognitionRef = useRef<SpeechRecognition | null>(null);
-  // Ref to track last processed result index to prevent duplicates
+  // Ref to track last processed result index to prevent duplicates (fallback mode)
   const lastProcessedIndexRef = useRef<number>(-1);
-  // Ref to track accumulated final transcript to detect and remove duplicates
+  // Ref to track accumulated final transcript to detect and remove duplicates (fallback mode)
   const accumulatedFinalTranscriptRef = useRef<string>('');
 
-  // Speech Recognition for transcription
-  const startRecording = useCallback(() => {
-    // Prevent race condition: use ref for synchronous check to avoid state timing issues
-    // State updates are asynchronous, so rapid double-clicks could bypass state-based guards
-    if (isRecordingRef.current) {
-      return;
-    }
+  // Format recording duration as mm:ss
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
+  // Web Speech API fallback - used when Whisper is unavailable (guest users, API errors)
+  const startWebSpeechRecording = useCallback(() => {
     const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognitionAPI) {
@@ -719,43 +743,28 @@ export function ChatInput() {
       return;
     }
 
-    // Set ref IMMEDIATELY to block any concurrent calls (synchronous update)
-    isRecordingRef.current = true;
-    setIsRecording(true);
-
     // Reset tracking state for new recording session
     lastProcessedIndexRef.current = -1;
     accumulatedFinalTranscriptRef.current = '';
     setInterimTranscript('');
     setFinalTranscriptDuringRecording('');
-    // Save the current input value before recording starts
     setTranscriptBeforeRecording(useChatUIStore.getState().inputValue);
 
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    // Language setting - could be made configurable via user preferences
-    recognition.lang = 'en-US';
-    // Request multiple alternatives to improve accuracy
-    // The browser may return up to this many alternatives for each result
+    recognition.lang = userLanguage === 'en' ? 'en-US' : userLanguage;
     recognition.maxAlternatives = 3;
 
-    // Track this recognition instance to prevent stale handlers from corrupting state
     currentRecognitionRef.current = recognition;
-
-    // Set speechRecognition state BEFORE starting to ensure error handlers have access
     setSpeechRecognition(recognition);
 
     recognition.onstart = () => {
-      // Confirm state is set (should already be set above)
       setIsRecording(true);
       isRecordingRef.current = true;
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Build the complete final transcript from all final results
-      // The Web Speech API in continuous mode returns accumulated transcripts,
-      // so we need to track what we've already processed to avoid duplicates
       let totalFinalTranscript = '';
       let currentInterim = '';
 
@@ -764,66 +773,44 @@ export function ChatInput() {
         const transcript = result[0].transcript;
 
         if (result.isFinal) {
-          // Accumulate all final transcripts
           totalFinalTranscript += transcript;
           lastProcessedIndexRef.current = i;
         } else {
-          // Interim results - these are still being processed
           currentInterim += transcript;
         }
       }
 
-      // Update interim transcript display
       setInterimTranscript(currentInterim);
 
       const newTotal = totalFinalTranscript.trim();
       if (!newTotal) return;
 
       const accumulated = accumulatedFinalTranscriptRef.current.trim();
-
-      // Quick exit if identical (no new content)
       if (newTotal === accumulated) return;
 
-      // Use word-level comparison to handle overlapping phrases
-      // This fixes issues where the API returns "How are you How are you doing"
-      // instead of just "How are you doing"
       const newWords = getWords(newTotal);
       const accWords = getWords(accumulated);
 
       let wordsToAppend: string[] = [];
 
       if (accWords.length === 0) {
-        // First transcript - add all words
         wordsToAppend = newWords;
       } else {
-        // Find where accumulated content ends within the new transcript
-        // This handles:
-        // 1. Accumulated is prefix of new: "hello" -> "hello world"
-        // 2. Duplicated content: "hello world" -> "hello world hello world doing"
-        // 3. Suffix overlap: "hello world" -> "world how are you"
         const newContentStartIndex = findAccumulatedEndIndex(accWords, newWords);
-
         if (newContentStartIndex >= 0) {
-          // Found where new content begins - take everything after that point
           wordsToAppend = newWords.slice(newContentStartIndex);
         } else {
-          // No overlap found at all - the new transcript is completely unrelated
-          // or shorter than what we have. Ignore to preserve existing content
-          // and avoid random duplicates.
           return;
         }
       }
 
-      // Update accumulated tracking with the full new transcript
       accumulatedFinalTranscriptRef.current = newTotal;
 
-      // Only update input if we have genuinely new words
       if (wordsToAppend.length > 0) {
         const newText = wordsToAppend.join(' ');
         const currentValue = useChatUIStore.getState().inputValue;
         const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
         setInputValue(currentValue + separator + newText);
-        // Also track final transcript separately for display
         setFinalTranscriptDuringRecording(prev => {
           const prevSeparator = prev && !prev.endsWith(' ') ? ' ' : '';
           return prev + prevSeparator + newText;
@@ -832,14 +819,11 @@ export function ChatInput() {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      // Only handle error if this is still the current recognition instance
-      // This prevents stale handlers from corrupting state of a new recording
-      if (currentRecognitionRef.current !== recognition) {
-        return;
-      }
+      if (currentRecognitionRef.current !== recognition) return;
       console.error('Speech recognition error:', event.error);
       isRecordingRef.current = false;
       setIsRecording(false);
+      setTranscriptionStatus('idle');
       setSpeechRecognition(null);
       currentRecognitionRef.current = null;
 
@@ -859,13 +843,10 @@ export function ChatInput() {
     };
 
     recognition.onend = () => {
-      // Only clean up state if this is still the current recognition instance
-      // This prevents an old recognition's onend from corrupting a new recording's state
-      if (currentRecognitionRef.current !== recognition) {
-        return;
-      }
+      if (currentRecognitionRef.current !== recognition) return;
       isRecordingRef.current = false;
       setIsRecording(false);
+      setTranscriptionStatus('idle');
       setSpeechRecognition(null);
       currentRecognitionRef.current = null;
     };
@@ -873,11 +854,10 @@ export function ChatInput() {
     try {
       recognition.start();
     } catch (error) {
-      // Handle synchronous errors from recognition.start()
-      // This can happen when audio context is blocked by browser policy
       console.error('Speech recognition start failed:', error);
       isRecordingRef.current = false;
       setIsRecording(false);
+      setTranscriptionStatus('idle');
       setSpeechRecognition(null);
       currentRecognitionRef.current = null;
       toast({
@@ -886,23 +866,94 @@ export function ChatInput() {
         variant: "destructive"
       });
     }
-  }, [toast, setInputValue]);
+  }, [toast, setInputValue, userLanguage]);
 
-  const stopRecording = useCallback(() => {
-    if (speechRecognition) {
-      // Clear the current recognition ref BEFORE stopping to prevent onend handler
-      // from running (since we're intentionally stopping)
+  // Main recording function - uses Whisper by default, falls back to Web Speech API
+  const startRecording = useCallback(async () => {
+    // Prevent race condition: use ref for synchronous check
+    if (isRecordingRef.current) {
+      return;
+    }
+
+    // Set ref IMMEDIATELY to block any concurrent calls
+    isRecordingRef.current = true;
+    setIsRecording(true);
+    setTranscriptionStatus('recording');
+    setRecordingDuration(0);
+    setTranscriptBeforeRecording(useChatUIStore.getState().inputValue);
+
+    // Start duration timer
+    const startTime = Date.now();
+    durationIntervalRef.current = setInterval(() => {
+      setRecordingDuration(Math.floor((Date.now() - startTime) / 1000));
+    }, 100);
+
+    // Use Web Speech API fallback for guest users (no API key for Whisper)
+    if (!isAuthenticated) {
+      setUseWebSpeechFallback(true);
+      startWebSpeechRecording();
+      return;
+    }
+
+    // Try Whisper (high-quality transcription)
+    try {
+      setUseWebSpeechFallback(false);
+      await whisperStartRecording();
+    } catch (error) {
+      console.error('Whisper recording failed, falling back to Web Speech API:', error);
+      // Fall back to Web Speech API
+      setUseWebSpeechFallback(true);
+      startWebSpeechRecording();
+    }
+  }, [isAuthenticated, whisperStartRecording, startWebSpeechRecording]);
+
+  // Stop recording and get transcription
+  const stopRecording = useCallback(async () => {
+    // Clear duration timer
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+      durationIntervalRef.current = null;
+    }
+
+    // Handle Web Speech API fallback mode
+    if (useWebSpeechFallback && speechRecognition) {
       currentRecognitionRef.current = null;
       speechRecognition.stop();
       setSpeechRecognition(null);
       isRecordingRef.current = false;
       setIsRecording(false);
+      setTranscriptionStatus('idle');
       setInterimTranscript('');
       setFinalTranscriptDuringRecording('');
       lastProcessedIndexRef.current = -1;
       accumulatedFinalTranscriptRef.current = '';
+      return;
     }
-  }, [speechRecognition]);
+
+    // Whisper mode - show transcribing state
+    setTranscriptionStatus('transcribing');
+    setIsRecording(false);
+
+    try {
+      const result = await whisperStopRecording();
+
+      if (result?.text) {
+        const currentValue = useChatUIStore.getState().inputValue;
+        const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
+        setInputValue(currentValue + separator + result.text.trim());
+      }
+    } catch (error) {
+      console.error('Whisper transcription failed:', error);
+      toast({
+        title: "Transcription failed",
+        description: "Unable to transcribe audio. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      isRecordingRef.current = false;
+      setTranscriptionStatus('idle');
+    }
+  }, [useWebSpeechFallback, speechRecognition, whisperStopRecording, setInputValue, toast]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) {
@@ -912,9 +963,10 @@ export function ChatInput() {
     }
   }, [isRecording, startRecording, stopRecording]);
 
-  // Cleanup speech recognition on component unmount
+  // Cleanup speech recognition and recording resources on component unmount
   useEffect(() => {
     return () => {
+      // Clean up speech recognition
       if (speechRecognition) {
         try {
           speechRecognition.abort();
@@ -922,66 +974,98 @@ export function ChatInput() {
           // Ignore errors during cleanup
         }
       }
+      // Clean up duration interval
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+        durationIntervalRef.current = null;
+      }
+      // Reset recording state
+      isRecordingRef.current = false;
     };
   }, [speechRecognition]);
 
   return (
     <>
-      {/* Recording Overlay - Full screen modal when recording */}
-      {isRecording && (
+      {/* Recording/Transcribing Overlay - Full screen modal */}
+      {(transcriptionStatus === 'recording' || transcriptionStatus === 'transcribing') && (
         <div className="recording-overlay">
           <div className="recording-overlay-content">
-            {/* Animated waveform */}
-            <div className="recording-waveform">
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-            </div>
+            {transcriptionStatus === 'recording' ? (
+              <>
+                {/* Animated waveform */}
+                <div className="recording-waveform">
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                </div>
 
-            {/* Transcription text display */}
-            <div className="recording-transcript-container">
-              {/* Show what was already in the input before recording */}
-              {transcriptBeforeRecording && (
-                <span className="recording-transcript-existing">
-                  {transcriptBeforeRecording}{' '}
-                </span>
-              )}
-              {/* Show newly captured text (tracked separately to avoid doubling) */}
-              {finalTranscriptDuringRecording && (
-                <span className="recording-transcript-final">
-                  {finalTranscriptDuringRecording}{' '}
-                </span>
-              )}
-              {/* Show interim (in-progress) text */}
-              {interimTranscript && (
-                <span className="recording-transcript-interim">
-                  {interimTranscript}
-                </span>
-              )}
-              {/* Show placeholder if nothing captured yet */}
-              {!finalTranscriptDuringRecording && !interimTranscript && (
-                <span className="recording-transcript-placeholder">
-                  Listening...
-                </span>
-              )}
-            </div>
+                {/* Recording duration display */}
+                <div className="recording-duration text-2xl font-mono text-white mb-4">
+                  {formatDuration(recordingDuration)}
+                </div>
 
-            {/* Stop button */}
-            <Button
-              size="lg"
-              variant="destructive"
-              onClick={toggleRecording}
-              className="recording-stop-button"
-            >
-              <Square className="h-5 w-5 mr-2" />
-              Stop Recording
-            </Button>
+                {/* Transcription text display - only for Web Speech API fallback mode */}
+                {useWebSpeechFallback && (
+                  <div className="recording-transcript-container">
+                    {transcriptBeforeRecording && (
+                      <span className="recording-transcript-existing">
+                        {transcriptBeforeRecording}{' '}
+                      </span>
+                    )}
+                    {finalTranscriptDuringRecording && (
+                      <span className="recording-transcript-final">
+                        {finalTranscriptDuringRecording}{' '}
+                      </span>
+                    )}
+                    {interimTranscript && (
+                      <span className="recording-transcript-interim">
+                        {interimTranscript}
+                      </span>
+                    )}
+                    {!finalTranscriptDuringRecording && !interimTranscript && (
+                      <span className="recording-transcript-placeholder">
+                        Listening...
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Whisper mode status */}
+                {!useWebSpeechFallback && (
+                  <div className="recording-transcript-container">
+                    <span className="recording-transcript-placeholder">
+                      Recording... Speak now
+                    </span>
+                  </div>
+                )}
+
+                {/* Stop button */}
+                <Button
+                  size="lg"
+                  variant="destructive"
+                  onClick={toggleRecording}
+                  className="recording-stop-button"
+                >
+                  <Square className="h-5 w-5 mr-2" />
+                  Stop Recording
+                </Button>
+              </>
+            ) : (
+              <>
+                {/* Transcribing state - show spinner */}
+                <div className="flex flex-col items-center gap-4">
+                  <Loader2 className="h-12 w-12 animate-spin text-white" />
+                  <span className="text-xl text-white font-medium">Transcribing...</span>
+                  <span className="text-sm text-white/70">Using high-quality AI transcription</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

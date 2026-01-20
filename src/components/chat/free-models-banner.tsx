@@ -5,6 +5,7 @@ import { AlertCircle, Sparkles, X } from "lucide-react";
 import { getUserData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { getUserTier } from '@/lib/tier-utils';
 
 const BANNER_DISMISSED_KEY = 'gatewayz_free_models_banner_dismissed';
 
@@ -25,6 +26,12 @@ export function FreeModelsBanner() {
 
     const userData = getUserData();
     if (!userData) {
+      return;
+    }
+
+    // Pro/Max users should never see this banner - they have active subscriptions
+    const userTier = getUserTier(userData);
+    if (userTier === 'pro' || userTier === 'max') {
       return;
     }
 

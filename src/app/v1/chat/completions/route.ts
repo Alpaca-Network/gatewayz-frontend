@@ -3,6 +3,10 @@ import { traced, wrapTraced } from 'braintrust';
 import { isBraintrustEnabled } from '@/lib/braintrust';
 import { normalizeModelId } from '@/lib/utils';
 
+// Enable debug logging only in development
+const DEBUG = process.env.NODE_ENV === 'development';
+const debug = (...args: any[]) => DEBUG && console.log('[API Proxy]', ...args);
+
 /**
  * Process LLM completion with Braintrust tracing
  */
@@ -16,9 +20,8 @@ const processCompletion = wrapTraced(
     return traced(async (span) => {
       const startTime = Date.now();
 
-      console.log('[API Proxy] Forwarding request to:', targetUrl);
-      console.log('[API Proxy] Model:', body.model);
-      console.log('[API Proxy] Stream:', body.stream);
+      debug('Forwarding request to:', targetUrl);
+      debug('Model:', body.model, 'Stream:', body.stream);
 
       // Create an AbortController for timeout handling (AbortSignal.timeout may not be available)
       const abortController = new AbortController();
@@ -37,10 +40,7 @@ const processCompletion = wrapTraced(
 
         clearTimeout(timeoutId);
 
-        console.log('[API Proxy] Response status:', response.status);
-        console.log('[API Proxy] Response ok:', response.ok);
-        console.log('[API Proxy] Response headers:', Object.fromEntries(response.headers.entries()));
-        console.log('[API Proxy] Response body exists:', !!response.body);
+        debug('Response:', response.status, response.ok ? 'OK' : 'ERROR');
 
       // If not streaming, parse and log the response
       if (!body.stream) {
@@ -111,7 +111,7 @@ const processCompletion = wrapTraced(
         });
       }
 
-      console.log('[API Proxy] Setting up streaming response forwarding');
+      debug('Setting up streaming response forwarding');
       return { stream: response.body, status: response.status };
       } catch (fetchError) {
         clearTimeout(timeoutId);
@@ -130,11 +130,10 @@ const processCompletion = wrapTraced(
  * This proxies requests to the Gatewayz API to bypass CORS issues in development
  */
 export async function POST(request: NextRequest) {
-  console.log('[API Proxy] POST request received');
+  debug('POST request received');
   let timeoutMs = 30000; // Default timeout
 
   try {
-    console.log('[API Proxy] Parsing request body...');
     const body = await request.json();
 
     // Normalize model ID to handle different formats from various gateway APIs
@@ -142,19 +141,15 @@ export async function POST(request: NextRequest) {
       const originalModel = body.model;
       body.model = normalizeModelId(body.model);
       if (originalModel !== body.model) {
-        console.log('[API Proxy] Normalized model ID from', originalModel, 'to', body.model);
+        debug('Normalized model ID from', originalModel, 'to', body.model);
       }
     }
 
-    console.log('[API Proxy] Request body parsed, model:', body.model, 'stream:', body.stream);
+    debug('Request:', body.model, body.stream ? 'streaming' : 'non-streaming');
 
     const apiKey = request.headers.get('authorization');
-    console.log('[API Proxy] API key present:', !!apiKey);
-    if (apiKey) {
-      const keyPrefix = apiKey.substring(0, 15);
-      console.log('[API Proxy] API key prefix:', keyPrefix);
-      console.log('[API Proxy] Is temp key?', apiKey.includes('gw_temp_'));
-      console.log('[API Proxy] Is live key?', apiKey.includes('gw_live_'));
+    if (!apiKey) {
+      debug('No API key provided');
     }
 
     if (!apiKey) {
@@ -189,21 +184,13 @@ export async function POST(request: NextRequest) {
 
     // For streaming requests, bypass Braintrust to avoid interference with the stream
     if (body.stream) {
-      console.log('[API Proxy] Handling streaming request directly (bypassing Braintrust)');
-      console.log('[API Proxy] Target URL:', targetUrl.toString());
-      console.log('[API Proxy] Timeout configured:', timeoutMs + 'ms', `(${timeoutMs / 1000}s)`, needsExtendedTimeout ? '[EXTENDED]' : '[STANDARD]');
+      debug('Streaming request, timeout:', `${timeoutMs / 1000}s`, needsExtendedTimeout ? '[EXTENDED]' : '[STANDARD]');
 
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
 
       try {
         const requestStartTime = Date.now();
-        console.log('[API Proxy] Making fetch request to backend');
-        console.log('[API Proxy] Target URL:', targetUrl.toString());
-        console.log('[API Proxy] Request headers:', {
-          'Content-Type': 'application/json',
-          'Authorization': apiKey ? apiKey.substring(0, 20) + '...' : 'none'
-        });
 
         const response = await fetch(targetUrl, {
           method: 'POST',
@@ -219,12 +206,7 @@ export async function POST(request: NextRequest) {
         clearTimeout(timeoutId);
         const responseTime = Date.now() - requestStartTime;
 
-        console.log('[API Proxy] Streaming response received');
-        console.log('[API Proxy] Response time:', responseTime + 'ms');
-        console.log('[API Proxy] Response status:', response.status);
-        console.log('[API Proxy] Response ok:', response.ok);
-        console.log('[API Proxy] Content-Type:', response.headers.get('content-type'));
-        console.log('[API Proxy] Response body exists:', !!response.body);
+        debug('Streaming response:', response.status, `${responseTime}ms`);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -267,7 +249,7 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        console.log('[API Proxy] Returning streaming response to client');
+        debug('Returning streaming response to client');
         return new Response(response.body, {
           status: response.status,
           headers: {
