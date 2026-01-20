@@ -217,6 +217,14 @@ export const GATEWAYS: GatewayConfig[] = [
     color: 'bg-sky-500',
     priority: 'slow',
   },
+  {
+    id: 'sybil',
+    name: 'Sybil',
+    color: 'bg-violet-500',
+    priority: 'slow',
+    requiresApiKey: true,
+    apiKeyEnvVar: 'SYBIL_API_KEY',
+  },
 
   // Deprecated gateways (kept for backward compatibility)
   {
