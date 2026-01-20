@@ -25,7 +25,7 @@ const BACKUP_BASE = path.join(__dirname, '..', '.desktop-build-backup');
 const DIRS_TO_EXCLUDE = [
   'api',                    // All API routes (use force-dynamic)
   'insights/assets/[id]',   // Dynamic insight assets page
-  // 'models/[...name]' is now INCLUDED - it has generateStaticParams() that returns static models
+  'models',                 // Models page uses useSearchParams() which requires dynamic rendering
   'organizations/[name]',   // Dynamic organization pages
   'sandbox/[sandboxId]',    // Dynamic sandbox pages
   'share/[token]',          // Dynamic share pages
