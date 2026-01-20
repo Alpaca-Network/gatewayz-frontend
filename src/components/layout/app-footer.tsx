@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Twitter } from 'lucide-react';
+import { Twitter, Linkedin } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
@@ -139,13 +139,24 @@ export function AppFooter() {
             <ul className="space-y-2">
               <li>
                 <Link
-                  href="https://x.com/AlpacaNetworkAI"
+                  href="https://x.com/GatewayzAI"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <Twitter className="h-4 w-4" />
                   <span>X</span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="https://www.linkedin.com/company/gatewayz-ai/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Linkedin className="h-4 w-4" />
+                  <span>LinkedIn</span>
                 </Link>
               </li>
               <li>

@@ -10,8 +10,8 @@ jest.mock('next/navigation', () => ({
 
 // Mock next/link
 jest.mock('next/link', () => {
-  return ({ children, href }: { children: React.ReactNode; href: string }) => (
-    <a href={href}>{children}</a>
+  return ({ children, href, target, rel }: { children: React.ReactNode; href: string; target?: string; rel?: string }) => (
+    <a href={href} target={target} rel={rel}>{children}</a>
   );
 });
 
@@ -27,6 +27,9 @@ jest.mock('next/image', () => ({
 jest.mock('lucide-react', () => ({
   Twitter: ({ className }: { className?: string }) => (
     <svg data-testid="twitter-icon" className={className} />
+  ),
+  Linkedin: ({ className }: { className?: string }) => (
+    <svg data-testid="linkedin-icon" className={className} />
   ),
 }));
 
@@ -115,5 +118,27 @@ describe('AppFooter', () => {
     // With undefined pathname, isHomepage is false (undefined !== '/'), so showFooter is true
     // and isSandboxPage is false (due to ?? false fallback), so footer renders
     expect(screen.getByRole('contentinfo')).toBeInTheDocument();
+  });
+
+  it('should render X (Twitter) link with correct URL', () => {
+    mockPathname.mockReturnValue('/settings');
+    render(<AppFooter />);
+
+    const xLink = screen.getByRole('link', { name: /X/i });
+    expect(xLink).toHaveAttribute('href', 'https://x.com/GatewayzAI');
+    expect(xLink).toHaveAttribute('target', '_blank');
+    expect(xLink).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByTestId('twitter-icon')).toBeInTheDocument();
+  });
+
+  it('should render LinkedIn link with correct URL', () => {
+    mockPathname.mockReturnValue('/settings');
+    render(<AppFooter />);
+
+    const linkedinLink = screen.getByRole('link', { name: /LinkedIn/i });
+    expect(linkedinLink).toHaveAttribute('href', 'https://www.linkedin.com/company/gatewayz-ai/');
+    expect(linkedinLink).toHaveAttribute('target', '_blank');
+    expect(linkedinLink).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByTestId('linkedin-icon')).toBeInTheDocument();
   });
 });

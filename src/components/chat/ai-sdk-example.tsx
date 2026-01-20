@@ -164,15 +164,6 @@ export function AISDKChatExample() {
       <div className="space-y-4 h-96 overflow-y-auto p-4 bg-gray-50 rounded-lg">
         {messages.map((message) => (
           <div key={message.id} className="space-y-2">
-            {/* Reasoning Display */}
-            {message.reasoning && (
-              <ReasoningDisplay
-                reasoning={message.reasoning}
-                source="ai-sdk"
-                isStreaming={false}
-              />
-            )}
-
             {/* Content Display */}
             <div
               className={`p-3 rounded-lg ${
@@ -185,6 +176,18 @@ export function AISDKChatExample() {
                 {message.role === 'user' ? 'You' : `${message.model || 'Assistant'}`}
               </p>
               <p className="text-sm text-gray-800">{message.content}</p>
+
+              {/* Reasoning Display - below content */}
+              {message.reasoning && (
+                <div className="mt-3">
+                  <ReasoningDisplay
+                    reasoning={message.reasoning}
+                    source="ai-sdk"
+                    isStreaming={false}
+                    hasContentStarted={true}
+                  />
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -192,23 +195,30 @@ export function AISDKChatExample() {
         {/* Streaming Message Display */}
         {loading && (currentContent || currentReasoning) && (
           <div className="space-y-2">
-            {currentReasoning && (
-              <ReasoningDisplay
-                reasoning={currentReasoning}
-                isStreaming={true}
-                source="ai-sdk"
-              />
-            )}
-            {currentContent && (
-              <div className="p-3 rounded-lg bg-gray-200 mr-8">
-                <p className="text-sm font-medium text-gray-600 mb-1">
-                  {selectedModel}
-                </p>
+            <div className="p-3 rounded-lg bg-gray-200 mr-8">
+              <p className="text-sm font-medium text-gray-600 mb-1">
+                {selectedModel}
+              </p>
+              {currentContent ? (
                 <p className="text-sm text-gray-800 whitespace-pre-wrap">
                   {currentContent}
                 </p>
-              </div>
-            )}
+              ) : (
+                <p className="text-sm text-gray-500">Thinking...</p>
+              )}
+
+              {/* Reasoning Display - below content during streaming */}
+              {currentReasoning && (
+                <div className="mt-3">
+                  <ReasoningDisplay
+                    reasoning={currentReasoning}
+                    isStreaming={!currentContent}
+                    hasContentStarted={Boolean(currentContent)}
+                    source="ai-sdk"
+                  />
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

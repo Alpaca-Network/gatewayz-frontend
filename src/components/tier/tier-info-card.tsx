@@ -3,7 +3,7 @@
 import { useTier } from '@/hooks/use-tier';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle, Clock, Sparkles } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Sparkles, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function TierInfoCard() {
@@ -47,6 +47,15 @@ export function TierInfoCard() {
     month: 'long',
     day: 'numeric',
   });
+
+  // Calculate days until credit renewal for Pro/Max users
+  const daysUntilRenewal = renewalDate
+    ? Math.ceil((renewalDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+
+  // Pro/Max users get monthly credit allocation
+  const isPaidTier = tier === 'pro' || tier === 'max';
+  const showCreditRenewal = isPaidTier && hasSubscription && subscriptionStatusText === 'Active';
 
   return (
     <Card>
@@ -192,6 +201,33 @@ export function TierInfoCard() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Credit Renewal Info for Pro/Max users */}
+        {showCreditRenewal && renewalDate && daysUntilRenewal !== null && (
+          <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                Credit Renewal
+              </p>
+            </div>
+            <div className="space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-blue-700 dark:text-blue-300">Days until renewal</span>
+                <span className="font-semibold text-blue-900 dark:text-blue-100">
+                  {daysUntilRenewal <= 0 ? 'Today' : `${daysUntilRenewal} day${daysUntilRenewal !== 1 ? 's' : ''}`}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-blue-700 dark:text-blue-300">Renewal date</span>
+                <span className="text-blue-900 dark:text-blue-100">{formattedRenewalDate}</span>
+              </div>
+            </div>
+            <p className="text-xs text-blue-600 dark:text-blue-400">
+              Your credits will be replenished on your billing date.
+            </p>
           </div>
         )}
 
