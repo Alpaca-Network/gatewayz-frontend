@@ -24,8 +24,8 @@ test.describe('Chat - Page Loading', () => {
     await expect(page).toHaveURL(/\/chat/);
     await expect(page.locator('body')).toBeVisible();
 
-    // Wait for page to fully load
-    await page.waitForLoadState('networkidle');
+    // Wait for page to load (use domcontentloaded to avoid flaky networkidle timeouts in CI)
+    await page.waitForLoadState('domcontentloaded');
 
     // Verify main content (if available)
     const mainContent = page.locator('main');
@@ -62,7 +62,7 @@ test.describe('Chat - Message Input', () => {
   test('message input field is visible and focusable', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Look for message input
     const messageInput = page.locator(
@@ -87,7 +87,7 @@ test.describe('Chat - Message Input', () => {
   test('can type message in input field', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const messageInput = page.locator(
       'textarea[placeholder*="message" i], ' +
@@ -108,7 +108,7 @@ test.describe('Chat - Message Input', () => {
   test('multiline input supported (if textarea)', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const textarea = page.locator('textarea[placeholder*="message" i], textarea[placeholder*="ask" i]').first();
 
@@ -124,7 +124,7 @@ test.describe('Chat - Message Input', () => {
   test('input has helpful placeholder text', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const inputs = page.locator('textarea, input');
 
@@ -143,7 +143,7 @@ test.describe('Chat - Message Sending', () => {
   test('send button exists and is clickable', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const sendButton = page.locator(
       'button:has-text("Send"), ' +
@@ -165,7 +165,7 @@ test.describe('Chat - Message Sending', () => {
   test('can submit message', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const messageInput = page.locator(
       'textarea[placeholder*="message" i], ' +
@@ -199,7 +199,7 @@ test.describe('Chat - Message Sending', () => {
     await page.route('**/api/chat/completions*', route => route.abort('failed'));
 
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const messageInput = page.locator('textarea, input').first();
     const sendButton = page.locator('button:has-text("Send"), button:has-text("submit")').first();
@@ -220,7 +220,7 @@ test.describe('Chat - Model Selection', () => {
     await mockChatAPI();
     await mockModelsAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const modelSelector = page.locator(
       'button:has-text("Model"), ' +
@@ -238,7 +238,7 @@ test.describe('Chat - Model Selection', () => {
     await mockChatAPI();
     await mockModelsAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const modelButton = page.locator(
       'button:has-text("Model"), ' +
@@ -259,7 +259,7 @@ test.describe('Chat - Model Selection', () => {
     await mockChatAPI();
     await mockModelsAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const modelButton = page.locator('button:has-text("Model"), button:has-text("Select")').first();
 
@@ -286,7 +286,7 @@ test.describe('Chat - Message Display', () => {
   test('chat messages display area is visible', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Look for message container
     const messageArea = page.locator(
@@ -341,7 +341,7 @@ test.describe('Chat - Session Management', () => {
   test('chat maintains session during interaction', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Get initial auth
     const initialAuth = await page.evaluate(() => localStorage.getItem('gatewayz_api_key'));
@@ -362,7 +362,7 @@ test.describe('Chat - Session Management', () => {
   test('can create new chat session', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const newChatButton = page.locator(
       'button:has-text("New"), ' +
@@ -473,7 +473,7 @@ test.describe('Chat - Accessibility', () => {
   test('message input has accessible label', async ({ authenticatedPage: page, mockChatAPI }) => {
     await mockChatAPI();
     await page.goto('/chat');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const input = page.locator('textarea, input').first();
 
