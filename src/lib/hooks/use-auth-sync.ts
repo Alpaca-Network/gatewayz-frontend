@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePrivy, User, LinkedAccountWithMetadata } from '@privy-io/react-auth';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
-import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData, AUTH_REFRESH_COMPLETE_EVENT } from '@/lib/api';
+import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData, AUTH_REFRESH_COMPLETE_EVENT, AUTH_REFRESH_EVENT } from '@/lib/api';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 // Helper to strip undefined values (copied from original context)
@@ -80,6 +80,31 @@ export function useAuthSync() {
       setLoading(false);
     }
   }, [setAuth, setLoading]);
+
+  // Listen for AUTH_REFRESH_EVENT to sync Zustand store with localStorage
+  // This is crucial for desktop (Tauri) where auth callback saves to localStorage
+  // and dispatches this event to notify the UI to update
+  useEffect(() => {
+    const handleAuthRefresh = () => {
+      console.log("[useAuthSync] AUTH_REFRESH_EVENT received, syncing store from localStorage");
+      const storedKey = getApiKey();
+      const storedUser = getUserData();
+      if (storedKey && storedUser) {
+        setAuth(storedKey, storedUser);
+        console.log("[useAuthSync] Auth store updated from localStorage");
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener(AUTH_REFRESH_EVENT, handleAuthRefresh);
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener(AUTH_REFRESH_EVENT, handleAuthRefresh);
+      }
+    };
+  }, [setAuth]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['auth-sync', user?.id],
