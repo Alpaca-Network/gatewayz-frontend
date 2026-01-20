@@ -149,39 +149,39 @@ export default function Home() {
 
 client = OpenAI(
     base_url="https://api.gatewayz.ai/v1",
-    api_key="${apiKey || 'YOUR_API_KEY'}"
+    api_key="${apiKey || 'YOUR_GATEWAYZ_API_KEY'}"
 )
 
-completion = client.chat.completions.create(
-    model="gpt-4",
+response = client.chat.completions.create(
+    model="gpt-4o",
     messages=[
         {"role": "user", "content": "Hello!"}
     ]
 )
 
-print(completion.choices[0].message)`,
+print(response.choices[0].message.content)`,
 
     javascript: `import OpenAI from "openai";
 
-const openai = new OpenAI({
+const client = new OpenAI({
   baseURL: "https://api.gatewayz.ai/v1",
-  apiKey: "${apiKey || 'YOUR_API_KEY'}",
+  apiKey: "${apiKey || 'YOUR_GATEWAYZ_API_KEY'}",
 });
 
-const completion = await openai.chat.completions.create({
-  model: "gpt-4",
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
   messages: [
     { role: "user", content: "Hello!" }
   ],
 });
 
-console.log(completion.choices[0].message);`,
+console.log(response.choices[0].message.content);`,
 
     curl: `curl https://api.gatewayz.ai/v1/chat/completions \\
   -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey || 'YOUR_API_KEY'}" \\
+  -H "Authorization: Bearer ${apiKey || 'YOUR_GATEWAYZ_API_KEY'}" \\
   -d '{
-    "model": "gpt-4",
+    "model": "gpt-4o",
     "messages": [
       {
         "role": "user",
