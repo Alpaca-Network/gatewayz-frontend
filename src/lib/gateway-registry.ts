@@ -225,6 +225,30 @@ export const GATEWAYS: GatewayConfig[] = [
     requiresApiKey: true,
     apiKeyEnvVar: 'SYBIL_API_KEY',
   },
+  {
+    id: 'aihubmix',
+    name: 'AiHubMix',
+    color: 'bg-rose-500',
+    priority: 'slow',
+  },
+  {
+    id: 'anannas',
+    name: 'Anannas',
+    color: 'bg-lime-600',
+    priority: 'slow',
+  },
+  {
+    id: 'cloudflare-workers-ai',
+    name: 'Cloudflare Workers AI',
+    color: 'bg-orange-500',
+    priority: 'slow',
+  },
+  {
+    id: 'morpheus',
+    name: 'Morpheus',
+    color: 'bg-cyan-600',
+    priority: 'slow',
+  },
 
   // Deprecated gateways (kept for backward compatibility)
   {
