@@ -815,6 +815,11 @@ export async function POST(request: NextRequest) {
             // Log all part types for debugging empty content issues
             partTypesReceived.push(part.type);
 
+            // Log start events for debugging
+            if (part.type === 'start' || part.type === 'start-step' || part.type === 'finish-step') {
+              console.log('[AI SDK Route] Lifecycle event:', part.type, JSON.stringify(part).substring(0, 300));
+            }
+
             // Handle different part types from AI SDK fullStream
             // Note: fullStream uses text-delta/reasoning-delta (TextStreamPart types)
             // This is different from UIMessageStream which uses text-start/text-delta/text-end
@@ -865,7 +870,16 @@ export async function POST(request: NextRequest) {
                 }
               };
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorData)}\n\n`));
+            } else if (part.type === 'raw') {
+              // Log raw provider responses for debugging
+              console.log('[AI SDK Route] Raw part received:', JSON.stringify(part).substring(0, 500));
             } else if (part.type === 'finish') {
+              // Log finish details for debugging empty responses
+              console.log('[AI SDK Route] Finish received:', {
+                finishReason: part.finishReason,
+                contentReceived,
+                usage: (part as any).usage,
+              });
               // Stream finished - check if it's an error finish
               if (part.finishReason === 'error' && !contentReceived) {
                 // If we finished with error and no content, send an error message
