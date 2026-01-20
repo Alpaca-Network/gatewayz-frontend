@@ -28,6 +28,7 @@ export interface ChatMessageProps {
   role: 'user' | 'assistant';
   content: string | any[];
   reasoning?: string;
+  isReasoningStreaming?: boolean;
   image?: string;
   video?: string;
   audio?: string;
@@ -169,6 +170,7 @@ export const ChatMessage = memo<ChatMessageProps>(
     role,
     content,
     reasoning,
+    isReasoningStreaming,
     image,
     video,
     audio,
@@ -286,13 +288,6 @@ export const ChatMessage = memo<ChatMessageProps>(
               </div>
             )}
 
-            {/* Reasoning (for models that support it) */}
-            {reasoning && !isUser && (
-              <div className="mb-3">
-                <ReasoningDisplay reasoning={reasoning} />
-              </div>
-            )}
-
             {/* Search results (for web search tool) */}
             {!isUser && (isSearching || searchResults || searchError) && (
               <SearchResults
@@ -372,6 +367,17 @@ export const ChatMessage = memo<ChatMessageProps>(
             {wasStopped && !isStreaming && (
               <div className="mt-2 text-xs text-muted-foreground italic">
                 Response stopped
+              </div>
+            )}
+
+            {/* Reasoning (for models that support it) - shown below content */}
+            {reasoning && !isUser && (
+              <div className="mt-3">
+                <ReasoningDisplay
+                  reasoning={reasoning}
+                  isStreaming={isReasoningStreaming}
+                  hasContentStarted={Boolean(displayContent)}
+                />
               </div>
             )}
           </Card>
@@ -470,6 +476,7 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.role === nextProps.role &&
       contentEquals(prevProps.content, nextProps.content) &&
       prevProps.reasoning === nextProps.reasoning &&
+      prevProps.isReasoningStreaming === nextProps.isReasoningStreaming &&
       prevProps.isStreaming === nextProps.isStreaming &&
       prevProps.wasStopped === nextProps.wasStopped &&
       prevProps.model === nextProps.model &&
