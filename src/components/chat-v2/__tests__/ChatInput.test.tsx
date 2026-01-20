@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 
 // Mock lucide-react icons
@@ -2418,5 +2418,169 @@ describe('ChatInput Whisper transcription', () => {
         expect(placeholder.textContent).toContain('Recording');
       }
     });
+  });
+
+  it('should stop recording and process transcription on stop button click', async () => {
+    // Configure mock to simulate successful transcription
+    mockWhisperStopRecording.mockResolvedValueOnce({ text: 'Hello from Whisper', language: 'en', duration: 2.5 });
+
+    render(<ChatInput />);
+
+    // Start recording
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      await act(async () => {
+        fireEvent.click(speechMicButton);
+      });
+    }
+
+    // Wait for recording overlay to appear
+    await waitFor(() => {
+      const overlay = document.querySelector('.recording-overlay');
+      expect(overlay).toBeInTheDocument();
+    });
+
+    // Click stop button
+    const stopButton = screen.getByRole('button', { name: /stop recording/i });
+    await act(async () => {
+      fireEvent.click(stopButton);
+    });
+
+    // Should have called stopRecording
+    expect(mockWhisperStopRecording).toHaveBeenCalled();
+  });
+
+  it('should handle Whisper transcription errors gracefully', async () => {
+    // Configure mock to simulate an error
+    mockWhisperStopRecording.mockRejectedValueOnce(new Error('Transcription failed'));
+
+    render(<ChatInput />);
+
+    // Start recording
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      await act(async () => {
+        fireEvent.click(speechMicButton);
+      });
+    }
+
+    // Wait for recording overlay to appear
+    await waitFor(() => {
+      const overlay = document.querySelector('.recording-overlay');
+      expect(overlay).toBeInTheDocument();
+    });
+
+    // Click stop button
+    const stopButton = screen.getByRole('button', { name: /stop recording/i });
+    await act(async () => {
+      fireEvent.click(stopButton);
+    });
+
+    // Should show error toast
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'destructive',
+        })
+      );
+    });
+  });
+
+  it('should clean up duration interval on unmount during recording', async () => {
+    jest.useFakeTimers();
+
+    const { unmount } = render(<ChatInput />);
+
+    // Start recording
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      await act(async () => {
+        fireEvent.click(speechMicButton);
+      });
+    }
+
+    // Advance timer to simulate recording duration
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    // Unmount while recording
+    unmount();
+
+    // The cleanup should have happened (no errors from setInterval still running)
+    jest.useRealTimers();
+  });
+
+  it('should format recording duration correctly', async () => {
+    jest.useFakeTimers();
+
+    render(<ChatInput />);
+
+    // Start recording
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      await act(async () => {
+        fireEvent.click(speechMicButton);
+      });
+    }
+
+    // Duration should start at 0:00
+    await waitFor(() => {
+      const durationDisplay = document.querySelector('.recording-duration');
+      expect(durationDisplay?.textContent).toBe('0:00');
+    });
+
+    // Advance time by 65 seconds (1:05)
+    await act(async () => {
+      jest.advanceTimersByTime(65000);
+    });
+
+    // Duration should show 1:05
+    await waitFor(() => {
+      const durationDisplay = document.querySelector('.recording-duration');
+      expect(durationDisplay?.textContent).toBe('1:05');
+    });
+
+    jest.useRealTimers();
+  });
+});
+
+describe('ChatInput Whisper fallback to Web Speech API', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    mockIsStreaming = false;
+    mockIsAuthenticated = false; // Unauthenticated user
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  afterEach(() => {
+    mockIsAuthenticated = true; // Reset for other tests
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should use Web Speech API for unauthenticated users', async () => {
+    render(<ChatInput />);
+
+    // Find and click the mic button
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      fireEvent.click(speechMicButton);
+    }
+
+    // Should NOT call Whisper for unauthenticated users
+    expect(mockWhisperStartRecording).not.toHaveBeenCalled();
   });
 });

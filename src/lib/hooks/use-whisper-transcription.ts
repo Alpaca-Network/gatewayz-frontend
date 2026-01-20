@@ -32,7 +32,7 @@
  * ```
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 interface TranscriptionOptions {
   /** ISO-639-1 language code (e.g., 'en', 'es', 'fr'). Improves accuracy. */
@@ -342,6 +342,25 @@ export function useWhisperTranscription(
       mediaRecorder.stop();
     });
   }, [transcribeAudio]);
+
+  // Clean up on unmount to release media resources
+  useEffect(() => {
+    return () => {
+      // Stop MediaRecorder if still active
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
+      // Release microphone by stopping all tracks
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+    };
+  }, []);
 
   return {
     startRecording,

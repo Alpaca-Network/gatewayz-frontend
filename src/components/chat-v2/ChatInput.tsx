@@ -963,9 +963,10 @@ export function ChatInput() {
     }
   }, [isRecording, startRecording, stopRecording]);
 
-  // Cleanup speech recognition on component unmount
+  // Cleanup speech recognition and recording resources on component unmount
   useEffect(() => {
     return () => {
+      // Clean up speech recognition
       if (speechRecognition) {
         try {
           speechRecognition.abort();
@@ -973,6 +974,13 @@ export function ChatInput() {
           // Ignore errors during cleanup
         }
       }
+      // Clean up duration interval
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+        durationIntervalRef.current = null;
+      }
+      // Reset recording state
+      isRecordingRef.current = false;
     };
   }, [speechRecognition]);
 
