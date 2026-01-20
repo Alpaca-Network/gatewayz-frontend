@@ -39,6 +39,14 @@ export async function generateStaticParams() {
  */
 export const revalidate = 3600; // 1 hour in seconds
 
+/**
+ * Dynamic params behavior:
+ * - Server mode (web): defaults to true, enabling ISR fallback for any model
+ * - Static export (desktop): automatically set to false by Next.js during static export
+ *
+ * No explicit export needed - Next.js handles this based on output mode
+ */
+
 interface LayoutProps {
   children: ReactNode;
   params: Promise<{ name: string[] }>;
