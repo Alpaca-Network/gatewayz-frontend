@@ -129,6 +129,9 @@ export const normalizeToUrlSafe = (str: string): string => {
 export const getModelUrl = (modelId: string, providerSlug?: string): string => {
   if (!modelId) return '/models';
 
+  // Note: Model detail pages are now included in desktop static export
+  // via generateStaticParams() for all static models
+
   // Handle provider:model format (e.g., "aimo:model-name")
   if (modelId.includes(':')) {
     const [provider, model] = modelId.split(':');

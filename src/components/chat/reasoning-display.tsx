@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChainOfThought,
   ChainOfThoughtContent,
@@ -27,6 +27,7 @@ interface ReasoningDisplayProps {
   reasoning: string;
   className?: string;
   isStreaming?: boolean;
+  hasContentStarted?: boolean;
   steps?: ReasoningStep[];
   source?: "gatewayz" | "ai-sdk";
 }
@@ -35,13 +36,20 @@ export function ReasoningDisplay({
   reasoning,
   className,
   isStreaming = false,
+  hasContentStarted = false,
   steps,
   source = "gatewayz",
 }: ReasoningDisplayProps) {
   const trimmedReasoning = reasoning?.trim() ?? "";
   const hasPlainReasoning = trimmedReasoning.length > 0;
   const hasStructuredSteps = Boolean(steps && steps.length > 0);
-  const [isExpanded, setIsExpanded] = useState(true);
+
+  // Start collapsed by default, but expand when reasoning is streaming without content
+  const [isExpanded, setIsExpanded] = useState(false);
+  // Track if we've auto-collapsed after content started (to not repeatedly collapse)
+  const hasAutoCollapsedRef = useRef(false);
+  // Track if user has manually toggled (to respect their preference)
+  const userToggledRef = useRef(false);
 
   // All hooks must be declared before any conditional returns
   const structuredSteps = useMemo(() => {
@@ -63,17 +71,47 @@ export function ReasoningDisplay({
     ));
   }, [hasStructuredSteps, steps]);
 
+  // Auto-expand when reasoning is streaming but content hasn't started yet
   useEffect(() => {
-    if (isStreaming) {
+    if (isStreaming && !hasContentStarted && !userToggledRef.current) {
       setIsExpanded(true);
+      hasAutoCollapsedRef.current = false;
+    }
+  }, [isStreaming, hasContentStarted]);
+
+  // Auto-collapse smoothly when content starts streaming
+  useEffect(() => {
+    if (hasContentStarted && !hasAutoCollapsedRef.current && !userToggledRef.current) {
+      // Small delay to allow the transition to be visible
+      const timer = setTimeout(() => {
+        setIsExpanded(false);
+        hasAutoCollapsedRef.current = true;
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [hasContentStarted]);
+
+  // Reset refs when streaming ends (for next message)
+  useEffect(() => {
+    if (!isStreaming) {
+      // Reset after streaming ends so next streaming session starts fresh
+      hasAutoCollapsedRef.current = false;
+      userToggledRef.current = false;
     }
   }, [isStreaming]);
 
+  // Handle user manual toggle
+  const handleOpenChange = (open: boolean) => {
+    userToggledRef.current = true;
+    setIsExpanded(open);
+  };
+
   useEffect(() => {
-    if (hasPlainReasoning) {
+    if (hasPlainReasoning && process.env.NODE_ENV === 'development') {
       console.log("[ReasoningDisplay] Rendering reasoning:", {
         length: trimmedReasoning.length,
         isStreaming,
+        hasContentStarted,
         isExpanded,
         source,
         hasSteps: hasStructuredSteps,
@@ -84,6 +122,7 @@ export function ReasoningDisplay({
     trimmedReasoning,
     hasPlainReasoning,
     isStreaming,
+    hasContentStarted,
     isExpanded,
     source,
     hasStructuredSteps,
@@ -129,11 +168,11 @@ export function ReasoningDisplay({
   return (
     <div
       className={cn(
-        "mb-3 overflow-hidden rounded-xl border border-amber-200/60 bg-amber-50/70 text-amber-950 shadow-sm backdrop-blur-md dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100",
+        "overflow-hidden rounded-xl border border-amber-200/60 bg-amber-50/70 text-amber-950 shadow-sm backdrop-blur-md transition-all duration-300 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100",
         className
       )}
     >
-      <ChainOfThought open={isExpanded} onOpenChange={setIsExpanded} className="space-y-0">
+      <ChainOfThought open={isExpanded} onOpenChange={handleOpenChange} className="space-y-0">
         <ChainOfThoughtHeader
           className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50"
           badge={headerBadge}

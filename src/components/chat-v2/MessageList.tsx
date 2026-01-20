@@ -179,6 +179,7 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
             role={msg.role}
             content={msg.content}
             reasoning={msg.reasoning}
+            isReasoningStreaming={msg.isReasoningStreaming}
             image={msg.image}
             video={msg.video}
             audio={msg.audio}

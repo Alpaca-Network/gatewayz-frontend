@@ -22,6 +22,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { GatewayzAuthContext, type AuthTimingInfo } from "@/context/gatewayz-auth-context";
 import { AUTH_REFRESH_EVENT, getApiKey, getUserData, type UserData } from "@/lib/api";
 import { signOutDesktop } from "@/lib/desktop/auth";
+import { useAuthStore } from "@/lib/store/auth-store";
 
 // Storage status context - mirrors the one in privy-provider.tsx
 type StorageStatus = "checking" | "ready" | "blocked";
@@ -37,6 +38,9 @@ interface DesktopAuthProviderProps {
 }
 
 export function DesktopAuthProvider({ children, storageStatus }: DesktopAuthProviderProps) {
+  // Get Zustand store setters - this syncs the global auth state that ChatLayout uses
+  const { setAuth: setZustandAuth, clearAuth: clearZustandAuth, setLoading: setZustandLoading } = useAuthStore();
+
   // Initialize state synchronously by checking localStorage immediately
   // This avoids the "idle" state that causes loading screens
   const [apiKey, setApiKey] = useState<string | null>(() => {
@@ -65,6 +69,7 @@ export function DesktopAuthProvider({ children, storageStatus }: DesktopAuthProv
   });
 
   // Helper function to refresh credentials from storage
+  // Also syncs to Zustand store so components using useAuthStore() get updated
   const refreshCredentials = useCallback(() => {
     const storedKey = getApiKey();
     const storedUser = getUserData();
@@ -73,19 +78,26 @@ export function DesktopAuthProvider({ children, storageStatus }: DesktopAuthProv
       setApiKey(storedKey);
       setUserData(storedUser);
       setStatus("authenticated");
-      console.info("[Auth] Desktop: Found stored credentials");
+      // Sync to Zustand store for components like ChatLayout that use useAuthStore()
+      setZustandAuth(storedKey, storedUser);
+      console.info("[Auth] Desktop: Found stored credentials, synced to Zustand store");
     } else {
       setApiKey(null);
       setUserData(null);
       setStatus("unauthenticated");
+      // Clear Zustand store
+      clearZustandAuth();
       console.info("[Auth] Desktop: No stored credentials found");
     }
-  }, []);
+  }, [setZustandAuth, clearZustandAuth]);
 
+  // Initialize on mount - sync localStorage to both local state and Zustand store
   useEffect(() => {
     console.info("[Auth] Running in Tauri desktop mode - Privy SDK bypassed");
+    // Set Zustand loading to false immediately since we're checking localStorage synchronously
+    setZustandLoading(false);
     refreshCredentials();
-  }, [refreshCredentials]);
+  }, [refreshCredentials, setZustandLoading]);
 
   // Listen for AUTH_REFRESH_EVENT to update state after OAuth login callback
   // This ensures the UI updates when handleDesktopOAuthCallback stores the token
