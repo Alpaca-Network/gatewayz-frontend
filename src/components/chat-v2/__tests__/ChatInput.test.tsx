@@ -16,6 +16,7 @@ jest.mock('lucide-react', () => ({
   Camera: () => <span data-testid="camera-icon">Camera</span>,
   Globe: () => <span data-testid="globe-icon">Globe</span>,
   Search: () => <span data-testid="search-icon">Search</span>,
+  Loader2: () => <span data-testid="loader-icon">Loader</span>,
 }));
 
 // Mock the UI components
@@ -136,14 +137,36 @@ jest.mock('@/lib/hooks/use-auto-search-detection', () => ({
   }),
 }));
 
+// Mock Whisper transcription hook
+const mockWhisperStartRecording = jest.fn();
+const mockWhisperStopRecording = jest.fn();
+jest.mock('@/lib/hooks/use-whisper-transcription', () => ({
+  useWhisperTranscription: () => ({
+    startRecording: mockWhisperStartRecording,
+    stopRecording: mockWhisperStopRecording,
+    isRecording: false,
+    isTranscribing: false,
+    error: null,
+  }),
+}));
+
+// Mock search augmentation hook
+jest.mock('@/lib/hooks/use-search-augmentation', () => ({
+  useSearchAugmentation: () => ({
+    augmentWithSearch: jest.fn(),
+    isSearching: false,
+  }),
+}));
+
 jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
-// Mock auth store
+// Mock auth store - configurable for tests
+let mockIsAuthenticated = true;
 jest.mock('@/lib/store/auth-store', () => ({
   useAuthStore: () => ({
-    isAuthenticated: true,
+    isAuthenticated: mockIsAuthenticated,
     isLoading: false,
   }),
 }));
@@ -890,7 +913,7 @@ describe('ChatInput error message extraction', () => {
   });
 });
 
-describe('ChatInput speech recognition', () => {
+describe('ChatInput speech recognition (Web Speech API fallback)', () => {
   let mockRecognition: any;
   let originalSpeechRecognition: any;
   let originalWebkitSpeechRecognition: any;
@@ -898,6 +921,9 @@ describe('ChatInput speech recognition', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetMockStoreState();
+    mockIsStreaming = false;
+    // Set unauthenticated to use Web Speech API fallback instead of Whisper
+    mockIsAuthenticated = false;
     delete (window as any).__chatInputFocus;
     delete (window as any).__chatInputSend;
 
@@ -931,6 +957,8 @@ describe('ChatInput speech recognition', () => {
     // Restore original values
     (window as any).SpeechRecognition = originalSpeechRecognition;
     (window as any).webkitSpeechRecognition = originalWebkitSpeechRecognition;
+    // Restore authenticated state for other tests
+    mockIsAuthenticated = true;
   });
 
   it('should show toast when speech recognition is not supported', () => {
@@ -2318,6 +2346,77 @@ describe('ChatInput textarea auto-resize', () => {
       expect(textarea).toBeVisible();
       // Textarea should not have visibility:hidden set on it
       expect(textarea.style.visibility).not.toBe('hidden');
+    });
+  });
+});
+
+describe('ChatInput Whisper transcription', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    mockIsStreaming = false;
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  afterEach(() => {
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should use Whisper transcription for authenticated users', async () => {
+    // Mock as authenticated user (default in our mocks)
+    render(<ChatInput />);
+
+    // Find and click the mic button
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      fireEvent.click(speechMicButton);
+    }
+
+    // Should call Whisper start recording for authenticated users
+    await waitFor(() => {
+      expect(mockWhisperStartRecording).toHaveBeenCalled();
+    });
+  });
+
+  it('should show recording duration in overlay', async () => {
+    render(<ChatInput />);
+
+    // Find and click the mic button
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      fireEvent.click(speechMicButton);
+    }
+
+    // Should show recording overlay with duration display
+    await waitFor(() => {
+      const overlay = document.querySelector('.recording-overlay');
+      expect(overlay).toBeInTheDocument();
+    });
+  });
+
+  it('should show "Recording... Speak now" message in Whisper mode', async () => {
+    render(<ChatInput />);
+
+    // Find and click the mic button
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      fireEvent.click(speechMicButton);
+    }
+
+    // Whisper mode should show "Recording... Speak now" placeholder
+    await waitFor(() => {
+      const placeholder = document.querySelector('.recording-transcript-placeholder');
+      if (placeholder) {
+        expect(placeholder.textContent).toContain('Recording');
+      }
     });
   });
 });
