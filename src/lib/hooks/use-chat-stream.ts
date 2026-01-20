@@ -439,6 +439,9 @@ export function useChatStream() {
                     const currentContent = streamHandlerRef.current.getFinalContent();
                     const currentReasoning = streamHandlerRef.current.getFinalReasoning();
 
+                    // Determine if reasoning is still streaming (has reasoning but no content yet, or chunk has reasoning)
+                    const isReasoningStreaming = Boolean(chunk.reasoning) || (currentReasoning && !currentContent);
+
                     // Use flushSync to force React to render immediately instead of batching
                     // This is critical for real-time streaming updates in React 18+
                     flushSync(() => {
@@ -451,6 +454,7 @@ export function useChatStream() {
                                 ...last,
                                 content: currentContent,
                                 reasoning: currentReasoning,
+                                isReasoningStreaming,
                                 isStreaming: true, // Ensure streaming flag stays true during updates
                             }];
                         });
