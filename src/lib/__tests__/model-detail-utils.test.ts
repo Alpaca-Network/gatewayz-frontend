@@ -172,6 +172,59 @@ describe('model-detail-utils', () => {
       const result = findModelByRouteParams(nearModels, params);
       expect(result?.id).toBe('near/deepseek-ai/deepseek-v3-1');
     });
+
+    it('should not match when collapsed name differs completely', () => {
+      // Test case where collapsed matching is attempted but fails
+      const models: ModelDetailRecord[] = [
+        {
+          id: 'openai/gpt-4o',
+          name: 'GPT-4o',
+          provider_slug: 'openai',
+        },
+      ];
+      // Search for a completely different model name
+      const params: ModelLookupParams = {
+        developer: 'openai',
+        modelNameParam: 'claude-3',
+      };
+      const result = findModelByRouteParams(models, params);
+      expect(result).toBeUndefined();
+    });
+
+    it('should handle model name with multiple special characters via collapsed matching', () => {
+      // Test case: model with underscores and dots matches URL with hyphens
+      const models: ModelDetailRecord[] = [
+        {
+          id: 'meta/llama_3.1_8b',
+          name: 'Llama 3.1 8B',
+          provider_slug: 'meta',
+        },
+      ];
+      // URL normalization converts to hyphens: llama-3-1-8b
+      const params: ModelLookupParams = {
+        developer: 'meta',
+        modelNameParam: 'llama-3-1-8b',
+      };
+      const result = findModelByRouteParams(models, params);
+      expect(result?.id).toBe('meta/llama_3.1_8b');
+    });
+
+    it('should return false when provider mismatches even if collapsed name matches', () => {
+      const models: ModelDetailRecord[] = [
+        {
+          id: 'openai/gpt-4.5',
+          name: 'GPT-4.5',
+          provider_slug: 'openai',
+        },
+      ];
+      // Correct model name but wrong provider
+      const params: ModelLookupParams = {
+        developer: 'anthropic',
+        modelNameParam: 'gpt-4-5',
+      };
+      const result = findModelByRouteParams(models, params);
+      expect(result).toBeUndefined();
+    });
   });
 
   describe('getModelGateways', () => {
