@@ -17,6 +17,7 @@ import {
   showShortcutInfoDialog,
 } from "@/components/dialogs/shortcut-info-dialog";
 import { isTauriDesktop } from "@/lib/browser-detection";
+import type { UserData } from "@/lib/api";
 
 interface DesktopProviderProps {
   children: ReactNode;
@@ -100,8 +101,21 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
     const code = params.get("code");
 
     if (token && userId) {
-      // Process the callback - always allow credentials to be updated/overwritten
+      // Deduplicate: check if we've already processed this token
+      // The Rust backend may emit multiple events with retry logic for reliability
+      const processedKey = `desktop_auth_processed_${token.slice(0, 16)}`;
+      if (typeof window !== "undefined" && window.sessionStorage.getItem(processedKey)) {
+        console.log("[Desktop Auth] Ignoring duplicate auth callback");
+        return;
+      }
+
+      // Process the callback
       try {
+        // Mark as processed immediately to prevent race conditions
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(processedKey, "true");
+        }
+
         // Import storage functions
         const { saveApiKey, saveUserData, AUTH_REFRESH_EVENT, getApiKey } = await import("@/lib/api");
 
@@ -110,7 +124,7 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
 
         // Fetch full user profile from backend to get display_name, credits, tier, etc.
         // The callback URL may not include all fields
-        let fullUserData = {
+        let fullUserData: UserData = {
           user_id: parseInt(userId, 10),
           api_key: token,
           auth_method: "desktop_deep_link",
@@ -118,7 +132,7 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
           display_name: displayName || email || "",
           email: email || "",
           credits: credits,
-          tier: tier || undefined,
+          tier: (tier === 'basic' || tier === 'pro' || tier === 'max') ? tier : undefined,
           tier_display_name: tierDisplayName || undefined,
         };
 
@@ -134,6 +148,12 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
           if (profileResponse.ok) {
             const profileData = await profileResponse.json();
 
+            // Validate and type-check tier
+            const profileTier = profileData.tier;
+            const validTier = (profileTier === 'basic' || profileTier === 'pro' || profileTier === 'max')
+              ? profileTier
+              : undefined;
+
             // Merge profile data with callback data (profile data takes precedence)
             fullUserData = {
               user_id: profileData.user_id || fullUserData.user_id,
@@ -143,12 +163,13 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
               display_name: profileData.display_name || profileData.email || fullUserData.display_name,
               email: profileData.email || fullUserData.email,
               credits: profileData.credits ?? fullUserData.credits,
-              tier: profileData.tier || fullUserData.tier,
+              tier: validTier || fullUserData.tier,
               tier_display_name: profileData.tier_display_name || fullUserData.tier_display_name,
             };
           }
-        } catch {
+        } catch (error) {
           // Failed to fetch profile, use callback data
+          console.warn("[Desktop Auth] Failed to fetch full user profile:", error);
         }
 
         // Save the full user data
@@ -178,11 +199,19 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
             }
           }, 500);
         } else {
-          console.error("[Desktop Auth] Credentials not found after save");
-          window.location.href = "/chat";
+          console.error("[Desktop Auth] Credentials not found after save - retrying save");
+          // Retry saving credentials
+          saveApiKey(token);
+          saveUserData(fullUserData);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          router.push("/chat");
         }
       } catch (error) {
         console.error("[Desktop Auth] Error handling token callback:", error);
+        // Clear the processed flag on error so retry can work
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(processedKey);
+        }
       }
     } else if (code) {
       // Legacy format: OAuth code exchange (kept for backwards compatibility)
