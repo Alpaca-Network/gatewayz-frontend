@@ -45,6 +45,7 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
   const createSparkleEffect = (button: HTMLElement) => {
     const rect = button.getBoundingClientRect();
     const sparkleCount = 12;
+    let completedCount = 0;
 
     for (let i = 0; i < sparkleCount; i++) {
       const sparkle = document.createElement('div');
@@ -83,7 +84,10 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
         easing: 'cubic-bezier(0.4, 0, 0.2, 1)'
       }).onfinish = () => {
         sparkle.remove();
-        setIsMagicAnimating(false);
+        completedCount++;
+        if (completedCount === sparkleCount) {
+          setIsMagicAnimating(false);
+        }
       };
     }
   };
