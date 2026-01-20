@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
     debug('Request:', body.model, body.stream ? 'streaming' : 'non-streaming');
 
     const apiKey = request.headers.get('authorization');
-    if (!apiKey && DEBUG) {
+    if (!apiKey) {
       debug('No API key provided');
     }
 
