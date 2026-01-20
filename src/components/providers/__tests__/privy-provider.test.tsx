@@ -783,7 +783,7 @@ describe('PrivyProviderWrapper', () => {
         </PrivyProviderWrapper>
       );
 
-      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: Found stored credentials');
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: Found stored credentials, synced to Zustand store');
       consoleSpy.mockRestore();
     });
 
@@ -823,7 +823,7 @@ describe('PrivyProviderWrapper', () => {
       });
 
       expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: AUTH_REFRESH_EVENT received, refreshing credentials');
-      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: Found stored credentials');
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: Found stored credentials, synced to Zustand store');
 
       consoleSpy.mockRestore();
     });

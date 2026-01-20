@@ -269,9 +269,9 @@ export function onAuthCallback(
   if (!isTauri()) {
     return Promise.resolve(() => {});
   }
-  return listen<string>("auth-callback", (event) => callback(event.payload)).then(
-    (unlisten) => unlisten
-  );
+  return listen<string>("auth-callback", (event) => {
+    callback(event.payload);
+  }).then((unlisten) => unlisten);
 }
 
 /**
