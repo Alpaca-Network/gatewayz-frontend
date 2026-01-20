@@ -136,6 +136,42 @@ describe('model-detail-utils', () => {
       const result = findModelByRouteParams(mockModels, params);
       expect(result?.id).toBe('google/gemini-pro');
     });
+
+    it('should match by collapsed name when normalization differs (dots vs hyphens)', () => {
+      // Model has version with dot, URL has version with hyphen
+      const modelsWithDot: ModelDetailRecord[] = [
+        {
+          id: 'openai/gpt-4.5',
+          name: 'GPT-4.5',
+          provider_slug: 'openai',
+        },
+      ];
+      // URL /models/openai/gpt-4-5 produces modelNameParam 'gpt-4-5'
+      const params: ModelLookupParams = {
+        developer: 'openai',
+        modelNameParam: 'gpt-4-5',
+      };
+      const result = findModelByRouteParams(modelsWithDot, params);
+      expect(result?.id).toBe('openai/gpt-4.5');
+    });
+
+    it('should match nested paths like NEAR models', () => {
+      const nearModels: ModelDetailRecord[] = [
+        {
+          id: 'near/deepseek-ai/deepseek-v3-1',
+          name: 'DeepSeek V3',
+          provider_slug: 'near',
+        },
+      ];
+      // URL /models/near/deepseek-ai/deepseek-v3-1 produces:
+      // developer = 'near', modelNameParam = 'deepseek-ai/deepseek-v3-1'
+      const params: ModelLookupParams = {
+        developer: 'near',
+        modelNameParam: 'deepseek-ai/deepseek-v3-1',
+      };
+      const result = findModelByRouteParams(nearModels, params);
+      expect(result?.id).toBe('near/deepseek-ai/deepseek-v3-1');
+    });
   });
 
   describe('getModelGateways', () => {
