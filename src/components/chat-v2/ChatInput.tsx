@@ -69,6 +69,7 @@ import { Switch } from "@/components/ui/switch";
 import { usePrivy } from "@privy-io/react-auth";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { useWhisperTranscription } from "@/lib/hooks/use-whisper-transcription";
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/safe-storage";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -492,11 +493,11 @@ export function ChatInput() {
         // Mark chat task as complete in onboarding after first message (authenticated users only)
         if (typeof window !== 'undefined' && isAuthenticated) {
             try {
-                const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
+                const savedTasks = safeLocalStorageGet('gatewayz_onboarding_tasks');
                 const taskState = savedTasks ? JSON.parse(savedTasks) : {};
                 if (!taskState.chat) {
                     taskState.chat = true;
-                    localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+                    safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
                     console.log('Onboarding - Chat task marked as complete');
 
                     // Dispatch custom event to notify the banner
