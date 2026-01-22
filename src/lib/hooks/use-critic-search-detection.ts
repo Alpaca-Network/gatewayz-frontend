@@ -67,7 +67,8 @@ export function useCriticSearchDetection() {
     const trimmedInput = input.trim();
 
     // Skip very short queries - not enough context
-    if (trimmedInput.length < 6) {
+    // Use same minimum (10 chars) as keyword fallback for consistent behavior
+    if (trimmedInput.length < 10) {
       return { needsSearch: false, usedFallback: false };
     }
 
@@ -121,10 +122,22 @@ export function useCriticSearchDetection() {
 
       // Limit cache size to prevent memory issues
       if (cacheRef.current.size > 100) {
-        // Remove oldest entries
+        const now = Date.now();
         const entries = Array.from(cacheRef.current.entries());
-        entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-        entries.slice(0, 50).forEach(([key]) => cacheRef.current.delete(key));
+
+        // First, remove expired entries
+        const expiredKeys = entries
+          .filter(([, cache]) => now - cache.timestamp >= CACHE_TTL_MS)
+          .map(([key]) => key);
+        expiredKeys.forEach((key) => cacheRef.current.delete(key));
+
+        // If still over limit, remove oldest valid entries
+        if (cacheRef.current.size > 100) {
+          const remainingEntries = Array.from(cacheRef.current.entries());
+          remainingEntries.sort((a, b) => a[1].timestamp - b[1].timestamp);
+          const toRemove = remainingEntries.slice(0, cacheRef.current.size - 50);
+          toRemove.forEach(([key]) => cacheRef.current.delete(key));
+        }
       }
 
       return result;

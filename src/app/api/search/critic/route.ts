@@ -64,7 +64,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Skip very short queries - not enough context for meaningful classification
-    if (query.trim().length < 6) {
+    // Use same minimum (10 chars) as keyword fallback for consistent behavior
+    if (query.trim().length < 10) {
       return NextResponse.json({
         needsSearch: false,
         reason: 'Query too short for classification',

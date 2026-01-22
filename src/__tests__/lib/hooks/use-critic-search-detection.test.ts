@@ -50,12 +50,12 @@ describe('useCriticSearchDetection', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('should return needsSearch=false for very short queries', async () => {
+    it('should return needsSearch=false for very short queries (under 10 chars)', async () => {
       const { result } = renderHook(() => useCriticSearchDetection());
 
       const response = await act(async () => {
         return result.current.checkIfSearchNeeded(
-          'Hi',
+          'Hi there', // 8 chars, under minimum
           mockModelWithTools,
           true
         );

@@ -81,10 +81,10 @@ describe('POST /api/search/critic', () => {
     expect(data.needsSearch).toBe(false);
   });
 
-  it('should skip classification for very short queries', async () => {
+  it('should skip classification for very short queries (under 10 chars)', async () => {
     const request = new NextRequest('http://localhost/api/search/critic', {
       method: 'POST',
-      body: JSON.stringify({ query: 'Hi' }),
+      body: JSON.stringify({ query: 'Hi there' }), // 8 chars, under minimum
     });
 
     const response = await POST(request);

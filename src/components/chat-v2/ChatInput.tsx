@@ -41,6 +41,7 @@ interface SpeechRecognition extends EventTarget {
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera, Globe, Search, Loader2 } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -255,6 +256,9 @@ export function ChatInput() {
   const [finalTranscriptDuringRecording, setFinalTranscriptDuringRecording] = useState<string>('');
   // Track if textarea has expanded to multiple lines
   const [isMultiline, setIsMultiline] = useState(false);
+  // Track minimum height to prevent jitter - once expanded, don't shrink until cleared
+  const [minTextareaHeight, setMinTextareaHeight] = useState(48);
+  const isMobile = useIsMobile();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -309,13 +313,35 @@ export function ChatInput() {
 
     parentNode.appendChild(clone);
 
-    let newHeight: number;
+    let contentHeight: number;
     try {
-      // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
-      newHeight = Math.min(Math.max(clone.scrollHeight, 48), 150);
+      // Calculate content height from clone
+      contentHeight = clone.scrollHeight;
     } finally {
       // Always remove the clone, even if an error occurs
       clone.remove();
+    }
+
+    // If text is empty or very short, reset to minimum single line height
+    const textLength = textarea.value.length;
+    if (textLength === 0) {
+      setMinTextareaHeight(48);
+      textarea.style.height = '48px';
+      setIsMultiline(false);
+      return;
+    }
+
+    // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
+    const calculatedHeight = Math.min(Math.max(contentHeight, 48), 150);
+
+    // Only allow growing, never shrink below current minimum (prevents jitter)
+    // This means once the textarea expands to 2 lines, it stays that size
+    // until the user clears the text completely
+    const newHeight = Math.max(calculatedHeight, minTextareaHeight);
+
+    // Update minimum height if we've grown
+    if (newHeight > minTextareaHeight) {
+      setMinTextareaHeight(newHeight);
     }
 
     // Only update height if it changed to avoid unnecessary reflows
@@ -325,7 +351,7 @@ export function ChatInput() {
 
     // Track if textarea has expanded beyond single line (48px is single line height)
     setIsMultiline(newHeight > 48);
-  }, []);
+  }, [minTextareaHeight]);
 
   // Store focus function in window for access from ChatLayout
   useEffect(() => {
@@ -1137,224 +1163,390 @@ export function ChatInput() {
             )}
         </div>
 
-        <div className={cn("flex gap-2 bg-muted p-3 rounded-2xl border", isMultiline ? "items-end" : "items-center")}>
+        <div className="bg-muted p-3 rounded-2xl border">
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
             <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
-            <div className={cn("flex gap-1", isMultiline ? "flex-col self-end" : "flex-row items-center")}>
-                {/* Combined "Add photos & files" dropdown with [+] button */}
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            title={enabledTools.length > 0 ? `Tools enabled: ${enabledTools.join(', ')}` : "Add photos & files"}
-                            className={cn(
-                                "h-10 w-10 rounded-full border hover:bg-accent relative",
-                                enabledTools.length > 0
-                                    ? "border-blue-500 bg-blue-500/10"
-                                    : "border-border"
-                            )}
-                        >
-                            <Plus className={cn(
-                                "h-5 w-5",
-                                enabledTools.length > 0 ? "text-blue-500" : "text-muted-foreground"
-                            )} />
-                            {/* Badge indicator when tools are enabled */}
-                            {enabledTools.length > 0 && (
-                                <span className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 rounded-full flex items-center justify-center text-[10px] text-white font-medium">
-                                    {enabledTools.length}
-                                </span>
-                            )}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" side="top" className="w-80 p-4">
-                        {/* Top row: Camera, Photos, Files */}
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+            {/* Mobile: Pills and action buttons above textarea */}
+            {isMobile && (
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/50">
+                    {/* Combined "Add photos & files" dropdown with [+] button */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                title={enabledTools.length > 0 ? `Tools enabled: ${enabledTools.join(', ')}` : "Add photos & files"}
+                                className={cn(
+                                    "h-9 w-9 rounded-full border hover:bg-accent relative flex-shrink-0",
+                                    enabledTools.length > 0
+                                        ? "border-blue-500 bg-blue-500/10"
+                                        : "border-border"
+                                )}
                             >
-                                <Camera className="h-6 w-6 mb-2 text-foreground" />
-                                <span className="text-sm font-medium">Camera</span>
-                            </button>
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
-                            >
-                                <ImageIcon className="h-6 w-6 mb-2 text-foreground" />
-                                <span className="text-sm font-medium">Photos</span>
-                            </button>
-                            <button
-                                onClick={() => documentInputRef.current?.click()}
-                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
-                            >
-                                <FileText className="h-6 w-6 mb-2 text-foreground" />
-                                <span className="text-sm font-medium">Files</span>
-                            </button>
-                        </div>
-                        {/* Divider */}
-                        <div className="border-t border-border mb-3" />
-                        {/* Additional options */}
-                        <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="py-3">
-                            <VideoIcon className="h-5 w-5 mr-3" />
-                            <div>
-                                <p className="font-medium">Upload video</p>
-                                <p className="text-xs text-muted-foreground">Add video files</p>
+                                <Plus className={cn(
+                                    "h-4 w-4",
+                                    enabledTools.length > 0 ? "text-blue-500" : "text-muted-foreground"
+                                )} />
+                                {/* Badge indicator when tools are enabled */}
+                                {enabledTools.length > 0 && (
+                                    <span className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 rounded-full flex items-center justify-center text-[10px] text-white font-medium">
+                                        {enabledTools.length}
+                                    </span>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" side="top" className="w-80 p-4">
+                            {/* Top row: Camera, Photos, Files */}
+                            <div className="grid grid-cols-3 gap-3 mb-4">
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                >
+                                    <Camera className="h-6 w-6 mb-2 text-foreground" />
+                                    <span className="text-sm font-medium">Camera</span>
+                                </button>
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                >
+                                    <ImageIcon className="h-6 w-6 mb-2 text-foreground" />
+                                    <span className="text-sm font-medium">Photos</span>
+                                </button>
+                                <button
+                                    onClick={() => documentInputRef.current?.click()}
+                                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                >
+                                    <FileText className="h-6 w-6 mb-2 text-foreground" />
+                                    <span className="text-sm font-medium">Files</span>
+                                </button>
                             </div>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => audioInputRef.current?.click()} className="py-3">
-                            <AudioIcon className="h-5 w-5 mr-3" />
-                            <div>
-                                <p className="font-medium">Upload audio</p>
-                                <p className="text-xs text-muted-foreground">Add audio files</p>
-                            </div>
-                        </DropdownMenuItem>
-
-                        {/* Tools Section */}
-                        <div className="border-t border-border my-3" />
-                        <div className="px-1">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-2">
-                                Tools
-                            </p>
-                            {/* Web Search Toggle */}
-                            <div className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-accent transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                                        <Globe className="h-5 w-5 text-blue-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium">Web Search</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {selectedModel?.supportsTools
-                                                ? "Search for current info"
-                                                : "Search augmentation mode"}
-                                        </p>
-                                    </div>
+                            {/* Divider */}
+                            <div className="border-t border-border mb-3" />
+                            {/* Additional options */}
+                            <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="py-3">
+                                <VideoIcon className="h-5 w-5 mr-3" />
+                                <div>
+                                    <p className="font-medium">Upload video</p>
+                                    <p className="text-xs text-muted-foreground">Add video files</p>
                                 </div>
-                                <Switch
-                                    checked={enabledTools.includes('web_search')}
-                                    onCheckedChange={() => toggleTool('web_search')}
-                                    aria-label="Toggle web search"
-                                />
-                            </div>
-                            {/* Auto-enable search preference */}
-                            <div className="flex items-center justify-between py-2 px-2 mt-1 rounded-md hover:bg-accent transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                                        <Search className="h-5 w-5 text-purple-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium">Auto Search</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Auto-enable for relevant queries
-                                        </p>
-                                    </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => audioInputRef.current?.click()} className="py-3">
+                                <AudioIcon className="h-5 w-5 mr-3" />
+                                <div>
+                                    <p className="font-medium">Upload audio</p>
+                                    <p className="text-xs text-muted-foreground">Add audio files</p>
                                 </div>
-                                <Switch
-                                    checked={autoEnableSearch}
-                                    onCheckedChange={setAutoEnableSearch}
-                                    aria-label="Toggle auto search detection"
-                                />
+                            </DropdownMenuItem>
+
+                            {/* Tools Section */}
+                            <div className="border-t border-border my-3" />
+                            <div className="px-1">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-2">
+                                    Tools
+                                </p>
+                                {/* Web Search Toggle */}
+                                <div className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-accent transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                            <Globe className="h-5 w-5 text-blue-500" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium">Web Search</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {selectedModel?.supportsTools
+                                                    ? "Search for current info"
+                                                    : "Search augmentation mode"}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Switch
+                                        checked={enabledTools.includes('web_search')}
+                                        onCheckedChange={() => toggleTool('web_search')}
+                                        aria-label="Toggle web search"
+                                    />
+                                </div>
+                                {/* Auto-enable search preference */}
+                                <div className="flex items-center justify-between py-2 px-2 mt-1 rounded-md hover:bg-accent transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                            <Search className="h-5 w-5 text-purple-500" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium">Auto Search</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Auto-enable for relevant queries
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Switch
+                                        checked={autoEnableSearch}
+                                        onCheckedChange={setAutoEnableSearch}
+                                        aria-label="Toggle auto search detection"
+                                    />
+                                </div>
                             </div>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Microphone button for speech-to-text */}
+                    <Button
+                        size="icon"
+                        variant={isRecording ? "destructive" : "ghost"}
+                        onClick={toggleRecording}
+                        title={isRecording ? "Stop recording" : "Start voice input"}
+                        className={cn("h-9 w-9 flex-shrink-0", isRecording && "animate-pulse")}
+                    >
+                        {isRecording ? (
+                            <Square className="h-4 w-4" />
+                        ) : (
+                            <Mic className="h-4 w-4 text-muted-foreground" />
+                        )}
+                    </Button>
+
+                    {/* Pill indicators for enabled tools */}
+                    {enabledTools.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 flex-1">
+                            {enabledTools.includes('web_search') && (
+                                <button
+                                    onClick={() => toggleTool('web_search')}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 transition-colors"
+                                    title="Click to disable web search"
+                                >
+                                    <Globe className="h-3 w-3" />
+                                    <span>Search</span>
+                                    <X className="h-3 w-3 opacity-60 hover:opacity-100" />
+                                </button>
+                            )}
                         </div>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-
-                {/* Microphone button for speech-to-text */}
-                <Button
-                    size="icon"
-                    variant={isRecording ? "destructive" : "ghost"}
-                    onClick={toggleRecording}
-                    title={isRecording ? "Stop recording" : "Start voice input"}
-                    className={cn(isRecording && "animate-pulse")}
-                >
-                    {isRecording ? (
-                        <Square className="h-4 w-4" />
-                    ) : (
-                        <Mic className="h-5 w-5 text-muted-foreground" />
-                    )}
-                </Button>
-            </div>
-
-            {/* Pill indicators for enabled tools */}
-            {enabledTools.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                    {enabledTools.includes('web_search') && (
-                        <button
-                            onClick={() => toggleTool('web_search')}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 transition-colors"
-                            title="Click to disable web search"
-                        >
-                            <Globe className="h-3 w-3" />
-                            <span>Search</span>
-                            <X className="h-3 w-3 opacity-60 hover:opacity-100" />
-                        </button>
                     )}
                 </div>
             )}
 
-            <textarea
-                ref={textareaRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                    }
-                }}
-                placeholder="Ask Gatewayz"
-                className="flex-1 border-0 bg-background focus-visible:ring-0 min-h-[48px] max-h-[150px] py-3 px-3 text-base resize-none overflow-y-auto rounded-xl"
-                disabled={isStreaming}
-                enterKeyHint="send"
-                rows={1}
-                data-testid="chat-textarea"
-            />
+            {/* Main input row */}
+            <div className={cn("flex gap-2", isMultiline ? "items-end" : "items-center")}>
+                {/* Desktop: Pills and action buttons inline with textarea */}
+                {!isMobile && (
+                    <>
+                        <div className={cn("flex gap-1", isMultiline ? "flex-col self-end" : "flex-row items-center")}>
+                            {/* Combined "Add photos & files" dropdown with [+] button */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        title={enabledTools.length > 0 ? `Tools enabled: ${enabledTools.join(', ')}` : "Add photos & files"}
+                                        className={cn(
+                                            "h-10 w-10 rounded-full border hover:bg-accent relative",
+                                            enabledTools.length > 0
+                                                ? "border-blue-500 bg-blue-500/10"
+                                                : "border-border"
+                                        )}
+                                    >
+                                        <Plus className={cn(
+                                            "h-5 w-5",
+                                            enabledTools.length > 0 ? "text-blue-500" : "text-muted-foreground"
+                                        )} />
+                                        {/* Badge indicator when tools are enabled */}
+                                        {enabledTools.length > 0 && (
+                                            <span className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 rounded-full flex items-center justify-center text-[10px] text-white font-medium">
+                                                {enabledTools.length}
+                                            </span>
+                                        )}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" side="top" className="w-80 p-4">
+                                    {/* Top row: Camera, Photos, Files */}
+                                    <div className="grid grid-cols-3 gap-3 mb-4">
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                        >
+                                            <Camera className="h-6 w-6 mb-2 text-foreground" />
+                                            <span className="text-sm font-medium">Camera</span>
+                                        </button>
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                        >
+                                            <ImageIcon className="h-6 w-6 mb-2 text-foreground" />
+                                            <span className="text-sm font-medium">Photos</span>
+                                        </button>
+                                        <button
+                                            onClick={() => documentInputRef.current?.click()}
+                                            className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                        >
+                                            <FileText className="h-6 w-6 mb-2 text-foreground" />
+                                            <span className="text-sm font-medium">Files</span>
+                                        </button>
+                                    </div>
+                                    {/* Divider */}
+                                    <div className="border-t border-border mb-3" />
+                                    {/* Additional options */}
+                                    <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="py-3">
+                                        <VideoIcon className="h-5 w-5 mr-3" />
+                                        <div>
+                                            <p className="font-medium">Upload video</p>
+                                            <p className="text-xs text-muted-foreground">Add video files</p>
+                                        </div>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => audioInputRef.current?.click()} className="py-3">
+                                        <AudioIcon className="h-5 w-5 mr-3" />
+                                        <div>
+                                            <p className="font-medium">Upload audio</p>
+                                            <p className="text-xs text-muted-foreground">Add audio files</p>
+                                        </div>
+                                    </DropdownMenuItem>
 
-            {isStreaming ? (
-                <Button
-                    type="button"
-                    size="icon"
-                    variant="destructive"
-                    onPointerDown={(e) => {
-                        // Prevent focus loss on mobile which can cause state sync issues
-                        e.preventDefault();
+                                    {/* Tools Section */}
+                                    <div className="border-t border-border my-3" />
+                                    <div className="px-1">
+                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-2">
+                                            Tools
+                                        </p>
+                                        {/* Web Search Toggle */}
+                                        <div className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-accent transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                                    <Globe className="h-5 w-5 text-blue-500" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Web Search</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {selectedModel?.supportsTools
+                                                            ? "Search for current info"
+                                                            : "Search augmentation mode"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={enabledTools.includes('web_search')}
+                                                onCheckedChange={() => toggleTool('web_search')}
+                                                aria-label="Toggle web search"
+                                            />
+                                        </div>
+                                        {/* Auto-enable search preference */}
+                                        <div className="flex items-center justify-between py-2 px-2 mt-1 rounded-md hover:bg-accent transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                                    <Search className="h-5 w-5 text-purple-500" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Auto Search</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Auto-enable for relevant queries
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={autoEnableSearch}
+                                                onCheckedChange={setAutoEnableSearch}
+                                                aria-label="Toggle auto search detection"
+                                            />
+                                        </div>
+                                    </div>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            {/* Microphone button for speech-to-text */}
+                            <Button
+                                size="icon"
+                                variant={isRecording ? "destructive" : "ghost"}
+                                onClick={toggleRecording}
+                                title={isRecording ? "Stop recording" : "Start voice input"}
+                                className={cn(isRecording && "animate-pulse")}
+                            >
+                                {isRecording ? (
+                                    <Square className="h-4 w-4" />
+                                ) : (
+                                    <Mic className="h-5 w-5 text-muted-foreground" />
+                                )}
+                            </Button>
+                        </div>
+
+                        {/* Pill indicators for enabled tools */}
+                        {enabledTools.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                                {enabledTools.includes('web_search') && (
+                                    <button
+                                        onClick={() => toggleTool('web_search')}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 transition-colors"
+                                        title="Click to disable web search"
+                                    >
+                                        <Globe className="h-3 w-3" />
+                                        <span>Search</span>
+                                        <X className="h-3 w-3 opacity-60 hover:opacity-100" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </>
+                )}
+
+                <textarea
+                    ref={textareaRef}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSend();
+                        }
                     }}
-                    onClick={(e) => {
-                        e.preventDefault();
-                        handleStop();
-                    }}
-                    title="Stop generating"
-                >
-                    <Square className="h-4 w-4" />
-                </Button>
-            ) : (
-                <Button
-                    type="button"
-                    size="icon"
-                    onPointerDown={(e) => {
-                        // Prevent focus loss on mobile which can cause state sync issues
-                        e.preventDefault();
-                    }}
-                    onClick={(e) => {
-                        // Prevent any default behavior that might interfere
-                        e.preventDefault();
-                        handleSend();
-                    }}
-                    disabled={isSearching || isCheckingSearch || (isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument)}
-                    className="bg-primary"
-                >
-                    {isSearching || isCheckingSearch ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                        <Send className="h-4 w-4" />
-                    )}
-                </Button>
-            )}
+                    placeholder="Ask Gatewayz"
+                    className="flex-1 border-0 bg-background focus-visible:ring-0 min-h-[48px] max-h-[150px] py-3 px-3 text-base resize-none overflow-y-auto rounded-xl"
+                    style={{ minHeight: `${minTextareaHeight}px` }}
+                    disabled={isStreaming}
+                    enterKeyHint="send"
+                    rows={1}
+                    data-testid="chat-textarea"
+                />
+
+                {isStreaming ? (
+                    <Button
+                        type="button"
+                        size="icon"
+                        variant="destructive"
+                        onPointerDown={(e) => {
+                            // Prevent focus loss on mobile which can cause state sync issues
+                            e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            handleStop();
+                        }}
+                        title="Stop generating"
+                        className={cn(isMobile && "h-10 w-10")}
+                    >
+                        <Square className="h-4 w-4" />
+                    </Button>
+                ) : (
+                    <Button
+                        type="button"
+                        size="icon"
+                        onPointerDown={(e) => {
+                            // Prevent focus loss on mobile which can cause state sync issues
+                            e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                            // Prevent any default behavior that might interfere
+                            e.preventDefault();
+                            handleSend();
+                        }}
+                        disabled={isSearching || isCheckingSearch || (isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument)}
+                        className={cn("bg-primary", isMobile && "h-10 w-10")}
+                    >
+                        {isSearching || isCheckingSearch ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <Send className="h-4 w-4" />
+                        )}
+                    </Button>
+                )}
+            </div>
         </div>
       </div>
     </div>
