@@ -48,7 +48,7 @@ export const TIER_CONFIG = {
     name: 'Pro',
     description: '$10/month subscription',
     monthlyPrice: 1000, // $10.00 in cents
-    creditAllocation: 0, // Credits determined by separate balance
+    creditAllocation: 1000, // $10 equivalent in credits (cents)
     isSubscription: true,
   },
   max: {
