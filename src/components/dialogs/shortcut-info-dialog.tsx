@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Keyboard } from "lucide-react";
 import { isMacOS, isWindows } from "@/lib/desktop/tauri";
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 export const SHORTCUT_INFO_EVENT = 'gatewayz:shortcut-info';
 const STORAGE_KEY = 'gatewayz_shortcut_info_shown';
@@ -43,7 +44,7 @@ function getShortcutDisplay(): { keys: string; description: string } {
  */
 export function hasShownShortcutInfo(): boolean {
   if (typeof window === 'undefined') return true;
-  return localStorage.getItem(STORAGE_KEY) === 'true';
+  return safeLocalStorageGet(STORAGE_KEY) === 'true';
 }
 
 /**
@@ -51,7 +52,7 @@ export function hasShownShortcutInfo(): boolean {
  */
 export function markShortcutInfoShown(): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(STORAGE_KEY, 'true');
+  safeLocalStorageSet(STORAGE_KEY, 'true');
 }
 
 /**
