@@ -66,8 +66,15 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
     const sparkleCount = 12;
     let completedCount = 0;
 
-    // Cancel previous animations before clearing
-    activeAnimationsRef.current.forEach(animation => animation.cancel());
+    // Cancel previous animations and remove their DOM elements before clearing
+    // Note: animation.cancel() does not trigger onfinish, so we must manually remove elements
+    activeAnimationsRef.current.forEach(animation => {
+      animation.cancel();
+      const effect = animation.effect;
+      if (effect && 'target' in effect && effect.target) {
+        (effect.target as Element).remove();
+      }
+    });
     activeAnimationsRef.current = [];
 
     for (let i = 0; i < sparkleCount; i++) {
