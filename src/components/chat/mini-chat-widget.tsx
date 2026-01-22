@@ -28,8 +28,8 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
       activeAnimationsRef.current.forEach(animation => {
         animation.cancel();
         const effect = animation.effect;
-        if (effect && effect instanceof KeyframeEffect && effect.target) {
-          effect.target.remove();
+        if (effect && 'target' in effect && effect.target) {
+          (effect.target as Element).remove();
         }
       });
       activeAnimationsRef.current = [];
@@ -66,7 +66,8 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
     const sparkleCount = 12;
     let completedCount = 0;
 
-    // Clear any previous animations
+    // Cancel previous animations before clearing
+    activeAnimationsRef.current.forEach(animation => animation.cancel());
     activeAnimationsRef.current = [];
 
     for (let i = 0; i < sparkleCount; i++) {
@@ -110,7 +111,9 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
       activeAnimationsRef.current.push(animation);
 
       animation.onfinish = () => {
-        sparkle.remove();
+        if (isMountedRef.current) {
+          sparkle.remove();
+        }
         completedCount++;
         // Only update state if component is still mounted
         if (completedCount === sparkleCount && isMountedRef.current) {
