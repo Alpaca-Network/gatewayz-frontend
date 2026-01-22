@@ -3,6 +3,7 @@
 import { useEffect, Suspense, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
+import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Gift } from 'lucide-react';
@@ -16,16 +17,17 @@ import { trackTwitterSignupClick } from '@/components/analytics/twitter-pixel';
 function SignupCardContent({
   refCode,
   ready,
-  authenticated,
+  authStatus,
   onSignup
 }: {
   refCode: string | null;
   ready: boolean;
-  authenticated: boolean;
+  authStatus: 'idle' | 'unauthenticated' | 'authenticating' | 'authenticated' | 'error';
   onSignup: () => void;
 }) {
-  // Show loading state on button only, not entire page
-  const isLoading = !ready;
+  // Show loading state when Privy isn't ready or when authentication is in progress
+  const isLoading = !ready || authStatus === 'authenticating';
+  const isAuthenticated = authStatus === 'authenticated';
 
   return (
     <div className="flex min-h-[calc(100vh-200px)] items-center justify-center p-4">
@@ -59,16 +61,16 @@ function SignupCardContent({
 
           <Button
             onClick={onSignup}
-            disabled={isLoading || authenticated}
+            disabled={isLoading || isAuthenticated}
             size="lg"
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
           >
             {isLoading ? (
               <span className="flex items-center gap-2">
                 <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></span>
-                Loading...
+                {authStatus === 'authenticating' ? 'Signing in...' : 'Loading...'}
               </span>
-            ) : authenticated ? (
+            ) : isAuthenticated ? (
               'Redirecting...'
             ) : (
               'Sign Up Now'
@@ -108,7 +110,21 @@ function SignupContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login, authenticated, ready } = usePrivy();
+  const { status: authStatus } = useGatewayzAuth();
   const hasAutoTriggeredLogin = useRef(false);
+
+  // Track if the user was already authenticated when they landed on this page
+  // This distinguishes between:
+  // 1. Returning users who are already authenticated (should redirect immediately)
+  // 2. New users who just signed up (auth context handles redirect to /onboarding)
+  const wasAlreadyAuthenticatedRef = useRef<boolean | null>(null);
+
+  // Capture initial auth state on mount
+  useEffect(() => {
+    if (wasAlreadyAuthenticatedRef.current === null && ready) {
+      wasAlreadyAuthenticatedRef.current = authenticated && authStatus === 'authenticated';
+    }
+  }, [ready, authenticated, authStatus]);
 
   // Memoize query params to prevent unstable effect dependencies
   // This prevents redirect loops when searchParams object changes
@@ -157,12 +173,18 @@ function SignupContent() {
       storeReferralCode(refCode, 'signup');
     }
 
-    // Then, redirect authenticated users to the return URL
-    // This ensures referral code is stored before redirect happens
-    if (ready && authenticated) {
+    // Only redirect users who were ALREADY authenticated when they landed on this page
+    // For new signups, the auth context handles the redirect (to /onboarding for new users)
+    // This prevents a race condition where:
+    // 1. Privy's `authenticated` becomes true
+    // 2. This effect tries to redirect to /chat
+    // 3. Auth context later redirects to /onboarding
+    // 4. User gets stuck in a loading state on /chat
+    if (ready && authStatus === 'authenticated' && wasAlreadyAuthenticatedRef.current === true) {
+      console.log('[Signup] Already authenticated user detected, redirecting to:', redirectUrl);
       router.push(redirectUrl);
     }
-  }, [ready, authenticated, router, redirectUrl, refCode]);
+  }, [ready, authStatus, router, redirectUrl, refCode]);
 
   useEffect(() => {
     // Auto-trigger Privy login modal for unauthenticated users
@@ -184,8 +206,9 @@ function SignupContent() {
       return;
     }
 
-    if (authenticated) {
-      // Use the same properly-constructed redirect URL
+    // If user is already fully authenticated (not just in Privy, but Gatewayz too),
+    // redirect them. This handles the case where an authenticated user clicks the button.
+    if (authStatus === 'authenticated') {
       router.push(redirectUrl);
       return;
     }
@@ -194,7 +217,7 @@ function SignupContent() {
     trackTwitterSignupClick();
 
     login();
-  }, [ready, authenticated, router, redirectUrl, login]);
+  }, [ready, authStatus, router, redirectUrl, login]);
 
   // PERFORMANCE OPTIMIZATION: Render the full card UI immediately
   // The button shows loading state while Privy initializes
@@ -203,7 +226,7 @@ function SignupContent() {
     <SignupCardContent
       refCode={refCode}
       ready={ready}
-      authenticated={authenticated}
+      authStatus={authStatus}
       onSignup={handleSignup}
     />
   );

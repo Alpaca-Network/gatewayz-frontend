@@ -692,7 +692,7 @@ export function ChatLayout() {
                            }
                        </Button>
 
-                       <div className="w-[140px] sm:w-[180px] lg:w-[250px]">
+                       <div className="min-w-[160px] w-auto max-w-[250px]">
                            <ModelSelect selectedModel={selectedModel} onSelectModel={setSelectedModel} isIncognitoMode={isIncognitoMode} />
                        </div>
                    </div>
