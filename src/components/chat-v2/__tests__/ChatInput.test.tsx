@@ -214,6 +214,11 @@ jest.mock('@/components/ui/alert', () => ({
   AlertDescription: ({ children, ...props }: any) => <div data-testid="alert-description" {...props}>{children}</div>,
 }));
 
+// Mock useIsMobile hook
+jest.mock('@/hooks/use-mobile', () => ({
+  useIsMobile: () => false, // Default to desktop view in tests
+}));
+
 // Import after mocks
 import { ChatInput } from '../ChatInput';
 
