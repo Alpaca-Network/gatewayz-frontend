@@ -16,6 +16,7 @@ Gatewayz is a comprehensive AI model management platform, providing a unified in
 - **Home**: Landing page with featured models and platform overview
 - **Models**: Comprehensive model browser with filtering and search capabilities
 - **Chat**: Interactive chat interface with model selection
+- **Inbox**: AI coding agent inbox powered by Terragon (see [docs/TERRAGON_INBOX_SETUP.md](../docs/TERRAGON_INBOX_SETUP.md))
 - **Rankings**: Performance analytics and model comparisons
 - **Settings**: User preferences, API keys, and configuration management
 - **Developers**: Developer resources and documentation
