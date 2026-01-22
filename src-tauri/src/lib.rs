@@ -12,12 +12,38 @@ use tauri::{
 mod commands;
 pub use commands::*;
 
+/// Simple timestamp for logging (avoids adding chrono dependency)
+#[cfg(all(target_os = "windows", not(debug_assertions)))]
+fn chrono_lite() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("{}", secs)
+}
+
 /// Initialize and run the Tauri application
 ///
 /// This function sets up all plugins, system tray, global shortcuts,
 /// and IPC command handlers for the desktop application.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Initialize logging - on Windows release builds, logs go to a file
+    // since there's no console window
+    #[cfg(all(target_os = "windows", not(debug_assertions)))]
+    {
+        use std::io::Write;
+        // Try to create a log file for debugging Windows launch issues
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(std::env::temp_dir().join("gatewayz-desktop.log"))
+        {
+            let _ = writeln!(file, "[{}] GatewayZ Desktop starting...", chrono_lite());
+        }
+    }
+
     env_logger::init();
 
     let builder = tauri::Builder::default();
@@ -37,10 +63,23 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             log::info!("Single instance triggered with args: {:?}", args);
+
             // Focus the main window when another instance tries to launch
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
+
+                // On Windows/Linux, deep links are passed as CLI arguments
+                // Check if any argument is a deep link URL and handle it
+                for arg in args.iter() {
+                    if arg.starts_with("gatewayz://") {
+                        log::info!("Deep link from CLI args: {}", arg);
+                        if let Ok(url) = url::Url::parse(arg) {
+                            handle_deep_link(app, &url);
+                        }
+                        break;
+                    }
+                }
             }
         }))
         .plugin(
@@ -62,8 +101,53 @@ pub fn run() {
             #[cfg(desktop)]
             register_shortcuts(app.handle())?;
 
-            // Handle deep links
+            // Handle deep links from events (macOS/iOS/Android)
             setup_deep_link_handler(app.handle());
+
+            // Handle deep links from CLI arguments on initial launch (Windows/Linux)
+            // This handles the case when the app is opened via a deep link URL
+            #[cfg(desktop)]
+            {
+                let args: Vec<String> = std::env::args().collect();
+                log::info!("App started with args: {:?}", args);
+                for arg in args.iter().skip(1) {
+                    // Skip the first arg (executable path)
+                    if arg.starts_with("gatewayz://") {
+                        log::info!("Deep link from startup args: {}", arg);
+                        if let Ok(url) = url::Url::parse(arg) {
+                            // Use retry mechanism to ensure JS listeners are ready
+                            // This handles slower machines where React may not have mounted yet
+                            let app_handle = app.handle().clone();
+                            std::thread::spawn(move || {
+                                // Retry with exponential backoff: 200ms, 400ms, 800ms, 1600ms
+                                let delays = [200, 400, 800, 1600];
+                                for (attempt, delay_ms) in delays.iter().enumerate() {
+                                    std::thread::sleep(std::time::Duration::from_millis(*delay_ms));
+                                    log::info!(
+                                        "Deep link emit attempt {} after {}ms",
+                                        attempt + 1,
+                                        delay_ms
+                                    );
+                                    if let Some(window) = app_handle.get_webview_window("main") {
+                                        // Emit the event - if JS listener catches it, we're done
+                                        // The JS side will ignore duplicate events
+                                        let query = url.query().unwrap_or("");
+                                        if window.emit("auth-callback", query).is_ok() {
+                                            log::info!(
+                                                "Deep link auth-callback emitted on attempt {}",
+                                                attempt + 1
+                                            );
+                                            // Continue retrying in case JS wasn't ready
+                                            // The frontend handles duplicate events gracefully
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                        break;
+                    }
+                }
+            }
 
             log::info!("GatewayZ Desktop initialized successfully");
             Ok(())
@@ -97,7 +181,21 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running GatewayZ Desktop");
+        .unwrap_or_else(|e| {
+            // Log error to file on Windows since there's no console
+            #[cfg(all(target_os = "windows", not(debug_assertions)))]
+            {
+                use std::io::Write;
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(std::env::temp_dir().join("gatewayz-desktop.log"))
+                {
+                    let _ = writeln!(file, "[{}] FATAL: {}", chrono_lite(), e);
+                }
+            }
+            panic!("error while running GatewayZ Desktop: {}", e);
+        });
 }
 
 /// Set up the system tray icon and menu
@@ -129,8 +227,14 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         ],
     )?;
 
+    // Get the default icon, with fallback handling for Windows
+    let icon = app
+        .default_window_icon()
+        .cloned()
+        .ok_or("Failed to get default window icon")?;
+
     let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(icon)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -188,9 +292,16 @@ fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 fn register_shortcuts(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
-    // Register Cmd/Ctrl+Shift+G to show/focus GatewayZ
-    // Use Shortcut::new() instead of parse() for reliable type inference
-    let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyG);
+    // Register platform-specific shortcuts to show/focus GatewayZ:
+    // - macOS: Cmd+G (Super+G)
+    // - Windows: Ctrl+G
+    // - Linux: Super+G
+    #[cfg(target_os = "windows")]
+    let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::KeyG);
+
+    #[cfg(not(target_os = "windows"))]
+    let shortcut = Shortcut::new(Some(Modifiers::SUPER), Code::KeyG);
+
     app.global_shortcut().register(shortcut)?;
 
     log::info!("Global shortcuts registered");
@@ -203,10 +314,29 @@ fn handle_global_shortcut(app: &AppHandle, shortcut: &tauri_plugin_global_shortc
     use tauri_plugin_global_shortcut::Code;
 
     if shortcut.key == Code::KeyG {
-        // Show and focus the main window
+        // Toggle the main window: show if hidden/minimized, hide if visible and focused
         if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.set_focus();
+            // Check window state
+            let is_visible = window.is_visible().unwrap_or(false);
+            let is_focused = window.is_focused().unwrap_or(false);
+            let is_minimized = window.is_minimized().unwrap_or(false);
+
+            if is_minimized {
+                // Window is minimized - unminimize, show, and focus it
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            } else if is_visible && is_focused {
+                // Window is visible and focused - hide it
+                let _ = window.hide();
+            } else if is_visible {
+                // Window is visible but not focused - bring it to focus
+                let _ = window.set_focus();
+            } else {
+                // Window is hidden - show and focus it
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
         }
     }
 }
@@ -243,6 +373,19 @@ fn setup_deep_link_handler(app: &AppHandle) {
 fn handle_deep_link(app: &AppHandle, url: &url::Url) {
     log::info!("Handling deep link: {}", url);
 
+    // Log to file on Windows for debugging
+    #[cfg(all(target_os = "windows", not(debug_assertions)))]
+    {
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(std::env::temp_dir().join("gatewayz-desktop.log"))
+        {
+            let _ = writeln!(file, "[{}] Deep link received: {}", chrono_lite(), url);
+        }
+    }
+
     // Get the main window
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -260,6 +403,19 @@ fn handle_deep_link(app: &AppHandle, url: &url::Url) {
             }
             "/auth/callback" => {
                 // Handle OAuth callback
+                log::info!("Auth callback received, emitting auth-callback event");
+                #[cfg(all(target_os = "windows", not(debug_assertions)))]
+                {
+                    use std::io::Write;
+                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(std::env::temp_dir().join("gatewayz-desktop.log"))
+                    {
+                        let _ =
+                            writeln!(file, "[{}] Auth callback - emitting event", chrono_lite());
+                    }
+                }
                 let query = url.query().unwrap_or("");
                 let _ = window.emit("auth-callback", query);
             }
@@ -269,5 +425,7 @@ fn handle_deep_link(app: &AppHandle, url: &url::Url) {
                 let _ = window.emit("navigate", path);
             }
         }
+    } else {
+        log::error!("Failed to get main window for deep link handling");
     }
 }

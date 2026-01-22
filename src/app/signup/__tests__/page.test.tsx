@@ -30,6 +30,15 @@ jest.mock('@privy-io/react-auth', () => ({
   }),
 }));
 
+// Mock GatewayzAuth context
+let mockAuthStatus: 'idle' | 'unauthenticated' | 'authenticating' | 'authenticated' | 'error' = 'unauthenticated';
+
+jest.mock('@/context/gatewayz-auth-context', () => ({
+  useGatewayzAuth: () => ({
+    status: mockAuthStatus,
+  }),
+}));
+
 // Mock referral utilities
 const mockStoreReferralCode = jest.fn();
 jest.mock('@/lib/referral', () => ({
@@ -95,6 +104,7 @@ describe('SignupPage', () => {
     mockSearchParams.clear();
     mockAuthenticated = false;
     mockReady = true;
+    mockAuthStatus = 'unauthenticated';
     mockLogin.mockClear();
     mockPush.mockClear();
     mockStoreReferralCode.mockClear();
@@ -150,8 +160,13 @@ describe('SignupPage', () => {
   });
 
   describe('Redirect behavior', () => {
-    it('should redirect authenticated users to /chat by default', async () => {
+    // Note: Redirects only happen for users who were ALREADY authenticated when landing on the page
+    // New signups are handled by the auth context (redirects to /onboarding)
+
+    it('should redirect already-authenticated users to /chat by default', async () => {
+      // Simulate a user who was already authenticated when they landed on the page
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
 
       render(<SignupPage />);
 
@@ -160,8 +175,9 @@ describe('SignupPage', () => {
       });
     });
 
-    it('should redirect to returnUrl when provided and authenticated', async () => {
+    it('should redirect to returnUrl when provided and already authenticated', async () => {
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('returnUrl', '/settings');
 
       render(<SignupPage />);
@@ -171,8 +187,9 @@ describe('SignupPage', () => {
       });
     });
 
-    it('should include ref code in redirect URL when authenticated', async () => {
+    it('should include ref code in redirect URL when already authenticated', async () => {
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('ref', 'TEST123');
 
       render(<SignupPage />);
@@ -182,8 +199,35 @@ describe('SignupPage', () => {
       });
     });
 
+    it('should NOT auto-redirect for new signups (auth context handles this)', async () => {
+      // User starts unauthenticated, then authenticates (simulating new signup flow)
+      mockAuthenticated = false;
+      mockAuthStatus = 'unauthenticated';
+
+      const { rerender } = render(<SignupPage />);
+
+      // User completes signup - Privy becomes authenticated, but Gatewayz is still syncing
+      mockAuthenticated = true;
+      mockAuthStatus = 'authenticating';
+      rerender(<SignupPage />);
+
+      // Should NOT redirect during authenticating state
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // Authentication completes
+      mockAuthStatus = 'authenticated';
+      rerender(<SignupPage />);
+
+      // Should still NOT redirect because this is a new signup (wasAlreadyAuthenticatedRef was false)
+      // The auth context will handle redirecting to /onboarding
+      await waitFor(() => {
+        expect(mockPush).not.toHaveBeenCalled();
+      }, { timeout: 100 });
+    });
+
     it('should handle returnUrl with existing query params and ref code', async () => {
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('returnUrl', '/chat?model=gpt-4');
       mockSearchParams.set('ref', 'TEST123');
 
@@ -196,6 +240,7 @@ describe('SignupPage', () => {
 
     it('should properly encode referral codes with special characters', async () => {
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('ref', 'TEST&=?#123');
 
       render(<SignupPage />);
@@ -208,6 +253,7 @@ describe('SignupPage', () => {
 
     it('should handle hash fragments correctly (query before hash)', async () => {
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('returnUrl', '/chat#section');
       mockSearchParams.set('ref', 'HASH123');
 
@@ -221,6 +267,7 @@ describe('SignupPage', () => {
 
     it('should handle returnUrl with both query params and hash', async () => {
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('returnUrl', '/chat?model=gpt-4#section');
       mockSearchParams.set('ref', 'COMPLEX123');
 
@@ -233,6 +280,7 @@ describe('SignupPage', () => {
 
     it('should replace existing ref param to avoid duplicates', async () => {
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('returnUrl', '/chat?ref=OLD123&model=gpt-4');
       mockSearchParams.set('ref', 'NEW123');
 
@@ -246,6 +294,7 @@ describe('SignupPage', () => {
 
     it('should handle malformed returnUrl ending with ?', async () => {
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('returnUrl', '/chat?');
       mockSearchParams.set('ref', 'TEST123');
 
@@ -259,6 +308,7 @@ describe('SignupPage', () => {
 
     it('should handle malformed returnUrl ending with &', async () => {
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('returnUrl', '/settings?foo=bar&');
       mockSearchParams.set('ref', 'TEST123');
 
@@ -306,10 +356,11 @@ describe('SignupPage', () => {
       expect(screen.getByText(/bonus credits/)).toBeInTheDocument();
     });
 
-    it('should store referral code BEFORE redirecting authenticated users (race condition fix)', async () => {
+    it('should store referral code BEFORE redirecting already-authenticated users (race condition fix)', async () => {
       // This test verifies the fix for the race condition where redirect could happen
       // before referral code storage completes for already-authenticated users
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
       mockSearchParams.set('ref', 'RACE_TEST');
 
       render(<SignupPage />);
@@ -332,20 +383,60 @@ describe('SignupPage', () => {
   });
 
   describe('Loading state', () => {
-    it('should show loading spinner when Privy is not ready', () => {
+    it('should show loading state in button when Privy is not ready', () => {
       mockReady = false;
 
       render(<SignupPage />);
 
+      // PERFORMANCE OPTIMIZATION: The card structure is always rendered for better FCP
+      // The loading state is now shown in the button, not as a separate page
+      const button = screen.getByTestId('signup-button');
+      expect(button).toBeDisabled();
       expect(screen.getByText('Loading...')).toBeInTheDocument();
+
+      // Card structure should still be visible for better FCP/LCP
+      expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
     });
 
-    it('should show redirecting message when authenticated', () => {
+    it('should show signing in state in button when authentication is in progress', () => {
+      mockReady = true;
       mockAuthenticated = true;
+      mockAuthStatus = 'authenticating';
 
       render(<SignupPage />);
 
+      // The button shows "Signing in..." when authentication is in progress
+      const button = screen.getByTestId('signup-button');
+      expect(button).toBeDisabled();
+      expect(screen.getByText('Signing in...')).toBeInTheDocument();
+
+      // Card structure should still be visible
+      expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
+    });
+
+    it('should show redirecting message in button when fully authenticated', () => {
+      mockAuthenticated = true;
+      mockAuthStatus = 'authenticated';
+
+      render(<SignupPage />);
+
+      // The button shows "Redirecting..." when fully authenticated
       expect(screen.getByText('Redirecting...')).toBeInTheDocument();
+
+      // Card structure should still be visible
+      expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
+    });
+
+    it('should always render card structure for good FCP/LCP (performance optimization)', () => {
+      mockReady = false;
+
+      render(<SignupPage />);
+
+      // Core card elements should always be visible
+      expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
+      expect(screen.getByText("What you'll get:")).toBeInTheDocument();
+      expect(screen.getByText('Access to 10,000+ AI models')).toBeInTheDocument();
+      expect(screen.getByText('$3 in free trial credits')).toBeInTheDocument();
     });
   });
 
@@ -404,14 +495,16 @@ describe('SignupPage', () => {
       expect(mockLogin).toHaveBeenCalledTimes(1);
     });
 
-    it('should show loading state when Privy is not ready (button not visible)', () => {
+    it('should show loading state in button when Privy is not ready', () => {
       mockReady = false;
 
       render(<SignupPage />);
 
-      // When Privy is not ready, the loading state is shown instead of the form
+      // PERFORMANCE OPTIMIZATION: Button is always visible for better FCP/LCP
+      // But it shows loading state and is disabled
+      const button = screen.getByTestId('signup-button');
+      expect(button).toBeDisabled();
       expect(screen.getByText('Loading...')).toBeInTheDocument();
-      expect(screen.queryByTestId('signup-button')).not.toBeInTheDocument();
     });
 
     it('should track Twitter signup click on manual button click', async () => {

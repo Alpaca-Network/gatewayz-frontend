@@ -90,13 +90,28 @@ export async function createShareLink(params: CreateShareLinkParams): Promise<Sh
 }
 
 /**
- * Get a shared chat by its token (public, no auth required)
+ * Get a shared chat by its token (requires authentication)
  */
 export async function getSharedChat(token: string): Promise<SharedChatPublicView> {
   try {
-    const response = await fetch(`/api/chat/share/${token}`);
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      return {
+        success: false,
+        error: 'Authentication required to view shared chats',
+      };
+    }
+
+    const response = await fetch(`/api/chat/share/${token}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error('Authentication required to view shared chats');
+      }
       if (response.status === 404) {
         throw new Error('Shared chat not found or has expired');
       }

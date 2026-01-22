@@ -4,13 +4,19 @@ import { validateApiKey } from '@/app/api/middleware/auth';
 
 /**
  * GET /api/chat/share/[token]
- * Get a shared chat by its token (public endpoint, no auth required)
+ * Get a shared chat by its token (requires authentication)
  */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    // Validate API key - authentication required to view shared chats
+    const { key: apiKey, error } = await validateApiKey(request);
+    if (error) {
+      return error;
+    }
+
     const { token } = await params;
 
     if (!token) {
@@ -20,12 +26,13 @@ export async function GET(
       );
     }
 
-    // Call backend API to get shared chat (public endpoint)
+    // Call backend API to get shared chat
     const response = await fetch(
       `${API_BASE_URL}/v1/chat/share/${token}`,
       {
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
         },
       }
     );

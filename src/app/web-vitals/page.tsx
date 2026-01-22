@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, lazy, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -19,14 +19,60 @@ import {
 import { RefreshCw, Monitor, Smartphone, Tablet, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWebVitalsSummary } from "@/hooks/use-web-vitals";
-import {
-  PerformanceScoreGauge,
-  VitalsSummaryGrid,
-  VitalsTimelineChart,
-  PagePerformanceTable,
-  DistributionChart,
-} from "@/components/web-vitals";
 import type { DeviceType } from "@/lib/web-vitals-types";
+
+// PERFORMANCE OPTIMIZATION: Lazy load heavy chart components
+// These components include Recharts which adds significant bundle size
+// Lazy loading defers their JavaScript until actually needed
+const PerformanceScoreGauge = lazy(() =>
+  import("@/components/web-vitals/performance-score-gauge").then(mod => ({ default: mod.PerformanceScoreGauge }))
+);
+const VitalsSummaryGrid = lazy(() =>
+  import("@/components/web-vitals/vital-summary-card").then(mod => ({ default: mod.VitalsSummaryGrid }))
+);
+const VitalsTimelineChart = lazy(() =>
+  import("@/components/web-vitals/vitals-timeline-chart").then(mod => ({ default: mod.VitalsTimelineChart }))
+);
+const PagePerformanceTable = lazy(() =>
+  import("@/components/web-vitals/page-performance-table").then(mod => ({ default: mod.PagePerformanceTable }))
+);
+const DistributionChart = lazy(() =>
+  import("@/components/web-vitals/distribution-chart").then(mod => ({ default: mod.DistributionChart }))
+);
+
+// Loading skeleton for chart components
+function ChartSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn("bg-card border rounded-lg p-4 animate-pulse", className)}>
+      <div className="h-4 w-24 bg-muted rounded mb-4" />
+      <div className="h-32 bg-muted rounded" />
+    </div>
+  );
+}
+
+// Loading skeleton for the gauge component
+function GaugeSkeleton() {
+  return (
+    <div className="bg-card border rounded-lg p-6 animate-pulse">
+      <div className="h-4 w-32 bg-muted rounded mb-4 mx-auto" />
+      <div className="h-32 w-32 bg-muted rounded-full mx-auto" />
+    </div>
+  );
+}
+
+// Loading skeleton for the table
+function TableSkeleton() {
+  return (
+    <div className="bg-card border rounded-lg p-4 animate-pulse">
+      <div className="h-4 w-32 bg-muted rounded mb-4" />
+      <div className="space-y-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="h-8 bg-muted rounded" />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function WebVitalsPage() {
   const [timeRange, setTimeRange] = useState<string>("24");
@@ -216,24 +262,28 @@ export default function WebVitalsPage() {
         <TabsContent value="overview" className="space-y-6">
           {/* Top Section: Score + Summary Cards */}
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            {/* Performance Score Gauge */}
+            {/* Performance Score Gauge - Lazy loaded */}
             <div className="lg:col-span-1">
-              <PerformanceScoreGauge
-                score={summaryData.performanceScore.overall}
-                breakdown={summaryData.performanceScore}
-                loading={loading && !data}
-              />
+              <Suspense fallback={<GaugeSkeleton />}>
+                <PerformanceScoreGauge
+                  score={summaryData.performanceScore.overall}
+                  breakdown={summaryData.performanceScore}
+                  loading={loading && !data}
+                />
+              </Suspense>
             </div>
 
-            {/* Distribution Chart */}
+            {/* Distribution Chart - Lazy loaded */}
             <div className="lg:col-span-1">
-              <DistributionChart
-                distribution={summaryData.distribution}
-                loading={loading && !data}
-              />
+              <Suspense fallback={<ChartSkeleton />}>
+                <DistributionChart
+                  distribution={summaryData.distribution}
+                  loading={loading && !data}
+                />
+              </Suspense>
             </div>
 
-            {/* Summary Stats */}
+            {/* Summary Stats - Rendered immediately for good FCP */}
             <div className="lg:col-span-2 flex flex-col justify-center space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-card border rounded-lg p-4">
@@ -262,11 +312,15 @@ export default function WebVitalsPage() {
             </div>
           </div>
 
-          {/* Vitals Summary Grid */}
-          <VitalsSummaryGrid vitals={summaryData.vitals} loading={loading && !data} />
+          {/* Vitals Summary Grid - Lazy loaded */}
+          <Suspense fallback={<ChartSkeleton className="h-48" />}>
+            <VitalsSummaryGrid vitals={summaryData.vitals} loading={loading && !data} />
+          </Suspense>
 
-          {/* Timeline Chart */}
-          <VitalsTimelineChart vitals={summaryData.vitals} loading={loading && !data} />
+          {/* Timeline Chart - Lazy loaded */}
+          <Suspense fallback={<ChartSkeleton className="h-64" />}>
+            <VitalsTimelineChart vitals={summaryData.vitals} loading={loading && !data} />
+          </Suspense>
         </TabsContent>
 
         {/* Pages Tab */}
@@ -284,7 +338,10 @@ export default function WebVitalsPage() {
               </div>
             </div>
           </div>
-          <PagePerformanceTable />
+          {/* Page Performance Table - Lazy loaded */}
+          <Suspense fallback={<TableSkeleton />}>
+            <PagePerformanceTable />
+          </Suspense>
         </TabsContent>
       </Tabs>
     </div>

@@ -33,6 +33,10 @@ env:
   CARGO_TERM_COLOR: always
   # Increase Node.js memory for large Next.js builds
   NODE_OPTIONS: '--max-old-space-size=8192'
+  # Privy authentication - required for desktop app to work
+  NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+  NEXT_PUBLIC_API_BASE_URL: https://api.gatewayz.ai
+  NEXT_PUBLIC_CHAT_HISTORY_API_URL: https://api.gatewayz.ai
 
 jobs:
   build:
@@ -70,8 +74,7 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.17.0
+        # Version is read from packageManager field in package.json
 
       - name: Get pnpm store directory
         shell: bash
@@ -123,6 +126,30 @@ jobs:
           # This creates icon.icns (macOS), icon.ico (Windows), and various PNG sizes
           pnpm tauri icon src-tauri/icons/icon.png --output src-tauri/icons
 
+      - name: Import Windows Code Signing Certificate
+        if: contains(matrix.platform, 'windows') && github.event_name != 'pull_request'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ($env:WINDOWS_CERTIFICATE -and $env:WINDOWS_CERTIFICATE_PASSWORD) {
+            $certBytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+            $certPath = "$env:RUNNER_TEMP\certificate.pfx"
+            [IO.File]::WriteAllBytes($certPath, $certBytes)
+            $securePassword = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+            Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword
+            $cert = Get-ChildItem -Path Cert:\CurrentUser\My -CodeSigningCert | Select-Object -First 1
+            $thumbprint = $cert.Thumbprint
+            echo "WINDOWS_CERT_THUMBPRINT=$thumbprint" >> $env:GITHUB_ENV
+            # Build the config JSON for Tauri - properly escaped for shell
+            $configJson = '{"bundle":{"windows":{"certificateThumbprint":"' + $thumbprint + '"}}}'
+            echo "TAURI_WINDOWS_CONFIG=$configJson" >> $env:GITHUB_ENV
+            echo "Windows code signing certificate imported successfully (thumbprint: $thumbprint)"
+          } else {
+            echo "No Windows certificate configured, build will be unsigned"
+          }
+
       - name: Build the desktop app (Release)
         if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || github.event.inputs.release == 'true')
         uses: tauri-apps/tauri-action@v0
@@ -138,7 +165,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tauriScript: pnpm tauri
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} ${{ env.TAURI_WINDOWS_CONFIG && format('--config ''{0}''', env.TAURI_WINDOWS_CONFIG) || '' }}
           # Only create releases for tag pushes, not PRs
           tagName: ${{ startsWith(github.ref, 'refs/tags/v') && 'v__VERSION__' || '' }}
           releaseName: ${{ startsWith(github.ref, 'refs/tags/v') && 'GatewayZ Desktop v__VERSION__' || '' }}
@@ -257,8 +284,7 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.17.0
+        # Version is read from packageManager field in package.json
 
       - name: Install frontend dependencies
         run: pnpm install

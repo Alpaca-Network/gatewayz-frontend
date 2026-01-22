@@ -6,24 +6,37 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ArrowRight, ChevronRight, GitMerge, ShieldCheck, TrendingUp, User, Zap, Code2, Terminal, MessageSquare, Check as CheckIcon, Send } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import { Check, Copy } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getApiKey } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
+import { safeParseJson } from '@/lib/http';
 import Image from 'next/image';
 import { PathChooserModal } from '@/components/onboarding/path-chooser-modal';
 import posthog from 'posthog-js';
-import {CodeExample} from "@/components/sections/CodeExample";
+import { isTauri } from '@/lib/desktop/tauri';
+
+// PERFORMANCE OPTIMIZATION: Import critical above-the-fold component directly
 import TitleSection from "@/components/sections/TitleSection";
-import LogoMarquee from "@/components/sections/LogoMarquee";
-import HowItWorks from "@/components/sections/HowItWorks";
-import Benefits from "@/components/sections/Benefits";
-import {FeaturesModern} from "@/components/sections/FeaturesModern";
-import ProblemSolution from "@/components/sections/ProblemSolution";
-import FAQ from "@/components/sections/FAQ";
+
+// PERFORMANCE OPTIMIZATION: Lazy load heavy below-the-fold sections
+// This dramatically improves FCP/LCP on mobile by deferring non-critical JavaScript
+const CodeExample = lazy(() => import("@/components/sections/CodeExample").then(mod => ({ default: mod.CodeExample })));
+const LogoMarquee = lazy(() => import("@/components/sections/LogoMarquee"));
+const HowItWorks = lazy(() => import("@/components/sections/HowItWorks"));
+const FeaturesModern = lazy(() => import("@/components/sections/FeaturesModern").then(mod => ({ default: mod.FeaturesModern })));
+const ProblemSolution = lazy(() => import("@/components/sections/ProblemSolution"));
+const FAQ = lazy(() => import("@/components/sections/FAQ"));
+
+// Skeleton component for lazy-loaded sections
+function SectionSkeleton({ className = "h-64" }: { className?: string }) {
+  return (
+    <div className={`bg-muted/30 rounded-lg animate-pulse ${className}`} />
+  );
+}
 
 interface FeaturedModel {
   name: string;
@@ -71,6 +84,13 @@ export default function Home() {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Redirect to chat page on desktop app
+  useEffect(() => {
+    if (isTauri()) {
+      router.replace('/chat');
+    }
+  }, [router]);
 
   // Load the actual API key when user is authenticated
   useEffect(() => {
@@ -129,39 +149,39 @@ export default function Home() {
 
 client = OpenAI(
     base_url="https://api.gatewayz.ai/v1",
-    api_key="${apiKey || 'YOUR_API_KEY'}"
+    api_key="${apiKey || 'YOUR_GATEWAYZ_API_KEY'}"
 )
 
-completion = client.chat.completions.create(
-    model="gpt-4",
+response = client.chat.completions.create(
+    model="gpt-4o",
     messages=[
         {"role": "user", "content": "Hello!"}
     ]
 )
 
-print(completion.choices[0].message)`,
+print(response.choices[0].message.content)`,
 
     javascript: `import OpenAI from "openai";
 
-const openai = new OpenAI({
+const client = new OpenAI({
   baseURL: "https://api.gatewayz.ai/v1",
-  apiKey: "${apiKey || 'YOUR_API_KEY'}",
+  apiKey: "${apiKey || 'YOUR_GATEWAYZ_API_KEY'}",
 });
 
-const completion = await openai.chat.completions.create({
-  model: "gpt-4",
+const response = await client.chat.completions.create({
+  model: "gpt-4o",
   messages: [
     { role: "user", content: "Hello!" }
   ],
 });
 
-console.log(completion.choices[0].message);`,
+console.log(response.choices[0].message.content);`,
 
     curl: `curl https://api.gatewayz.ai/v1/chat/completions \\
   -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer ${apiKey || 'YOUR_API_KEY'}" \\
+  -H "Authorization: Bearer ${apiKey || 'YOUR_GATEWAYZ_API_KEY'}" \\
   -d '{
-    "model": "gpt-4",
+    "model": "gpt-4o",
     "messages": [
       {
         "role": "user",
@@ -186,8 +206,13 @@ console.log(completion.choices[0].message);`,
           }
         });
 
-        if (response.ok) {
-          const result = await response.json();
+        // Use safeParseJson to handle HTML error responses gracefully
+        const result = await safeParseJson<{ data?: RankingModelData[] }>(
+          response,
+          '[Home] fetchRankingModels'
+        );
+
+        if (result && result.data) {
           const rankingModels: RankingModelData[] = result.data || [];
 
           // Map ranking data to featured model format
@@ -383,12 +408,15 @@ console.log(completion.choices[0].message);`,
       <main className="w-full overflow-x-hidden">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8" style={{position: 'relative'}}>
           {/* Hero Section */}
+          {/* PERFORMANCE OPTIMIZATION: Hide background logo on mobile to save bandwidth
+              It was barely visible (opacity-20) and 180px still impacts mobile performance */}
           <Image
             src="/logo_transparent.svg"
             alt="Background logo"
             width={768}
             height={768}
-            className="absolute top-0 left-1/2 transform -translate-x-1/2 w-[180px] h-[180px] sm:w-[350px] sm:h-[350px] md:w-[450px] md:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none opacity-20 sm:opacity-50 md:opacity-100"
+            loading="lazy"
+            className="hidden sm:block absolute top-0 left-1/2 transform -translate-x-1/2 sm:w-[350px] sm:h-[350px] md:w-[450px] md:h-[450px] lg:w-[640px] lg:h-[640px] xl:w-[768px] xl:h-[768px] pointer-events-none sm:opacity-50 md:opacity-100"
             style={{ zIndex: 0 }}
           />
 
@@ -513,22 +541,37 @@ console.log(completion.choices[0].message);`,
           </div>
           </section>
 
+          {/* PERFORMANCE OPTIMIZATION: Wrap below-the-fold sections in Suspense
+              This allows the above-the-fold content to render immediately */}
+
           {/* Logo Marquee - moved up and reduced spacing */}
-          <div className="mt-4 mb-6 sm:mt-6 sm:mb-8 md:mt-8 md:mb-10 w-full animate-fade-in opacity-0 delay-400">
-            <LogoMarquee />
-          </div>
+          <Suspense fallback={<SectionSkeleton className="h-16 mt-4 mb-6" />}>
+            <div className="mt-4 mb-6 sm:mt-6 sm:mb-8 md:mt-8 md:mb-10 w-full animate-fade-in opacity-0 delay-400">
+              <LogoMarquee />
+            </div>
+          </Suspense>
 
-          <CodeExample/>
+          <Suspense fallback={<SectionSkeleton className="h-96 my-8" />}>
+            <CodeExample/>
+          </Suspense>
 
-          <HowItWorks/>
+          <Suspense fallback={<SectionSkeleton className="h-64 my-8" />}>
+            <HowItWorks/>
+          </Suspense>
 
-          <FeaturesModern/>
+          <Suspense fallback={<SectionSkeleton className="h-64 my-8" />}>
+            <FeaturesModern/>
+          </Suspense>
 
-          <ProblemSolution/>
+          <Suspense fallback={<SectionSkeleton className="h-64 my-8" />}>
+            <ProblemSolution/>
+          </Suspense>
 
           {/*<Benefits/>*/}
 
-          <FAQ/>
+          <Suspense fallback={<SectionSkeleton className="h-96 my-8" />}>
+            <FAQ/>
+          </Suspense>
         </div>
       </main>
 

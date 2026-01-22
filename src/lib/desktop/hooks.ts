@@ -27,13 +27,17 @@ import {
 
 /**
  * Hook to check if running in Tauri desktop environment
+ *
+ * Uses synchronous initialization to avoid race conditions where
+ * components render multiple times with isTauri=false before the
+ * useEffect runs and sets it to true.
  */
 export function useIsTauri(): boolean {
-  const [isTauriEnv, setIsTauriEnv] = useState(false);
-
-  useEffect(() => {
-    setIsTauriEnv(isTauri());
-  }, []);
+  // Initialize synchronously to avoid flash of wrong state
+  const [isTauriEnv] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return isTauri();
+  });
 
   return isTauriEnv;
 }
@@ -182,7 +186,9 @@ export function useAuthCallback(
   callbackRef.current = callback;
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri()) {
+      return;
+    }
 
     let unlisten: (() => void) | undefined;
 
@@ -190,6 +196,8 @@ export function useAuthCallback(
       callbackRef.current(query);
     }).then((fn) => {
       unlisten = fn;
+    }).catch((err) => {
+      console.error("[useAuthCallback] Failed to register listener:", err);
     });
 
     return () => {

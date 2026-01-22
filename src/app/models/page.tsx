@@ -1,9 +1,25 @@
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
+import { models as staticModels } from '@/lib/models-data';
+import { transformStaticModel } from '@/lib/model-detail-utils';
 
-// Force dynamic rendering to always fetch latest models
-// This ensures models are always fresh and not cached from build time (when there are 0 models)
-export const dynamic = 'force-dynamic';
+/**
+ * Models page rendering configuration
+ *
+ * For desktop static export (NEXT_STATIC_EXPORT=true):
+ * - Page is pre-rendered with static models only
+ * - Client-side fetching is disabled (no API routes available)
+ * - Users see curated static models from models-data.ts
+ *
+ * For server mode (web):
+ * - Uses ISR with revalidation to keep models fresh
+ * - Server fetches latest models from all gateways
+ * - Client-side fetches additional models if server returns < 50
+ *
+ * Note: We cannot use `dynamic = 'force-dynamic'` as it's incompatible with
+ * static export. Instead, we rely on revalidation and client-side fetching.
+ */
+export const revalidate = 60; // Revalidate every 60 seconds in server mode
 
 interface Model {
   id: string;
@@ -79,10 +95,19 @@ function deduplicateModels(models: Model[]): Model[] {
 
 async function getAllModels(): Promise<Model[]> {
   try {
-    // During build time, skip API calls if running in CI/build environment
+    // During static export (desktop builds), use static models only
+    // API routes are not available during static export
+    const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true';
+    if (isStaticExport) {
+      console.log('[Models Page] Static export mode - using static models');
+      // Transform static models to match the Model interface
+      return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
+    }
+
+    // During build time in CI, skip API calls to avoid build failures
     if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.CI) {
-      console.log('[Models Page] Build time detected, skipping API calls');
-      return [];
+      console.log('[Models Page] Build time detected, using static models as fallback');
+      return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
     }
 
     console.log('[Models Page] Fetching all models with gateway=all (single request)');
@@ -101,7 +126,8 @@ async function getAllModels(): Promise<Model[]> {
     return uniqueModels;
   } catch (error) {
     console.error('[Models Page] Failed to fetch models:', error);
-    return [];
+    // Fallback to static models on error
+    return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
   }
 }
 

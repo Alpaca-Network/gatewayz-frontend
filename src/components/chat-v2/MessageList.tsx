@@ -32,6 +32,8 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
   const containerRef = useRef<HTMLDivElement>(null);
   const [userHasScrolled, setUserHasScrolled] = useState(false);
   const lastMessageCountRef = useRef(messages.length);
+  const lastScrollTimeRef = useRef(0);
+  const scrollRafRef = useRef<number | null>(null);
 
   // Detect if user has scrolled away from bottom
   const handleScroll = useCallback(() => {
@@ -41,6 +43,37 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
     // Check if user is near the bottom (within 100px)
     const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
     setUserHasScrolled(!isNearBottom);
+  }, []);
+
+  // Smooth scroll to bottom using requestAnimationFrame for jitter-free scrolling
+  const scrollToBottom = useCallback((smooth: boolean = false) => {
+    // Cancel any pending scroll
+    if (scrollRafRef.current !== null) {
+      cancelAnimationFrame(scrollRafRef.current);
+    }
+
+    scrollRafRef.current = requestAnimationFrame(() => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      if (smooth) {
+        // Use smooth scrolling for new messages (not during streaming)
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        // Use instant scroll during streaming to avoid jitter from overlapping animations
+        container.scrollTop = container.scrollHeight;
+      }
+      scrollRafRef.current = null;
+    });
+  }, []);
+
+  // Cleanup RAF on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollRafRef.current !== null) {
+        cancelAnimationFrame(scrollRafRef.current);
+      }
+    };
   }, []);
 
   // Get the last message for dependency tracking
@@ -57,19 +90,25 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
   useEffect(() => {
     const isNewMessage = messages.length > lastMessageCountRef.current;
     const isStreamingNewMessage = lastMessage?.isStreaming && isNewMessage;
+    const now = Date.now();
 
     // Always scroll on new message or when streaming starts
     if (isNewMessage || isStreamingNewMessage) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      scrollToBottom(true); // Use smooth scroll for new messages
       setUserHasScrolled(false);
+      lastScrollTimeRef.current = now;
     }
     // Scroll during streaming only if user hasn't scrolled away
+    // Throttle streaming scroll updates for controlled, deliberate feel (max once per 75ms)
     else if (lastMessage?.isStreaming && !userHasScrolled) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      if (now - lastScrollTimeRef.current > 75) {
+        scrollToBottom(false); // Use instant scroll during streaming
+        lastScrollTimeRef.current = now;
+      }
     }
 
     lastMessageCountRef.current = messages.length;
-  }, [messages.length, lastMessage?.isStreaming, lastMessageContent, userHasScrolled]);
+  }, [messages.length, lastMessage?.isStreaming, lastMessageContent, userHasScrolled, scrollToBottom]);
 
   // Show pending prompt as optimistic message while session is being created
   // This MUST come before the sessionId check to show UI immediately
@@ -140,6 +179,7 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
             role={msg.role}
             content={msg.content}
             reasoning={msg.reasoning}
+            isReasoningStreaming={msg.isReasoningStreaming}
             image={msg.image}
             video={msg.video}
             audio={msg.audio}
@@ -149,6 +189,11 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
             model={msg.model}
             error={msg.error}
             hasError={msg.hasError}
+            // Search/tool call state
+            isSearching={msg.isSearching}
+            searchQuery={msg.searchQuery}
+            searchResults={msg.searchResults}
+            searchError={msg.searchError}
             showActions={msg.role === 'assistant'}
             onCopy={() => navigator.clipboard.writeText(getTextFromContent(msg.content))}
             onRetry={idx === lastMessageIndex && msg.hasError ? onRetry : undefined}

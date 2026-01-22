@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import { PrivyProviderWrapper } from '../privy-provider';
 
 const mockUsePathname = jest.fn(() => '/');
@@ -35,12 +35,30 @@ jest.mock('@privy-io/react-auth', () => ({
   },
 }));
 
-// Mock the GatewayzAuthProvider
-jest.mock('@/context/gatewayz-auth-context', () => ({
-  GatewayzAuthProvider: ({ children }: any) => (
-    <div data-testid="gatewayz-auth-provider">{children}</div>
-  ),
-}));
+// Mock the GatewayzAuthProvider and GatewayzAuthContext
+jest.mock('@/context/gatewayz-auth-context', () => {
+  const { createContext } = require('react');
+  return {
+    GatewayzAuthProvider: ({ children }: any) => (
+      <div data-testid="gatewayz-auth-provider">{children}</div>
+    ),
+    GatewayzAuthContext: createContext(undefined),
+  };
+});
+
+// Mock the new privy-web-provider module - use actual implementation
+// This ensures the tests verify real behavior including error handlers
+jest.mock('../privy-web-provider', () => {
+  const actual = jest.requireActual('../privy-web-provider');
+  return actual;
+});
+
+// Mock the desktop-auth-provider module - uses the actual implementation
+// This ensures the tests verify real behavior
+jest.mock('../desktop-auth-provider', () => {
+  const actual = jest.requireActual('../desktop-auth-provider');
+  return actual;
+});
 
 // Mock PreviewHostnameInterceptor
 jest.mock('@/components/auth/preview-hostname-interceptor', () => ({
@@ -69,6 +87,7 @@ jest.mock('@sentry/nextjs', () => ({
 const mockCanUseLocalStorage = jest.fn(() => true);
 const mockWaitForLocalStorageAccess = jest.fn(() => Promise.resolve(true));
 const mockShouldDisableEmbeddedWallets = jest.fn(() => false);
+const mockIsTauriDesktop = jest.fn(() => false);
 
 jest.mock('@/lib/safe-storage', () => ({
   canUseLocalStorage: () => mockCanUseLocalStorage(),
@@ -77,6 +96,22 @@ jest.mock('@/lib/safe-storage', () => ({
 
 jest.mock('@/lib/browser-detection', () => ({
   shouldDisableEmbeddedWallets: () => mockShouldDisableEmbeddedWallets(),
+  isTauriDesktop: () => mockIsTauriDesktop(),
+}));
+
+// Mock the api module for desktop auth
+const mockGetApiKey = jest.fn(() => null);
+const mockGetUserData = jest.fn(() => null);
+jest.mock('@/lib/api', () => ({
+  AUTH_REFRESH_EVENT: 'gatewayz:refresh-auth',
+  getApiKey: () => mockGetApiKey(),
+  getUserData: () => mockGetUserData(),
+}));
+
+// Mock the desktop auth module
+const mockSignOutDesktop = jest.fn(() => Promise.resolve());
+jest.mock('@/lib/desktop/auth', () => ({
+  signOutDesktop: () => mockSignOutDesktop(),
 }));
 
 describe('PrivyProviderWrapper', () => {
@@ -89,12 +124,16 @@ describe('PrivyProviderWrapper', () => {
     mockCanUseLocalStorage.mockReturnValue(true);
     mockWaitForLocalStorageAccess.mockResolvedValue(true);
     mockShouldDisableEmbeddedWallets.mockReturnValue(false);
+    mockIsTauriDesktop.mockReturnValue(false);
     mockIsVercelPreviewDeployment.mockReturnValue(false);
     mockUsePathname.mockReturnValue('/');
     mockUseSearchParams.mockReturnValue({
       toString: () => '',
     });
     mockBuildPreviewSafeRedirectUrl.mockReset();
+    mockGetApiKey.mockReturnValue(null);
+    mockGetUserData.mockReturnValue(null);
+    mockSignOutDesktop.mockClear();
   });
 
   afterEach(() => {
@@ -233,7 +272,7 @@ describe('PrivyProviderWrapper', () => {
         expect(config.embeddedWallets.ethereum.createOnLogin).toBe('users-without-wallets');
       });
 
-      it('should disable embedded wallets on iOS in-app browsers', () => {
+      it('should disable embedded wallets on iOS in-app browsers or Tauri desktop', () => {
         process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
         mockShouldDisableEmbeddedWallets.mockReturnValue(true);
         const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
@@ -245,12 +284,56 @@ describe('PrivyProviderWrapper', () => {
         );
 
         const config = (global as any).__PRIVY_CONFIG__;
-        expect(config.embeddedWallets).toBeUndefined();
+        // When disabled, createOnLogin is set to 'off' instead of undefined
+        expect(config.embeddedWallets).toBeDefined();
+        expect(config.embeddedWallets.ethereum.createOnLogin).toBe('off');
         expect(consoleSpy).toHaveBeenCalledWith(
-          '[Auth] Embedded wallets disabled due to iOS in-app browser environment'
+          "[Auth] Embedded wallets disabled (createOnLogin: 'off') - iOS in-app browser detected"
         );
 
         consoleSpy.mockRestore();
+      });
+    });
+
+    describe('Tauri Desktop Mode', () => {
+      it('should bypass Privy SDK entirely when running in Tauri desktop', () => {
+        process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+        mockIsTauriDesktop.mockReturnValue(true);
+        const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+        render(
+          <PrivyProviderWrapper>
+            <div>Test Child</div>
+          </PrivyProviderWrapper>
+        );
+
+        // Should NOT render the Privy provider - on desktop we bypass it entirely
+        // to avoid the Privy SDK's HTTPS requirement check during module initialization
+        expect(screen.queryByTestId('privy-provider')).not.toBeInTheDocument();
+
+        // Should log that we're in desktop mode
+        expect(consoleSpy).toHaveBeenCalledWith(
+          "[Auth] Running in Tauri desktop mode - Privy SDK bypassed"
+        );
+
+        // Should still render children
+        expect(screen.getByText('Test Child')).toBeInTheDocument();
+
+        consoleSpy.mockRestore();
+      });
+
+      it('should render Privy provider when not in Tauri desktop', () => {
+        process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+        mockIsTauriDesktop.mockReturnValue(false);
+
+        render(
+          <PrivyProviderWrapper>
+            <div>Test Child</div>
+          </PrivyProviderWrapper>
+        );
+
+        // Should render the Privy provider
+        expect(screen.getByTestId('privy-provider')).toBeInTheDocument();
       });
     });
 
@@ -642,5 +725,132 @@ describe('PrivyProviderWrapper', () => {
 
     // Note: "Cannot redefine property: ethereum" errors are handled by ErrorSuppressor component
     // which is loaded earlier in the component tree (layout.tsx) to centralize error suppression
+  });
+
+  describe('Tauri Desktop Synchronous Detection', () => {
+    it('should detect Tauri immediately when isTauriDesktop returns true', () => {
+      // The synchronous detection relies on isTauriDesktop checking:
+      // 1. window.location.hostname === 'tauri.localhost'
+      // 2. '__TAURI__' in window
+      // We mock isTauriDesktop to return true to simulate this
+      mockIsTauriDesktop.mockReturnValue(true);
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Should bypass Privy immediately without needing useEffect
+      expect(screen.queryByTestId('privy-provider')).not.toBeInTheDocument();
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Running in Tauri desktop mode - Privy SDK bypassed');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should pass ready storage status to desktop provider', () => {
+      mockIsTauriDesktop.mockReturnValue(true);
+      mockCanUseLocalStorage.mockReturnValue(false); // Even if this returns false
+      mockWaitForLocalStorageAccess.mockResolvedValue(false); // And this returns blocked
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Should NOT show storage blocked message on desktop
+      expect(screen.queryByText('Browser storage is disabled')).not.toBeInTheDocument();
+      // Should still render children
+      expect(screen.getByText('Test Child')).toBeInTheDocument();
+    });
+  });
+
+  describe('DesktopAuthProvider', () => {
+    beforeEach(() => {
+      mockIsTauriDesktop.mockReturnValue(true);
+    });
+
+    it('should set status to authenticated when credentials exist', () => {
+      mockGetApiKey.mockReturnValue('test-api-key');
+      mockGetUserData.mockReturnValue({ id: '123', email: 'test@example.com' });
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: Found stored credentials, synced to Zustand store');
+      consoleSpy.mockRestore();
+    });
+
+    it('should set status to unauthenticated when no credentials exist', () => {
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: No stored credentials found');
+      consoleSpy.mockRestore();
+    });
+
+    it('should listen for AUTH_REFRESH_EVENT and refresh credentials', async () => {
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Simulate OAuth callback storing credentials
+      mockGetApiKey.mockReturnValue('new-api-key');
+      mockGetUserData.mockReturnValue({ id: '456', email: 'new@example.com' });
+
+      // Dispatch AUTH_REFRESH_EVENT wrapped in act
+      await act(async () => {
+        window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: AUTH_REFRESH_EVENT received, refreshing credentials');
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: Found stored credentials, synced to Zustand store');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should set status to unauthenticated when refresh finds no credentials', async () => {
+      // Start with credentials
+      mockGetApiKey.mockReturnValue('test-api-key');
+      mockGetUserData.mockReturnValue({ id: '123', email: 'test@example.com' });
+      const consoleSpy = jest.spyOn(console, 'info').mockImplementation();
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      // Simulate credentials being cleared
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+
+      // Dispatch AUTH_REFRESH_EVENT wrapped in act
+      await act(async () => {
+        window.dispatchEvent(new Event('gatewayz:refresh-auth'));
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith('[Auth] Desktop: No stored credentials found');
+      consoleSpy.mockRestore();
+    });
   });
 });

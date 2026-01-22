@@ -9,12 +9,20 @@ import { getModelsForGateway } from '@/lib/models-service';
 /**
  * Get the most popular/important models for static generation
  * Static pages will be pre-generated for these models at build time
- * This includes all static models + top models from popular gateways
+ * This includes all static models + top models from popular gateways (server mode only)
  */
 export async function getPopularModels(limit: number = 50) {
   try {
     // Start with all static models (these are curated and important)
     const topModels = [...staticModels];
+
+    // Skip server fetch for static export (desktop builds)
+    // The API routes are excluded during static export, so we can't fetch from them
+    const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true';
+    if (isStaticExport) {
+      console.log('[generateStaticParams] Static export mode - using only static models');
+      return topModels.slice(0, limit);
+    }
 
     // Try to fetch models from the top gateway (OpenRouter) for additional popular models
     try {

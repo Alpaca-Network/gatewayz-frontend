@@ -326,4 +326,166 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
     expect(mockLogin).toHaveBeenCalled();
   });
+
+  describe('Privy SDK Initialization Timeout', () => {
+    it('should immediately transition to unauthenticated if no cached credentials (guest mode)', async () => {
+      // Mock Privy as not ready (simulating slow or failed SDK load)
+      mockUsePrivy.mockReturnValue({
+        ready: false,
+        authenticated: false,
+        user: null,
+        login: jest.fn(),
+        logout: jest.fn(),
+        getAccessToken: jest.fn(),
+      } as any);
+
+      // No cached credentials
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+
+      const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
+
+      // FIX: Should immediately transition to unauthenticated when no cached credentials
+      // This allows guest users to access the chat without waiting for Privy SDK
+      // (matching the behavior of DesktopAuthProvider)
+      await waitFor(() => {
+        expect(result.current.status).toBe('unauthenticated');
+      });
+
+      // Sentry should NOT be called for Privy timeout since we transitioned immediately
+      // The backup timeout may still be running but since status is already 'unauthenticated',
+      // the timeout handler will be a no-op
+      expect(Sentry.captureMessage).not.toHaveBeenCalledWith(
+        'Privy SDK initialization timeout',
+        expect.anything()
+      );
+    });
+
+    it('should use cached credentials if Privy not ready but credentials exist', async () => {
+      // Mock Privy as not ready
+      mockUsePrivy.mockReturnValue({
+        ready: false,
+        authenticated: false,
+        user: null,
+        login: jest.fn(),
+        logout: jest.fn(),
+        getAccessToken: jest.fn(),
+      } as any);
+
+      // Mock cached credentials
+      mockGetApiKey.mockReturnValue('gw_test_api_key');
+      mockGetUserData.mockReturnValue({
+        user_id: 'cached-user-id',
+        email: 'cached@example.com',
+        api_key: 'gw_test_api_key',
+      });
+
+      const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
+
+      // Should immediately use cached credentials and become authenticated
+      await waitFor(() => {
+        expect(result.current.status).toBe('authenticated');
+      });
+
+      // Privy timeout should NOT fire since we have cached credentials
+      act(() => {
+        jest.advanceTimersByTime(10000);
+      });
+
+      // Should still be authenticated
+      expect(result.current.status).toBe('authenticated');
+
+      // Sentry should NOT be called for timeout
+      expect(Sentry.captureMessage).not.toHaveBeenCalledWith(
+        'Privy SDK initialization timeout',
+        expect.anything()
+      );
+    });
+
+    it('should already be unauthenticated when Privy becomes ready (no timeout needed)', async () => {
+      // Start with Privy not ready
+      mockUsePrivy.mockReturnValue({
+        ready: false,
+        authenticated: false,
+        user: null,
+        login: jest.fn(),
+        logout: jest.fn(),
+        getAccessToken: jest.fn(),
+      } as any);
+
+      // No cached credentials
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+
+      const { result, rerender } = renderHook(() => useGatewayzAuth(), { wrapper });
+
+      // FIX: Should immediately be unauthenticated (no cached credentials = guest mode)
+      await waitFor(() => {
+        expect(result.current.status).toBe('unauthenticated');
+      });
+
+      // Advance time but not past the timeout
+      act(() => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      // Still unauthenticated (not idle)
+      expect(result.current.status).toBe('unauthenticated');
+
+      // Now Privy becomes ready and user is not authenticated
+      mockUsePrivy.mockReturnValue({
+        ready: true,
+        authenticated: false,
+        user: null,
+        login: jest.fn(),
+        logout: jest.fn(),
+        getAccessToken: jest.fn(),
+      } as any);
+
+      rerender();
+
+      // Should still be unauthenticated (no change needed)
+      await waitFor(() => {
+        expect(result.current.status).toBe('unauthenticated');
+      });
+
+      // Sentry should NOT be called for timeout
+      expect(Sentry.captureMessage).not.toHaveBeenCalledWith(
+        'Privy SDK initialization timeout',
+        expect.anything()
+      );
+    });
+
+    it('should allow login immediately in guest mode (no wait needed)', async () => {
+      const mockLogin = jest.fn();
+
+      // Mock Privy as not ready
+      mockUsePrivy.mockReturnValue({
+        ready: false,
+        authenticated: false,
+        user: null,
+        login: mockLogin,
+        logout: jest.fn(),
+        getAccessToken: jest.fn(),
+      } as any);
+
+      // No cached credentials
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+
+      const { result } = renderHook(() => useGatewayzAuth(), { wrapper });
+
+      // FIX: Should immediately be unauthenticated (guest mode), not idle
+      await waitFor(() => {
+        expect(result.current.status).toBe('unauthenticated');
+      });
+
+      // User should be able to try logging in immediately (no timeout wait needed)
+      act(() => {
+        result.current.login();
+      });
+
+      expect(mockLogin).toHaveBeenCalled();
+    });
+  });
 });

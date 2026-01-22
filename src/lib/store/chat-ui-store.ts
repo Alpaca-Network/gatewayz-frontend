@@ -44,6 +44,7 @@ export const INCOGNITO_DEFAULT_MODEL: ModelOption = NEAR_INCOGNITO_MODELS[0];
 // Storage keys for persistence
 const INCOGNITO_STORAGE_KEY = 'gatewayz_incognito_mode';
 const PREVIOUS_MODEL_STORAGE_KEY = 'gatewayz_previous_model';
+const AUTO_ENABLE_SEARCH_KEY = 'gatewayz_auto_enable_search';
 
 // Helper to get initial incognito state from localStorage
 const getInitialIncognitoState = (): boolean => {
@@ -73,6 +74,17 @@ const isNearIncognitoModel = (model: ModelOption | null): boolean => {
   return model.sourceGateway === 'near' || model.value.startsWith('near/');
 };
 
+// Helper to get auto-enable search preference from localStorage
+const getAutoEnableSearchPreference = (): boolean => {
+  if (typeof window === 'undefined') return true; // Default to enabled
+  try {
+    const stored = localStorage.getItem(AUTO_ENABLE_SEARCH_KEY);
+    return stored !== 'false'; // Default to true unless explicitly disabled
+  } catch {
+    return true;
+  }
+};
+
 interface ChatUIState {
   activeSessionId: number | null;
   mobileSidebarOpen: boolean;
@@ -83,6 +95,10 @@ interface ChatUIState {
   previousModel: ModelOption | null; // Store model before entering incognito
   _hasHydrated: boolean; // Track if hydration sync has run
 
+  // Tools state
+  enabledTools: string[]; // List of enabled tool names (e.g., ['web_search'])
+  autoEnableSearch: boolean; // Whether to auto-detect queries needing search
+
   setActiveSessionId: (id: number | null) => void;
   setMobileSidebarOpen: (open: boolean) => void;
   setInputValue: (val: string) => void;
@@ -92,6 +108,11 @@ interface ChatUIState {
   toggleIncognitoMode: () => void;
   resetChatState: () => void;
   syncIncognitoState: () => void; // Sync incognito state after hydration
+
+  // Tools actions
+  setEnabledTools: (tools: string[]) => void;
+  toggleTool: (toolName: string) => void;
+  setAutoEnableSearch: (enabled: boolean) => void;
 }
 
 // Standard default model
@@ -115,6 +136,10 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
   isIncognitoMode: getInitialIncognitoState(),
   previousModel: getPreviousModel(),
   _hasHydrated: false,
+
+  // Tools state initialization
+  enabledTools: [],
+  autoEnableSearch: getAutoEnableSearchPreference(),
 
   setActiveSessionId: (id) => set({ activeSessionId: id }),
   setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
@@ -224,6 +249,31 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
     activeSessionId: null,
     inputValue: '',
     mobileSidebarOpen: false,
-    messageStartTime: null
+    messageStartTime: null,
+    enabledTools: [], // Reset tools on new chat
   }),
+
+  // Tools actions
+  setEnabledTools: (tools) => set({ enabledTools: tools }),
+
+  toggleTool: (toolName) => {
+    const current = get().enabledTools;
+    const isEnabled = current.includes(toolName);
+    const next = isEnabled
+      ? current.filter(t => t !== toolName)
+      : [...current, toolName];
+    set({ enabledTools: next });
+  },
+
+  setAutoEnableSearch: (enabled) => {
+    set({ autoEnableSearch: enabled });
+    // Persist preference to localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(AUTO_ENABLE_SEARCH_KEY, String(enabled));
+      } catch {
+        // Ignore storage errors
+      }
+    }
+  },
 }));

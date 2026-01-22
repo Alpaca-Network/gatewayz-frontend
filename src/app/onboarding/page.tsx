@@ -4,13 +4,15 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, Circle, ArrowRight, Code, MessageSquare, CreditCard, Sparkles, Terminal, Book, Copy, Check, Key } from "lucide-react";
+import { CheckCircle2, Circle, ArrowRight, Code, MessageSquare, CreditCard, Sparkles, Terminal, Book, Copy, Check, Key, Keyboard } from "lucide-react";
 import Link from "next/link";
 import { getUserData, getApiKey } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
 import { useToast } from '@/hooks/use-toast';
 import { CodeHighlighter } from '@/components/code-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { isTauri, isMacOS, isWindows } from '@/lib/desktop/tauri';
+import { showShortcutInfoDialog, hasShownShortcutInfo, markShortcutInfoShown } from '@/components/dialogs/shortcut-info-dialog';
 
 interface OnboardingTask {
   id: string;
@@ -22,11 +24,21 @@ interface OnboardingTask {
   actionLabel?: string;
 }
 
+/**
+ * Get the platform-specific shortcut display text for the task description
+ */
+function getShortcutText(): string {
+  if (isMacOS()) return '⌘+G';
+  if (isWindows()) return 'Ctrl+G';
+  return 'Super+G';
+}
+
 export default function OnboardingPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [apiKey, setApiKey] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   const [tasks, setTasks] = useState<OnboardingTask[]>([
     {
@@ -76,6 +88,38 @@ export default function OnboardingPage() {
     { id: 'mistralai/mistral-large', name: 'Mistral Large' },
   ]);
 
+  // Check if running in desktop mode
+  useEffect(() => {
+    setIsDesktop(isTauri());
+  }, []);
+
+  // Add shortcut task for desktop users
+  useEffect(() => {
+    if (isDesktop) {
+      setTasks(prev => {
+        // Check if shortcut task already exists
+        if (prev.some(task => task.id === 'shortcut')) {
+          return prev;
+        }
+
+        // Insert shortcut task after welcome task
+        const shortcutTask: OnboardingTask = {
+          id: "shortcut",
+          title: "Learn Quick Launch Shortcut",
+          description: `Press ${getShortcutText()} anytime to instantly open GatewayZ from anywhere.`,
+          icon: <Keyboard className="h-5 w-5" />,
+          completed: hasShownShortcutInfo(),
+          actionLabel: "Show Shortcut"
+        };
+
+        const welcomeIndex = prev.findIndex(t => t.id === 'welcome');
+        const newTasks = [...prev];
+        newTasks.splice(welcomeIndex + 1, 0, shortcutTask);
+        return newTasks;
+      });
+    }
+  }, [isDesktop]);
+
   useEffect(() => {
     // Check if user has already seen onboarding
     const hasSeenOnboarding = localStorage.getItem('gatewayz_onboarding_completed');
@@ -124,7 +168,8 @@ export default function OnboardingPage() {
         welcome: true,
         chat: false,
         explore: false,
-        credits: false
+        credits: false,
+        ...(isTauri() ? { shortcut: hasShownShortcutInfo() } : {})
       };
       localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
       setTasks(prev => prev.map(task =>
@@ -495,7 +540,7 @@ console.log(response.choices[0].message.content);`
                       </CardDescription>
                     </div>
                   </div>
-                  {task.action && (
+                  {task.action ? (
                     <Link href={task.action}>
                       <Button
                         variant={task.completed ? "outline" : "default"}
@@ -506,7 +551,22 @@ console.log(response.choices[0].message.content);`
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </Button>
                     </Link>
-                  )}
+                  ) : task.id === 'shortcut' && task.actionLabel ? (
+                    <Button
+                      variant={task.completed ? "outline" : "default"}
+                      size="sm"
+                      onClick={() => {
+                        showShortcutInfoDialog();
+                        if (!task.completed) {
+                          markTaskComplete(task.id);
+                          markShortcutInfoShown();
+                        }
+                      }}
+                    >
+                      {task.actionLabel}
+                      <Keyboard className="ml-2 h-4 w-4" />
+                    </Button>
+                  ) : null}
                 </div>
               </CardHeader>
             </Card>

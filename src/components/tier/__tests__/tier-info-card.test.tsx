@@ -14,6 +14,7 @@ jest.mock('lucide-react', () => ({
   CheckCircle: () => <span data-testid="check-icon">CheckCircle</span>,
   Clock: () => <span data-testid="clock-icon">Clock</span>,
   Sparkles: () => <span data-testid="sparkles-icon">Sparkles</span>,
+  RefreshCw: () => <span data-testid="refresh-icon">RefreshCw</span>,
 }));
 
 describe('TierInfoCard', () => {
@@ -320,6 +321,236 @@ describe('TierInfoCard', () => {
       render(<TierInfoCard />);
 
       expect(screen.getByText('Past due')).toBeInTheDocument();
+    });
+  });
+
+  describe('Credit Renewal for Pro/Max users', () => {
+    it('should display credit renewal info for Pro users with active subscription', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show credit renewal section
+      expect(screen.getByText('Credit Renewal')).toBeInTheDocument();
+      expect(screen.getByText('Days until renewal')).toBeInTheDocument();
+      expect(screen.getByText('15 days')).toBeInTheDocument();
+      expect(screen.getByText('Renewal date')).toBeInTheDocument();
+      expect(screen.getByText(/credits will be replenished/i)).toBeInTheDocument();
+    });
+
+    it('should display credit renewal info for Max users with active subscription', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 7);
+
+      mockUseTier.mockReturnValue({
+        tier: 'max',
+        tierInfo: {
+          name: 'max',
+          displayName: 'Max',
+          description: 'Maximum tier',
+          monthlyPrice: '$75/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show credit renewal section
+      expect(screen.getByText('Credit Renewal')).toBeInTheDocument();
+      expect(screen.getByText('7 days')).toBeInTheDocument();
+    });
+
+    it('should show "Today" when renewal is due today', () => {
+      const renewalDate = new Date();
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: true,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.getByText('Credit Renewal')).toBeInTheDocument();
+      expect(screen.getByText('Today')).toBeInTheDocument();
+    });
+
+    it('should show singular "day" when 1 day remaining', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 1);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.getByText('1 day')).toBeInTheDocument();
+    });
+
+    it('should NOT show credit renewal for basic tier users', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'basic',
+        tierInfo: {
+          name: 'basic',
+          displayName: 'Basic',
+          description: 'Pay-per-use access',
+          monthlyPrice: 'Pay-per-use',
+          features: [],
+        },
+        hasSubscription: false,
+        subscriptionStatusText: null,
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.queryByText('Credit Renewal')).not.toBeInTheDocument();
+    });
+
+    it('should NOT show credit renewal for cancelled subscriptions', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Cancelled',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.queryByText('Credit Renewal')).not.toBeInTheDocument();
+    });
+
+    it('should NOT show credit renewal when no renewal date is available', () => {
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: null,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.queryByText('Credit Renewal')).not.toBeInTheDocument();
     });
   });
 });

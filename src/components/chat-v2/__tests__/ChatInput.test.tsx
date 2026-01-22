@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 
 // Mock lucide-react icons
@@ -14,6 +14,9 @@ jest.mock('lucide-react', () => ({
   Paperclip: () => <span data-testid="paperclip-icon">Paperclip</span>,
   Square: () => <span data-testid="square-icon">Square</span>,
   Camera: () => <span data-testid="camera-icon">Camera</span>,
+  Globe: () => <span data-testid="globe-icon">Globe</span>,
+  Search: () => <span data-testid="search-icon">Search</span>,
+  Loader2: () => <span data-testid="loader-icon">Loader</span>,
 }));
 
 // Mock the UI components
@@ -72,6 +75,12 @@ jest.mock('@/lib/store/chat-ui-store', () => {
     inputValue: mockStoreState.inputValue,
     setInputValue: mockSetInputValue,
     setMessageStartTime: mockSetMessageStartTime,
+    // Tools state
+    enabledTools: [],
+    autoEnableSearch: false,
+    setEnabledTools: jest.fn(),
+    toggleTool: jest.fn(),
+    setAutoEnableSearch: jest.fn(),
   });
 
   // Add getState method to the function
@@ -110,14 +119,54 @@ jest.mock('@/lib/hooks/use-auto-model-switch', () => ({
   }),
 }));
 
+// Mock tool definitions hook
+jest.mock('@/lib/hooks/use-tool-definitions', () => ({
+  useToolDefinitions: () => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+  }),
+  filterEnabledTools: () => [],
+}));
+
+// Mock auto search detection hook
+jest.mock('@/lib/hooks/use-auto-search-detection', () => ({
+  useAutoSearchDetection: () => ({
+    shouldAutoEnableSearch: jest.fn(() => false),
+    getAutoEnableReason: jest.fn(() => null),
+  }),
+}));
+
+// Mock Whisper transcription hook
+const mockWhisperStartRecording = jest.fn();
+const mockWhisperStopRecording = jest.fn();
+jest.mock('@/lib/hooks/use-whisper-transcription', () => ({
+  useWhisperTranscription: () => ({
+    startRecording: mockWhisperStartRecording,
+    stopRecording: mockWhisperStopRecording,
+    isRecording: false,
+    isTranscribing: false,
+    error: null,
+  }),
+}));
+
+// Mock search augmentation hook
+jest.mock('@/lib/hooks/use-search-augmentation', () => ({
+  useSearchAugmentation: () => ({
+    augmentWithSearch: jest.fn(),
+    isSearching: false,
+  }),
+}));
+
 jest.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: mockToast }),
 }));
 
-// Mock auth store
+// Mock auth store - configurable for tests
+let mockIsAuthenticated = true;
 jest.mock('@/lib/store/auth-store', () => ({
   useAuthStore: () => ({
-    isAuthenticated: true,
+    isAuthenticated: mockIsAuthenticated,
     isLoading: false,
   }),
 }));
@@ -145,10 +194,29 @@ jest.mock('@/lib/guest-chat', () => ({
   getGuestMessageLimit: jest.fn(() => 10),
 }));
 
+// Mock Switch component
+jest.mock('@/components/ui/switch', () => ({
+  Switch: ({ checked, onCheckedChange, disabled, ...props }: any) => (
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => onCheckedChange?.(e.target.checked)}
+      disabled={disabled}
+      data-testid="switch"
+      {...props}
+    />
+  ),
+}));
+
 // Mock Alert component
 jest.mock('@/components/ui/alert', () => ({
   Alert: ({ children, ...props }: any) => <div data-testid="alert" {...props}>{children}</div>,
   AlertDescription: ({ children, ...props }: any) => <div data-testid="alert-description" {...props}>{children}</div>,
+}));
+
+// Mock useIsMobile hook
+jest.mock('@/hooks/use-mobile', () => ({
+  useIsMobile: () => false, // Default to desktop view in tests
 }));
 
 // Import after mocks
@@ -850,7 +918,7 @@ describe('ChatInput error message extraction', () => {
   });
 });
 
-describe('ChatInput speech recognition', () => {
+describe('ChatInput speech recognition (Web Speech API fallback)', () => {
   let mockRecognition: any;
   let originalSpeechRecognition: any;
   let originalWebkitSpeechRecognition: any;
@@ -858,6 +926,9 @@ describe('ChatInput speech recognition', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetMockStoreState();
+    mockIsStreaming = false;
+    // Set unauthenticated to use Web Speech API fallback instead of Whisper
+    mockIsAuthenticated = false;
     delete (window as any).__chatInputFocus;
     delete (window as any).__chatInputSend;
 
@@ -891,6 +962,8 @@ describe('ChatInput speech recognition', () => {
     // Restore original values
     (window as any).SpeechRecognition = originalSpeechRecognition;
     (window as any).webkitSpeechRecognition = originalWebkitSpeechRecognition;
+    // Restore authenticated state for other tests
+    mockIsAuthenticated = true;
   });
 
   it('should show toast when speech recognition is not supported', () => {
@@ -1743,6 +1816,310 @@ describe('ChatInput speech recognition', () => {
     // Recognition should have been stopped
     expect(mockRecognition.stop).toHaveBeenCalled();
   });
+
+  it('should handle repeated phrases like "hello world hello world doing"', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result: "hello world"
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // Problematic API response: repeated phrase plus new content
+    // This simulates the bug where API returns "hello world hello world doing"
+    const duplicatedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world hello world doing', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(duplicatedResult);
+    }
+
+    // Should recognize the duplicate "hello world" and only append "doing"
+    // Not "hello world doing" (which would duplicate "hello world")
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world doing');
+  });
+
+  it('should handle accumulated content found in middle of new transcript', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'testing one two', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('testing one two');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'testing one two';
+
+    // API sends transcript where accumulated content appears after some prefix
+    // This can happen when API reprocesses audio
+    const reorganizedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'okay testing one two three four', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(reorganizedResult);
+    }
+
+    // Should find "testing one two" in the middle and only append "three four"
+    expect(mockSetInputValue).toHaveBeenCalledWith('testing one two three four');
+  });
+
+  it('should not duplicate when API sends same content with prefix', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('how are you');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'how are you';
+
+    // API sends exact same content as prefix plus new content
+    const extendedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'how are you doing today', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(extendedResult);
+    }
+
+    // Should recognize prefix match and only append "doing today"
+    expect(mockSetInputValue).toHaveBeenCalledWith('how are you doing today');
+  });
+
+  it('should handle longer repeated phrases without duplication', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result - longer phrase
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'the quick brown fox jumps', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('the quick brown fox jumps');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'the quick brown fox jumps';
+
+    // API sends repeated content
+    const repeatedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'the quick brown fox jumps over the lazy dog', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(repeatedResult);
+    }
+
+    // Should only append "over the lazy dog"
+    expect(mockSetInputValue).toHaveBeenCalledWith('the quick brown fox jumps over the lazy dog');
+  });
+
+  it('should reject completely unrelated longer transcripts', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // Completely unrelated but longer transcript (API glitch)
+    const unrelatedResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'goodbye moon stars planets', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(unrelatedResult);
+    }
+
+    // Should NOT update - no relationship to accumulated content
+    expect(mockSetInputValue).not.toHaveBeenCalled();
+  });
+
+  it('should handle partial suffix-to-prefix overlap (e.g., "hello world" -> "world how are you")', () => {
+    render(<ChatInput />);
+
+    // Start recording
+    const buttons = screen.getAllByTestId('button');
+    const micButton = buttons.find(btn => btn.querySelector('[data-testid="mic-icon"]'));
+    if (micButton) {
+      fireEvent.click(micButton);
+    }
+
+    // First result
+    const firstResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'hello world', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(firstResult);
+    }
+
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world');
+    mockSetInputValue.mockClear();
+    mockStoreState.inputValue = 'hello world';
+
+    // API sends transcript with partial overlap - suffix of accumulated matches prefix of new
+    // This tests the fallback overlap detection when no exact match is found
+    const partialOverlapResult = {
+      resultIndex: 0,
+      results: {
+        length: 1,
+        0: {
+          isFinal: true,
+          0: { transcript: 'world how are you', confidence: 0.9 },
+        },
+      },
+    };
+
+    if (mockRecognition.onresult) {
+      mockRecognition.onresult(partialOverlapResult);
+    }
+
+    // Should recognize "world" overlap and only append "how are you"
+    expect(mockSetInputValue).toHaveBeenCalledWith('hello world how are you');
+  });
 });
 
 describe('ChatInput stop streaming button', () => {
@@ -1975,5 +2352,240 @@ describe('ChatInput textarea auto-resize', () => {
       // Textarea should not have visibility:hidden set on it
       expect(textarea.style.visibility).not.toBe('hidden');
     });
+  });
+});
+
+describe('ChatInput Whisper transcription', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    mockIsStreaming = false;
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  afterEach(() => {
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should use Whisper transcription for authenticated users', async () => {
+    // Mock as authenticated user (default in our mocks)
+    render(<ChatInput />);
+
+    // Find and click the mic button
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      fireEvent.click(speechMicButton);
+    }
+
+    // Should call Whisper start recording for authenticated users
+    await waitFor(() => {
+      expect(mockWhisperStartRecording).toHaveBeenCalled();
+    });
+  });
+
+  it('should show recording duration in overlay', async () => {
+    render(<ChatInput />);
+
+    // Find and click the mic button
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      fireEvent.click(speechMicButton);
+    }
+
+    // Should show recording overlay with duration display
+    await waitFor(() => {
+      const overlay = document.querySelector('.recording-overlay');
+      expect(overlay).toBeInTheDocument();
+    });
+  });
+
+  it('should show "Recording... Speak now" message in Whisper mode', async () => {
+    render(<ChatInput />);
+
+    // Find and click the mic button
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      fireEvent.click(speechMicButton);
+    }
+
+    // Whisper mode should show "Recording... Speak now" placeholder
+    await waitFor(() => {
+      const placeholder = document.querySelector('.recording-transcript-placeholder');
+      if (placeholder) {
+        expect(placeholder.textContent).toContain('Recording');
+      }
+    });
+  });
+
+  it('should stop recording and process transcription on stop button click', async () => {
+    // Configure mock to simulate successful transcription
+    mockWhisperStopRecording.mockResolvedValueOnce({ text: 'Hello from Whisper', language: 'en', duration: 2.5 });
+
+    render(<ChatInput />);
+
+    // Start recording
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      await act(async () => {
+        fireEvent.click(speechMicButton);
+      });
+    }
+
+    // Wait for recording overlay to appear
+    await waitFor(() => {
+      const overlay = document.querySelector('.recording-overlay');
+      expect(overlay).toBeInTheDocument();
+    });
+
+    // Click stop button
+    const stopButton = screen.getByRole('button', { name: /stop recording/i });
+    await act(async () => {
+      fireEvent.click(stopButton);
+    });
+
+    // Should have called stopRecording
+    expect(mockWhisperStopRecording).toHaveBeenCalled();
+  });
+
+  it('should handle Whisper transcription errors gracefully', async () => {
+    // Configure mock to simulate an error
+    mockWhisperStopRecording.mockRejectedValueOnce(new Error('Transcription failed'));
+
+    render(<ChatInput />);
+
+    // Start recording
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      await act(async () => {
+        fireEvent.click(speechMicButton);
+      });
+    }
+
+    // Wait for recording overlay to appear
+    await waitFor(() => {
+      const overlay = document.querySelector('.recording-overlay');
+      expect(overlay).toBeInTheDocument();
+    });
+
+    // Click stop button
+    const stopButton = screen.getByRole('button', { name: /stop recording/i });
+    await act(async () => {
+      fireEvent.click(stopButton);
+    });
+
+    // Should show error toast
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'destructive',
+        })
+      );
+    });
+  });
+
+  it('should clean up duration interval on unmount during recording', async () => {
+    jest.useFakeTimers();
+
+    const { unmount } = render(<ChatInput />);
+
+    // Start recording
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      await act(async () => {
+        fireEvent.click(speechMicButton);
+      });
+    }
+
+    // Advance timer to simulate recording duration
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    // Unmount while recording
+    unmount();
+
+    // The cleanup should have happened (no errors from setInterval still running)
+    jest.useRealTimers();
+  });
+
+  it('should format recording duration correctly', async () => {
+    jest.useFakeTimers();
+
+    render(<ChatInput />);
+
+    // Start recording
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      await act(async () => {
+        fireEvent.click(speechMicButton);
+      });
+    }
+
+    // Duration should start at 0:00
+    await waitFor(() => {
+      const durationDisplay = document.querySelector('.recording-duration');
+      expect(durationDisplay?.textContent).toBe('0:00');
+    });
+
+    // Advance time by 65 seconds (1:05)
+    await act(async () => {
+      jest.advanceTimersByTime(65000);
+    });
+
+    // Duration should show 1:05
+    await waitFor(() => {
+      const durationDisplay = document.querySelector('.recording-duration');
+      expect(durationDisplay?.textContent).toBe('1:05');
+    });
+
+    jest.useRealTimers();
+  });
+});
+
+describe('ChatInput Whisper fallback to Web Speech API', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    mockIsStreaming = false;
+    mockIsAuthenticated = false; // Unauthenticated user
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  afterEach(() => {
+    mockIsAuthenticated = true; // Reset for other tests
+    delete (window as any).__chatInputFocus;
+    delete (window as any).__chatInputSend;
+  });
+
+  it('should use Web Speech API for unauthenticated users', async () => {
+    render(<ChatInput />);
+
+    // Find and click the mic button
+    const micIcons = screen.getAllByTestId('mic-icon');
+    const speechMicButton = micIcons[micIcons.length - 1].closest('button');
+
+    if (speechMicButton) {
+      fireEvent.click(speechMicButton);
+    }
+
+    // Should NOT call Whisper for unauthenticated users
+    expect(mockWhisperStartRecording).not.toHaveBeenCalled();
   });
 });

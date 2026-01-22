@@ -351,15 +351,6 @@ export default function PlaygroundPage() {
             <>
               {messages.map((message) => (
                 <div key={message.id} className="space-y-2">
-                  {/* Reasoning Display */}
-                  {message.reasoning && (
-                    <ReasoningDisplay
-                      reasoning={message.reasoning}
-                      source="ai-sdk"
-                      isStreaming={false}
-                    />
-                  )}
-
                   {/* Message Content */}
                   <div
                     className={cn(
@@ -393,6 +384,18 @@ export default function PlaygroundPage() {
                         </Button>
                       )}
                     </div>
+
+                    {/* Reasoning Display - below content */}
+                    {message.reasoning && (
+                      <div className="mt-3">
+                        <ReasoningDisplay
+                          reasoning={message.reasoning}
+                          source="ai-sdk"
+                          isStreaming={false}
+                          hasContentStarted={true}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -400,21 +403,28 @@ export default function PlaygroundPage() {
               {/* Streaming Message */}
               {loading && (currentContent || currentReasoning) && (
                 <div className="space-y-2">
-                  {currentReasoning && (
-                    <ReasoningDisplay
-                      reasoning={currentReasoning}
-                      isStreaming={true}
-                      source="ai-sdk"
-                    />
-                  )}
-                  {currentContent && (
-                    <div className="p-4 rounded-lg bg-secondary text-secondary-foreground border border-border max-w-2xl">
-                      <p className="text-xs font-medium text-muted-foreground mb-2">
-                        {selectedModel}
-                      </p>
+                  <div className="p-4 rounded-lg bg-secondary text-secondary-foreground border border-border max-w-2xl">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                      {selectedModel}
+                    </p>
+                    {currentContent ? (
                       <p className="text-sm whitespace-pre-wrap">{currentContent}</p>
-                    </div>
-                  )}
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Thinking...</p>
+                    )}
+
+                    {/* Reasoning Display - below content during streaming */}
+                    {currentReasoning && (
+                      <div className="mt-3">
+                        <ReasoningDisplay
+                          reasoning={currentReasoning}
+                          isStreaming={!currentContent}
+                          hasContentStarted={Boolean(currentContent)}
+                          source="ai-sdk"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

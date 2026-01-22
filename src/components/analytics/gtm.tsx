@@ -1,6 +1,13 @@
 'use client';
 
+import { isTauriDesktop } from '@/lib/browser-detection';
+
 export function GTM() {
+  // Skip GTM iframe on desktop app to avoid CSP violations
+  if (typeof window !== 'undefined' && isTauriDesktop()) {
+    return null;
+  }
+
   return (
     <noscript>
       <iframe

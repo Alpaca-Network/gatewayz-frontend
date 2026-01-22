@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { usePrivy } from '@privy-io/react-auth';
 import { getSharedChat, SharedChatPublicView } from '@/lib/share-chat';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, MessageSquare } from 'lucide-react';
+import { ExternalLink, MessageSquare, Lock } from 'lucide-react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -27,6 +28,7 @@ interface ChatMessage {
 export default function SharedChatPage() {
   const params = useParams();
   const token = params?.token as string;
+  const { user, ready, login } = usePrivy();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,15 @@ export default function SharedChatPage() {
 
   useEffect(() => {
     async function loadSharedChat() {
+      // Wait for Privy to be ready
+      if (!ready) return;
+
+      // Require authentication to view shared chats
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       if (!token) {
         setError('Invalid share link');
         setLoading(false);
@@ -59,9 +70,10 @@ export default function SharedChatPage() {
     }
 
     loadSharedChat();
-  }, [token]);
+  }, [token, ready, user]);
 
-  if (loading) {
+  // Show loading state while Privy initializes
+  if (!ready || loading) {
     return (
       <div className="min-h-screen bg-background">
         <div className="container max-w-4xl mx-auto py-8 px-4">
@@ -74,6 +86,33 @@ export default function SharedChatPage() {
               <Skeleton className="h-32 w-full" />
             </div>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login prompt if user is not authenticated
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="container max-w-2xl mx-auto py-8 px-4">
+          <Card className="p-8 text-center">
+            <div className="mb-4 flex justify-center">
+              <Lock className="h-16 w-16 text-muted-foreground" />
+            </div>
+            <h1 className="text-2xl font-bold mb-2">Sign in Required</h1>
+            <p className="text-muted-foreground mb-6">
+              Please sign in to view this shared conversation.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <Button onClick={() => login()} variant="default">
+                Sign In
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/">Go to Home</Link>
+              </Button>
+            </div>
+          </Card>
         </div>
       </div>
     );

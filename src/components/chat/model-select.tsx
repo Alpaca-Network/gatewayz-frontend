@@ -7,6 +7,7 @@ import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkl
 import { cn } from "@/lib/utils"
 import { getAdaptiveTimeout } from "@/lib/network-timeouts"
 import { isFreeModel, getModelPricingCategory } from "@/lib/model-pricing-utils"
+import { isTauriDesktop } from "@/lib/browser-detection"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -35,6 +36,7 @@ export type ModelOption = {
     };
     speedTier?: 'ultra-fast' | 'fast' | 'medium' | 'slow';
     avgLatencyMs?: number;
+    supportsTools?: boolean; // Whether model supports function calling/tools
 };
 
 interface ModelSelectProps {
@@ -153,6 +155,61 @@ export const getModelSpeedTier = (modelId: string, gateway?: string): 'ultra-fas
   return undefined; // Unknown speed
 };
 
+// Check if model supports tool calling/function calling
+// Based on model architecture and known capabilities
+export const checkModelToolSupport = (modelId: string, supportedParams?: string[]): boolean => {
+  const id = modelId.toLowerCase();
+
+  // If we have explicit supported_parameters from the API, check for 'tools'
+  if (supportedParams && supportedParams.length > 0) {
+    return supportedParams.includes('tools') || supportedParams.includes('tool_choice');
+  }
+
+  // Pattern-based detection for known tool-capable model families
+  // GPT-4 and GPT-3.5 support tools
+  if (id.includes('gpt-4') || id.includes('gpt-3.5')) {
+    return true;
+  }
+
+  // Claude 3.x models support tools
+  if (id.includes('claude-3') || id.includes('claude-3.5') || id.includes('claude-sonnet') || id.includes('claude-opus') || id.includes('claude-haiku')) {
+    return true;
+  }
+
+  // Gemini models support tools
+  if (id.includes('gemini-pro') || id.includes('gemini-flash') || id.includes('gemini-2')) {
+    return true;
+  }
+
+  // Llama 3.x instruct models support tools
+  if ((id.includes('llama-3') || id.includes('llama3')) && id.includes('instruct')) {
+    return true;
+  }
+
+  // Qwen 2.x models support tools
+  if (id.includes('qwen2') || id.includes('qwen-2') || id.includes('qwen3') || id.includes('qwen-3')) {
+    return true;
+  }
+
+  // Mistral and Mixtral support tools
+  if (id.includes('mistral') || id.includes('mixtral')) {
+    return true;
+  }
+
+  // DeepSeek V3 supports tools
+  if (id.includes('deepseek-v3') || id.includes('deepseek-chat')) {
+    return true;
+  }
+
+  // Command R models support tools
+  if (id.includes('command-r')) {
+    return true;
+  }
+
+  // Default to false for unknown models
+  return false
+};
+
 export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = false }: ModelSelectProps) {
   const [open, setOpen] = React.useState(false)
   const [models, setModels] = React.useState<ModelOption[]>([])
@@ -213,13 +270,22 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for search
 
         // Perform server-side search with gateway=all to search across all models
-        const response = await fetch(
-          `/api/models?gateway=all&search=${encodeURIComponent(query)}`,
-          { signal: controller.signal }
-        );
+        // In desktop mode, use backend API directly since API routes don't exist
+        const isDesktop = typeof window !== 'undefined' && isTauriDesktop();
+        const searchUrl = isDesktop
+          ? `${API_BASE_URL}/v1/models?gateway=all&search=${encodeURIComponent(query)}`
+          : `/api/models?gateway=all&search=${encodeURIComponent(query)}`;
+
+        const response = await fetch(searchUrl, { signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (response.ok) {
+          // Verify JSON response
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            console.error('[ModelSelect] Search API returned non-JSON response (content-type:', contentType, ')');
+            return;
+          }
           const data = await response.json();
           if (data.data && Array.isArray(data.data)) {
             const searchOptions: ModelOption[] = data.data.map((model: any) => {
@@ -265,11 +331,26 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
   }, []);
 
   // Fetch popular models
+  // In desktop mode (static export), API routes are unavailable, so fetch from backend API directly
   React.useEffect(() => {
     async function fetchPopularModels() {
+      // In Tauri desktop mode, API routes don't exist (static export)
+      // Fetch directly from backend API instead
+      const isDesktop = typeof window !== 'undefined' && isTauriDesktop();
+      const popularModelsUrl = isDesktop
+        ? `${API_BASE_URL}/v1/models/popular?limit=10`
+        : '/api/models/popular?limit=10';
+
       try {
-        const response = await fetch('/api/models/popular?limit=10');
+        const response = await fetch(popularModelsUrl);
         if (response.ok) {
+          // Check content-type to ensure we got JSON, not HTML (404 page)
+          const contentType = response.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            console.error('[ModelSelect] Popular models API returned non-JSON response (content-type:', contentType, ')');
+            return;
+          }
+
           const data = await response.json();
           if (data.data && Array.isArray(data.data)) {
             const popularOptions: ModelOption[] = data.data.map((model: any) => {
@@ -285,11 +366,14 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
               };
             });
             setPopularModels(popularOptions);
+          } else {
+            console.error('[ModelSelect] Popular models API returned invalid response structure:', data);
           }
+        } else {
+          console.error('[ModelSelect] Popular models API returned error status:', response.status, response.statusText);
         }
       } catch (error) {
-        console.log('[ModelSelect] Failed to fetch popular models:', error);
-        // Silently fail - popular models are optional
+        console.error('[ModelSelect] Failed to fetch popular models:', error);
       }
     }
     fetchPopularModels();
@@ -352,8 +436,22 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           });
           const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-        const allGatewaysRes = await fetch(`/api/models?gateway=all${limitParam}`, { signal: controller.signal });
+        // In desktop mode, API routes don't exist (static export), so fetch directly from backend
+        const isDesktop = typeof window !== 'undefined' && isTauriDesktop();
+        const modelsUrl = isDesktop
+          ? `${API_BASE_URL}/v1/models?gateway=all${limitParam ? limitParam : ''}`
+          : `/api/models?gateway=all${limitParam}`;
+
+        const allGatewaysRes = await fetch(modelsUrl, { signal: controller.signal });
         clearTimeout(timeoutId);
+
+        // Verify we got JSON response (in case static export returns HTML)
+        const contentType = allGatewaysRes.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          console.error('[ModelSelect] Models API returned non-JSON response (content-type:', contentType, ')');
+          throw new Error('Non-JSON response from models API');
+        }
+
         const allGatewaysData = await allGatewaysRes.json();
 
         // Combine models from all gateways
@@ -382,6 +480,9 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           // Get speed tier for performance indicators
           const speedTier = getModelSpeedTier(model.id, sourceGateway);
 
+          // Check if model supports tool calling
+          const supportsTools = checkModelToolSupport(model.id, model.supported_parameters);
+
           return {
             value: model.id,
             label: cleanModelName(model.name),
@@ -390,6 +491,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
             developer,
             modalities,
             speedTier,
+            supportsTools,
             huggingfaceMetrics: model.huggingface_metrics ? {
               downloads: model.huggingface_metrics.downloads || 0,
               likes: model.huggingface_metrics.likes || 0,
@@ -829,8 +931,22 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-          const openrouterRes = await fetch(`/api/models?gateway=openrouter`, { signal: controller.signal });
+          // In desktop mode, use backend API directly since API routes don't exist
+          const isDesktop = typeof window !== 'undefined' && isTauriDesktop();
+          const prefetchUrl = isDesktop
+            ? `${API_BASE_URL}/v1/models?gateway=openrouter`
+            : `/api/models?gateway=openrouter`;
+
+          const openrouterRes = await fetch(prefetchUrl, { signal: controller.signal });
           clearTimeout(timeoutId);
+
+          // Verify JSON response
+          const contentType = openrouterRes.headers.get('content-type');
+          if (!contentType || !contentType.includes('application/json')) {
+            console.error('[ModelSelect] Prefetch API returned non-JSON response (content-type:', contentType, ')');
+            return;
+          }
+
           const openrouterData = await openrouterRes.json();
 
           // Cache prefetched models for instant access
@@ -852,6 +968,9 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
               m.charAt(0).toUpperCase() + m.slice(1)
             ) || ['Text'];
 
+            // Check if model supports tool calling
+            const supportsTools = checkModelToolSupport(model.id, model.supported_parameters);
+
             return {
               value: model.id,
               label: cleanModelName(model.name),
@@ -859,6 +978,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
               sourceGateway,
               developer,
               modalities,
+              supportsTools,
               huggingfaceMetrics: model.huggingface_metrics ? {
                 downloads: model.huggingface_metrics.downloads || 0,
                 likes: model.huggingface_metrics.likes || 0,

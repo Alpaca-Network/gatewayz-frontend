@@ -440,6 +440,86 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
+  // Filter out IndexedDB errors from browser privacy modes or database cleanup
+  // These occur when:
+  // - Users browse in private/incognito mode (iOS Safari, Firefox)
+  // - Browser privacy extensions clean up storage
+  // - Database is deleted while operations are in progress
+  // These are not application bugs and cannot be fixed in our code
+  const isIndexedDBError =
+    (errorMessageLower.includes('indexeddb') ||
+     errorMessageLower.includes('idbdatabase') ||
+     errorMessageLower.includes('createobjectstore') ||
+     eventMessageLower.includes('indexeddb') ||
+     eventMessageLower.includes('idbdatabase') ||
+     eventMessageLower.includes('createobjectstore')) &&
+    (errorMessageLower.includes('undefined') ||
+     errorMessageLower.includes('closing') ||
+     errorMessageLower.includes('not found') ||
+     errorMessageLower.includes('invalidstateerror') ||
+     eventMessageLower.includes('undefined') ||
+     eventMessageLower.includes('closing') ||
+     eventMessageLower.includes('not found') ||
+     eventMessageLower.includes('invalidstateerror'));
+
+  if (isIndexedDBError) {
+    console.debug('[Sentry] Filtered out IndexedDB error (browser privacy mode or database cleanup)');
+    return true;
+  }
+
+  // Filter out build/minification lexical declaration errors
+  // These occur when minified code (variable names like 'tH', 'eR') has initialization issues
+  // These are rare edge cases in the build process that:
+  // - Are not reproducible
+  // - Don't indicate actual code bugs
+  // - Often resolve on page refresh
+  const isBuildError =
+    (errorMessageLower.includes("can't access lexical declaration") ||
+     errorMessageLower.includes("cannot access") ||
+     eventMessageLower.includes("can't access lexical declaration") ||
+     eventMessageLower.includes("cannot access")) &&
+    (errorMessageLower.includes('before initialization') ||
+     eventMessageLower.includes('before initialization'));
+
+  if (isBuildError) {
+    console.debug('[Sentry] Filtered out build/minification lexical declaration error (transient edge case)');
+    return true;
+  }
+
+  // Filter out Safari regex errors (browser compatibility)
+  // Safari doesn't support certain regex features like named capture groups in some versions
+  // This is a browser limitation, not an application bug
+  const isSafariRegexError =
+    (errorMessageLower.includes('invalid regular expression') ||
+     eventMessageLower.includes('invalid regular expression')) &&
+    (errorMessageLower.includes('invalid group specifier') ||
+     errorMessageLower.includes('group specifier name') ||
+     eventMessageLower.includes('invalid group specifier') ||
+     eventMessageLower.includes('group specifier name'));
+
+  if (isSafariRegexError) {
+    console.debug('[Sentry] Filtered out Safari regex error (browser compatibility issue)');
+    return true;
+  }
+
+  // Filter out Privy session timeout errors (external service)
+  // These occur when the Privy authentication service times out
+  // This is an external service issue, not an application bug
+  const isPrivySessionTimeout =
+    (errorMessageLower.includes('auth.privy.io') ||
+     eventMessageLower.includes('auth.privy.io')) &&
+    (errorMessageLower.includes('timeouterror') ||
+     errorMessageLower.includes('timeout') ||
+     errorMessageLower.includes('no response') ||
+     eventMessageLower.includes('timeouterror') ||
+     eventMessageLower.includes('timeout') ||
+     eventMessageLower.includes('no response'));
+
+  if (isPrivySessionTimeout) {
+    console.debug('[Sentry] Filtered out Privy session timeout error (external service timeout)');
+    return true;
+  }
+
   return false;
 }
 

@@ -159,6 +159,18 @@ export const findModelByRouteParams = <T extends ModelDetailRecord>(
       return providerMatches;
     }
 
+    // Fallback: try collapsed matching (removes all non-alphanumeric chars)
+    // This handles edge cases where URL normalization differs from model name normalization
+    // e.g., "gpt-4.5" vs "gpt-4-5" both collapse to "gpt45"
+    const collapsedSearchName = collapseIdentifier(normalizedSearchName);
+    if (collapsedSearchName) {
+      for (const candidate of nameCandidates) {
+        if (collapseIdentifier(candidate) === collapsedSearchName) {
+          return providerMatches;
+        }
+      }
+    }
+
     return false;
   });
 };

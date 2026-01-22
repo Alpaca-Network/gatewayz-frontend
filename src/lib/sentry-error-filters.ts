@@ -1,10 +1,19 @@
 /**
  * Sentry error filtering configuration
  *
- * This module provides comprehensive error filtering for Sentry to reduce noise
- * from third-party errors, browser extension conflicts, and known non-blocking issues.
+ * This module provides centralized error pattern definitions for Sentry filtering.
+ * These patterns are:
+ * 1. Used as a reference/specification for what errors should be filtered
+ * 2. Tested comprehensively in sentry-error-filters.test.ts
+ * 3. Can be imported and used in custom beforeSend handlers if needed
  *
- * Usage: Import and apply filters in instrumentation-client.ts and sentry.server.config.ts
+ * NOTE: The actual runtime filtering is done INLINE in instrumentation-client.ts
+ * (see shouldFilterEvent function) for two reasons:
+ * - Better performance (no extra module import during error handling)
+ * - Direct integration with Sentry SDK initialization
+ *
+ * The patterns here mirror those in instrumentation-client.ts and serve as
+ * documentation and a testable specification of our error filtering rules.
  */
 
 import type * as Sentry from '@sentry/nextjs';
@@ -49,6 +58,24 @@ const SUPPRESSED_ERROR_PATTERNS = {
     /explorer-api\.walletconnect\.com/i,
   ],
 
+  // DOM manipulation errors from third-party scripts (Statsig Session Replay, etc.)
+  domManipulation: [
+    /Failed to execute 'removeChild' on 'Node'.*not a child/i,
+    /Failed to execute 'insertBefore' on 'Node'.*not a child/i,
+    /Statsig.*removeChild/i,
+    /Statsig.*insertBefore/i,
+    /Node.*not a child/i,
+  ],
+
+  // IndexedDB errors from browser privacy/deletion
+  indexedDB: [
+    /undefined is not an object.*evaluating.*createObjectStore/i,
+    /createObjectStore.*undefined/i,
+    /Failed to execute 'transaction' on 'IDBDatabase'.*closing/i,
+    /Failed to execute 'transaction' on 'IDBDatabase'.*not found/i,
+    /InvalidStateError.*IDBDatabase.*closing/i,
+  ],
+
   // Rate limiting and monitoring errors
   rateLimiting: [
     /\/monitoring.*429/i,
@@ -59,6 +86,25 @@ const SUPPRESSED_ERROR_PATTERNS = {
   storageAccess: [
     /Failed to read.*localStorage.*Access is denied/i,
     /QuotaExceededError/i,
+  ],
+
+  // Build/minification errors (transient, not reproducible)
+  buildErrors: [
+    /can't access lexical declaration.*before initialization/i,
+    /ReferenceError.*tH.*before initialization/i,
+  ],
+
+  // Safari/browser compatibility errors
+  browserCompat: [
+    /Invalid regular expression.*invalid group specifier/i,
+    /Invalid regular expression.*group specifier name/i,
+  ],
+
+  // External service timeouts (Privy, etc.)
+  externalServiceTimeouts: [
+    /auth\.privy\.io.*timeouterror/i,
+    /auth\.privy\.io.*timeout/i,
+    /auth\.privy\.io.*no response/i,
   ],
 };
 
@@ -216,7 +262,12 @@ export function getIgnoreErrors(): RegExp[] {
     ...SUPPRESSED_ERROR_PATTERNS.walletExtensions,
     ...SUPPRESSED_ERROR_PATTERNS.hydration,
     ...SUPPRESSED_ERROR_PATTERNS.thirdParty,
+    ...SUPPRESSED_ERROR_PATTERNS.domManipulation,
+    ...SUPPRESSED_ERROR_PATTERNS.indexedDB,
     ...SUPPRESSED_ERROR_PATTERNS.rateLimiting,
     ...SUPPRESSED_ERROR_PATTERNS.storageAccess,
+    ...SUPPRESSED_ERROR_PATTERNS.buildErrors,
+    ...SUPPRESSED_ERROR_PATTERNS.browserCompat,
+    ...SUPPRESSED_ERROR_PATTERNS.externalServiceTimeouts,
   ];
 }
