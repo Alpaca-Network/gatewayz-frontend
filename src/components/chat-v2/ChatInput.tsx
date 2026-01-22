@@ -337,12 +337,11 @@ export function ChatInput() {
     // Only allow growing, never shrink below current minimum (prevents jitter)
     // This means once the textarea expands to 2 lines, it stays that size
     // until the user clears the text completely
-    const newMinHeight = Math.max(calculatedHeight, minTextareaHeight);
     const newHeight = Math.max(calculatedHeight, minTextareaHeight);
 
     // Update minimum height if we've grown
-    if (newMinHeight > minTextareaHeight) {
-      setMinTextareaHeight(newMinHeight);
+    if (newHeight > minTextareaHeight) {
+      setMinTextareaHeight(newHeight);
     }
 
     // Only update height if it changed to avoid unnecessary reflows
