@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
@@ -8,12 +8,46 @@ import { GameOfLife } from '@/components/game-of-life/GameOfLife';
 import { useGameOfLife } from '@/components/game-of-life/useGameOfLife';
 import { Play, Pause, RotateCcw, Home, Zap } from 'lucide-react';
 
+// Responsive cell size - smaller on mobile for finer resolution
+function useCellSize() {
+  const [cellSize, setCellSize] = useState(12);
+
+  useEffect(() => {
+    const updateCellSize = () => {
+      // Use smaller cells on mobile for finer resolution
+      if (window.innerWidth < 640) {
+        setCellSize(8); // Mobile: 8px cells
+      } else if (window.innerWidth < 1024) {
+        setCellSize(10); // Tablet: 10px cells
+      } else {
+        setCellSize(12); // Desktop: 12px cells
+      }
+    };
+
+    updateCellSize();
+    window.addEventListener('resize', updateCellSize);
+    return () => window.removeEventListener('resize', updateCellSize);
+  }, []);
+
+  return cellSize;
+}
+
 export default function NotFoundClient() {
   const gameState = useGameOfLife({
     initialSpeed: 150,
   });
 
-  const { isPlaying, generation, speed, toggle, reset, setSpeed } = gameState;
+  const { isPlaying, generation, speed, toggle, reset, setSpeed, play } = gameState;
+  const cellSize = useCellSize();
+
+  // Auto-start the game on mount
+  useEffect(() => {
+    // Small delay to let the grid initialize first
+    const timer = setTimeout(() => {
+      play();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [play]);
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -33,7 +67,7 @@ export default function NotFoundClient() {
         <GameOfLife
           gameState={gameState}
           className="w-full h-full rounded-lg border border-border overflow-hidden"
-          cellSize={12}
+          cellSize={cellSize}
         />
       </div>
 

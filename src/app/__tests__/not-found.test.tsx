@@ -56,6 +56,7 @@ jest.mock('@/components/game-of-life/GameOfLife', () => ({
 const mockToggle = jest.fn();
 const mockReset = jest.fn();
 const mockSetSpeed = jest.fn();
+const mockPlay = jest.fn();
 
 jest.mock('@/components/game-of-life/useGameOfLife', () => ({
   useGameOfLife: () => ({
@@ -64,7 +65,7 @@ jest.mock('@/components/game-of-life/useGameOfLife', () => ({
     generation: 42,
     speed: 150,
     gridSize: { cols: 60, rows: 40 },
-    play: jest.fn(),
+    play: mockPlay,
     pause: jest.fn(),
     toggle: mockToggle,
     reset: mockReset,
@@ -99,6 +100,11 @@ import NotFoundClient from '../not-found-client';
 describe('NotFoundClient', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   describe('rendering', () => {
@@ -201,6 +207,15 @@ describe('NotFoundClient', () => {
       fireEvent.change(slider, { target: { value: '200' } });
 
       expect(mockSetSpeed).toHaveBeenCalled();
+    });
+
+    it('auto-starts the game on mount', () => {
+      render(<NotFoundClient />);
+
+      // Fast-forward past the auto-start delay
+      jest.advanceTimersByTime(150);
+
+      expect(mockPlay).toHaveBeenCalled();
     });
   });
 
