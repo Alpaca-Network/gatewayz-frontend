@@ -2329,8 +2329,8 @@ describe('ChatInput textarea auto-resize', () => {
 
     // Should have resize-none class to prevent manual resize
     expect(textarea.className).toContain('resize-none');
-    // Should have min-h-[48px] for minimum height
-    expect(textarea.className).toContain('min-h-[48px]');
+    // Should have min-height via inline style (controlled by state)
+    expect(textarea.style.minHeight).toBe('48px');
     // Should have max-h-[150px] for maximum height
     expect(textarea.className).toContain('max-h-[150px]');
   });
