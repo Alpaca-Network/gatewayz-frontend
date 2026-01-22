@@ -22,6 +22,7 @@ jest.mock('lucide-react', () => ({
   Crown: () => <span data-testid="crown-icon">Crown</span>,
   Sparkles: () => <span data-testid="sparkles-icon">Sparkles</span>,
   AlertCircle: () => <span data-testid="alert-icon">AlertCircle</span>,
+  Plus: () => <span data-testid="plus-icon">Plus</span>,
 }));
 
 describe('CreditsDisplay', () => {
@@ -96,7 +97,7 @@ describe('CreditsDisplay', () => {
   });
 
   describe('PRO Tier Users', () => {
-    it('should display PRO badge for pro tier users', () => {
+    it('should display PRO badge and credit usage for pro tier users', () => {
       const mockUserData: UserData = {
         user_id: 1,
         api_key: 'test-key',
@@ -104,7 +105,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 5000,
+        credits: 5,
         tier: 'pro',
         subscription_status: 'active',
       };
@@ -115,8 +116,10 @@ describe('CreditsDisplay', () => {
 
       // Should show PRO badge
       expect(screen.getByText('PRO')).toBeInTheDocument();
-      // Should not show credit count
-      expect(screen.queryByText('5,000')).not.toBeInTheDocument();
+      // Should show credit amount in progress bar
+      expect(screen.getByText('$5')).toBeInTheDocument();
+      // Should show Add Credits button
+      expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
 
     it('should handle uppercase PRO tier from backend', () => {
@@ -127,7 +130,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 5000,
+        credits: 5,
         tier: 'PRO' as any, // Simulate backend sending uppercase
         subscription_status: 'active',
       };
@@ -142,7 +145,7 @@ describe('CreditsDisplay', () => {
   });
 
   describe('MAX Tier Users', () => {
-    it('should display MAX badge for max tier users', () => {
+    it('should display MAX badge and credit usage for max tier users', () => {
       const mockUserData: UserData = {
         user_id: 1,
         api_key: 'test-key',
@@ -150,7 +153,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 15000,
+        credits: 75,
         tier: 'max',
         subscription_status: 'active',
       };
@@ -161,8 +164,10 @@ describe('CreditsDisplay', () => {
 
       // Should show MAX badge
       expect(screen.getByText('MAX')).toBeInTheDocument();
-      // Should not show credit count
-      expect(screen.queryByText('15,000')).not.toBeInTheDocument();
+      // Should show credit amount in progress bar
+      expect(screen.getByText('$75')).toBeInTheDocument();
+      // Should show Add Credits button
+      expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
 
     it('should handle uppercase MAX tier from backend', () => {
@@ -173,7 +178,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 15000,
+        credits: 75,
         tier: 'MAX' as any, // Simulate backend sending uppercase
         subscription_status: 'active',
       };
@@ -523,6 +528,168 @@ describe('CreditsDisplay', () => {
 
       const link = screen.getByRole('link');
       expect(link).toHaveAttribute('href', '/settings/credits');
+    });
+  });
+
+  describe('Credit Usage Progress Bar for Pro/Max Users', () => {
+    it('should display progress bar and Add Credits button for Pro users', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 5, // $5 remaining of $10 allocation
+        tier: 'pro',
+        subscription_status: 'active',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      // Should show credit amount
+      expect(screen.getByText('$5')).toBeInTheDocument();
+      // Should show Add Credits button
+      expect(screen.getByText('Add Credits')).toBeInTheDocument();
+    });
+
+    it('should display progress bar and Add Credits button for Max users', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Max User',
+        email: 'max@example.com',
+        credits: 75, // $75 remaining of $150 allocation
+        tier: 'max',
+        subscription_status: 'active',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show MAX badge
+      expect(screen.getByText('MAX')).toBeInTheDocument();
+      // Should show credit amount
+      expect(screen.getByText('$75')).toBeInTheDocument();
+      // Should show Add Credits button
+      expect(screen.getByText('Add Credits')).toBeInTheDocument();
+    });
+
+    it('should link Add Credits button to credits page with buy=true', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 5,
+        tier: 'pro',
+        subscription_status: 'active',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      const addCreditsLink = screen.getByText('Add Credits').closest('a');
+      expect(addCreditsLink).toHaveAttribute('href', '/settings/credits?buy=true');
+    });
+
+    it('should show green progress bar when credits are above 50%', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 8, // 80% of $10 allocation
+        tier: 'pro',
+        subscription_status: 'active',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show $8 credit amount
+      expect(screen.getByText('$8')).toBeInTheDocument();
+    });
+
+    it('should NOT show Add Credits button for basic tier users', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Basic User',
+        email: 'basic@example.com',
+        credits: 50,
+        tier: 'basic',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show credits
+      expect(screen.getByText('50')).toBeInTheDocument();
+      // Should NOT show Add Credits button
+      expect(screen.queryByText('Add Credits')).not.toBeInTheDocument();
+    });
+
+    it('should handle Pro user with low credits (showing low indicator)', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 1, // Only 10% remaining - should show red
+        tier: 'pro',
+        subscription_status: 'active',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show $1 credit amount
+      expect(screen.getByText('$1')).toBeInTheDocument();
+      // Should show Add Credits button
+      expect(screen.getByText('Add Credits')).toBeInTheDocument();
+    });
+
+    it('should handle Pro user with 0 credits', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 0,
+        tier: 'pro',
+        subscription_status: 'active',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show $0 credit amount
+      expect(screen.getByText('$0')).toBeInTheDocument();
+      // Should show Add Credits button
+      expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
   });
 
