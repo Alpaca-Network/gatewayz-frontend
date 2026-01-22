@@ -359,25 +359,161 @@ describe('useGameOfLife', () => {
   });
 
   describe('Game of Life rules', () => {
-    it('lonely cell dies (underpopulation)', () => {
-      const { result } = renderHook(() =>
-        useGameOfLife({ initialCols: 5, initialRows: 5 })
-      );
-
-      // Clear grid and set up a single cell
+    // Helper to create a clean grid and manually set specific cells
+    // First clears ALL cells, then sets the specified ones
+    function setupCleanGridWithCells(
+      result: { current: ReturnType<typeof useGameOfLife> },
+      size: number,
+      aliveCells: [number, number][]
+    ) {
+      // Set a new grid size - this resets with 404 pattern
       act(() => {
-        result.current.setGridSize(5, 5);
+        result.current.setGridSize(size, size);
       });
 
-      // Clear the grid by resetting to a size where 404 won't fit
-      // Then toggle a single cell
-      act(() => {
-        // Grid is now empty with 404 pattern (which may not fit in 5x5)
-        // The test just verifies basic functionality works
-      });
+      // First, turn OFF all cells that are on (from 404 pattern)
+      const grid = result.current.grid;
+      for (let row = 0; row < grid.length; row++) {
+        for (let col = 0; col < grid[row].length; col++) {
+          if (grid[row][col]) {
+            act(() => {
+              result.current.toggleCell(row, col);
+            });
+          }
+        }
+      }
 
-      expect(result.current.grid.length).toBe(5);
-      expect(result.current.grid[0].length).toBe(5);
+      // Now toggle ON the specified cells
+      aliveCells.forEach(([row, col]) => {
+        act(() => {
+          result.current.toggleCell(row, col);
+        });
+      });
+    }
+
+    it('grid can be set up with specific cells', () => {
+      const { result } = renderHook(() => useGameOfLife());
+
+      // Create a 2x2 block pattern (stable)
+      setupCleanGridWithCells(result, 8, [
+        [2, 2],
+        [2, 3],
+        [3, 2],
+        [3, 3],
+      ]);
+
+      const aliveCount = result.current.grid.flat().filter(Boolean).length;
+      expect(aliveCount).toBe(4);
+
+      // Verify specific cells
+      expect(result.current.grid[2][2]).toBe(true);
+      expect(result.current.grid[2][3]).toBe(true);
+      expect(result.current.grid[3][2]).toBe(true);
+      expect(result.current.grid[3][3]).toBe(true);
+    });
+
+    it('oscillator: blinker pattern can be set up', () => {
+      const { result } = renderHook(() => useGameOfLife());
+
+      // Create a horizontal blinker (3 cells in a row)
+      setupCleanGridWithCells(result, 7, [
+        [3, 2],
+        [3, 3],
+        [3, 4],
+      ]);
+
+      // Verify initial state - horizontal line
+      expect(result.current.grid[3][2]).toBe(true);
+      expect(result.current.grid[3][3]).toBe(true);
+      expect(result.current.grid[3][4]).toBe(true);
+      expect(result.current.grid[2][3]).toBe(false);
+      expect(result.current.grid[4][3]).toBe(false);
+    });
+
+    it('underpopulation: single cell is isolated', () => {
+      const { result } = renderHook(() => useGameOfLife());
+
+      // Create a single isolated cell
+      setupCleanGridWithCells(result, 5, [[2, 2]]);
+
+      expect(result.current.grid[2][2]).toBe(true);
+      // Verify it's isolated (no neighbors)
+      expect(result.current.grid[1][1]).toBe(false);
+      expect(result.current.grid[1][2]).toBe(false);
+      expect(result.current.grid[1][3]).toBe(false);
+      expect(result.current.grid[2][1]).toBe(false);
+      expect(result.current.grid[2][3]).toBe(false);
+    });
+
+    it('birth setup: dead cell has 3 neighbors', () => {
+      const { result } = renderHook(() => useGameOfLife());
+
+      // Create an L-shape - the corner cell (2,2) is dead with 3 neighbors
+      setupCleanGridWithCells(result, 6, [
+        [1, 2], // neighbor above
+        [2, 1], // neighbor left
+        [2, 3], // neighbor right
+      ]);
+
+      // Cell (2,2) is dead but has 3 neighbors
+      expect(result.current.grid[2][2]).toBe(false);
+      expect(result.current.grid[1][2]).toBe(true);
+      expect(result.current.grid[2][1]).toBe(true);
+      expect(result.current.grid[2][3]).toBe(true);
+    });
+
+    it('survival setup: cell has 2 neighbors', () => {
+      const { result } = renderHook(() => useGameOfLife());
+
+      // Create a diagonal line - middle cell has 2 neighbors
+      setupCleanGridWithCells(result, 5, [
+        [1, 1],
+        [2, 2],
+        [3, 3],
+      ]);
+
+      // Middle cell (2,2) is alive with 2 neighbors
+      expect(result.current.grid[1][1]).toBe(true);
+      expect(result.current.grid[2][2]).toBe(true);
+      expect(result.current.grid[3][3]).toBe(true);
+    });
+
+    it('overpopulation setup: cell has 4 neighbors', () => {
+      const { result } = renderHook(() => useGameOfLife());
+
+      // Create a plus shape - center cell has 4 neighbors
+      setupCleanGridWithCells(result, 5, [
+        [2, 2], // center
+        [1, 2], // top neighbor
+        [3, 2], // bottom neighbor
+        [2, 1], // left neighbor
+        [2, 3], // right neighbor
+      ]);
+
+      // Center cell is alive with 4 neighbors
+      expect(result.current.grid[2][2]).toBe(true);
+      expect(result.current.grid[1][2]).toBe(true);
+      expect(result.current.grid[3][2]).toBe(true);
+      expect(result.current.grid[2][1]).toBe(true);
+      expect(result.current.grid[2][3]).toBe(true);
+    });
+
+    it('toroidal wrapping: cells on edges can be set', () => {
+      const { result } = renderHook(() => useGameOfLife());
+
+      // Small grid to test edge cells
+      setupCleanGridWithCells(result, 5, [
+        [0, 0], // top-left corner
+        [0, 4], // top-right corner
+        [4, 0], // bottom-left corner
+        [4, 4], // bottom-right corner
+      ]);
+
+      // Verify corner cells are set
+      expect(result.current.grid[0][0]).toBe(true);
+      expect(result.current.grid[0][4]).toBe(true);
+      expect(result.current.grid[4][0]).toBe(true);
+      expect(result.current.grid[4][4]).toBe(true);
     });
   });
 
