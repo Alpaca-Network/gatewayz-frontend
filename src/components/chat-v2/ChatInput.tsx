@@ -400,7 +400,7 @@ export function ChatInput() {
 
     // Auto-enable search if the query needs real-time information
     // Get fresh tools state from store
-    let freshEnabledTools = storeState.enabledTools;
+    let freshEnabledTools = storeState.enabledTools ?? [];
     const freshAutoEnableSearch = storeState.autoEnableSearch;
 
     // Use critic model to check if we should auto-enable web search
@@ -416,7 +416,7 @@ export function ChatInput() {
       if (!freshEnabledTools.includes('web_search')) {
         toggleTool('web_search');
         // Get fresh state after toggle to ensure we have the updated tools list
-        freshEnabledTools = useChatUIStore.getState().enabledTools;
+        freshEnabledTools = useChatUIStore.getState().enabledTools ?? [];
       }
     }
 
@@ -471,7 +471,7 @@ export function ChatInput() {
     let finalMessageText = messageText;
     // Use freshEnabledTools which was updated after the critic check
     const currentEnabledTools = useChatUIStore.getState().enabledTools ?? [];
-    const searchEnabled = currentEnabledTools.includes('web_search') || freshEnabledTools.includes('web_search');
+    const searchEnabled = currentEnabledTools.includes('web_search') || (freshEnabledTools ?? []).includes('web_search');
     const modelSupportsTools = freshSelectedModel?.supportsTools ?? false;
 
     // If search is enabled but model doesn't support native tools, use search augmentation
