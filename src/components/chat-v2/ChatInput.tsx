@@ -1487,7 +1487,7 @@ export function ChatInput() {
                         }
                     }}
                     placeholder="Ask Gatewayz"
-                    className="flex-1 border-0 bg-background focus-visible:ring-0 min-h-[48px] max-h-[150px] py-3 px-3 text-base resize-none overflow-y-auto rounded-xl"
+                    className="flex-1 border-0 bg-background focus-visible:ring-0 max-h-[150px] py-3 px-3 text-base resize-none overflow-y-auto rounded-xl"
                     style={{ minHeight: `${minTextareaHeight}px` }}
                     disabled={isStreaming}
                     enterKeyHint="send"
