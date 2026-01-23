@@ -40,13 +40,44 @@ export default function NotFoundClient() {
   const { isPlaying, generation, speed, toggle, reset, setSpeed, play } = gameState;
   const cellSize = useCellSize();
 
-  // Auto-start the game on mount
+  // Auto-start the game when page becomes visible
+  // This handles Telegram browser and other in-app browsers that may load pages
+  // in a background/frozen state where requestAnimationFrame won't fire
   useEffect(() => {
-    // Small delay to let the grid initialize first
-    const timer = setTimeout(() => {
-      play();
-    }, 100);
-    return () => clearTimeout(timer);
+    let hasStarted = false;
+
+    const startGame = () => {
+      if (hasStarted) return;
+      // Only start if page is visible
+      if (document.visibilityState === 'visible') {
+        hasStarted = true;
+        play();
+      }
+    };
+
+    // Try to start after a small delay (for normal browsers)
+    const timer = setTimeout(startGame, 100);
+
+    // Also listen for visibility changes (for in-app browsers like Telegram)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        startGame();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Handle focus event as a fallback for some browsers
+    const handleFocus = () => {
+      startGame();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [play]);
 
   return (

@@ -209,11 +209,66 @@ describe('NotFoundClient', () => {
       expect(mockSetSpeed).toHaveBeenCalled();
     });
 
-    it('auto-starts the game on mount', () => {
+    it('auto-starts the game on mount when page is visible', () => {
+      // Mock document.visibilityState
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'visible',
+      });
+
       render(<NotFoundClient />);
 
       // Fast-forward past the auto-start delay
       jest.advanceTimersByTime(150);
+
+      expect(mockPlay).toHaveBeenCalled();
+    });
+
+    it('does not auto-start when page is hidden, but starts on visibility change', () => {
+      // Mock document.visibilityState as hidden initially
+      let visibilityState = 'hidden';
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => visibilityState,
+      });
+
+      render(<NotFoundClient />);
+
+      // Fast-forward past the auto-start delay
+      jest.advanceTimersByTime(150);
+
+      // Should not have started yet because page is hidden
+      expect(mockPlay).not.toHaveBeenCalled();
+
+      // Simulate page becoming visible
+      visibilityState = 'visible';
+      fireEvent(document, new Event('visibilitychange'));
+
+      expect(mockPlay).toHaveBeenCalled();
+    });
+
+    it('auto-starts the game on window focus', () => {
+      // Mock document.visibilityState as hidden initially
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'hidden',
+      });
+
+      render(<NotFoundClient />);
+
+      // Fast-forward past the auto-start delay
+      jest.advanceTimersByTime(150);
+
+      // Should not have started yet
+      expect(mockPlay).not.toHaveBeenCalled();
+
+      // Mock visibilityState change then trigger focus
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'visible',
+      });
+
+      fireEvent.focus(window);
 
       expect(mockPlay).toHaveBeenCalled();
     });
