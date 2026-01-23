@@ -154,13 +154,17 @@ export function CreditsDisplay() {
 
   // Pro/Max users - show credit usage progress bar with plan name
   if (showPlanName) {
-    // Use monthlyAllowance instead of creditAllocation
-    const monthlyAllowance = tier ? TIER_CONFIG[tier].monthlyAllowance / 100 : 0;
+    // monthlyAllowance is stored in cents in TIER_CONFIG
+    const monthlyAllowanceCents = tier ? TIER_CONFIG[tier].monthlyAllowance : 0;
 
-    // Calculate percentage based on subscription_allowance remaining
-    const usagePercentage = monthlyAllowance > 0
-      ? Math.min(100, Math.max(0, (subscriptionAllowance / monthlyAllowance) * 100))
+    // Calculate percentage based on subscription_allowance remaining (both in cents)
+    const usagePercentage = monthlyAllowanceCents > 0
+      ? Math.min(100, Math.max(0, (subscriptionAllowance / monthlyAllowanceCents) * 100))
       : 100;
+
+    // Convert from cents to dollars for display
+    const subscriptionAllowanceDollars = subscriptionAllowance / 100;
+    const purchasedCreditsDollars = purchasedCredits / 100;
 
     const isLow = usagePercentage <= 20;
     const isMedium = usagePercentage > 20 && usagePercentage <= 50;
@@ -193,13 +197,13 @@ export function CreditsDisplay() {
                   />
                 </div>
                 <span className="text-[10px] text-amber-700 dark:text-amber-300 min-w-[32px]">
-                  ${subscriptionAllowance.toFixed(0)}
+                  ${subscriptionAllowanceDollars.toFixed(0)}
                 </span>
               </div>
               {/* Show purchased credits if any */}
-              {purchasedCredits > 0 && (
+              {purchasedCreditsDollars > 0 && (
                 <span className="hidden sm:inline text-[10px] text-blue-600 dark:text-blue-400 font-medium">
-                  +${purchasedCredits.toFixed(0)}
+                  +${purchasedCreditsDollars.toFixed(0)}
                 </span>
               )}
             </div>
