@@ -254,6 +254,15 @@ export const GATEWAYS: GatewayConfig[] = [
     logo: '/sybil-logo.svg',
   },
   {
+    id: 'canopywave',
+    name: 'Canopy Wave',
+    color: 'bg-teal-500',
+    priority: 'slow',
+    requiresApiKey: true,
+    apiKeyEnvVar: 'CANOPYWAVE_API_KEY',
+    logo: '/canopywave-logo.svg',
+  },
+  {
     id: 'aihubmix',
     name: 'AiHubMix',
     color: 'bg-rose-500',
