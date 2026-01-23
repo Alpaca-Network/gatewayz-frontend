@@ -1,13 +1,18 @@
 import { NextRequest } from "next/server";
 import { POST, GET } from "../route";
-import { createHmac, createDecipheriv } from "crypto";
+import { createHmac, createDecipheriv, hkdfSync } from "crypto";
 
 // Mock fetch for backend validation
 global.fetch = jest.fn();
 
+// Derive key using HKDF (must match route.ts implementation)
+function deriveKey(secret: string): Buffer {
+  return Buffer.from(hkdfSync("sha256", secret, "", "gatewayz-terragon-auth", 32));
+}
+
 // Helper to decrypt token payload for testing
 function decryptPayload(encryptedPayload: string, secret: string): Record<string, unknown> {
-  const key = Buffer.from(secret.padEnd(32, "0").slice(0, 32));
+  const key = deriveKey(secret);
   const [ivB64, encrypted, authTagB64] = encryptedPayload.split(".");
   const iv = Buffer.from(ivB64, "base64url");
   const authTag = Buffer.from(authTagB64, "base64url");

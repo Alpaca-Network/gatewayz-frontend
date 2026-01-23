@@ -19,12 +19,14 @@ import {
   groupSessionsByDate,
 } from './types';
 import { getApiKey } from '@/lib/auth';
+import { getChatApiUrl } from '@/lib/config';
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
-const API_BASE = '/api/chat/sessions';
+// Use dynamic endpoint for desktop (direct backend) vs web (Next.js API route)
+const getSessionsApiBase = () => getChatApiUrl('/v1/chat/sessions');
 const DEFAULT_TIMEOUT = 15000; // 15 seconds
 const SESSION_CREATION_TIMEOUT = 30000; // 30 seconds for creation
 
@@ -110,7 +112,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
     setError(null);
 
     try {
-      const response = await fetchWithTimeout(API_BASE, {
+      const response = await fetchWithTimeout(getSessionsApiBase(), {
         headers: getAuthHeaders(),
       });
 
@@ -152,7 +154,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
     setError(null);
 
     try {
-      const response = await fetchWithTimeout(API_BASE, {
+      const response = await fetchWithTimeout(getSessionsApiBase(), {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -218,7 +220,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
     );
 
     try {
-      const response = await fetchWithTimeout(`${API_BASE}/${sessionId}`, {
+      const response = await fetchWithTimeout(`${getSessionsApiBase()}/${sessionId}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(updates),
@@ -261,7 +263,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsReturn
     }
 
     try {
-      const response = await fetchWithTimeout(`${API_BASE}/${sessionId}`, {
+      const response = await fetchWithTimeout(`${getSessionsApiBase()}/${sessionId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
