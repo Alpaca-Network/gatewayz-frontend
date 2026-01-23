@@ -210,13 +210,106 @@ describe('NotFoundClient', () => {
       expect(mockSetSpeed).toHaveBeenCalled();
     });
 
-    it('auto-starts the game on mount', () => {
+    it('auto-starts the game on mount when page is visible', () => {
       render(<NotFoundClient />);
 
       // Fast-forward past the auto-start delay
       jest.advanceTimersByTime(150);
 
       expect(mockPlay).toHaveBeenCalled();
+    });
+
+    it('adds visibility change listener when page is hidden on mount', () => {
+      // Save original visibilityState
+      const originalVisibilityState = document.visibilityState;
+      const addEventListenerSpy = jest.spyOn(document, 'addEventListener');
+
+      // Mock visibilityState as hidden
+      Object.defineProperty(document, 'visibilityState', {
+        value: 'hidden',
+        configurable: true,
+      });
+
+      render(<NotFoundClient />);
+
+      // Fast-forward past the auto-start delay
+      jest.advanceTimersByTime(150);
+
+      // Should not have called play since page is hidden
+      expect(mockPlay).not.toHaveBeenCalled();
+
+      // Should have added visibilitychange listener
+      expect(addEventListenerSpy).toHaveBeenCalledWith(
+        'visibilitychange',
+        expect.any(Function)
+      );
+
+      // Restore original visibilityState
+      Object.defineProperty(document, 'visibilityState', {
+        value: originalVisibilityState,
+        configurable: true,
+      });
+      addEventListenerSpy.mockRestore();
+    });
+
+    it('starts game when page becomes visible after being hidden', () => {
+      // Save original visibilityState
+      const originalVisibilityState = document.visibilityState;
+      let visibilityChangeHandler: (() => void) | undefined;
+
+      const addEventListenerSpy = jest
+        .spyOn(document, 'addEventListener')
+        .mockImplementation((event, handler) => {
+          if (event === 'visibilitychange') {
+            visibilityChangeHandler = handler as () => void;
+          }
+        });
+
+      // Mock visibilityState as hidden initially
+      Object.defineProperty(document, 'visibilityState', {
+        value: 'hidden',
+        configurable: true,
+      });
+
+      render(<NotFoundClient />);
+
+      // Fast-forward past the auto-start delay
+      jest.advanceTimersByTime(150);
+
+      expect(mockPlay).not.toHaveBeenCalled();
+
+      // Now simulate page becoming visible
+      Object.defineProperty(document, 'visibilityState', {
+        value: 'visible',
+        configurable: true,
+      });
+
+      // Trigger the visibility change handler
+      if (visibilityChangeHandler) {
+        visibilityChangeHandler();
+      }
+
+      expect(mockPlay).toHaveBeenCalled();
+
+      // Restore
+      Object.defineProperty(document, 'visibilityState', {
+        value: originalVisibilityState,
+        configurable: true,
+      });
+      addEventListenerSpy.mockRestore();
+    });
+
+    it('clears timeout on unmount before it fires', () => {
+      const { unmount } = render(<NotFoundClient />);
+
+      // Unmount before timer fires
+      unmount();
+
+      // Timer should be cleared, so advancing time shouldn't call play
+      jest.advanceTimersByTime(150);
+
+      // mockPlay was not called because unmount cleared the timer
+      expect(mockPlay).not.toHaveBeenCalled();
     });
   });
 
