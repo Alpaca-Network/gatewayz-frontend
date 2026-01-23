@@ -205,7 +205,7 @@ describe("InboxPage", () => {
       );
     });
 
-    it("should render iframe with auth token in URL", async () => {
+    it("should render iframe with embed mode (token sent via postMessage for security)", async () => {
       render(<InboxPage />);
 
       // Wait for auth token fetch
@@ -218,8 +218,10 @@ describe("InboxPage", () => {
 
       const iframeSrc = iframe.getAttribute("src");
       expect(iframeSrc).toContain(testTerragonUrl);
-      expect(iframeSrc).toContain("gwauth=test-token-payload.test-signature");
       expect(iframeSrc).toContain("embed=true");
+      expect(iframeSrc).toContain("awaitAuth=true");
+      // Token should NOT be in URL for security (passed via postMessage instead)
+      expect(iframeSrc).not.toContain("gwauth=");
     });
 
     it("should have proper iframe sandbox attributes", async () => {
@@ -248,6 +250,100 @@ describe("InboxPage", () => {
         "allow",
         "clipboard-read; clipboard-write"
       );
+    });
+
+    it("should send auth token via postMessage when iframe loads", async () => {
+      const mockPostMessage = jest.fn();
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const iframe = screen.getByTitle("Coding Inbox");
+      // Mock the iframe contentWindow
+      Object.defineProperty(iframe, "contentWindow", {
+        value: { postMessage: mockPostMessage },
+        writable: true,
+      });
+
+      fireEvent.load(iframe);
+
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        {
+          type: "GATEWAYZ_AUTH",
+          token: "test-token-payload.test-signature",
+        },
+        "https://test-terragon.railway.app"
+      );
+    });
+
+    it("should respond to auth request from iframe via message event", async () => {
+      const mockPostMessage = jest.fn();
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const iframe = screen.getByTitle("Coding Inbox");
+      Object.defineProperty(iframe, "contentWindow", {
+        value: { postMessage: mockPostMessage },
+        writable: true,
+      });
+
+      // Clear any previous calls
+      mockPostMessage.mockClear();
+
+      // Simulate message from iframe requesting auth
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: "https://test-terragon.railway.app",
+            data: { type: "GATEWAYZ_AUTH_REQUEST" },
+          })
+        );
+      });
+
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        {
+          type: "GATEWAYZ_AUTH",
+          token: "test-token-payload.test-signature",
+        },
+        "https://test-terragon.railway.app"
+      );
+    });
+
+    it("should ignore messages from unauthorized origins", async () => {
+      const mockPostMessage = jest.fn();
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const iframe = screen.getByTitle("Coding Inbox");
+      Object.defineProperty(iframe, "contentWindow", {
+        value: { postMessage: mockPostMessage },
+        writable: true,
+      });
+
+      // Load iframe to send initial auth
+      fireEvent.load(iframe);
+      mockPostMessage.mockClear();
+
+      // Simulate message from unauthorized origin
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: "https://evil-site.com",
+            data: { type: "GATEWAYZ_AUTH_REQUEST" },
+          })
+        );
+      });
+
+      // Should not send auth to unauthorized origin
+      expect(mockPostMessage).not.toHaveBeenCalled();
     });
 
     it("should fallback to URL without auth token on API failure", async () => {

@@ -15,8 +15,10 @@ import { Loader2, RefreshCw, ExternalLink, LogIn } from "lucide-react";
  *
  * Authentication flow:
  * 1. Check if user is authenticated with GatewayZ (Privy)
- * 2. If authenticated, call /api/terragon/auth to get an HMAC-signed token
- * 3. Embed the Terragon inbox with the signed token as a URL parameter
+ * 2. If authenticated, call /api/terragon/auth to get an encrypted token
+ * 3. Embed the Terragon inbox and pass the token via postMessage (not URL)
+ *
+ * Security: Token is passed via postMessage API to avoid exposure in URL/logs
  *
  * @see https://github.com/terragon-labs/terragon-oss
  */
@@ -27,8 +29,11 @@ export default function InboxPage() {
   const [connectionError, setConnectionError] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
   const [terragonUrl, setTerragonUrl] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const iframeLoadedRef = useRef(false);
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const authSentRef = useRef(false);
 
   // Get the Terragon URL from environment variable
   const baseTerragonUrl = process.env.NEXT_PUBLIC_TERRAGON_URL;
@@ -91,12 +96,15 @@ export default function InboxPage() {
     // If authenticated, fetch the auth token and build the URL
     if (status === "authenticated" && apiKey && userData) {
       setIsLoading(true);
+      authSentRef.current = false;
       fetchAuthToken()
         .then((token) => {
           if (token) {
+            setAuthToken(token);
+            // Use embed mode URL without exposing token in query params
             const url = new URL(baseTerragonUrl);
-            url.searchParams.set("gwauth", token);
             url.searchParams.set("embed", "true");
+            url.searchParams.set("awaitAuth", "true"); // Tell Terragon to wait for postMessage
             setTerragonUrl(url.toString());
           } else {
             // Fallback: embed without auth (will show Terragon login)
@@ -126,6 +134,28 @@ export default function InboxPage() {
     };
   }, [baseTerragonUrl, status, apiKey, userData, fetchAuthToken]);
 
+  // Send auth token to iframe via postMessage when ready
+  const sendAuthToIframe = useCallback(() => {
+    if (!iframeRef.current?.contentWindow || !authToken || authSentRef.current || !baseTerragonUrl) {
+      return;
+    }
+
+    try {
+      const targetOrigin = new URL(baseTerragonUrl).origin;
+      iframeRef.current.contentWindow.postMessage(
+        {
+          type: "GATEWAYZ_AUTH",
+          token: authToken,
+        },
+        targetOrigin
+      );
+      authSentRef.current = true;
+      console.log("[Inbox] Auth token sent via postMessage");
+    } catch (err) {
+      console.error("[Inbox] Failed to send auth token:", err);
+    }
+  }, [authToken, baseTerragonUrl]);
+
   // Handle iframe load event
   const handleIframeLoad = useCallback(() => {
     iframeLoadedRef.current = true;
@@ -134,13 +164,38 @@ export default function InboxPage() {
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current);
     }
-  }, []);
+    // Send auth token after iframe loads
+    sendAuthToIframe();
+  }, [sendAuthToIframe]);
+
+  // Listen for auth request from iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (!baseTerragonUrl) return;
+
+      try {
+        const expectedOrigin = new URL(baseTerragonUrl).origin;
+        if (event.origin !== expectedOrigin) return;
+
+        if (event.data?.type === "GATEWAYZ_AUTH_REQUEST") {
+          console.log("[Inbox] Received auth request from iframe");
+          sendAuthToIframe();
+        }
+      } catch {
+        // Ignore invalid URLs
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [baseTerragonUrl, sendAuthToIframe]);
 
   // Retry connection handler
   const handleRetry = useCallback(() => {
     setConnectionError(false);
     setIsLoading(true);
     iframeLoadedRef.current = false;
+    authSentRef.current = false;
     setIframeKey((prev) => prev + 1);
 
     if (loadTimeoutRef.current) {
@@ -301,6 +356,7 @@ export default function InboxPage() {
 
       {terragonUrl && (
         <iframe
+          ref={iframeRef}
           key={iframeKey}
           src={terragonUrl}
           className="w-full h-full border-0"

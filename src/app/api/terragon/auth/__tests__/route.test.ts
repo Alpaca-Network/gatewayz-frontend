@@ -1,6 +1,22 @@
 import { NextRequest } from "next/server";
 import { POST, GET } from "../route";
-import { createHmac } from "crypto";
+import { createHmac, createDecipheriv } from "crypto";
+
+// Mock fetch for backend validation
+global.fetch = jest.fn();
+
+// Helper to decrypt token payload for testing
+function decryptPayload(encryptedPayload: string, secret: string): Record<string, unknown> {
+  const key = Buffer.from(secret.padEnd(32, "0").slice(0, 32));
+  const [ivB64, encrypted, authTagB64] = encryptedPayload.split(".");
+  const iv = Buffer.from(ivB64, "base64url");
+  const authTag = Buffer.from(authTagB64, "base64url");
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  let decrypted = decipher.update(encrypted, "base64url", "utf8");
+  decrypted += decipher.final("utf8");
+  return JSON.parse(decrypted);
+}
 
 // Store original env
 const originalEnv = process.env;
@@ -10,6 +26,10 @@ describe("API /api/terragon/auth", () => {
     jest.resetModules();
     process.env = { ...originalEnv };
     process.env.GATEWAYZ_AUTH_BRIDGE_SECRET = "test-secret-key-for-testing";
+    // Don't set BACKEND_URL to skip backend validation in tests
+    delete process.env.BACKEND_URL;
+    delete process.env.NEXT_PUBLIC_BACKEND_URL;
+    (global.fetch as jest.Mock).mockReset();
   });
 
   afterAll(() => {
@@ -36,12 +56,38 @@ describe("API /api/terragon/auth", () => {
       expect(data.error).toBe("Missing authorization header");
     });
 
-    it("should return 401 when API key is invalid", async () => {
+    it("should return 401 when API key format is invalid", async () => {
       const request = new NextRequest("http://localhost/api/terragon/auth", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: "Bearer abc",
+        },
+        body: JSON.stringify({
+          userId: "user-123",
+          email: "test@example.com",
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(401);
+
+      const data = await response.json();
+      expect(data.error).toBe("Invalid API key format");
+    });
+
+    it("should return 401 when backend validation fails", async () => {
+      process.env.BACKEND_URL = "https://api.gatewayz.ai";
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 401,
+      });
+
+      const request = new NextRequest("http://localhost/api/terragon/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer gw_live_fake_api_key_12345",
         },
         body: JSON.stringify({
           userId: "user-123",
@@ -97,8 +143,9 @@ describe("API /api/terragon/auth", () => {
       expect(data.error).toBe("Missing required fields: userId, email");
     });
 
-    it("should generate a valid signed token", async () => {
+    it("should generate a valid encrypted and signed token", async () => {
       const apiKey = "gw_live_valid_api_key_12345";
+      const secret = "test-secret-key-for-testing";
       const request = new NextRequest("http://localhost/api/terragon/auth", {
         method: "POST",
         headers: {
@@ -120,30 +167,32 @@ describe("API /api/terragon/auth", () => {
       expect(data.token).toBeDefined();
       expect(data.expiresAt).toBeDefined();
 
-      // Verify token structure (base64url.signature)
-      const tokenParts = data.token.split(".");
-      expect(tokenParts).toHaveLength(2);
+      // Token format: iv.encrypted.authTag.signature (4 parts total)
+      const lastDotIndex = data.token.lastIndexOf(".");
+      const encryptedPayload = data.token.slice(0, lastDotIndex);
+      const signature = data.token.slice(lastDotIndex + 1);
 
-      // Decode and verify payload
-      const payloadJson = Buffer.from(tokenParts[0], "base64url").toString("utf-8");
-      const payload = JSON.parse(payloadJson);
+      // Verify signature
+      const expectedSig = createHmac("sha256", secret)
+        .update(encryptedPayload)
+        .digest("base64url");
+      expect(signature).toBe(expectedSig);
 
+      // Decrypt and verify payload
+      const payload = decryptPayload(encryptedPayload, secret);
       expect(payload.gwUserId).toBe("user-123");
       expect(payload.email).toBe("test@example.com");
       expect(payload.username).toBe("testuser");
       expect(payload.tier).toBe("pro");
-      expect(payload.apiKey).toBe(apiKey);
+      // API key should NOT be in payload (only keyHash)
+      expect(payload.apiKey).toBeUndefined();
+      expect(payload.keyHash).toBeDefined();
       expect(payload.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
       expect(payload.iat).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
-
-      // Verify signature
-      const expectedSig = createHmac("sha256", "test-secret-key-for-testing")
-        .update(payloadJson)
-        .digest("base64url");
-      expect(tokenParts[1]).toBe(expectedSig);
     });
 
     it("should use email prefix as username when username not provided", async () => {
+      const secret = "test-secret-key-for-testing";
       const request = new NextRequest("http://localhost/api/terragon/auth", {
         method: "POST",
         headers: {
@@ -160,13 +209,15 @@ describe("API /api/terragon/auth", () => {
       expect(response.status).toBe(200);
 
       const data = await response.json();
-      const payloadJson = Buffer.from(data.token.split(".")[0], "base64url").toString("utf-8");
-      const payload = JSON.parse(payloadJson);
+      const lastDotIndex = data.token.lastIndexOf(".");
+      const encryptedPayload = data.token.slice(0, lastDotIndex);
+      const payload = decryptPayload(encryptedPayload, secret);
 
       expect(payload.username).toBe("test");
     });
 
     it("should default tier to free when not provided", async () => {
+      const secret = "test-secret-key-for-testing";
       const request = new NextRequest("http://localhost/api/terragon/auth", {
         method: "POST",
         headers: {
@@ -183,13 +234,15 @@ describe("API /api/terragon/auth", () => {
       expect(response.status).toBe(200);
 
       const data = await response.json();
-      const payloadJson = Buffer.from(data.token.split(".")[0], "base64url").toString("utf-8");
-      const payload = JSON.parse(payloadJson);
+      const lastDotIndex = data.token.lastIndexOf(".");
+      const encryptedPayload = data.token.slice(0, lastDotIndex);
+      const payload = decryptPayload(encryptedPayload, secret);
 
       expect(payload.tier).toBe("free");
     });
 
     it("should set expiration to 1 hour from now", async () => {
+      const secret = "test-secret-key-for-testing";
       const request = new NextRequest("http://localhost/api/terragon/auth", {
         method: "POST",
         headers: {
@@ -206,12 +259,44 @@ describe("API /api/terragon/auth", () => {
       const response = await POST(request);
       const data = await response.json();
 
-      const payloadJson = Buffer.from(data.token.split(".")[0], "base64url").toString("utf-8");
-      const payload = JSON.parse(payloadJson);
+      const lastDotIndex = data.token.lastIndexOf(".");
+      const encryptedPayload = data.token.slice(0, lastDotIndex);
+      const payload = decryptPayload(encryptedPayload, secret);
 
       // Should expire approximately 1 hour from now (with some tolerance)
-      expect(payload.exp - now).toBeGreaterThanOrEqual(3590);
-      expect(payload.exp - now).toBeLessThanOrEqual(3610);
+      expect((payload.exp as number) - now).toBeGreaterThanOrEqual(3590);
+      expect((payload.exp as number) - now).toBeLessThanOrEqual(3610);
+    });
+
+    it("should validate API key against backend when BACKEND_URL is set", async () => {
+      process.env.BACKEND_URL = "https://api.gatewayz.ai";
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ user_id: "user-123" }),
+      });
+
+      const request = new NextRequest("http://localhost/api/terragon/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer gw_live_valid_api_key_12345",
+        },
+        body: JSON.stringify({
+          userId: "user-123",
+          email: "test@example.com",
+        }),
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(200);
+
+      // Verify backend was called
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://api.gatewayz.ai/api/user/me",
+        expect.objectContaining({
+          headers: { Authorization: "Bearer gw_live_valid_api_key_12345" },
+        })
+      );
     });
   });
 

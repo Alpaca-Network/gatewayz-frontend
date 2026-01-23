@@ -1,23 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac } from "crypto";
+import { createHmac, createCipheriv, randomBytes } from "crypto";
 import { handleApiError } from "@/app/api/middleware/error-handler";
+
+/**
+ * Validate API key against the backend to ensure authenticity
+ */
+async function validateApiKeyWithBackend(apiKey: string): Promise<{ valid: boolean; userId?: string }> {
+  const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL;
+  if (!backendUrl) {
+    console.warn("[API /api/terragon/auth] BACKEND_URL not configured, skipping backend validation");
+    return { valid: true }; // Allow in dev without backend
+  }
+
+  try {
+    const response = await fetch(`${backendUrl}/api/user/me`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return { valid: true, userId: data.user_id };
+    }
+    return { valid: false };
+  } catch (error) {
+    console.error("[API /api/terragon/auth] Backend validation error:", error);
+    // On network error, fail closed for security
+    return { valid: false };
+  }
+}
+
+/**
+ * Encrypt payload using AES-256-GCM
+ * Returns: iv.ciphertext.authTag (all base64url encoded)
+ */
+function encryptPayload(payload: string, secret: string): string {
+  const key = Buffer.from(secret.padEnd(32, "0").slice(0, 32)); // Ensure 32 bytes
+  const iv = randomBytes(12); // 12 bytes for GCM
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+
+  let encrypted = cipher.update(payload, "utf8", "base64url");
+  encrypted += cipher.final("base64url");
+  const authTag = cipher.getAuthTag().toString("base64url");
+
+  return `${iv.toString("base64url")}.${encrypted}.${authTag}`;
+}
 
 /**
  * POST /api/terragon/auth
  *
- * Generate an HMAC-signed token for authenticating with Terragon.
+ * Generate an encrypted, HMAC-signed token for authenticating with Terragon.
  * This creates a bridge between GatewayZ (Privy) auth and Terragon's auth system.
  *
- * The token contains:
+ * Security features:
+ * - API key is validated against the backend before issuing tokens
+ * - Payload is encrypted with AES-256-GCM (not just base64 encoded)
+ * - Token includes HMAC signature for integrity verification
+ * - Short expiration time (1 hour)
+ *
+ * The token payload contains:
  * - gwUserId: GatewayZ user ID
  * - email: User's email
  * - username: User's display name
  * - tier: Subscription tier
- * - apiKey: GatewayZ API key (for API calls from Terragon)
+ * - keyHash: Hash of API key (not the key itself)
  * - exp: Expiration timestamp (1 hour from now)
  * - iat: Issued at timestamp
  *
- * Token format: base64url(payload).hmac_signature
+ * Token format: encrypted_payload.hmac_signature
  */
 export async function POST(request: NextRequest) {
   try {
@@ -32,6 +83,15 @@ export async function POST(request: NextRequest) {
 
     const apiKey = authHeader.slice(7);
     if (!apiKey || apiKey.length < 10) {
+      return NextResponse.json(
+        { error: "Invalid API key format" },
+        { status: 401 }
+      );
+    }
+
+    // Validate API key against the backend
+    const validation = await validateApiKeyWithBackend(apiKey);
+    if (!validation.valid) {
       return NextResponse.json(
         { error: "Invalid API key" },
         { status: 401 }
@@ -59,26 +119,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create token payload
+    // Create token payload - note: we store a hash of the API key, not the key itself
     const now = Math.floor(Date.now() / 1000);
+    const keyHash = createHmac("sha256", bridgeSecret)
+      .update(apiKey)
+      .digest("base64url")
+      .slice(0, 16); // Short hash for identification, not full key
+
     const payload = {
       gwUserId: userId,
       email,
       username: username || email.split("@")[0],
       tier: tier || "free",
-      apiKey, // Include API key so Terragon can make API calls on behalf of user
+      keyHash, // Only store a hash, not the actual API key
       exp: now + 3600, // 1 hour expiration
       iat: now,
     };
 
-    // Sign the payload with HMAC-SHA256
+    // Encrypt the payload with AES-256-GCM
     const payloadJson = JSON.stringify(payload);
-    const payloadB64 = Buffer.from(payloadJson).toString("base64url");
+    const encryptedPayload = encryptPayload(payloadJson, bridgeSecret);
+
+    // Sign the encrypted payload with HMAC-SHA256 for integrity
     const signature = createHmac("sha256", bridgeSecret)
-      .update(payloadJson)
+      .update(encryptedPayload)
       .digest("base64url");
 
-    const token = `${payloadB64}.${signature}`;
+    const token = `${encryptedPayload}.${signature}`;
 
     console.log("[API /api/terragon/auth] Generated auth token for user", {
       userId,
