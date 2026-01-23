@@ -34,6 +34,12 @@ import { isFreeModel as checkIsFreeModel, getSourceGateway, formatPricingForDisp
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 
+// Per-gateway pricing information
+interface GatewayPricing {
+  prompt: string;
+  completion: string;
+}
+
 interface Model {
   id: string;
   name: string;
@@ -52,6 +58,7 @@ interface Model {
   provider_slugs?: string[]; // NEW: Array of all providers offering this model
   source_gateways?: string[]; // Array of all gateways offering this model
   source_gateway?: string; // Keep for backwards compatibility
+  gateway_pricing?: Record<string, GatewayPricing>; // Per-gateway pricing map
   created?: number;
   is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
   is_free?: boolean; // Only true for OpenRouter models with :free suffix
@@ -173,6 +180,195 @@ const ModelTableHeader = React.memo(function ModelTableHeader() {
       <div className="text-right">Input ($/1M)</div>
       <div className="text-right">Output ($/1M)</div>
       <div className="text-right">Context</div>
+    </div>
+  );
+});
+
+// Provider sub-row component for expanded view
+const ProviderSubRow = React.memo(function ProviderSubRow({
+  gateway,
+  pricing,
+  isLast
+}: {
+  gateway: string;
+  pricing: GatewayPricing;
+  isLast: boolean;
+}) {
+  const normalizedGateway = gateway.replace(/^@/, '').toLowerCase();
+  const gatewayConfig = GATEWAY_CONFIG[normalizedGateway] || {
+    name: gateway,
+    color: 'bg-gray-500'
+  };
+  const inputCost = formatPricingForDisplay(pricing.prompt, gateway);
+  const outputCost = formatPricingForDisplay(pricing.completion, gateway);
+
+  return (
+    <div className={`grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-2 px-4 pl-12 bg-muted/10 items-center ${!isLast ? 'border-b border-border/30' : ''}`}>
+      {/* Empty space for alignment */}
+      <div className="min-w-0" />
+
+      {/* Gateway/Provider name with badge */}
+      <div className="flex items-center gap-2">
+        <Badge
+          className={`${gatewayConfig.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
+          variant="secondary"
+        >
+          {gatewayConfig.icon}
+          {gatewayConfig.name}
+        </Badge>
+      </div>
+
+      {/* Input Price */}
+      <div className="text-right text-sm tabular-nums text-muted-foreground">
+        ${inputCost}
+      </div>
+
+      {/* Output Price */}
+      <div className="text-right text-sm tabular-nums text-muted-foreground">
+        ${outputCost}
+      </div>
+
+      {/* Empty - context is same for all providers */}
+      <div className="text-right text-sm tabular-nums text-muted-foreground">
+        -
+      </div>
+    </div>
+  );
+});
+
+// Grouped model table row with expandable provider sub-rows
+const GroupedModelTableRow = React.memo(function GroupedModelTableRow({ model }: { model: Model }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = checkIsFreeModel(model);
+  const sourceGateway = getSourceGateway(model);
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
+
+  // Get all gateways with pricing
+  const gatewayPricing = model.gateway_pricing || {};
+  const gateways = Object.keys(gatewayPricing);
+  const hasMultipleProviders = gateways.length > 1;
+
+  // For display, use the best pricing (lowest input cost)
+  const bestGateway = useMemo(() => {
+    if (gateways.length === 0) return sourceGateway;
+    let best = gateways[0];
+    let bestInputPrice = Infinity;
+    for (const gw of gateways) {
+      const price = parseFloat(gatewayPricing[gw]?.prompt || '999999');
+      if (price < bestInputPrice) {
+        bestInputPrice = price;
+        best = gw;
+      }
+    }
+    return best;
+  }, [gateways, gatewayPricing, sourceGateway]);
+
+  const displayPricing = gatewayPricing[bestGateway] || model.pricing;
+  const inputCost = displayPricing ? formatPricingForDisplay(displayPricing.prompt, bestGateway) : null;
+  const outputCost = displayPricing ? formatPricingForDisplay(displayPricing.completion, bestGateway) : null;
+
+  // Format context as number with commas
+  const formatContext = (length: number | undefined | null) => {
+    if (length === undefined || length === null || length <= 0) return '-';
+    return length.toLocaleString();
+  };
+
+  // Get provider display name
+  const providerDisplay = model.provider_slug?.replace(/^@/, '') || 'Unknown';
+
+  return (
+    <div>
+      {/* Main row */}
+      <div
+        className={`grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-3 px-4 hover:bg-muted/50 transition-colors items-center ${hasMultipleProviders ? 'cursor-pointer' : ''}`}
+        onClick={hasMultipleProviders ? () => setIsExpanded(!isExpanded) : undefined}
+      >
+        {/* Model Name & ID */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {hasMultipleProviders && (
+              <button
+                className="flex-shrink-0 p-0.5 hover:bg-muted rounded"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExpanded(!isExpanded);
+                }}
+              >
+                {isExpanded ? (
+                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            )}
+            <Link href={modelUrl} className="group flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+              <span className="font-medium text-primary group-hover:underline truncate block">
+                {model.name}
+              </span>
+              <span className="text-xs text-muted-foreground font-mono truncate block mt-0.5">
+                {model.id}
+              </span>
+            </Link>
+            {isFree && (
+              <Badge className="bg-green-600 text-white hover:bg-green-700 text-[10px] px-1.5 py-0 h-5 flex-shrink-0">
+                Free
+              </Badge>
+            )}
+            {hasMultipleProviders && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 flex-shrink-0">
+                {gateways.length} providers
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Provider/Developer */}
+        <div className="text-sm text-muted-foreground truncate">
+          <span className="text-foreground/80">{providerDisplay}</span>
+        </div>
+
+        {/* Input Price (best/lowest) */}
+        <div className="text-right text-sm tabular-nums">
+          {hasPricing && inputCost !== null ? (
+            <span className={hasMultipleProviders ? 'text-green-600 font-medium' : ''}>
+              {isFree ? '$0' : `$${inputCost}`}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </div>
+
+        {/* Output Price (best/lowest) */}
+        <div className="text-right text-sm tabular-nums">
+          {hasPricing && outputCost !== null ? (
+            <span className={hasMultipleProviders ? 'text-green-600 font-medium' : ''}>
+              {isFree ? '$0' : `$${outputCost}`}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </div>
+
+        {/* Context Length */}
+        <div className="text-right text-sm tabular-nums">
+          {formatContext(model.context_length)}
+        </div>
+      </div>
+
+      {/* Expanded provider sub-rows */}
+      {isExpanded && hasMultipleProviders && (
+        <div className="border-t border-border/30">
+          {gateways.map((gateway, index) => (
+            <ProviderSubRow
+              key={gateway}
+              gateway={gateway}
+              pricing={gatewayPricing[gateway]}
+              isLast={index === gateways.length - 1}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 });
@@ -1270,7 +1466,7 @@ export default function ModelsClient({
               <div className="divide-y divide-border/50">
                 {visibleModels.map((model, index) => (
                   <div key={model.id} className={index % 2 === 1 ? 'bg-muted/20' : ''}>
-                    <ModelTableRow model={model} />
+                    <GroupedModelTableRow model={model} />
                   </div>
                 ))}
               </div>

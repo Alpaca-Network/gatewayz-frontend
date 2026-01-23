@@ -21,6 +21,12 @@ import { transformStaticModel } from '@/lib/model-detail-utils';
  */
 export const revalidate = 60; // Revalidate every 60 seconds in server mode
 
+// Per-gateway pricing information
+interface GatewayPricing {
+  prompt: string;
+  completion: string;
+}
+
 interface Model {
   id: string;
   name: string;
@@ -38,6 +44,7 @@ interface Model {
   provider_slug: string;
   source_gateway?: string; // From API, used to populate source_gateways
   source_gateways: string[]; // Changed from source_gateway to array
+  gateway_pricing?: Record<string, GatewayPricing>; // Per-gateway pricing map
   created?: number;
 }
 
@@ -60,6 +67,9 @@ function deduplicateModels(models: Model[]): Model[] {
 
     const dedupKey = `${normalizedName}:::${model.provider_slug || 'unknown'}`;
 
+    // Get the gateway for this model instance
+    const modelGateway = model.source_gateway || (model.source_gateways?.[0]) || 'unknown';
+
     // Merge models from multiple gateways
     if (modelMap.has(dedupKey)) {
       const existing = modelMap.get(dedupKey)!;
@@ -69,6 +79,20 @@ function deduplicateModels(models: Model[]): Model[] {
       const newGateways = model.source_gateways || [];
       const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
 
+      // Merge gateway_pricing - preserve pricing from each gateway
+      const existingPricing = existing.gateway_pricing || {};
+      const newPricing: Record<string, GatewayPricing> = {};
+
+      // Add pricing from current model's gateway if available
+      if (model.pricing && modelGateway) {
+        newPricing[modelGateway] = {
+          prompt: model.pricing.prompt,
+          completion: model.pricing.completion
+        };
+      }
+
+      const combinedPricing = { ...existingPricing, ...newPricing };
+
       // Calculate data completeness score
       const existingScore = (existing.description ? 1 : 0) +
                             (existing.pricing?.prompt ? 1 : 0) +
@@ -77,15 +101,27 @@ function deduplicateModels(models: Model[]): Model[] {
                        (model.pricing?.prompt ? 1 : 0) +
                        (model.context_length > 0 ? 1 : 0);
 
-      // Keep model with more complete data
-      const mergedModel = newScore > existingScore ? model : existing;
+      // Keep model with more complete data but preserve all gateway pricing
+      const mergedModel = newScore > existingScore ? { ...model } : { ...existing };
       mergedModel.source_gateways = combinedGateways;
+      mergedModel.gateway_pricing = combinedPricing;
       modelMap.set(dedupKey, mergedModel);
     } else {
-      // First occurrence - ensure source_gateways is an array
+      // First occurrence - ensure source_gateways is an array and initialize gateway_pricing
       if (!model.source_gateways) {
         model.source_gateways = model.source_gateway ? [model.source_gateway] : [];
       }
+
+      // Initialize gateway_pricing with this model's pricing
+      if (model.pricing && modelGateway) {
+        model.gateway_pricing = {
+          [modelGateway]: {
+            prompt: model.pricing.prompt,
+            completion: model.pricing.completion
+          }
+        };
+      }
+
       modelMap.set(dedupKey, model);
     }
   }
