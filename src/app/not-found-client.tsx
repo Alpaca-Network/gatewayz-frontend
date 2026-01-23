@@ -40,11 +40,24 @@ export default function NotFoundClient() {
   const { isPlaying, generation, speed, toggle, reset, setSpeed, play } = gameState;
   const cellSize = useCellSize();
 
-  // Auto-start the game on mount
+  // Auto-start the game on mount, using Page Visibility API for desktop compatibility
   useEffect(() => {
     // Small delay to let the grid initialize first
     const timer = setTimeout(() => {
-      play();
+      // Check if page is visible before starting
+      if (document.visibilityState === 'visible') {
+        play();
+      } else {
+        // Wait for page to become visible (handles desktop browser tabs, Telegram browser, etc.)
+        const handleVisibilityChange = () => {
+          if (document.visibilityState === 'visible') {
+            play();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+          }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     }, 100);
     return () => clearTimeout(timer);
   }, [play]);
@@ -141,7 +154,7 @@ export default function NotFoundClient() {
 
           {/* Instructions */}
           <p className="text-center text-xs text-muted-foreground">
-            Click or tap on the grid to toggle cells. Adjust speed with the
+            Click or drag on the grid to draw cells. Adjust speed with the
             slider.
           </p>
         </div>

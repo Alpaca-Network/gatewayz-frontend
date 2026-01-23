@@ -306,6 +306,119 @@ describe('useGameOfLife', () => {
     });
   });
 
+  describe('setCell', () => {
+    it('sets a dead cell to alive', () => {
+      const { result } = renderHook(() =>
+        useGameOfLife({ initialCols: 10, initialRows: 10 })
+      );
+
+      // Find a dead cell (corner is likely dead in 404 pattern)
+      const row = 0;
+      const col = 0;
+
+      // First ensure it's dead by setting to false
+      act(() => {
+        result.current.setCell(row, col, false);
+      });
+      expect(result.current.grid[row][col]).toBe(false);
+
+      // Now set to alive
+      act(() => {
+        result.current.setCell(row, col, true);
+      });
+      expect(result.current.grid[row][col]).toBe(true);
+    });
+
+    it('sets an alive cell to dead', () => {
+      const { result } = renderHook(() =>
+        useGameOfLife({ initialCols: 10, initialRows: 10 })
+      );
+
+      const row = 0;
+      const col = 0;
+
+      // First ensure it's alive
+      act(() => {
+        result.current.setCell(row, col, true);
+      });
+      expect(result.current.grid[row][col]).toBe(true);
+
+      // Now set to dead
+      act(() => {
+        result.current.setCell(row, col, false);
+      });
+      expect(result.current.grid[row][col]).toBe(false);
+    });
+
+    it('does not trigger update when setting to same state', () => {
+      const { result } = renderHook(() =>
+        useGameOfLife({ initialCols: 10, initialRows: 10 })
+      );
+
+      // Set to true
+      act(() => {
+        result.current.setCell(0, 0, true);
+      });
+      const gridAfterFirst = result.current.grid;
+
+      // Set to true again - should return same reference
+      act(() => {
+        result.current.setCell(0, 0, true);
+      });
+
+      // The grid reference should be the same (no unnecessary re-render)
+      expect(result.current.grid).toBe(gridAfterFirst);
+    });
+
+    it('handles negative row index gracefully', () => {
+      const { result } = renderHook(() => useGameOfLife());
+      const gridBefore = JSON.stringify(result.current.grid);
+
+      act(() => {
+        result.current.setCell(-1, 5, true);
+      });
+
+      expect(JSON.stringify(result.current.grid)).toBe(gridBefore);
+    });
+
+    it('handles negative col index gracefully', () => {
+      const { result } = renderHook(() => useGameOfLife());
+      const gridBefore = JSON.stringify(result.current.grid);
+
+      act(() => {
+        result.current.setCell(5, -1, true);
+      });
+
+      expect(JSON.stringify(result.current.grid)).toBe(gridBefore);
+    });
+
+    it('handles out of bounds row gracefully', () => {
+      const { result } = renderHook(() =>
+        useGameOfLife({ initialCols: 10, initialRows: 10 })
+      );
+      const gridBefore = JSON.stringify(result.current.grid);
+
+      act(() => {
+        result.current.setCell(100, 5, true);
+      });
+
+      expect(JSON.stringify(result.current.grid)).toBe(gridBefore);
+    });
+
+    it('handles out of bounds col gracefully', () => {
+      const { result } = renderHook(() =>
+        useGameOfLife({ initialCols: 10, initialRows: 10 })
+      );
+      const gridBefore = JSON.stringify(result.current.grid);
+
+      act(() => {
+        result.current.setCell(5, 100, true);
+      });
+
+      expect(JSON.stringify(result.current.grid)).toBe(gridBefore);
+    });
+  });
+
   describe('setGridSize', () => {
     it('updates grid size', () => {
       const { result } = renderHook(() => useGameOfLife());
