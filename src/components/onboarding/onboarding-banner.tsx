@@ -63,6 +63,12 @@ export function OnboardingBanner() {
         completed: taskState.welcome || true,
       },
       {
+        id: 'apikey',
+        title: 'Create Your API Key',
+        path: '/settings/keys',
+        completed: taskState.apikey || false,
+      },
+      {
         id: 'chat',
         title: 'Start Your First Chat',
         path: '/chat',
