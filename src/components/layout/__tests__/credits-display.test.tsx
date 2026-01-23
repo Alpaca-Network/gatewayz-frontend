@@ -160,6 +160,8 @@ describe('CreditsDisplay', () => {
         credits: 75,
         tier: 'max',
         subscription_status: 'active',
+        subscription_allowance: 75, // Tiered credits
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -168,7 +170,7 @@ describe('CreditsDisplay', () => {
 
       // Should show MAX badge
       expect(screen.getByText('MAX')).toBeInTheDocument();
-      // Should show credit amount in progress bar
+      // Should show subscription allowance in progress bar
       expect(screen.getByText('$75')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
@@ -185,6 +187,8 @@ describe('CreditsDisplay', () => {
         credits: 75,
         tier: 'MAX' as any, // Simulate backend sending uppercase
         subscription_status: 'active',
+        subscription_allowance: 75,
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);

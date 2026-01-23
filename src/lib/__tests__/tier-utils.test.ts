@@ -91,6 +91,7 @@ describe('tier-utils', () => {
         monthlyPrice: null,
         creditAllocation: 0,
         isSubscription: false,
+        monthlyAllowance: 0, // No subscription allowance for basic tier
       });
     });
 
@@ -101,6 +102,7 @@ describe('tier-utils', () => {
         monthlyPrice: 1000,
         creditAllocation: 1000, // $10 equivalent in credits (cents)
         isSubscription: true,
+        monthlyAllowance: 1500, // $15 subscription allowance (in cents)
       });
     });
 
@@ -111,6 +113,7 @@ describe('tier-utils', () => {
         monthlyPrice: 7500,
         creditAllocation: 15000,
         isSubscription: true,
+        monthlyAllowance: 15000, // $150 subscription allowance (in cents)
       });
     });
   });
