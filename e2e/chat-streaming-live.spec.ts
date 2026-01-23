@@ -352,7 +352,7 @@ test.describe('Streaming - Live API Tests', () => {
 
         await mockChatAPI();
         await page.goto('/chat');
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('domcontentloaded');
         await expect(page.locator('body')).toBeVisible();
       });
     }
