@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac, createCipheriv, randomBytes } from "crypto";
+import { createHmac, createCipheriv, randomBytes, hkdfSync } from "crypto";
 import { handleApiError } from "@/app/api/middleware/error-handler";
 
 /**
@@ -32,11 +32,19 @@ async function validateApiKeyWithBackend(apiKey: string): Promise<{ valid: boole
 }
 
 /**
+ * Derive a 32-byte encryption key from the secret using HKDF.
+ * This is cryptographically secure unlike simple padding.
+ */
+function deriveKey(secret: string): Buffer {
+  return Buffer.from(hkdfSync("sha256", secret, "", "gatewayz-terragon-auth", 32));
+}
+
+/**
  * Encrypt payload using AES-256-GCM
  * Returns: iv.ciphertext.authTag (all base64url encoded)
  */
 function encryptPayload(payload: string, secret: string): string {
-  const key = Buffer.from(secret.padEnd(32, "0").slice(0, 32)); // Ensure 32 bytes
+  const key = deriveKey(secret);
   const iv = randomBytes(12); // 12 bytes for GCM
   const cipher = createCipheriv("aes-256-gcm", key, iv);
 
