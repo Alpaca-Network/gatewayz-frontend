@@ -513,3 +513,17 @@ body {
 .surprise-me-shimmer {
   animation: surprise-shimmer-glow 2.5s ease-in-out infinite, surprise-twinkle 3s ease-in-out infinite;
 }
+
+/* Subtle bounce animation for eye-catching effect on surprise me button */
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s ease-in-out infinite;
+}
