@@ -6,7 +6,7 @@ import { getUserData } from '@/lib/api';
 import type { UserTier } from '@/lib/api';
 import { Coins, Crown, Sparkles, AlertCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { getTrialDaysRemaining, isOnTrial as checkIsOnTrial, isTrialExpired as checkIsTrialExpired, TIER_CONFIG } from '@/lib/tier-utils';
+import { getTrialDaysRemaining, isOnTrial as checkIsOnTrial, isTrialExpired as checkIsTrialExpired, TIER_CONFIG, getUserTier } from '@/lib/tier-utils';
 
 export function CreditsDisplay() {
   const [credits, setCredits] = useState<number | null>(null);
@@ -39,16 +39,17 @@ export function CreditsDisplay() {
           return prevCredits;
         });
 
-        // Normalize tier to lowercase to handle case sensitivity
-        const normalizedTier = userData.tier?.toLowerCase() as UserTier | undefined;
+        // Use getUserTier to properly determine tier from userData
+        // This handles cases where tier field is missing but subscription_status is active
+        const computedTier = getUserTier(userData);
         if (process.env.NODE_ENV === 'development') {
-          console.log('[CreditsDisplay] Normalized tier:', { original: userData.tier, normalized: normalizedTier, isPro: normalizedTier === 'pro', isMax: normalizedTier === 'max' });
+          console.log('[CreditsDisplay] Computed tier:', { original: userData.tier, computed: computedTier, subscription_status: userData.subscription_status, isPro: computedTier === 'pro', isMax: computedTier === 'max' });
         }
 
         // Only update tier if it has changed
         setTier(prevTier => {
-          if (prevTier !== normalizedTier) {
-            return normalizedTier;
+          if (prevTier !== computedTier) {
+            return computedTier;
           }
           return prevTier;
         });

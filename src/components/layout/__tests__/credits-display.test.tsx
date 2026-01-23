@@ -693,6 +693,62 @@ describe('CreditsDisplay', () => {
     });
   });
 
+  describe('Missing Tier Field with Active Subscription (getUserTier fix)', () => {
+    it('should show PRO badge when tier field is missing but subscription_status is active', () => {
+      // This is the key bug fix scenario - backend sometimes returns active subscription
+      // but tier field is undefined. getUserTier should infer 'pro' in this case.
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 3,
+        tier: undefined, // Missing tier field!
+        tier_display_name: 'Pro', // But has display name
+        subscription_status: 'active',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show Pro badge (using tier_display_name since it's provided)
+      expect(screen.getByText('Pro')).toBeInTheDocument();
+      // Should show credit amount
+      expect(screen.getByText('$3')).toBeInTheDocument();
+      // Should show Add Credits button
+      expect(screen.getByText('Add Credits')).toBeInTheDocument();
+    });
+
+    it('should show PRO badge when tier field is missing and tier_display_name is also missing but subscription is active', () => {
+      // Edge case: both tier and tier_display_name are missing, but subscription is active
+      // getUserTier should default to 'pro', display falls back to uppercase 'PRO'
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 5,
+        tier: undefined,
+        tier_display_name: undefined,
+        subscription_status: 'active',
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge (fallback to uppercase since tier_display_name is missing)
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      // Should show Add Credits button
+      expect(screen.getByText('Add Credits')).toBeInTheDocument();
+    });
+  });
+
   describe('Real-time Updates', () => {
     it('should update when localStorage changes', async () => {
       const initialUserData: UserData = {
