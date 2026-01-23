@@ -116,13 +116,15 @@ export default function PrivacyPage() {
             : "Response caching has been turned off.",
         });
       } else {
-        throw new Error("Failed to update cache settings");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || errorData.message || "Failed to update cache settings");
       }
     } catch (error) {
       console.error("Error updating cache settings:", error);
+      const errorMessage = error instanceof Error ? error.message : "Please try again later";
       toast({
         title: "Failed to update setting",
-        description: "Please try again later",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
