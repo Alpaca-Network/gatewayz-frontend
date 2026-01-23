@@ -10,7 +10,7 @@ import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 import { sentryMetrics } from '@/lib/sentry-metrics';
-import { getChatApiUrl, isTauriEnvironment } from '@/lib/config';
+import { isTauriEnvironment } from '@/lib/config';
 
 // Stream stopped error for clean cancellation
 class StreamStoppedError extends Error {
@@ -373,12 +373,23 @@ export function useChatStream() {
         // Use flexible route for non-standard gateways UNLESS normalized by a gateway
         const useFlexibleRoute = (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway;
 
-        // Use dynamic endpoint for desktop (direct backend) vs web (Next.js API route)
-        // getChatApiUrl handles Tauri vs web detection internally
+        // Determine the appropriate URL based on environment:
+        // - Tauri desktop: Always use backend API directly at /v1/chat/completions
+        //   (no Next.js server in static export, and ai-sdk-completions is a Next.js-only route)
+        // - Web: Use Next.js API routes as proxy (/api/chat/completions or /api/chat/ai-sdk-completions)
         const isTauri = isTauriEnvironment();
-        const url = useFlexibleRoute
-            ? `${getChatApiUrl('/v1/chat/completions')}?session_id=${sessionId}`
-            : `${getChatApiUrl('/v1/chat/ai-sdk-completions')}?session_id=${sessionId}`;
+        let url: string;
+        if (isTauri) {
+            // Desktop app: Always use /v1/chat/completions directly
+            // The backend only has /v1/chat/completions, not /v1/chat/ai-sdk-completions
+            const backendBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+            url = `${backendBaseUrl}/v1/chat/completions?session_id=${sessionId}`;
+        } else {
+            // Web app: Use Next.js API routes as proxy
+            url = useFlexibleRoute
+                ? `/api/chat/completions?session_id=${sessionId}`
+                : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+        }
 
         debugLog('Route selection', {
             isTauri,
