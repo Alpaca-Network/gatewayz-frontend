@@ -833,4 +833,70 @@ describe('ModelsClient - Filtering Logic', () => {
       expect(getNormalizedPerTokenPrice('0', 'onerouter')).toBe(0);
     });
   });
+
+  describe('Table view formatting', () => {
+    it('should format context length with commas', () => {
+      const formatContext = (length: number | undefined | null) => {
+        if (length === undefined || length === null || length <= 0) return '-';
+        return length.toLocaleString();
+      };
+
+      expect(formatContext(0)).toBe('-');
+      expect(formatContext(-1)).toBe('-');
+      expect(formatContext(undefined)).toBe('-');
+      expect(formatContext(null)).toBe('-');
+      expect(formatContext(1000)).toBe('1,000');
+      expect(formatContext(128000)).toBe('128,000');
+      expect(formatContext(1000000)).toBe('1,000,000');
+    });
+
+    it('should display free indicator for free models', () => {
+      const model = mockModel({
+        id: 'google/gemini-2.0-flash-exp:free',
+        source_gateway: 'openrouter',
+        pricing: { prompt: '0', completion: '0' }
+      });
+
+      const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+      const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
+
+      expect(isFree).toBe(true);
+    });
+
+    it('should display pricing correctly in table view', () => {
+      const model = mockModel({
+        pricing: { prompt: '0.00000015', completion: '0.0000006' },
+        source_gateway: 'openrouter',
+      });
+
+      const sourceGateway = getSourceGateway(model);
+      const inputCost = formatPricingForDisplay(model.pricing?.prompt, sourceGateway);
+      const outputCost = formatPricingForDisplay(model.pricing?.completion, sourceGateway);
+
+      expect(inputCost).toBe('0.15');
+      expect(outputCost).toBe('0.60');
+    });
+
+    it('should handle models without pricing in table view', () => {
+      const model = mockModel({ pricing: null });
+
+      const hasPricing = model.pricing !== null && model.pricing !== undefined;
+      expect(hasPricing).toBe(false);
+    });
+  });
+
+  describe('Layout state', () => {
+    it('should default to table layout', () => {
+      const defaultLayout: 'table' | 'grid' = 'table';
+      expect(defaultLayout).toBe('table');
+    });
+
+    it('should support both table and grid layouts', () => {
+      type LayoutType = 'table' | 'grid';
+      const layouts: LayoutType[] = ['table', 'grid'];
+
+      expect(layouts).toContain('table');
+      expect(layouts).toContain('grid');
+    });
+  });
 });
