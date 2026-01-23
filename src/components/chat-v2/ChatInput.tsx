@@ -53,7 +53,7 @@ import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useCreateSession, useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { useAutoModelSwitch } from "@/lib/hooks/use-auto-model-switch";
-import { useAutoSearchDetection } from "@/lib/hooks/use-auto-search-detection";
+import { useCriticSearchDetection } from "@/lib/hooks/use-critic-search-detection";
 import { useToolDefinitions, filterEnabledTools } from "@/lib/hooks/use-tool-definitions";
 import { useSearchAugmentation } from "@/lib/hooks/use-search-augmentation";
 import { useToast } from "@/hooks/use-toast";
@@ -206,7 +206,7 @@ export function ChatInput() {
   const createSession = useCreateSession();
   const { isStreaming, streamMessage, stopStream } = useChatStream();
   const { checkImageSupport, checkVideoSupport, checkAudioSupport, checkFileSupport } = useAutoModelSwitch();
-  const { shouldAutoEnableSearch } = useAutoSearchDetection();
+  const { checkIfSearchNeeded, isChecking: isCheckingSearch } = useCriticSearchDetection();
   const { data: toolDefinitions } = useToolDefinitions();
   const { augmentWithSearch, isSearching } = useSearchAugmentation();
   const { toast } = useToast();
@@ -400,14 +400,23 @@ export function ChatInput() {
 
     // Auto-enable search if the query needs real-time information
     // Get fresh tools state from store
-    const freshEnabledTools = storeState.enabledTools;
+    let freshEnabledTools = storeState.enabledTools ?? [];
     const freshAutoEnableSearch = storeState.autoEnableSearch;
 
-    // Check if we should auto-enable web search for this query
-    if (shouldAutoEnableSearch(currentInputValue, freshSelectedModel, freshAutoEnableSearch)) {
+    // Use critic model to check if we should auto-enable web search
+    // This provides much better accuracy than keyword matching
+    const { needsSearch } = await checkIfSearchNeeded(
+      currentInputValue,
+      freshSelectedModel,
+      freshAutoEnableSearch
+    );
+
+    if (needsSearch) {
       // Auto-enable web search if not already enabled
       if (!freshEnabledTools.includes('web_search')) {
         toggleTool('web_search');
+        // Get fresh state after toggle to ensure we have the updated tools list
+        freshEnabledTools = useChatUIStore.getState().enabledTools ?? [];
       }
     }
 
@@ -460,8 +469,9 @@ export function ChatInput() {
 
     // Check if we need search augmentation (search enabled but model doesn't support tools)
     let finalMessageText = messageText;
+    // Use freshEnabledTools which was updated after the critic check
     const currentEnabledTools = useChatUIStore.getState().enabledTools ?? [];
-    const searchEnabled = currentEnabledTools.includes('web_search');
+    const searchEnabled = currentEnabledTools.includes('web_search') || (freshEnabledTools ?? []).includes('web_search');
     const modelSupportsTools = freshSelectedModel?.supportsTools ?? false;
 
     // If search is enabled but model doesn't support native tools, use search augmentation
@@ -1526,10 +1536,10 @@ export function ChatInput() {
                             e.preventDefault();
                             handleSend();
                         }}
-                        disabled={isSearching || (isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument)}
+                        disabled={isSearching || isCheckingSearch || (isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument)}
                         className={cn("bg-primary", isMobile && "h-10 w-10")}
                     >
-                        {isSearching ? (
+                        {isSearching || isCheckingSearch ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                             <Send className="h-4 w-4" />
