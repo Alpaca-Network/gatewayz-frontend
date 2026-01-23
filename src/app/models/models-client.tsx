@@ -220,12 +220,12 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
 
       {/* Input Price */}
       <div className="text-right text-sm tabular-nums text-muted-foreground">
-        ${inputCost}
+        {inputCost !== null ? `$${inputCost}` : '-'}
       </div>
 
       {/* Output Price */}
       <div className="text-right text-sm tabular-nums text-muted-foreground">
-        ${outputCost}
+        {outputCost !== null ? `$${outputCost}` : '-'}
       </div>
 
       {/* Empty - context is same for all providers */}
@@ -239,7 +239,6 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
 // Grouped model table row with expandable provider sub-rows
 const GroupedModelTableRow = React.memo(function GroupedModelTableRow({ model }: { model: Model }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const hasPricing = model.pricing !== null && model.pricing !== undefined;
   const isFree = checkIsFreeModel(model);
   const sourceGateway = getSourceGateway(model);
   const modelUrl = getModelUrl(model.id, model.provider_slug);
@@ -249,20 +248,27 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({ model }:
   const gateways = Object.keys(gatewayPricing);
   const hasMultipleProviders = gateways.length > 1;
 
+  // Check if we have pricing - either model.pricing or gateway_pricing entries
+  const hasPricing = (model.pricing !== null && model.pricing !== undefined) || gateways.length > 0;
+
+  // Sort gateways by normalized price (lowest first) for consistent display
+  const sortedGateways = useMemo(() => {
+    if (gateways.length === 0) return [];
+    return [...gateways].sort((a, b) => {
+      const priceA = parseFloat(formatPricingForDisplay(gatewayPricing[a]?.prompt, a) || '999999');
+      const priceB = parseFloat(formatPricingForDisplay(gatewayPricing[b]?.prompt, b) || '999999');
+      return priceA - priceB;
+    });
+  }, [gateways, gatewayPricing]);
+
   // For display, use the best pricing (lowest input cost)
+  // We use formatPricingForDisplay to normalize prices to per-million format for fair comparison
+  // since different gateways return prices in different formats (per-token vs per-million)
   const bestGateway = useMemo(() => {
-    if (gateways.length === 0) return sourceGateway;
-    let best = gateways[0];
-    let bestInputPrice = Infinity;
-    for (const gw of gateways) {
-      const price = parseFloat(gatewayPricing[gw]?.prompt || '999999');
-      if (price < bestInputPrice) {
-        bestInputPrice = price;
-        best = gw;
-      }
-    }
-    return best;
-  }, [gateways, gatewayPricing, sourceGateway]);
+    if (sortedGateways.length === 0) return sourceGateway;
+    // First gateway in sorted list is the cheapest
+    return sortedGateways[0];
+  }, [sortedGateways, sourceGateway]);
 
   const displayPricing = gatewayPricing[bestGateway] || model.pricing;
   const inputCost = displayPricing ? formatPricingForDisplay(displayPricing.prompt, bestGateway) : null;
@@ -356,15 +362,15 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({ model }:
         </div>
       </div>
 
-      {/* Expanded provider sub-rows */}
+      {/* Expanded provider sub-rows - sorted by price (lowest first) */}
       {isExpanded && hasMultipleProviders && (
         <div className="border-t border-border/30">
-          {gateways.map((gateway, index) => (
+          {sortedGateways.map((gateway, index) => (
             <ProviderSubRow
               key={gateway}
               gateway={gateway}
               pricing={gatewayPricing[gateway]}
-              isLast={index === gateways.length - 1}
+              isLast={index === sortedGateways.length - 1}
             />
           ))}
         </div>

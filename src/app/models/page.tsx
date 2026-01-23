@@ -74,9 +74,16 @@ function deduplicateModels(models: Model[]): Model[] {
     if (modelMap.has(dedupKey)) {
       const existing = modelMap.get(dedupKey)!;
 
-      // Merge source_gateways arrays
-      const existingGateways = existing.source_gateways || [];
-      const newGateways = model.source_gateways || [];
+      // Merge source_gateways arrays - include source_gateway from both models
+      // to handle models that still use the legacy source_gateway field
+      const existingGateways = Array.from(new Set([
+        ...(existing.source_gateways ?? []),
+        ...(existing.source_gateway ? [existing.source_gateway] : [])
+      ]));
+      const newGateways = Array.from(new Set([
+        ...(model.source_gateways ?? []),
+        ...(model.source_gateway ? [model.source_gateway] : [])
+      ]));
       const combinedGateways = Array.from(new Set([...existingGateways, ...newGateways]));
 
       // Merge gateway_pricing - preserve pricing from each gateway

@@ -155,7 +155,7 @@ describe('GroupedModelTableRow - Grouped Models Display', () => {
       expect(gateways).toContain('together');
     });
 
-    it('should find the best (lowest) priced gateway', () => {
+    it('should find the best (lowest) priced gateway using normalized prices', () => {
       const model = createMockModel({
         gateway_pricing: {
           openrouter: { prompt: '0.000001', completion: '0.000003' }, // $1/M (per-token format)
@@ -167,23 +167,28 @@ describe('GroupedModelTableRow - Grouped Models Display', () => {
       const gatewayPricing = model.gateway_pricing!;
       const gateways = Object.keys(gatewayPricing);
 
-      // Find best gateway (same logic as component - uses raw price values)
-      // Note: The component compares raw prices, which works because it picks lowest
-      // In production, normalized comparison would be needed for cross-gateway accuracy
+      // Find best gateway using normalized prices (same logic as component)
+      // The component uses formatPricingForDisplay to normalize prices to per-million format
+      // for fair comparison across gateways with different pricing formats
+      const { formatPricingForDisplay } = require('@/lib/model-pricing-utils');
       let best = gateways[0];
       let bestInputPrice = Infinity;
       for (const gw of gateways) {
-        const price = parseFloat(gatewayPricing[gw]?.prompt || '999999');
-        if (price < bestInputPrice) {
-          bestInputPrice = price;
+        // Normalize prices to per-million format for fair comparison
+        const normalizedPrice = parseFloat(formatPricingForDisplay(gatewayPricing[gw]?.prompt, gw) || '999999');
+        if (normalizedPrice < bestInputPrice) {
+          bestInputPrice = normalizedPrice;
           best = gw;
         }
       }
 
-      // OpenRouter's per-token 0.000001 is numerically smaller than groq's 0.10
-      // This is expected behavior - the component uses raw price comparison
-      expect(best).toBe('openrouter');
-      expect(bestInputPrice).toBe(0.000001);
+      // After normalization:
+      // - OpenRouter: 0.000001 * 1M = $1.00/M
+      // - Groq: 0.10 = $0.10/M (per-million gateway, stays as is)
+      // - Together: 0.20 = $0.20/M (per-million gateway, stays as is)
+      // So groq ($0.10/M) is actually the cheapest
+      expect(best).toBe('groq');
+      expect(bestInputPrice).toBe(0.10);
     });
 
     it('should show provider count badge text', () => {
@@ -321,6 +326,34 @@ describe('ProviderSubRow - Per-Gateway Pricing Display', () => {
           expect(expectedBorderClass).toContain('border-b');
         }
       });
+    });
+  });
+
+  describe('Gateway sorting', () => {
+    it('should sort gateways by normalized price (lowest first)', () => {
+      const gatewayPricing: Record<string, GatewayPricing> = {
+        openrouter: { prompt: '0.000001', completion: '0.000003' }, // $1/M (per-token format)
+        groq: { prompt: '0.10', completion: '0.40' }, // $0.10/M (per-million format - cheapest)
+        together: { prompt: '0.20', completion: '0.80' }, // $0.20/M (per-million format)
+      };
+
+      const gateways = Object.keys(gatewayPricing);
+      const { formatPricingForDisplay } = require('@/lib/model-pricing-utils');
+
+      // Sort gateways by normalized price (same logic as component)
+      const sortedGateways = [...gateways].sort((a, b) => {
+        const priceA = parseFloat(formatPricingForDisplay(gatewayPricing[a]?.prompt, a) || '999999');
+        const priceB = parseFloat(formatPricingForDisplay(gatewayPricing[b]?.prompt, b) || '999999');
+        return priceA - priceB;
+      });
+
+      // After normalization and sorting:
+      // 1. Groq: $0.10/M (cheapest)
+      // 2. Together: $0.20/M
+      // 3. OpenRouter: $1.00/M (most expensive)
+      expect(sortedGateways[0]).toBe('groq');
+      expect(sortedGateways[1]).toBe('together');
+      expect(sortedGateways[2]).toBe('openrouter');
     });
   });
 });
