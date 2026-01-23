@@ -12,9 +12,14 @@
  * - The Privy SDK tries to access a deleted database
  *
  * This script:
- * 1. Sets up early error handlers to catch these errors before React mounts
- * 2. Suppresses console errors from wallet extensions
- * 3. Catches IndexedDB "Database deleted by request of the user" errors
+ * 1. Pre-configures window.ethereum as a configurable property with getter/setter,
+ *    allowing wallet extensions to redefine it without throwing errors
+ * 2. Sets up early error handlers to catch any remaining errors before React mounts
+ * 3. Suppresses console errors from wallet extensions
+ * 4. Catches IndexedDB "Database deleted by request of the user" errors
+ *
+ * The key fix is pre-defining window.ethereum with { configurable: true } so that
+ * subsequent Object.defineProperty calls from wallet extensions won't fail.
  *
  * Note: This is complementary to the ErrorSuppressor React component, which handles
  * errors after React has mounted.
@@ -22,6 +27,32 @@
 export const ETHEREUM_ERROR_SUPPRESSOR_SCRIPT = `
 (function() {
   'use strict';
+
+  // Pre-configure window.ethereum to be configurable before wallet extensions run.
+  // This prevents "Cannot redefine property: ethereum" errors that occur when
+  // multiple wallet extensions try to define window.ethereum with non-configurable descriptors.
+  // By defining it first as configurable, subsequent definitions won't throw.
+  try {
+    if (typeof window.ethereum === 'undefined') {
+      // Define a placeholder that wallet extensions can override
+      var currentEthereum = null;
+      Object.defineProperty(window, 'ethereum', {
+        get: function() { return currentEthereum; },
+        set: function(val) { currentEthereum = val; },
+        configurable: true,
+        enumerable: true
+      });
+    } else {
+      // ethereum already exists - try to make it configurable for future redefinitions
+      var descriptor = Object.getOwnPropertyDescriptor(window, 'ethereum');
+      if (descriptor && !descriptor.configurable) {
+        // Can't make non-configurable property configurable, but we can suppress errors
+        // The error handlers below will catch any subsequent redefinition attempts
+      }
+    }
+  } catch (e) {
+    // Ignore errors during ethereum property setup - error handlers below will catch issues
+  }
 
   // Patterns for errors to suppress (ethereum/wallet extension errors)
   var suppressPatterns = [
