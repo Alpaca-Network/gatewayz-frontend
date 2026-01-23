@@ -82,15 +82,25 @@ export default function PrivacyPage() {
           const data = await response.json();
           setCacheEnabled(data.enable_butter_cache || false);
           setCacheSystemEnabled(data.system_enabled || false);
-          setSettingsLoaded(true);
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || errorData.message || "Failed to load cache settings");
         }
       } catch (error) {
         console.error("Error loading cache settings:", error);
+        const errorMessage = error instanceof Error ? error.message : "Failed to load cache settings";
+        toast({
+          title: "Failed to load cache settings",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        setSettingsLoaded(true);
       }
     };
 
     loadCacheSettings();
-  }, [isAuthenticated, settingsLoaded]);
+  }, [isAuthenticated, settingsLoaded, toast]);
 
   // Reset on logout
   useEffect(() => {
@@ -240,7 +250,7 @@ export default function PrivacyPage() {
         <h3 className="text-xl font-semibold mb-2">Chat History</h3>
         <p className="text-sm text-muted-foreground">
           Your chat history in the{" "}
-          <Link href="#" className="text-primary underline">
+          <Link href="/chat" className="text-primary underline">
             Chatroom
           </Link>{" "}
           is stored locally on your device. If logging is enabled, only LLM inputs and outputs are
