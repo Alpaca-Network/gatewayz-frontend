@@ -785,6 +785,235 @@ describe('CreditsDisplay', () => {
     });
   });
 
+  describe('Purchased Credits Display for Pro/Max Users', () => {
+    it('should display purchased credits indicator when purchasedCredits > 0 for Pro user', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 20, // $20 total
+        tier: 'pro',
+        subscription_status: 'active',
+        subscription_allowance: 10, // $10 allowance remaining
+        purchased_credits: 10, // $10 purchased
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      // Should show subscription allowance
+      expect(screen.getByText('$10')).toBeInTheDocument();
+      // Should show purchased credits indicator
+      expect(screen.getByText('+$10')).toBeInTheDocument();
+    });
+
+    it('should display purchased credits indicator when purchasedCredits > 0 for Max user', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Max User',
+        email: 'max@example.com',
+        credits: 175, // $175 total
+        tier: 'max',
+        subscription_status: 'active',
+        subscription_allowance: 150, // $150 allowance remaining
+        purchased_credits: 25, // $25 purchased
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show MAX badge
+      expect(screen.getByText('MAX')).toBeInTheDocument();
+      // Should show subscription allowance
+      expect(screen.getByText('$150')).toBeInTheDocument();
+      // Should show purchased credits indicator
+      expect(screen.getByText('+$25')).toBeInTheDocument();
+    });
+
+    it('should NOT display purchased credits indicator when purchasedCredits is 0', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 10,
+        tier: 'pro',
+        subscription_status: 'active',
+        subscription_allowance: 10,
+        purchased_credits: 0, // No purchased credits
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      // Should NOT show purchased credits indicator
+      expect(screen.queryByText(/\+\$/)).not.toBeInTheDocument();
+    });
+
+    it('should NOT display purchased credits indicator when purchasedCredits is undefined', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 10,
+        tier: 'pro',
+        subscription_status: 'active',
+        subscription_allowance: 10,
+        // purchased_credits is undefined
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      // Should NOT show purchased credits indicator
+      expect(screen.queryByText(/\+\$/)).not.toBeInTheDocument();
+    });
+
+    it('should handle fractional purchased credits', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 15,
+        tier: 'pro',
+        subscription_status: 'active',
+        subscription_allowance: 10,
+        purchased_credits: 5.5, // Fractional value
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      // Should show purchased credits (rounded to integer)
+      expect(screen.getByText('+$6')).toBeInTheDocument();
+    });
+
+    it('should use tier_display_name when available for badge text', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 15,
+        tier: 'pro',
+        tier_display_name: 'Pro Plus', // Custom display name
+        subscription_status: 'active',
+        subscription_allowance: 10,
+        purchased_credits: 5,
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show custom tier_display_name
+      expect(screen.getByText('Pro Plus')).toBeInTheDocument();
+    });
+  });
+
+  describe('Progress Bar Color States', () => {
+    it('should show progress bar with appropriate color when allowance is low (<=20%)', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 2,
+        tier: 'pro',
+        subscription_status: 'active',
+        subscription_allowance: 2, // $2 of $15 = ~13% - low
+        purchased_credits: 0,
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge and low credits indicator
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      expect(screen.getByText('$2')).toBeInTheDocument();
+    });
+
+    it('should show progress bar with appropriate color when allowance is medium (20-50%)', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 5,
+        tier: 'pro',
+        subscription_status: 'active',
+        subscription_allowance: 5, // $5 of $15 = ~33% - medium
+        purchased_credits: 0,
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      expect(screen.getByText('$5')).toBeInTheDocument();
+    });
+
+    it('should show progress bar with appropriate color when allowance is high (>50%)', () => {
+      const mockUserData: UserData = {
+        user_id: 1,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'test-privy-id',
+        display_name: 'Pro User',
+        email: 'pro@example.com',
+        credits: 12,
+        tier: 'pro',
+        subscription_status: 'active',
+        subscription_allowance: 12, // $12 of $15 = 80% - high
+        purchased_credits: 0,
+      };
+
+      (getUserData as jest.Mock).mockReturnValue(mockUserData);
+
+      render(<CreditsDisplay />);
+
+      // Should show PRO badge
+      expect(screen.getByText('PRO')).toBeInTheDocument();
+      expect(screen.getByText('$12')).toBeInTheDocument();
+    });
+  });
+
   describe('Real-time Updates', () => {
     it('should update when localStorage changes', async () => {
       const initialUserData: UserData = {

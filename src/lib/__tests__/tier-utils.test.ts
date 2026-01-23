@@ -14,6 +14,8 @@ import {
   getTrialDaysRemaining,
   isTrialExpiringSoon,
   _resetLoggedWarnings,
+  getMonthlyAllowance,
+  getAllowancePercentage,
 } from '../tier-utils';
 import type { UserData, UserTier, SubscriptionStatus } from '../api';
 
@@ -1286,6 +1288,68 @@ describe('tier-utils', () => {
       };
 
       expect(isTrialExpiringSoon(userData)).toBe(false);
+    });
+  });
+
+  describe('getMonthlyAllowance', () => {
+    it('should return 0 for basic tier', () => {
+      expect(getMonthlyAllowance('basic')).toBe(0);
+    });
+
+    it('should return 15 for pro tier ($15.00 = 1500 cents / 100)', () => {
+      expect(getMonthlyAllowance('pro')).toBe(15);
+    });
+
+    it('should return 150 for max tier ($150.00 = 15000 cents / 100)', () => {
+      expect(getMonthlyAllowance('max')).toBe(150);
+    });
+  });
+
+  describe('getAllowancePercentage', () => {
+
+    it('should return 0 when tier has no monthly allowance (basic)', () => {
+      expect(getAllowancePercentage(10, 'basic')).toBe(0);
+    });
+
+    it('should return correct percentage for pro tier', () => {
+      // Pro tier has $15 allowance
+      // $7.50 remaining = 50%
+      expect(getAllowancePercentage(7.5, 'pro')).toBe(50);
+    });
+
+    it('should return 100 when full allowance remains for pro tier', () => {
+      // Pro tier has $15 allowance
+      expect(getAllowancePercentage(15, 'pro')).toBe(100);
+    });
+
+    it('should return 0 when no allowance remains', () => {
+      expect(getAllowancePercentage(0, 'pro')).toBe(0);
+    });
+
+    it('should cap percentage at 100 even if subscription_allowance exceeds max', () => {
+      // If somehow allowance is more than max (shouldn't happen normally)
+      expect(getAllowancePercentage(20, 'pro')).toBe(100);
+    });
+
+    it('should handle negative subscription_allowance by returning 0', () => {
+      // Negative values should be clamped to 0
+      expect(getAllowancePercentage(-5, 'pro')).toBe(0);
+    });
+
+    it('should return correct percentage for max tier', () => {
+      // Max tier has $150 allowance
+      // $75 remaining = 50%
+      expect(getAllowancePercentage(75, 'max')).toBe(50);
+    });
+
+    it('should return 100 when full allowance remains for max tier', () => {
+      // Max tier has $150 allowance
+      expect(getAllowancePercentage(150, 'max')).toBe(100);
+    });
+
+    it('should handle fractional percentages correctly', () => {
+      // Pro tier: $3 of $15 = 20%
+      expect(getAllowancePercentage(3, 'pro')).toBe(20);
     });
   });
 
