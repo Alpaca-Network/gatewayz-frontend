@@ -10,6 +10,7 @@ import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 import { sentryMetrics } from '@/lib/sentry-metrics';
+import { isTauriDesktop } from '@/lib/browser-detection';
 
 // Stream stopped error for clean cancellation
 class StreamStoppedError extends Error {
@@ -371,11 +372,28 @@ export function useChatStream() {
 
         // Use flexible route for non-standard gateways UNLESS normalized by a gateway
         const useFlexibleRoute = (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway;
-        const url = useFlexibleRoute
-            ? `/api/chat/completions?session_id=${sessionId}`
-            : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+
+        // In Tauri desktop app, we need to call the backend API directly
+        // since there's no Next.js server running (static export).
+        // The Next.js API routes act as proxies in the web version.
+        const isTauri = isTauriDesktop();
+        const backendBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+
+        let url: string;
+        if (isTauri) {
+            // Desktop app: Call backend API directly
+            // All providers use the same OpenAI-compatible endpoint
+            url = `${backendBaseUrl}/v1/chat/completions`;
+            debugLog('Using direct backend API for Tauri desktop', { url });
+        } else {
+            // Web app: Use Next.js API routes as proxy
+            url = useFlexibleRoute
+                ? `/api/chat/completions?session_id=${sessionId}`
+                : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+        }
 
         debugLog('Route selection', {
+            isTauri,
             useFlexibleRoute,
             isNonStandardGateway,
             isFireworksModel,
@@ -384,7 +402,7 @@ export function useChatStream() {
             url,
             model: model.value
         });
-        console.log('[Chat Stream] Using', useFlexibleRoute ? 'completions (flexible)' : 'AI SDK', 'route for model:', model.value, 'gateway:', gatewayLower || 'none');
+        console.log('[Chat Stream] Using', isTauri ? 'direct backend API' : (useFlexibleRoute ? 'completions (flexible)' : 'AI SDK'), 'route for model:', model.value, 'gateway:', gatewayLower || 'none');
 
         try {
             // 4. Stream Loop
