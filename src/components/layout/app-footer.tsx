@@ -13,6 +13,7 @@ export function AppFooter() {
   const [isModelsPage, setIsModelsPage] = useState(false);
   const [isSandboxPage, setIsSandboxPage] = useState(false);
   const [isAgentPage, setIsAgentPage] = useState(false);
+  const [isInboxPage, setIsInboxPage] = useState(false);
   const [showFooter, setShowFooter] = useState(false);
   const [hasScrolledPastFold, setHasScrolledPastFold] = useState(false);
 
@@ -21,6 +22,7 @@ export function AppFooter() {
     setIsModelsPage(pathname?.startsWith('/models') ?? false);
     setIsSandboxPage(pathname?.startsWith('/sandbox') ?? false);
     setIsAgentPage(pathname?.startsWith('/agent') ?? false);
+    setIsInboxPage(pathname?.startsWith('/inbox') ?? false);
   }, [pathname]);
 
   // Track if user has scrolled past the initial viewport on homepage
@@ -61,6 +63,11 @@ export function AppFooter() {
 
   // Hide footer on agent pages (full-screen embedded coding agent)
   if (isAgentPage) {
+    return null;
+  }
+
+  // Hide footer on inbox pages (full-screen embedded Terragon inbox)
+  if (isInboxPage) {
     return null;
   }
 
