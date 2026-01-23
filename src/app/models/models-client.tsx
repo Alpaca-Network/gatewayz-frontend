@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
+import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, List, Lock, Music, Search, Sliders as SlidersIcon, Table2, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
@@ -93,6 +93,89 @@ const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
   alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
   // Add more providers as needed
 };
+
+// Table row component for OpenRouter-style table view
+const ModelTableRow = React.memo(function ModelTableRow({ model }: { model: Model }) {
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = checkIsFreeModel(model);
+  const sourceGateway = getSourceGateway(model);
+  const inputCost = hasPricing ? formatPricingForDisplay(model.pricing?.prompt, sourceGateway) : null;
+  const outputCost = hasPricing ? formatPricingForDisplay(model.pricing?.completion, sourceGateway) : null;
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
+
+  // Format context as number with commas
+  const formatContext = (length: number | undefined | null) => {
+    if (length === undefined || length === null || length <= 0) return '-';
+    return length.toLocaleString();
+  };
+
+  // Get provider display name
+  const providerDisplay = model.provider_slug?.replace(/^@/, '') || 'Unknown';
+
+  return (
+    <Link href={modelUrl} className="block group">
+      <div className="grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-3 px-4 hover:bg-muted/50 transition-colors items-center">
+        {/* Model Name & ID */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-primary group-hover:underline truncate">
+              {model.name}
+            </span>
+            {isFree && (
+              <Badge className="bg-green-600 text-white hover:bg-green-700 text-[10px] px-1.5 py-0 h-5 flex-shrink-0">
+                Free
+              </Badge>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
+            {model.id}
+          </div>
+        </div>
+
+        {/* Provider/Developer */}
+        <div className="text-sm text-muted-foreground truncate">
+          <span className="text-foreground/80">{providerDisplay}</span>
+        </div>
+
+        {/* Input Price */}
+        <div className="text-right text-sm tabular-nums">
+          {hasPricing && inputCost !== null ? (
+            <span>{isFree ? '$0' : `$${inputCost}`}</span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </div>
+
+        {/* Output Price */}
+        <div className="text-right text-sm tabular-nums">
+          {hasPricing && outputCost !== null ? (
+            <span>{isFree ? '$0' : `$${outputCost}`}</span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </div>
+
+        {/* Context Length */}
+        <div className="text-right text-sm tabular-nums">
+          {formatContext(model.context_length)}
+        </div>
+      </div>
+    </Link>
+  );
+});
+
+// Table header component
+const ModelTableHeader = React.memo(function ModelTableHeader() {
+  return (
+    <div className="grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-3 px-4 border-b border-border text-sm font-medium text-muted-foreground bg-muted/30">
+      <div>Model Name & ID</div>
+      <div>Provider</div>
+      <div className="text-right">Input ($/1M)</div>
+      <div className="text-right">Output ($/1M)</div>
+      <div className="text-right">Context</div>
+    </div>
+  );
+});
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
@@ -405,7 +488,7 @@ export default function ModelsClient({
     return deduplicated;
   }, [models]);
 
-  const [layout, setLayout] = useState("list");
+  const [layout, setLayout] = useState<'table' | 'grid'>("table");
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || "");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchParams.get('search') || "");
   const [selectedInputFormats, setSelectedInputFormats] = useState<string[]>(searchParams.get('inputFormats')?.split(',').filter(Boolean) || []);
@@ -1061,20 +1144,22 @@ export default function ModelsClient({
                   </Select>
                   <div className="hidden lg:flex items-center gap-1 bg-muted p-1 rounded-md">
                     <Button
+                      variant={layout === 'table' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      onClick={() => setLayout('table')}
+                      className="h-8 w-8"
+                      title="Table view"
+                    >
+                      <Table2 className="w-4 h-4" />
+                    </Button>
+                    <Button
                       variant={layout === 'grid' ? 'secondary' : 'ghost'}
                       size="icon"
                       onClick={() => setLayout('grid')}
                       className="h-8 w-8"
+                      title="Grid view"
                     >
                       <LayoutGrid className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant={layout === 'list' ? 'secondary' : 'ghost'}
-                      size="icon"
-                      onClick={() => setLayout('list')}
-                      className="h-8 w-8"
-                    >
-                      <LayoutList className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
@@ -1178,18 +1263,29 @@ export default function ModelsClient({
           </div>
 
           <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20 has-onboarding-banner:mt-40" style={{ transition: 'margin-top 0.3s ease' }}>
-          <div
-            className={
-              layout === 'grid'
-                ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden'
-                : 'flex flex-col gap-4 lg:gap-6 overflow-x-hidden'
-            }
-            key={`models-${filteredModels.length}-${debouncedSearchTerm}`}
-          >
-            {visibleModels.map((model, key) => (
-              <ModelCard key={key} model={model} />
-            ))}
-          </div>
+          {layout === 'table' ? (
+            /* Table View - OpenRouter style */
+            <div className="overflow-x-auto rounded-lg border border-border" key={`models-table-${filteredModels.length}-${debouncedSearchTerm}`}>
+              <ModelTableHeader />
+              <div className="divide-y divide-border/50">
+                {visibleModels.map((model, index) => (
+                  <div key={model.id} className={index % 2 === 1 ? 'bg-muted/20' : ''}>
+                    <ModelTableRow model={model} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Grid View - Card style */
+            <div
+              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden"
+              key={`models-grid-${filteredModels.length}-${debouncedSearchTerm}`}
+            >
+              {visibleModels.map((model) => (
+                <ModelCard key={model.id} model={model} />
+              ))}
+            </div>
+          )}
 
           {/* No results message */}
           {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (

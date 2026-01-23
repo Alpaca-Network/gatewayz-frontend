@@ -49,6 +49,14 @@ export interface AuthResponse {
   email: string;
   credits: number;
   timestamp: string | null;
+
+  // New tiered credit fields
+  subscription_allowance?: number;
+  purchased_credits?: number;
+  total_credits?: number;
+  allowance_reset_date?: string;
+
+  // Existing fields
   tier?: UserTier;
   tier_display_name?: string; // Formatted tier name from backend (e.g., "Pro", "MAX")
   subscription_status?: SubscriptionStatus;
@@ -63,7 +71,15 @@ export interface UserData {
   privy_user_id: string;
   display_name: string;
   email: string;
-  credits: number;
+  credits: number; // Legacy - total credits for backward compatibility
+
+  // New tiered credit fields
+  subscription_allowance?: number; // Monthly allowance remaining
+  purchased_credits?: number; // One-time purchased credits
+  total_credits?: number; // Computed sum of both
+  allowance_reset_date?: string; // ISO timestamp of last reset
+
+  // Existing fields
   tier?: UserTier;
   tier_display_name?: string; // Formatted tier name from backend (e.g., "Pro", "MAX")
   subscription_status?: SubscriptionStatus;
@@ -294,6 +310,11 @@ export const processAuthResponse = (response: AuthResponse): void => {
       display_name: response.display_name,
       email: response.email,
       credits: creditsAsInteger,
+      // New tiered credit fields
+      subscription_allowance: response.subscription_allowance,
+      purchased_credits: response.purchased_credits,
+      total_credits: response.total_credits,
+      allowance_reset_date: response.allowance_reset_date,
       // Normalize tier to lowercase to handle case sensitivity from backend
       tier: response.tier?.toLowerCase() as UserTier | undefined,
       tier_display_name: response.tier_display_name,

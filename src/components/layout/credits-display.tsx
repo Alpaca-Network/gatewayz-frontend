@@ -15,6 +15,8 @@ export function CreditsDisplay() {
   const [trialDaysRemaining, setTrialDaysRemaining] = useState<number | null>(null);
   const [isTrial, setIsTrial] = useState<boolean>(false);
   const [isTrialExpiredState, setIsTrialExpiredState] = useState<boolean>(false);
+  const [subscriptionAllowance, setSubscriptionAllowance] = useState<number>(0);
+  const [purchasedCredits, setPurchasedCredits] = useState<number>(0);
 
   useEffect(() => {
     const updateCredits = () => {
@@ -70,6 +72,10 @@ export function CreditsDisplay() {
         // Update trial days remaining
         const daysRemaining = getTrialDaysRemaining(userData);
         setTrialDaysRemaining(daysRemaining);
+
+        // Update tiered credit fields
+        setSubscriptionAllowance(userData.subscription_allowance ?? 0);
+        setPurchasedCredits(userData.purchased_credits ?? 0);
       } else {
         if (process.env.NODE_ENV === 'development') {
           console.log('[CreditsDisplay] No credits found in userData');
@@ -148,14 +154,18 @@ export function CreditsDisplay() {
 
   // Pro/Max users - show credit usage progress bar with plan name
   if (showPlanName) {
-    // Get monthly credit allocation for the tier (in cents, convert to dollars)
-    const monthlyAllocation = tier ? TIER_CONFIG[tier].creditAllocation / 100 : 0;
-    // Calculate usage percentage (credits remaining vs allocation)
-    // If credits > allocation, cap at 100% (user bought extra credits)
-    const usagePercentage = monthlyAllocation > 0
-      ? Math.min(100, Math.max(0, (credits / monthlyAllocation) * 100))
+    // monthlyAllowance is stored in cents in TIER_CONFIG
+    const monthlyAllowanceCents = tier ? TIER_CONFIG[tier].monthlyAllowance : 0;
+
+    // Calculate percentage based on subscription_allowance remaining (both in cents)
+    const usagePercentage = monthlyAllowanceCents > 0
+      ? Math.min(100, Math.max(0, (subscriptionAllowance / monthlyAllowanceCents) * 100))
       : 100;
-    // Determine color based on remaining credits
+
+    // Convert from cents to dollars for display
+    const subscriptionAllowanceDollars = subscriptionAllowance / 100;
+    const purchasedCreditsDollars = purchasedCredits / 100;
+
     const isLow = usagePercentage <= 20;
     const isMedium = usagePercentage > 20 && usagePercentage <= 50;
 
@@ -172,7 +182,7 @@ export function CreditsDisplay() {
               <span className="font-semibold text-xs sm:text-sm">
                 {planName}
               </span>
-              {/* Credit usage progress bar */}
+              {/* Allowance progress bar */}
               <div className="hidden sm:flex items-center gap-1.5">
                 <div className="w-16 h-1.5 bg-amber-200 dark:bg-amber-900 rounded-full overflow-hidden">
                   <div
@@ -187,13 +197,19 @@ export function CreditsDisplay() {
                   />
                 </div>
                 <span className="text-[10px] text-amber-700 dark:text-amber-300 min-w-[32px]">
-                  ${credits}
+                  ${subscriptionAllowanceDollars.toFixed(0)}
                 </span>
               </div>
+              {/* Show purchased credits if any */}
+              {purchasedCreditsDollars > 0 && (
+                <span className="hidden sm:inline text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+                  +${purchasedCreditsDollars.toFixed(0)}
+                </span>
+              )}
             </div>
           </Button>
         </Link>
-        {/* Increase Usage button */}
+        {/* Add Credits button */}
         <Link href="/settings/credits?buy=true">
           <Button
             variant="outline"
