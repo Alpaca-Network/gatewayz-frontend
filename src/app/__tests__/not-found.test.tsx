@@ -71,6 +71,7 @@ jest.mock('@/components/game-of-life/useGameOfLife', () => ({
     reset: mockReset,
     setSpeed: mockSetSpeed,
     toggleCell: jest.fn(),
+    setCell: jest.fn(),
     setGridSize: jest.fn(),
   }),
 }));
@@ -167,7 +168,7 @@ describe('NotFoundClient', () => {
     it('renders the instructions text', () => {
       render(<NotFoundClient />);
       expect(
-        screen.getByText(/click or tap on the grid to toggle cells/i)
+        screen.getByText(/click or drag on the grid to draw cells/i)
       ).toBeInTheDocument();
     });
 
