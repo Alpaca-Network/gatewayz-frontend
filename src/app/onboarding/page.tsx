@@ -50,6 +50,15 @@ export default function OnboardingPage() {
       completed: true,
     },
     {
+      id: "apikey",
+      title: "Create Your API Key",
+      description: "Generate an API key to authenticate your requests and integrate with your applications.",
+      icon: <Key className="h-5 w-5" />,
+      completed: false,
+      action: "/settings/keys",
+      actionLabel: "Create API Key"
+    },
+    {
       id: "chat",
       title: "Start Your First Chat",
       description: "Try chatting with any of our AI models in the playground.",
@@ -167,6 +176,7 @@ export default function OnboardingPage() {
       // First time - create task state with welcome completed
       const taskState: Record<string, boolean> = {
         welcome: true,
+        apikey: false,
         chat: false,
         explore: false,
         credits: false,

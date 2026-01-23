@@ -103,7 +103,8 @@ describe('OnboardingBanner Hydration Fix', () => {
       // Banner should be visible when user is authenticated and has incomplete tasks
       localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify({
         welcome: true,
-        chat: false, // Incomplete task
+        apikey: false, // Incomplete task
+        chat: false,
         explore: false,
       }));
 
@@ -131,7 +132,8 @@ describe('OnboardingBanner Hydration Fix', () => {
     it('should set CSS custom properties when visible', async () => {
       localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify({
         welcome: true,
-        chat: false, // Incomplete task
+        apikey: false, // Incomplete task
+        chat: false,
       }));
 
       render(<OnboardingBanner />);
@@ -177,6 +179,7 @@ describe('OnboardingBanner Hydration Fix', () => {
     it('should handle visibility state changes without hydration errors', async () => {
       localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify({
         welcome: true,
+        apikey: false,
         chat: false,
       }));
 
@@ -201,6 +204,7 @@ describe('OnboardingBanner Hydration Fix', () => {
     it('should cleanup DOM styles and cancel animations on unmount', async () => {
       localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify({
         welcome: true,
+        apikey: false,
         chat: false,
       }));
 
@@ -225,6 +229,63 @@ describe('OnboardingBanner Hydration Fix', () => {
         expect(document.documentElement.style.getPropertyValue('--sidebar-height')).toBe('calc(100vh - 65px)');
         expect(document.documentElement.style.getPropertyValue('--models-header-top')).toBe('65px');
         expect(document.documentElement.style.getPropertyValue('--onboarding-banner-height')).toBe('0px');
+      });
+    });
+  });
+
+  describe('API Key Step', () => {
+    it('should include API key step in the task list', async () => {
+      localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify({
+        welcome: true,
+        apikey: false,
+        chat: false,
+        explore: false,
+        credits: false,
+      }));
+
+      render(<OnboardingBanner />);
+
+      // Wait for the banner to render and check that the API key step is shown as the next task
+      // Use getAllByText since there are mobile and desktop layouts
+      await waitFor(() => {
+        const elements = screen.getAllByText('Create Your API Key');
+        expect(elements.length).toBeGreaterThan(0);
+      });
+    });
+
+    it('should show API key step as next task when welcome is complete and apikey is incomplete', async () => {
+      localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify({
+        welcome: true,
+        apikey: false,
+        chat: true,
+        explore: true,
+        credits: true,
+      }));
+
+      render(<OnboardingBanner />);
+
+      await waitFor(() => {
+        const links = screen.getAllByRole('link', { name: /Create Your API Key/i });
+        expect(links.length).toBeGreaterThan(0);
+        expect(links[0]).toHaveAttribute('href', '/settings/keys');
+      });
+    });
+
+    it('should skip to next incomplete task when API key step is complete', async () => {
+      localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify({
+        welcome: true,
+        apikey: true,
+        chat: false,
+        explore: false,
+        credits: false,
+      }));
+
+      render(<OnboardingBanner />);
+
+      await waitFor(() => {
+        const links = screen.getAllByRole('link', { name: /Start Your First Chat/i });
+        expect(links.length).toBeGreaterThan(0);
+        expect(links[0]).toHaveAttribute('href', '/chat');
       });
     });
   });
