@@ -21,6 +21,7 @@ export interface UseGameOfLifeReturn {
   reset: () => void;
   setSpeed: (speed: number) => void;
   toggleCell: (row: number, col: number) => void;
+  setCell: (row: number, col: number, alive: boolean) => void;
   setGridSize: (cols: number, rows: number) => void;
 }
 
@@ -193,6 +194,19 @@ export function useGameOfLife(
     });
   }, []);
 
+  // Set individual cell to specific state (used for drag interactions)
+  const setCell = useCallback((row: number, col: number, alive: boolean) => {
+    setGrid((prev) => {
+      if (row < 0 || row >= prev.length) return prev;
+      if (col < 0 || col >= (prev[0]?.length ?? 0)) return prev;
+      if (prev[row][col] === alive) return prev; // No change needed
+
+      const newGrid = prev.map((r) => [...r]);
+      newGrid[row][col] = alive;
+      return newGrid;
+    });
+  }, []);
+
   // Update grid size and reset pattern
   const setGridSize = useCallback(
     (cols: number, rows: number) => {
@@ -225,6 +239,7 @@ export function useGameOfLife(
     reset,
     setSpeed,
     toggleCell,
+    setCell,
     setGridSize,
   };
 }

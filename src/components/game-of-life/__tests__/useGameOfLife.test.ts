@@ -306,6 +306,87 @@ describe('useGameOfLife', () => {
     });
   });
 
+  describe('setCell', () => {
+    it('sets a dead cell to alive', () => {
+      const { result } = renderHook(() =>
+        useGameOfLife({ initialCols: 10, initialRows: 10 })
+      );
+
+      // Ensure cell is dead first
+      if (result.current.grid[0][0]) {
+        act(() => {
+          result.current.toggleCell(0, 0);
+        });
+      }
+      expect(result.current.grid[0][0]).toBe(false);
+
+      act(() => {
+        result.current.setCell(0, 0, true);
+      });
+
+      expect(result.current.grid[0][0]).toBe(true);
+    });
+
+    it('sets an alive cell to dead', () => {
+      const { result } = renderHook(() =>
+        useGameOfLife({ initialCols: 10, initialRows: 10 })
+      );
+
+      // Ensure cell is alive first
+      if (!result.current.grid[0][0]) {
+        act(() => {
+          result.current.toggleCell(0, 0);
+        });
+      }
+      expect(result.current.grid[0][0]).toBe(true);
+
+      act(() => {
+        result.current.setCell(0, 0, false);
+      });
+
+      expect(result.current.grid[0][0]).toBe(false);
+    });
+
+    it('does not change grid when setting cell to same state', () => {
+      const { result } = renderHook(() =>
+        useGameOfLife({ initialCols: 10, initialRows: 10 })
+      );
+
+      // Ensure cell is alive
+      if (!result.current.grid[0][0]) {
+        act(() => {
+          result.current.toggleCell(0, 0);
+        });
+      }
+
+      const gridBefore = result.current.grid;
+
+      act(() => {
+        result.current.setCell(0, 0, true); // Already true
+      });
+
+      // Grid reference should be the same (no new grid created)
+      expect(result.current.grid).toBe(gridBefore);
+    });
+
+    it('handles out of bounds gracefully', () => {
+      const { result } = renderHook(() =>
+        useGameOfLife({ initialCols: 10, initialRows: 10 })
+      );
+
+      const gridBefore = JSON.stringify(result.current.grid);
+
+      act(() => {
+        result.current.setCell(-1, 0, true);
+        result.current.setCell(0, -1, true);
+        result.current.setCell(100, 0, true);
+        result.current.setCell(0, 100, true);
+      });
+
+      expect(JSON.stringify(result.current.grid)).toBe(gridBefore);
+    });
+  });
+
   describe('setGridSize', () => {
     it('updates grid size', () => {
       const { result } = renderHook(() => useGameOfLife());

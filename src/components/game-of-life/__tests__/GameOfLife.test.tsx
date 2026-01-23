@@ -4,6 +4,7 @@ import { GameOfLife } from '../GameOfLife';
 
 // Mock the hook
 const mockToggleCell = jest.fn();
+const mockSetCell = jest.fn();
 const mockSetGridSize = jest.fn();
 
 jest.mock('../useGameOfLife', () => ({
@@ -21,6 +22,7 @@ jest.mock('../useGameOfLife', () => ({
     reset: jest.fn(),
     setSpeed: jest.fn(),
     toggleCell: mockToggleCell,
+    setCell: mockSetCell,
     setGridSize: mockSetGridSize,
   }),
 }));
@@ -112,7 +114,7 @@ describe('GameOfLife', () => {
     expect(canvas).toHaveAttribute('tabIndex', '0');
   });
 
-  it('handles click events to toggle cells', () => {
+  it('handles mousedown events to toggle cells', () => {
     render(<GameOfLife cellSize={12} />);
     const canvas = screen.getByLabelText(/Game of Life grid/i);
 
@@ -129,9 +131,124 @@ describe('GameOfLife', () => {
       toJSON: jest.fn(),
     }));
 
-    fireEvent.click(canvas, { clientX: 15, clientY: 15 });
+    fireEvent.mouseDown(canvas, { clientX: 15, clientY: 15 });
 
     expect(mockToggleCell).toHaveBeenCalledWith(1, 1); // row 1, col 1 for cellSize 12
+  });
+
+  it('handles drag to activate multiple cells', () => {
+    render(<GameOfLife cellSize={12} />);
+    const canvas = screen.getByLabelText(/Game of Life grid/i);
+
+    canvas.getBoundingClientRect = jest.fn(() => ({
+      left: 0,
+      top: 0,
+      width: 120,
+      height: 120,
+      right: 120,
+      bottom: 120,
+      x: 0,
+      y: 0,
+      toJSON: jest.fn(),
+    }));
+
+    // Start drag at cell (1, 1)
+    fireEvent.mouseDown(canvas, { clientX: 15, clientY: 15 });
+    expect(mockToggleCell).toHaveBeenCalledWith(1, 1);
+
+    // Move to cell (2, 2)
+    fireEvent.mouseMove(canvas, { clientX: 27, clientY: 27 });
+    expect(mockSetCell).toHaveBeenCalledWith(2, 2, true);
+
+    // Move to cell (3, 3)
+    fireEvent.mouseMove(canvas, { clientX: 39, clientY: 39 });
+    expect(mockSetCell).toHaveBeenCalledWith(3, 3, true);
+
+    // End drag
+    fireEvent.mouseUp(canvas);
+  });
+
+  it('does not activate cells on mousemove without mousedown', () => {
+    render(<GameOfLife cellSize={12} />);
+    const canvas = screen.getByLabelText(/Game of Life grid/i);
+
+    canvas.getBoundingClientRect = jest.fn(() => ({
+      left: 0,
+      top: 0,
+      width: 120,
+      height: 120,
+      right: 120,
+      bottom: 120,
+      x: 0,
+      y: 0,
+      toJSON: jest.fn(),
+    }));
+
+    // Move without dragging
+    fireEvent.mouseMove(canvas, { clientX: 27, clientY: 27 });
+
+    expect(mockSetCell).not.toHaveBeenCalled();
+    expect(mockToggleCell).not.toHaveBeenCalled();
+  });
+
+  it('stops dragging on mouseup', () => {
+    render(<GameOfLife cellSize={12} />);
+    const canvas = screen.getByLabelText(/Game of Life grid/i);
+
+    canvas.getBoundingClientRect = jest.fn(() => ({
+      left: 0,
+      top: 0,
+      width: 120,
+      height: 120,
+      right: 120,
+      bottom: 120,
+      x: 0,
+      y: 0,
+      toJSON: jest.fn(),
+    }));
+
+    // Start drag
+    fireEvent.mouseDown(canvas, { clientX: 15, clientY: 15 });
+    mockToggleCell.mockClear();
+    mockSetCell.mockClear();
+
+    // End drag
+    fireEvent.mouseUp(canvas);
+
+    // Try to move after mouseup
+    fireEvent.mouseMove(canvas, { clientX: 27, clientY: 27 });
+
+    expect(mockSetCell).not.toHaveBeenCalled();
+  });
+
+  it('stops dragging on mouseleave', () => {
+    render(<GameOfLife cellSize={12} />);
+    const canvas = screen.getByLabelText(/Game of Life grid/i);
+
+    canvas.getBoundingClientRect = jest.fn(() => ({
+      left: 0,
+      top: 0,
+      width: 120,
+      height: 120,
+      right: 120,
+      bottom: 120,
+      x: 0,
+      y: 0,
+      toJSON: jest.fn(),
+    }));
+
+    // Start drag
+    fireEvent.mouseDown(canvas, { clientX: 15, clientY: 15 });
+    mockToggleCell.mockClear();
+    mockSetCell.mockClear();
+
+    // Leave canvas
+    fireEvent.mouseLeave(canvas);
+
+    // Try to move after leaving (shouldn't do anything)
+    fireEvent.mouseMove(canvas, { clientX: 27, clientY: 27 });
+
+    expect(mockSetCell).not.toHaveBeenCalled();
   });
 
   it('handles touch events for mobile', () => {
@@ -157,8 +274,41 @@ describe('GameOfLife', () => {
     expect(mockToggleCell).toHaveBeenCalledWith(2, 2); // row 2, col 2 for cellSize 12
   });
 
+  it('handles touch drag to activate multiple cells', () => {
+    render(<GameOfLife cellSize={12} />);
+    const canvas = screen.getByLabelText(/Game of Life grid/i);
+
+    canvas.getBoundingClientRect = jest.fn(() => ({
+      left: 0,
+      top: 0,
+      width: 120,
+      height: 120,
+      right: 120,
+      bottom: 120,
+      x: 0,
+      y: 0,
+      toJSON: jest.fn(),
+    }));
+
+    // Start touch at cell (1, 1)
+    fireEvent.touchStart(canvas, {
+      touches: [{ clientX: 15, clientY: 15 }],
+    });
+    expect(mockToggleCell).toHaveBeenCalledWith(1, 1);
+
+    // Move to cell (2, 2)
+    fireEvent.touchMove(canvas, {
+      touches: [{ clientX: 27, clientY: 27 }],
+    });
+    expect(mockSetCell).toHaveBeenCalledWith(2, 2, true);
+
+    // End touch
+    fireEvent.touchEnd(canvas);
+  });
+
   it('uses external gameState when provided', () => {
     const externalToggleCell = jest.fn();
+    const externalSetCell = jest.fn();
     const externalGameState = {
       grid: Array(5)
         .fill(null)
@@ -173,6 +323,7 @@ describe('GameOfLife', () => {
       reset: jest.fn(),
       setSpeed: jest.fn(),
       toggleCell: externalToggleCell,
+      setCell: externalSetCell,
       setGridSize: jest.fn(),
     };
 
@@ -191,7 +342,7 @@ describe('GameOfLife', () => {
       toJSON: jest.fn(),
     }));
 
-    fireEvent.click(canvas, { clientX: 6, clientY: 6 });
+    fireEvent.mouseDown(canvas, { clientX: 6, clientY: 6 });
 
     expect(externalToggleCell).toHaveBeenCalled();
     expect(mockToggleCell).not.toHaveBeenCalled();

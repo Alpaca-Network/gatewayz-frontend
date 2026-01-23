@@ -29,7 +29,11 @@ export function GameOfLife({
   const gameState = externalGameState ?? internalGameState;
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
-  const { grid, toggleCell, setGridSize } = gameState;
+  const { grid, toggleCell, setCell, setGridSize } = gameState;
+
+  // Track dragging state for click-and-drag cell activation
+  const isDraggingRef = useRef(false);
+  const lastCellRef = useRef<{ row: number; col: number } | null>(null);
 
   // Check for reduced motion preference
   useEffect(() => {
@@ -150,17 +154,17 @@ export function GameOfLife({
     }
   }, [grid, cellSize, getColors]);
 
-  // Handle click/touch to toggle cells
-  const handleInteraction = useCallback(
+  // Helper to get cell coordinates from event
+  const getCellFromEvent = useCallback(
     (
       event:
         | React.MouseEvent<HTMLCanvasElement>
         | React.TouchEvent<HTMLCanvasElement>
-    ) => {
+        | MouseEvent
+        | TouchEvent
+    ): { row: number; col: number } | null => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      event.preventDefault();
+      if (!canvas) return null;
 
       const rect = canvas.getBoundingClientRect();
       let clientX: number;
@@ -168,7 +172,7 @@ export function GameOfLife({
 
       if ('touches' in event) {
         const touch = event.touches[0];
-        if (!touch) return;
+        if (!touch) return null;
         clientX = touch.clientX;
         clientY = touch.clientY;
       } else {
@@ -182,10 +186,79 @@ export function GameOfLife({
       const col = Math.floor(x / cellSize);
       const row = Math.floor(y / cellSize);
 
-      toggleCell(row, col);
+      return { row, col };
     },
-    [cellSize, toggleCell]
+    [cellSize]
   );
+
+  // Handle mouse/touch down - start dragging and toggle first cell
+  const handlePointerDown = useCallback(
+    (
+      event:
+        | React.MouseEvent<HTMLCanvasElement>
+        | React.TouchEvent<HTMLCanvasElement>
+    ) => {
+      event.preventDefault();
+      isDraggingRef.current = true;
+
+      const cell = getCellFromEvent(event);
+      if (cell) {
+        lastCellRef.current = cell;
+        toggleCell(cell.row, cell.col);
+      }
+    },
+    [getCellFromEvent, toggleCell]
+  );
+
+  // Handle mouse/touch move - activate cells while dragging
+  const handlePointerMove = useCallback(
+    (
+      event:
+        | React.MouseEvent<HTMLCanvasElement>
+        | React.TouchEvent<HTMLCanvasElement>
+    ) => {
+      if (!isDraggingRef.current) return;
+      event.preventDefault();
+
+      const cell = getCellFromEvent(event);
+      if (!cell) return;
+
+      // Only activate if we moved to a different cell
+      if (
+        !lastCellRef.current ||
+        cell.row !== lastCellRef.current.row ||
+        cell.col !== lastCellRef.current.col
+      ) {
+        lastCellRef.current = cell;
+        setCell(cell.row, cell.col, true); // Always activate on drag
+      }
+    },
+    [getCellFromEvent, setCell]
+  );
+
+  // Handle mouse/touch up - stop dragging
+  const handlePointerUp = useCallback(() => {
+    isDraggingRef.current = false;
+    lastCellRef.current = null;
+  }, []);
+
+  // Add global event listeners for mouse/touch up to handle when pointer leaves canvas
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      isDraggingRef.current = false;
+      lastCellRef.current = null;
+    };
+
+    window.addEventListener('mouseup', handleGlobalPointerUp);
+    window.addEventListener('touchend', handleGlobalPointerUp);
+    window.addEventListener('touchcancel', handleGlobalPointerUp);
+
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalPointerUp);
+      window.removeEventListener('touchend', handleGlobalPointerUp);
+      window.removeEventListener('touchcancel', handleGlobalPointerUp);
+    };
+  }, []);
 
   return (
     <div
@@ -196,13 +269,18 @@ export function GameOfLife({
     >
       <canvas
         ref={canvasRef}
-        onClick={handleInteraction}
-        onTouchStart={handleInteraction}
+        onMouseDown={handlePointerDown}
+        onMouseMove={handlePointerMove}
+        onMouseUp={handlePointerUp}
+        onMouseLeave={handlePointerUp}
+        onTouchStart={handlePointerDown}
+        onTouchMove={handlePointerMove}
+        onTouchEnd={handlePointerUp}
         className={cn(
-          'block mx-auto cursor-pointer touch-none',
+          'block mx-auto cursor-pointer touch-none select-none',
           prefersReducedMotion && 'transition-none'
         )}
-        aria-label="Game of Life grid - click or tap to toggle cells"
+        aria-label="Game of Life grid - click or drag to toggle cells"
         tabIndex={0}
       />
     </div>
