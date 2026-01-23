@@ -99,7 +99,7 @@ describe('tier-utils', () => {
         name: 'Pro',
         description: '$10/month subscription',
         monthlyPrice: 1000,
-        creditAllocation: 0,
+        creditAllocation: 1000, // $10 equivalent in credits (cents)
         isSubscription: true,
       });
     });

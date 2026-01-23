@@ -257,6 +257,16 @@ function CreditsPageContent() {
   const [showDialog, setShowDialog] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
 
+  // Check for buy parameter to auto-open dialog
+  useEffect(() => {
+    const buyParam = searchParams?.get('buy');
+    if (buyParam === 'true') {
+      setShowDialog(true);
+      // Clean up URL
+      window.history.replaceState({}, '', '/settings/credits');
+    }
+  }, [searchParams]);
+
   // Check for success message from Stripe redirect
   useEffect(() => {
     const sessionId = searchParams?.get('session_id');

@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { getUserData } from '@/lib/api';
 import type { UserTier } from '@/lib/api';
-import { Coins, Crown, Sparkles, AlertCircle } from 'lucide-react';
+import { Coins, Crown, Sparkles, AlertCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { getTrialDaysRemaining, isOnTrial as checkIsOnTrial, isTrialExpired as checkIsTrialExpired } from '@/lib/tier-utils';
+import { getTrialDaysRemaining, isOnTrial as checkIsOnTrial, isTrialExpired as checkIsTrialExpired, TIER_CONFIG, getUserTier } from '@/lib/tier-utils';
 
 export function CreditsDisplay() {
   const [credits, setCredits] = useState<number | null>(null);
@@ -39,16 +39,17 @@ export function CreditsDisplay() {
           return prevCredits;
         });
 
-        // Normalize tier to lowercase to handle case sensitivity
-        const normalizedTier = userData.tier?.toLowerCase() as UserTier | undefined;
+        // Use getUserTier to properly determine tier from userData
+        // This handles cases where tier field is missing but subscription_status is active
+        const computedTier = getUserTier(userData);
         if (process.env.NODE_ENV === 'development') {
-          console.log('[CreditsDisplay] Normalized tier:', { original: userData.tier, normalized: normalizedTier, isPro: normalizedTier === 'pro', isMax: normalizedTier === 'max' });
+          console.log('[CreditsDisplay] Computed tier:', { original: userData.tier, computed: computedTier, subscription_status: userData.subscription_status, isPro: computedTier === 'pro', isMax: computedTier === 'max' });
         }
 
         // Only update tier if it has changed
         setTier(prevTier => {
-          if (prevTier !== normalizedTier) {
-            return normalizedTier;
+          if (prevTier !== computedTier) {
+            return computedTier;
           }
           return prevTier;
         });
@@ -145,21 +146,65 @@ export function CreditsDisplay() {
     );
   }
 
-  // Pro/Max users - show plan name with crown
+  // Pro/Max users - show credit usage progress bar with plan name
   if (showPlanName) {
+    // Get monthly credit allocation for the tier (in cents, convert to dollars)
+    const monthlyAllocation = tier ? TIER_CONFIG[tier].creditAllocation / 100 : 0;
+    // Calculate usage percentage (credits remaining vs allocation)
+    // If credits > allocation, cap at 100% (user bought extra credits)
+    const usagePercentage = monthlyAllocation > 0
+      ? Math.min(100, Math.max(0, (credits / monthlyAllocation) * 100))
+      : 100;
+    // Determine color based on remaining credits
+    const isLow = usagePercentage <= 20;
+    const isMedium = usagePercentage > 20 && usagePercentage <= 50;
+
     return (
-      <Link href="/settings/credits">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-8 px-2 sm:px-3 gap-1.5 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-950/50 text-amber-900 dark:text-amber-100"
-        >
-          <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-          <span className="font-semibold text-xs sm:text-sm">
-            {planName}
-          </span>
-        </Button>
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link href="/settings/credits">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2 sm:px-3 gap-1.5 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-950/50 text-amber-900 dark:text-amber-100"
+          >
+            <Crown className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-xs sm:text-sm">
+                {planName}
+              </span>
+              {/* Credit usage progress bar */}
+              <div className="hidden sm:flex items-center gap-1.5">
+                <div className="w-16 h-1.5 bg-amber-200 dark:bg-amber-900 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${
+                      isLow
+                        ? 'bg-red-500'
+                        : isMedium
+                          ? 'bg-amber-500'
+                          : 'bg-green-500'
+                    }`}
+                    style={{ width: `${usagePercentage}%` }}
+                  />
+                </div>
+                <span className="text-[10px] text-amber-700 dark:text-amber-300 min-w-[32px]">
+                  ${credits}
+                </span>
+              </div>
+            </div>
+          </Button>
+        </Link>
+        {/* Increase Usage button */}
+        <Link href="/settings/credits?buy=true">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2 gap-1 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-950/50 text-blue-900 dark:text-blue-100"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline text-xs font-medium">Add Credits</span>
+          </Button>
+        </Link>
+      </div>
     );
   }
 

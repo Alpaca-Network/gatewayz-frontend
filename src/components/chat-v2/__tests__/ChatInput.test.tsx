@@ -55,6 +55,8 @@ const mockStoreState = {
   selectedModel: { value: 'test-model', label: 'Test Model' } as { value: string; label: string },
   inputValue: '',
   messageStartTime: null as number | null,
+  enabledTools: [] as string[],
+  autoEnableSearch: false,
 };
 const mockSetMessageStartTime = jest.fn();
 
@@ -64,6 +66,8 @@ const resetMockStoreState = () => {
   mockStoreState.selectedModel = { value: 'test-model', label: 'Test Model' };
   mockStoreState.inputValue = '';
   mockStoreState.messageStartTime = null;
+  mockStoreState.enabledTools = [];
+  mockStoreState.autoEnableSearch = false;
 };
 
 jest.mock('@/lib/store/chat-ui-store', () => {
@@ -134,6 +138,15 @@ jest.mock('@/lib/hooks/use-auto-search-detection', () => ({
   useAutoSearchDetection: () => ({
     shouldAutoEnableSearch: jest.fn(() => false),
     getAutoEnableReason: jest.fn(() => null),
+  }),
+}));
+
+// Mock critic search detection hook
+jest.mock('@/lib/hooks/use-critic-search-detection', () => ({
+  useCriticSearchDetection: () => ({
+    checkIfSearchNeeded: jest.fn().mockResolvedValue({ needsSearch: false, usedFallback: false }),
+    isChecking: false,
+    clearCache: jest.fn(),
   }),
 }));
 
@@ -212,6 +225,11 @@ jest.mock('@/components/ui/switch', () => ({
 jest.mock('@/components/ui/alert', () => ({
   Alert: ({ children, ...props }: any) => <div data-testid="alert" {...props}>{children}</div>,
   AlertDescription: ({ children, ...props }: any) => <div data-testid="alert-description" {...props}>{children}</div>,
+}));
+
+// Mock useIsMobile hook
+jest.mock('@/hooks/use-mobile', () => ({
+  useIsMobile: () => false, // Default to desktop view in tests
 }));
 
 // Import after mocks

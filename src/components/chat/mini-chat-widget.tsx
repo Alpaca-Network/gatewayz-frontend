@@ -28,8 +28,8 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
       activeAnimationsRef.current.forEach(animation => {
         animation.cancel();
         const effect = animation.effect;
-        if (effect && effect instanceof KeyframeEffect && effect.target) {
-          effect.target.remove();
+        if (effect && 'target' in effect && effect.target) {
+          (effect.target as Element).remove();
         }
       });
       activeAnimationsRef.current = [];
@@ -66,7 +66,15 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
     const sparkleCount = 12;
     let completedCount = 0;
 
-    // Clear any previous animations
+    // Cancel previous animations and remove their DOM elements before clearing
+    // Note: animation.cancel() does not trigger onfinish, so we must manually remove elements
+    activeAnimationsRef.current.forEach(animation => {
+      animation.cancel();
+      const effect = animation.effect;
+      if (effect && 'target' in effect && effect.target) {
+        (effect.target as Element).remove();
+      }
+    });
     activeAnimationsRef.current = [];
 
     for (let i = 0; i < sparkleCount; i++) {
@@ -110,7 +118,9 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
       activeAnimationsRef.current.push(animation);
 
       animation.onfinish = () => {
-        sparkle.remove();
+        if (isMountedRef.current) {
+          sparkle.remove();
+        }
         completedCount++;
         // Only update state if component is still mounted
         if (completedCount === sparkleCount && isMountedRef.current) {
@@ -161,7 +171,7 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
               disabled={isMagicAnimating}
               className={`flex-shrink-0 w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 shadow-md transition-all ${
                 isMagicAnimating ? 'animate-pulse scale-110' : ''
-              }`}
+              } ${!message.trim() && !isMagicAnimating ? 'surprise-me-shimmer' : ''}`}
               title={message.trim() ? "Send message" : "Surprise me!"}
             >
               {message.trim() ? (
