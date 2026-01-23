@@ -12,10 +12,23 @@ describe('ETHEREUM_ERROR_SUPPRESSOR_SCRIPT', () => {
   let originalError: typeof console.error;
   let errorEventHandler: ((event: ErrorEvent) => boolean | void) | null = null;
   let addEventListenerSpy: jest.SpyInstance;
+  let originalEthereum: any;
+  let ethereumDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     originalError = console.error;
     errorLogs = [];
+
+    // Save original ethereum state
+    ethereumDescriptor = Object.getOwnPropertyDescriptor(window, 'ethereum');
+    originalEthereum = (window as any).ethereum;
+
+    // Clean up ethereum property for tests
+    try {
+      delete (window as any).ethereum;
+    } catch (e) {
+      // May fail if non-configurable, that's fine for tests
+    }
 
     // Mock console.error
     console.error = jest.fn((...args: any[]) => {
@@ -38,6 +51,18 @@ describe('ETHEREUM_ERROR_SUPPRESSOR_SCRIPT', () => {
     errorEventHandler = null;
     addEventListenerSpy.mockRestore();
     jest.restoreAllMocks();
+
+    // Restore original ethereum state
+    try {
+      delete (window as any).ethereum;
+      if (ethereumDescriptor) {
+        Object.defineProperty(window, 'ethereum', ethereumDescriptor);
+      } else if (originalEthereum !== undefined) {
+        (window as any).ethereum = originalEthereum;
+      }
+    } catch (e) {
+      // Ignore cleanup errors
+    }
   });
 
   describe('script content', () => {
@@ -54,6 +79,63 @@ describe('ETHEREUM_ERROR_SUPPRESSOR_SCRIPT', () => {
 
     it('should use strict mode', () => {
       expect(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT).toContain("'use strict'");
+    });
+
+    it('should include ethereum property pre-configuration', () => {
+      expect(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT).toContain('Object.defineProperty(window, \'ethereum\'');
+      expect(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT).toContain('configurable: true');
+    });
+  });
+
+  describe('ethereum property pre-configuration', () => {
+    beforeEach(() => {
+      // Ensure ethereum is undefined before script runs
+      try {
+        delete (window as any).ethereum;
+      } catch (e) {
+        // Ignore if already non-configurable
+      }
+    });
+
+    it('should pre-define window.ethereum as configurable when undefined', () => {
+      // Mock addEventListener to prevent side effects
+      addEventListenerSpy.mockImplementation(() => undefined as any);
+
+      eval(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT);
+
+      const descriptor = Object.getOwnPropertyDescriptor(window, 'ethereum');
+      expect(descriptor).toBeDefined();
+      expect(descriptor?.configurable).toBe(true);
+    });
+
+    it('should allow subsequent redefinition of window.ethereum', () => {
+      // Mock addEventListener to prevent side effects
+      addEventListenerSpy.mockImplementation(() => undefined as any);
+
+      eval(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT);
+
+      // This should not throw because ethereum is now configurable
+      expect(() => {
+        Object.defineProperty(window, 'ethereum', {
+          value: { isMetaMask: true },
+          configurable: true,
+          writable: true,
+        });
+      }).not.toThrow();
+
+      expect((window as any).ethereum.isMetaMask).toBe(true);
+    });
+
+    it('should allow setting window.ethereum via setter', () => {
+      // Mock addEventListener to prevent side effects
+      addEventListenerSpy.mockImplementation(() => undefined as any);
+
+      eval(ETHEREUM_ERROR_SUPPRESSOR_SCRIPT);
+
+      const mockProvider = { isOKExWallet: true };
+      (window as any).ethereum = mockProvider;
+
+      expect((window as any).ethereum).toBe(mockProvider);
     });
   });
 
