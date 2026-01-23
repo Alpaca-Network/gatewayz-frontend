@@ -11,6 +11,7 @@ import {
 // Using modular streaming - the old streaming.ts is deprecated
 import { streamChatResponse } from "@/lib/streaming/index";
 import type { ModelOption } from "@/components/chat/model-select";
+import { getChatApiUrl } from "@/lib/config";
 
 export type ChatSessionView = {
   id: string;
@@ -296,7 +297,7 @@ export function useChatController() {
       let currentSearchResults: ChatMessageView["searchResults"] | undefined;
       let currentSearchError: string | undefined;
 
-      for await (const chunk of streamChatResponse("/api/chat/completions", apiKey, payload)) {
+      for await (const chunk of streamChatResponse(getChatApiUrl('/v1/chat/completions'), apiKey, payload)) {
         // Handle tool call events (search starting)
         if (chunk.type === "tool_call" && chunk.toolCall) {
           if (chunk.toolCall.name === "web_search") {

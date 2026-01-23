@@ -28,8 +28,9 @@ import {
     transformStaticModel,
     type ModelDetailRecord,
 } from '@/lib/model-detail-utils';
-import { stripDeveloperPrefix, keepFullModelId } from '@/lib/provider-model-formats';
 import { getSourceGateway, formatPricingForDisplay } from '@/lib/model-pricing-utils';
+import { buildProviderConfigsRecord, getProviderDisplayName, type ProviderConfig } from '@/lib/provider-config';
+import { getGatewayDisplayName, getGatewayLogoWithFallback } from '@/lib/gateway-registry';
 
 // Lazy load heavy components
 const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
@@ -172,211 +173,9 @@ export default function ModelProfilePage() {
         }
     }, [developer, modelNameParam, router]);
 
-    // Provider configurations for API calls
-    const providerConfigs: Record<string, {
-        name: string;
-        baseUrl: string;
-        requiresApiKey: boolean;
-        apiKeyPlaceholder: string;
-        modelIdFormat?: (modelId: string) => string;
-    }> = {
-        gatewayz: {
-            name: 'Gatewayz (Unified)',
-            baseUrl: 'https://api.gatewayz.ai/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: apiKey,
-        },
-        openrouter: {
-            name: 'OpenRouter',
-            baseUrl: 'https://openrouter.ai/api/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'sk-or-v1-...',
-        },
-        groq: {
-            name: 'Groq',
-            baseUrl: 'https://api.groq.com/openai/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'gsk_...',
-            modelIdFormat: (modelId: string) => {
-                // Groq uses the model name without the developer prefix
-                // e.g., 'meta/llama-3.3-70b' → 'llama-3.3-70b'
-                const parts = modelId.split('/');
-                return parts[parts.length - 1];
-            }
-        },
-        together: {
-            name: 'Together AI',
-            baseUrl: 'https://api.together.xyz/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: '...',
-            modelIdFormat: (modelId: string) => {
-                // Together AI typically uses the full model ID
-                return modelId;
-            }
-        },
-        fireworks: {
-            name: 'Fireworks',
-            baseUrl: 'https://api.fireworks.ai/inference/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'fw_...',
-            modelIdFormat: (modelId: string) => {
-                // Fireworks uses the full model ID with developer prefix
-                return modelId;
-            }
-        },
-        deepinfra: {
-            name: 'DeepInfra',
-            baseUrl: 'https://api.deepinfra.com/v1/openai',
-            requiresApiKey: true,
-            apiKeyPlaceholder: '...',
-            modelIdFormat: (modelId: string) => {
-                // DeepInfra uses the full model ID
-                return modelId;
-            }
-        },
-        google: {
-            name: 'Google AI',
-            baseUrl: 'https://generativelanguage.googleapis.com/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'AIza...',
-        },
-        cerebras: {
-            name: 'Cerebras',
-            baseUrl: 'https://api.cerebras.ai/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'csk-...',
-            modelIdFormat: (modelId: string) => {
-                // Cerebras uses the model name without the developer prefix
-                // e.g., 'cerebras/cpt-llama-3.1-8b' → 'cpt-llama-3.1-8b'
-                const parts = modelId.split('/');
-                return parts[parts.length - 1];
-            }
-        },
-        xai: {
-            name: 'xAI',
-            baseUrl: 'https://api.x.ai/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'xai-...',
-            modelIdFormat: (modelId: string) => {
-                // xAI uses the model name without the developer prefix
-                // e.g., 'xai/grok-3' → 'grok-3'
-                const parts = modelId.split('/');
-                return parts[parts.length - 1];
-            }
-        },
-        huggingface: {
-            name: 'Hugging Face',
-            baseUrl: 'https://api-inference.huggingface.co/models',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'hf_...',
-            modelIdFormat: (modelId: string) => {
-                // Hugging Face uses the full model ID (developer/model)
-                return modelId;
-            }
-        },
-        near: {
-            name: 'NEAR Protocol',
-            baseUrl: 'https://api.near.ai/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'near_...',
-            modelIdFormat: (modelId: string) => {
-                // NEAR Protocol uses the full model ID (including nested paths like near/deepseek-ai/DeepSeek-V3.1)
-                return modelId;
-            }
-        },
-        nebius: {
-            name: 'Nebius AI Studio',
-            baseUrl: 'https://api.studio.nebius.ai/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: '...',
-            modelIdFormat: (modelId: string) => {
-                // Nebius uses the model name without the developer prefix
-                // e.g., 'meta/llama-3.1-70b' → 'llama-3.1-70b'
-                const parts = modelId.split('/');
-                return parts[parts.length - 1];
-            }
-        },
-        featherless: {
-            name: 'Featherless',
-            baseUrl: 'https://api.featherless.ai/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: '...',
-            modelIdFormat: (modelId: string) => {
-                // Featherless uses the full model ID with developer prefix
-                return modelId;
-            }
-        },
-        chutes: {
-            name: 'Chutes',
-            baseUrl: 'https://api.chutes.ai/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: '...',
-            modelIdFormat: (modelId: string) => {
-                // Chutes uses the full model ID
-                return modelId;
-            }
-        },
-        portkey: {
-            name: 'Portkey',
-            baseUrl: 'https://api.portkey.ai/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: '...',
-        },
-        novita: {
-            name: 'Novita AI',
-            baseUrl: 'https://api.novita.ai/v3/openai',
-            requiresApiKey: true,
-            apiKeyPlaceholder: '...',
-            modelIdFormat: (modelId: string) => {
-                // Novita uses the model name without the developer prefix
-                // e.g., 'meta/llama-3-70b' → 'llama-3-70b'
-                const parts = modelId.split('/');
-                return parts[parts.length - 1];
-            }
-        },
-        aimo: {
-            name: 'AIMO Network',
-            baseUrl: 'https://api.aimo.network/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: '...',
-            modelIdFormat: (modelId: string) => {
-                // AIMO uses the full model ID
-                return modelId;
-            }
-        },
-        fal: {
-            name: 'FAL AI',
-            baseUrl: 'https://fal.run/fal-ai',
-            requiresApiKey: true,
-            apiKeyPlaceholder: '...',
-        },
-        alibaba: {
-            name: 'Alibaba Cloud',
-            baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'sk-...',
-            modelIdFormat: (modelId: string) => {
-                // Alibaba uses the model name without the developer prefix
-                // e.g., 'qwen/qwen-turbo' → 'qwen-turbo'
-                const parts = modelId.split('/');
-                return parts[parts.length - 1];
-            }
-        },
-        openai: {
-            name: 'OpenAI',
-            baseUrl: 'https://api.openai.com/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'sk-...',
-            modelIdFormat: stripDeveloperPrefix,
-        },
-        anthropic: {
-            name: 'Anthropic',
-            baseUrl: 'https://api.anthropic.com/v1',
-            requiresApiKey: true,
-            apiKeyPlaceholder: 'sk-ant-...',
-            modelIdFormat: stripDeveloperPrefix,
-        },
-    };
+    // Provider configurations for API calls - built from centralized utility
+    // The apiKey is passed to override the gatewayz placeholder
+    const providerConfigs = useMemo(() => buildProviderConfigsRecord(apiKey), [apiKey]);
 
     // Store the model ID
     let modelId = `${developer}/${modelNameParam}`;
@@ -1031,56 +830,17 @@ console.log(response.choices[0].message.content);`
                             <div className="space-y-4">
                                 {modelProviders.map(provider => {
                                     const isRecommended = provider === selectedProvider;
-                                    const providerNames: Record<string, string> = {
-                                        openai: 'OpenAI',
-                                        anthropic: 'Anthropic',
-                                        openrouter: 'OpenRouter',
-                                        portkey: 'Portkey',
-                                        featherless: 'Featherless',
-                                        chutes: 'Chutes',
-                                        fireworks: 'Fireworks',
-                                        together: 'Together AI',
-                                        groq: 'Groq',
-                                        deepinfra: 'DeepInfra',
-                                        google: 'Google AI',
-                                        cerebras: 'Cerebras',
-                                        nebius: 'Nebius AI Studio',
-                                        xai: 'xAI',
-                                        novita: 'Novita AI',
-                                        huggingface: 'Hugging Face',
-                                        aimo: 'AIMO Network',
-                                        near: 'NEAR Protocol',
-                                        fal: 'FAL AI'
-                                    };
-                                    const providerLogos: Record<string, string> = {
-                                        openai: '/openai-logo.svg',
-                                        anthropic: '/anthropic-logo.svg',
-                                        openrouter: '/openrouter-logo.svg',
-                                        portkey: '/portkey-logo.svg',
-                                        featherless: '/featherless-logo.svg',
-                                        chutes: '/chutes-logo.svg',
-                                        fireworks: '/fireworks-logo.svg',
-                                        together: '/together-logo.svg',
-                                        groq: '/groq-logo.svg',
-                                        deepinfra: '/deepinfra-logo.svg',
-                                        google: '/google-logo.svg',
-                                        cerebras: '/cerebras-logo.svg',
-                                        nebius: '/nebius-logo.svg',
-                                        xai: '/xai-logo.svg',
-                                        novita: '/novita-logo.svg',
-                                        huggingface: '/huggingface-logo.svg',
-                                        aimo: '/aimo-logo.svg',
-                                        near: '/near-logo.svg',
-                                        fal: '/fal-logo.svg'
-                                    };
+                                    // Use centralized gateway registry for display names and logos
+                                    const displayName = getGatewayDisplayName(provider);
+                                    const logoPath = getGatewayLogoWithFallback(provider);
 
                                     return (
                                         <Card key={provider} className={`p-6 ${isRecommended ? 'ring-2 ring-primary' : ''}`}>
                                             <div className="flex items-center gap-4 mb-4">
                                                 <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center border">
                                                     <img
-                                                        src={providerLogos[provider] || '/OpenAI_Logo-black.svg'}
-                                                        alt={providerNames[provider]}
+                                                        src={logoPath}
+                                                        alt={displayName}
                                                         className="w-8 h-8 object-contain"
                                                         onError={(e) => {
                                                             // Fallback to a default icon if logo doesn't exist
@@ -1090,7 +850,7 @@ console.log(response.choices[0].message.content);`
                                                 </div>
                                                 <div className="flex-1">
                                                     <div className="flex items-center gap-2">
-                                                        <h3 className="text-lg font-semibold">{providerNames[provider]}</h3>
+                                                        <h3 className="text-lg font-semibold">{displayName}</h3>
                                                         {isRecommended && (
                                                             <Badge className="bg-primary text-primary-foreground">
                                                                 Recommended
