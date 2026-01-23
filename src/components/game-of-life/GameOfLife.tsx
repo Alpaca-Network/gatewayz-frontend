@@ -50,19 +50,37 @@ export function GameOfLife({
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
+  // Vibrant color palette for cells
+  const CELL_COLORS = [
+    '#FF6B6B', // coral red
+    '#FF8E53', // orange
+    '#FFD93D', // yellow
+    '#6BCB77', // green
+    '#4D96FF', // blue
+    '#9B59B6', // purple
+    '#E91E63', // pink
+    '#00BCD4', // cyan
+  ];
+
+  // Get color for a cell based on position (creates rainbow gradient effect)
+  const getCellColor = useCallback(
+    (row: number, col: number, totalCols: number) => {
+      // Use diagonal position to create a gradient effect
+      const position = (row + col) % CELL_COLORS.length;
+      return CELL_COLORS[position];
+    },
+    []
+  );
+
   // Get theme colors from CSS variables
   const getColors = useCallback(() => {
     if (typeof window === 'undefined') {
-      return { alive: '#1f2937', dead: '#f9fafb', grid: '#e5e7eb' };
+      return { dead: '#f9fafb', grid: '#e5e7eb' };
     }
 
     const isDark = document.documentElement.classList.contains('dark');
 
     return {
-      // Use theme colors - foreground for alive cells, background for dead
-      alive: isDark
-        ? 'hsl(210, 40%, 98%)' // dark mode foreground
-        : 'hsl(222.2, 47.4%, 11.2%)', // light mode foreground
       dead: isDark
         ? 'hsl(222.2, 84%, 4.9%)' // dark mode background
         : 'hsl(0, 0%, 100%)', // light mode background
@@ -117,11 +135,11 @@ export function GameOfLife({
     ctx.fillStyle = colors.dead;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Draw alive cells
-    ctx.fillStyle = colors.alive;
+    // Draw alive cells with colorful gradient
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         if (grid[row][col]) {
+          ctx.fillStyle = getCellColor(row, col, cols);
           // Draw cell with 1px padding for visual separation
           ctx.fillRect(
             col * cellSize + 1,
