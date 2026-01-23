@@ -166,6 +166,11 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
             {/* Send button - shows Send icon when message is entered, Sparkles when empty */}
             <Button
               ref={buttonRef}
+              type="button"
+              onPointerDown={(e) => {
+                // Prevent focus from moving away from input on mobile/touch devices
+                e.preventDefault();
+              }}
               onClick={message.trim() ? handleSendMessage : handleSurpriseMe}
               size="icon"
               disabled={isMagicAnimating}

@@ -489,7 +489,7 @@ body {
 }
 
 /* Shimmer/twinkle animation for Surprise Me button */
-@keyframes shimmer {
+@keyframes surprise-shimmer-glow {
   0% {
     box-shadow: 0 0 20px rgba(99, 102, 241, 0.4), 0 0 10px rgba(59, 130, 246, 0.3);
   }
@@ -501,7 +501,7 @@ body {
   }
 }
 
-@keyframes twinkle {
+@keyframes surprise-twinkle {
   0%, 100% {
     opacity: 1;
   }
@@ -511,5 +511,5 @@ body {
 }
 
 .surprise-me-shimmer {
-  animation: shimmer 2.5s ease-in-out infinite, twinkle 3s ease-in-out infinite;
+  animation: surprise-shimmer-glow 2.5s ease-in-out infinite, surprise-twinkle 3s ease-in-out infinite;
 }
