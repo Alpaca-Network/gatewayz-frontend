@@ -108,6 +108,8 @@ describe('CreditsDisplay', () => {
         credits: 5,
         tier: 'pro',
         subscription_status: 'active',
+        subscription_allowance: 5, // Tiered credits: allowance remaining
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -116,7 +118,7 @@ describe('CreditsDisplay', () => {
 
       // Should show PRO badge
       expect(screen.getByText('PRO')).toBeInTheDocument();
-      // Should show credit amount in progress bar
+      // Should show subscription allowance in progress bar
       expect(screen.getByText('$5')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
@@ -133,6 +135,8 @@ describe('CreditsDisplay', () => {
         credits: 5,
         tier: 'PRO' as any, // Simulate backend sending uppercase
         subscription_status: 'active',
+        subscription_allowance: 5, // Tiered credits: allowance remaining
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -337,6 +341,8 @@ describe('CreditsDisplay', () => {
         credits: 15000,
         tier: 'max',
         subscription_status: 'trial', // Stale status - should be ignored for max tier
+        subscription_allowance: 15000,
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -359,6 +365,8 @@ describe('CreditsDisplay', () => {
         credits: 5000,
         tier: 'pro',
         subscription_status: 'trial', // Stale status - should be ignored for pro tier
+        subscription_allowance: 5000,
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -381,6 +389,8 @@ describe('CreditsDisplay', () => {
         credits: 15000,
         tier: 'max',
         subscription_status: 'expired', // Stale status - should be ignored for max tier
+        subscription_allowance: 15000,
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -403,6 +413,8 @@ describe('CreditsDisplay', () => {
         credits: 5000,
         tier: 'pro',
         subscription_status: 'expired', // Stale status - should be ignored for pro tier
+        subscription_allowance: 5000,
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -425,6 +437,8 @@ describe('CreditsDisplay', () => {
         credits: 15000,
         tier: 'MAX' as any, // Uppercase tier from backend
         subscription_status: 'trial', // Stale status
+        subscription_allowance: 15000,
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -540,9 +554,11 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 5, // $5 remaining of $10 allocation
+        credits: 5, // $5 remaining of $15 allocation
         tier: 'pro',
         subscription_status: 'active',
+        subscription_allowance: 5, // Tiered credits
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -551,7 +567,7 @@ describe('CreditsDisplay', () => {
 
       // Should show PRO badge
       expect(screen.getByText('PRO')).toBeInTheDocument();
-      // Should show credit amount
+      // Should show subscription allowance
       expect(screen.getByText('$5')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
@@ -568,6 +584,8 @@ describe('CreditsDisplay', () => {
         credits: 75, // $75 remaining of $150 allocation
         tier: 'max',
         subscription_status: 'active',
+        subscription_allowance: 75, // Tiered credits
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -576,7 +594,7 @@ describe('CreditsDisplay', () => {
 
       // Should show MAX badge
       expect(screen.getByText('MAX')).toBeInTheDocument();
-      // Should show credit amount
+      // Should show subscription allowance
       expect(screen.getByText('$75')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
@@ -593,6 +611,8 @@ describe('CreditsDisplay', () => {
         credits: 5,
         tier: 'pro',
         subscription_status: 'active',
+        subscription_allowance: 5,
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -611,16 +631,18 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 8, // 80% of $10 allocation
+        credits: 8, // 80% of $15 allocation
         tier: 'pro',
         subscription_status: 'active',
+        subscription_allowance: 8,
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
 
       render(<CreditsDisplay />);
 
-      // Should show $8 credit amount
+      // Should show $8 subscription allowance
       expect(screen.getByText('$8')).toBeInTheDocument();
     });
 
@@ -657,13 +679,15 @@ describe('CreditsDisplay', () => {
         credits: 1, // Only 10% remaining - should show red
         tier: 'pro',
         subscription_status: 'active',
+        subscription_allowance: 1, // Tiered credits: allowance remaining
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
 
       render(<CreditsDisplay />);
 
-      // Should show $1 credit amount
+      // Should show $1 subscription allowance amount
       expect(screen.getByText('$1')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
@@ -680,13 +704,15 @@ describe('CreditsDisplay', () => {
         credits: 0,
         tier: 'pro',
         subscription_status: 'active',
+        subscription_allowance: 0, // Tiered credits: no allowance remaining
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
 
       render(<CreditsDisplay />);
 
-      // Should show $0 credit amount
+      // Should show $0 subscription allowance amount
       expect(screen.getByText('$0')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
@@ -708,6 +734,8 @@ describe('CreditsDisplay', () => {
         tier: undefined, // Missing tier field!
         tier_display_name: 'Pro', // But has display name
         subscription_status: 'active',
+        subscription_allowance: 3, // Tiered credits: allowance remaining
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -716,7 +744,7 @@ describe('CreditsDisplay', () => {
 
       // Should show Pro badge (using tier_display_name since it's provided)
       expect(screen.getByText('Pro')).toBeInTheDocument();
-      // Should show credit amount
+      // Should show subscription allowance amount
       expect(screen.getByText('$3')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
@@ -736,6 +764,8 @@ describe('CreditsDisplay', () => {
         tier: undefined,
         tier_display_name: undefined,
         subscription_status: 'active',
+        subscription_allowance: 5, // Tiered credits: allowance remaining
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -744,6 +774,8 @@ describe('CreditsDisplay', () => {
 
       // Should show PRO badge (fallback to uppercase since tier_display_name is missing)
       expect(screen.getByText('PRO')).toBeInTheDocument();
+      // Should show subscription allowance amount
+      expect(screen.getByText('$5')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
@@ -774,6 +806,8 @@ describe('CreditsDisplay', () => {
         ...initialUserData,
         tier: 'pro',
         subscription_status: 'active',
+        subscription_allowance: 15, // Tiered credits for PRO
+        purchased_credits: 0,
       };
 
       (getUserData as jest.Mock).mockReturnValue(upgradedUserData);
