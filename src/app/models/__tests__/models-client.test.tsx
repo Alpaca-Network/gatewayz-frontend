@@ -836,13 +836,15 @@ describe('ModelsClient - Filtering Logic', () => {
 
   describe('Table view formatting', () => {
     it('should format context length with commas', () => {
-      const formatContext = (length: number) => {
-        if (length <= 0) return '-';
+      const formatContext = (length: number | undefined | null) => {
+        if (length === undefined || length === null || length <= 0) return '-';
         return length.toLocaleString();
       };
 
       expect(formatContext(0)).toBe('-');
       expect(formatContext(-1)).toBe('-');
+      expect(formatContext(undefined)).toBe('-');
+      expect(formatContext(null)).toBe('-');
       expect(formatContext(1000)).toBe('1,000');
       expect(formatContext(128000)).toBe('128,000');
       expect(formatContext(1000000)).toBe('1,000,000');

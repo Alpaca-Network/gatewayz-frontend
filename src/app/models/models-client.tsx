@@ -104,8 +104,8 @@ const ModelTableRow = React.memo(function ModelTableRow({ model }: { model: Mode
   const modelUrl = getModelUrl(model.id, model.provider_slug);
 
   // Format context as number with commas
-  const formatContext = (length: number) => {
-    if (length <= 0) return '-';
+  const formatContext = (length: number | undefined | null) => {
+    if (length === undefined || length === null || length <= 0) return '-';
     return length.toLocaleString();
   };
 
