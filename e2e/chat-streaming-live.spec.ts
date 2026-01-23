@@ -62,7 +62,10 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
+
+      // Wait for the chat interface to be ready
+      await page.waitForSelector('body', { state: 'visible' });
 
       // Find and interact with message input
       const messageInput = page.locator(
@@ -111,7 +114,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Page should remain functional
       await expect(page.locator('body')).toBeVisible();
@@ -148,7 +151,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Verify page handles rate limit gracefully
       await expect(page.locator('body')).toBeVisible();
@@ -164,7 +167,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       const messageInput = page.locator('textarea, input').first();
       const sendButton = page.locator('button:has-text("Send")').first();
@@ -186,7 +189,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       const messageInput = page.locator('textarea, input').first();
       const sendButton = page.locator('button:has-text("Send")').first();
@@ -221,7 +224,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       await expect(page.locator('body')).toBeVisible();
     });
 
@@ -243,7 +246,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       await expect(page.locator('body')).toBeVisible();
     });
 
@@ -264,7 +267,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       await expect(page.locator('body')).toBeVisible();
     });
   });
@@ -288,7 +291,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Page should remain responsive even with many chunks
       await expect(page.locator('body')).toBeVisible();
@@ -312,7 +315,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       await expect(page.locator('body')).toBeVisible();
     });
@@ -352,7 +355,7 @@ test.describe('Streaming - Live API Tests', () => {
 
         await mockChatAPI();
         await page.goto('/chat');
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('domcontentloaded');
         await expect(page.locator('body')).toBeVisible();
       });
     }
@@ -375,7 +378,7 @@ test.describe('Streaming - Live API Tests', () => {
       });
 
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Page should still work for guests
       await expect(page.locator('body')).toBeVisible();
@@ -393,7 +396,7 @@ test.describe('Streaming - Live API Tests', () => {
       });
 
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Page should remain usable
       await expect(page.locator('body')).toBeVisible();
@@ -422,7 +425,7 @@ test.describe('Streaming - Live API Tests', () => {
 
       await mockChatAPI();
       await page.goto('/chat');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Page should handle concurrent requests
       await expect(page.locator('body')).toBeVisible();
