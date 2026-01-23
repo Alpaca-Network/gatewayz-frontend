@@ -383,7 +383,7 @@ export function useChatStream() {
         if (isTauri) {
             // Desktop app: Call backend API directly
             // All providers use the same OpenAI-compatible endpoint
-            url = `${backendBaseUrl}/v1/chat/completions`;
+            url = `${backendBaseUrl}/v1/chat/completions?session_id=${sessionId}`;
             debugLog('Using direct backend API for Tauri desktop', { url });
         } else {
             // Web app: Use Next.js API routes as proxy

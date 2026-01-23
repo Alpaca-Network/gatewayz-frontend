@@ -410,8 +410,8 @@ describe('useChatStream routing logic', () => {
       backendBaseUrl: string = 'https://api.gatewayz.ai'
     ): string {
       if (isTauri) {
-        // Desktop app: Call backend API directly
-        return `${backendBaseUrl}/v1/chat/completions`;
+        // Desktop app: Call backend API directly with session_id
+        return `${backendBaseUrl}/v1/chat/completions?session_id=${sessionId}`;
       } else {
         // Web app: Use Next.js API routes as proxy
         return useFlexibleRoute
@@ -422,7 +422,7 @@ describe('useChatStream routing logic', () => {
 
     test('should use backend API directly for Tauri desktop app', () => {
       const url = getUrlForEnvironment(true, false, 123);
-      expect(url).toBe('https://api.gatewayz.ai/v1/chat/completions');
+      expect(url).toBe('https://api.gatewayz.ai/v1/chat/completions?session_id=123');
     });
 
     test('should use backend API for Tauri regardless of route type', () => {
@@ -431,8 +431,8 @@ describe('useChatStream routing logic', () => {
       const urlFlexible = getUrlForEnvironment(true, true, 123);
       const urlAiSdk = getUrlForEnvironment(true, false, 456);
 
-      expect(urlFlexible).toBe('https://api.gatewayz.ai/v1/chat/completions');
-      expect(urlAiSdk).toBe('https://api.gatewayz.ai/v1/chat/completions');
+      expect(urlFlexible).toBe('https://api.gatewayz.ai/v1/chat/completions?session_id=123');
+      expect(urlAiSdk).toBe('https://api.gatewayz.ai/v1/chat/completions?session_id=456');
     });
 
     test('should use Next.js proxy routes for web app', () => {
@@ -446,7 +446,7 @@ describe('useChatStream routing logic', () => {
     test('should support custom backend URL for Tauri', () => {
       const customUrl = 'https://custom-api.example.com';
       const url = getUrlForEnvironment(true, false, 123, customUrl);
-      expect(url).toBe('https://custom-api.example.com/v1/chat/completions');
+      expect(url).toBe('https://custom-api.example.com/v1/chat/completions?session_id=123');
     });
   });
 });
