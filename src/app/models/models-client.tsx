@@ -31,6 +31,7 @@ import { stringToColor, getModelUrl } from '@/lib/utils';
 import { safeParseJson } from '@/lib/http';
 import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, getAllActiveGatewayIds } from '@/lib/gateway-registry';
 import { isFreeModel as checkIsFreeModel, getSourceGateway, formatPricingForDisplay, getNormalizedPerTokenPrice } from '@/lib/model-pricing-utils';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 
 interface Model {
@@ -431,12 +432,12 @@ export default function ModelsClient({
     // Only run on client side to prevent hydration errors
     if (typeof window !== 'undefined') {
       try {
-        const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
+        const savedTasks = safeLocalStorageGet('gatewayz_onboarding_tasks');
         if (savedTasks) {
           const taskState = JSON.parse(savedTasks);
           if (!taskState.explore) {
             taskState.explore = true;
-            localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+            safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
             console.log('Onboarding - Explore task marked as complete');
 
             // Dispatch custom event to notify the banner
@@ -445,7 +446,7 @@ export default function ModelsClient({
         } else {
           // Initialize task state if it doesn't exist and mark explore as complete
           const taskState = { explore: true };
-          localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+          safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
           console.log('Onboarding - Explore task initialized and marked as complete');
 
           // Dispatch custom event to notify the banner

@@ -131,6 +131,27 @@ export default function StartOpencodePage() {
           </p>
         </div>
 
+        {/* Demo Video */}
+        <div className="mb-12">
+          <div className="rounded-xl overflow-hidden shadow-lg border border-gray-200 dark:border-gray-800">
+            <video
+              className="w-full"
+              autoPlay
+              playsInline
+              loop
+              muted
+              preload="auto"
+              poster="https://opencode.ai/_build/assets/opencode-poster-CbUiDHgA.png"
+            >
+              <source src="https://opencode.ai/_build/assets/opencode-min-CiEsORKQ.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
+          </div>
+          <p className="text-center text-sm text-muted-foreground mt-3">
+            See OpenCode in action — AI-powered coding right in your terminal
+          </p>
+        </div>
+
         {/* Step 1: Install */}
         <div className="mb-12">
           <div className="flex items-center gap-3 mb-4">

@@ -10,6 +10,7 @@ import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 import { sentryMetrics } from '@/lib/sentry-metrics';
+import { getChatApiUrl } from '@/lib/config';
 
 // Stream stopped error for clean cancellation
 class StreamStoppedError extends Error {
@@ -371,9 +372,10 @@ export function useChatStream() {
 
         // Use flexible route for non-standard gateways UNLESS normalized by a gateway
         const useFlexibleRoute = (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway;
+        // Use dynamic endpoint for desktop (direct backend) vs web (Next.js API route)
         const url = useFlexibleRoute
-            ? `/api/chat/completions?session_id=${sessionId}`
-            : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+            ? `${getChatApiUrl('/v1/chat/completions')}?session_id=${sessionId}`
+            : `${getChatApiUrl('/v1/chat/ai-sdk-completions')}?session_id=${sessionId}`;
 
         debugLog('Route selection', {
             useFlexibleRoute,

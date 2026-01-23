@@ -15,6 +15,9 @@ import {
   normalizeGatewayId,
   isValidGateway,
   getGatewayDisplayName,
+  getGatewayLogo,
+  getGatewayLogoWithFallback,
+  DEFAULT_GATEWAY_LOGO,
   isGatewayDeprecated,
   registerDynamicGateway,
   getAllGateways,
@@ -130,6 +133,18 @@ describe('gateway-registry', () => {
         expect(GATEWAY_CONFIG[gateway.id]).toBeDefined();
         expect(GATEWAY_CONFIG[gateway.id].name).toBe(gateway.name);
         expect(GATEWAY_CONFIG[gateway.id].color).toBe(gateway.color);
+        // Logo should be included if defined on the gateway
+        if (gateway.logo) {
+          expect(GATEWAY_CONFIG[gateway.id].logo).toBe(gateway.logo);
+        }
+      }
+    });
+
+    it('should have logo defined for all static gateways', () => {
+      for (const gateway of GATEWAYS) {
+        expect(gateway.logo).toBeDefined();
+        expect(typeof gateway.logo).toBe('string');
+        expect(gateway.logo).toMatch(/^\/.*-logo\.svg$/);
       }
     });
 
@@ -157,7 +172,7 @@ describe('gateway-registry', () => {
       expect(GATEWAY_BY_ID['google']).toBeDefined();
       expect(GATEWAY_BY_ID['google'].id).toBe('google-vertex');
       expect(GATEWAY_BY_ID['google-vertex']).toBeDefined();
-      expect(GATEWAY_BY_ID['google-vertex'].name).toBe('Google');
+      expect(GATEWAY_BY_ID['google-vertex'].name).toBe('Google AI');
     });
   });
 
@@ -247,7 +262,7 @@ describe('gateway-registry', () => {
 
       it('should return display name for case-insensitive aliases', () => {
         expect(getGatewayDisplayName('HUG')).toBe('Hugging Face');
-        expect(getGatewayDisplayName('GOOGLE')).toBe('Google');
+        expect(getGatewayDisplayName('GOOGLE')).toBe('Google AI');
       });
     });
 
@@ -271,6 +286,51 @@ describe('gateway-registry', () => {
         expect(isGatewayDeprecated('Portkey')).toBe(true);
         expect(isGatewayDeprecated('OPENROUTER')).toBe(false);
         expect(isGatewayDeprecated('OpenRouter')).toBe(false);
+      });
+    });
+
+    describe('getGatewayLogo', () => {
+      it('should return logo path for known gateways with logos', () => {
+        expect(getGatewayLogo('openrouter')).toBe('/openrouter-logo.svg');
+        expect(getGatewayLogo('groq')).toBe('/groq-logo.svg');
+        expect(getGatewayLogo('openai')).toBe('/openai-logo.svg');
+      });
+
+      it('should return logo path for aliases', () => {
+        expect(getGatewayLogo('hug')).toBe('/huggingface-logo.svg');
+        expect(getGatewayLogo('google')).toBe('/google-logo.svg');
+      });
+
+      it('should return undefined for unknown gateways', () => {
+        expect(getGatewayLogo('unknown-gateway')).toBeUndefined();
+      });
+
+      it('should return logo path for case-insensitive gateway IDs', () => {
+        expect(getGatewayLogo('OPENROUTER')).toBe('/openrouter-logo.svg');
+        expect(getGatewayLogo('GrOq')).toBe('/groq-logo.svg');
+      });
+    });
+
+    describe('getGatewayLogoWithFallback', () => {
+      it('should return logo path for known gateways', () => {
+        expect(getGatewayLogoWithFallback('openrouter')).toBe('/openrouter-logo.svg');
+        expect(getGatewayLogoWithFallback('groq')).toBe('/groq-logo.svg');
+      });
+
+      it('should return default logo for unknown gateways', () => {
+        expect(getGatewayLogoWithFallback('unknown-gateway')).toBe(DEFAULT_GATEWAY_LOGO);
+      });
+
+      it('should return default logo for dynamically registered gateways without logo', () => {
+        registerDynamicGateway('no-logo-gateway');
+        expect(getGatewayLogoWithFallback('no-logo-gateway')).toBe(DEFAULT_GATEWAY_LOGO);
+      });
+    });
+
+    describe('DEFAULT_GATEWAY_LOGO', () => {
+      it('should be defined', () => {
+        expect(DEFAULT_GATEWAY_LOGO).toBeDefined();
+        expect(typeof DEFAULT_GATEWAY_LOGO).toBe('string');
       });
     });
   });

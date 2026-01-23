@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, Sparkles } from "lucide-react";
 import Link from 'next/link';
 import { getUserData } from '@/lib/api';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 const TRIAL_NOTICE_DISMISSED_KEY = 'gatewayz_trial_notice_dismissed';
 
@@ -22,7 +23,7 @@ export function TrialCreditsNotice() {
 
   useEffect(() => {
     // Check if user has already dismissed this notice
-    const dismissed = localStorage.getItem(TRIAL_NOTICE_DISMISSED_KEY);
+    const dismissed = safeLocalStorageGet(TRIAL_NOTICE_DISMISSED_KEY);
     if (dismissed === 'true') {
       return;
     }
@@ -46,7 +47,7 @@ export function TrialCreditsNotice() {
   }, []);
 
   const handleDismiss = () => {
-    localStorage.setItem(TRIAL_NOTICE_DISMISSED_KEY, 'true');
+    safeLocalStorageSet(TRIAL_NOTICE_DISMISSED_KEY, 'true');
     setShowDialog(false);
   };
 

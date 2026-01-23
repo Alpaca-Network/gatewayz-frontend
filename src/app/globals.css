@@ -487,3 +487,43 @@ body {
     scrollbar-color: rgba(155, 155, 155, 0.3) transparent;
   }
 }
+
+/* Shimmer/twinkle animation for Surprise Me button */
+@keyframes surprise-shimmer-glow {
+  0% {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4), 0 0 10px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.6), 0 0 15px rgba(59, 130, 246, 0.5), 0 0 5px rgba(255, 255, 255, 0.8);
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4), 0 0 10px rgba(59, 130, 246, 0.3);
+  }
+}
+
+@keyframes surprise-twinkle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.surprise-me-shimmer {
+  animation: surprise-shimmer-glow 2.5s ease-in-out infinite, surprise-twinkle 3s ease-in-out infinite;
+}
+
+/* Subtle bounce animation for eye-catching effect on surprise me button */
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s ease-in-out infinite;
+}

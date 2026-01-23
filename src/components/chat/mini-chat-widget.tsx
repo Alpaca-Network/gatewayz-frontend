@@ -16,6 +16,7 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
   const [isMagicAnimating, setIsMagicAnimating] = useState(false);
   const router = useRouter();
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const leftButtonRef = useRef<HTMLButtonElement>(null);
   const isMountedRef = useRef(true);
   const activeAnimationsRef = useRef<Animation[]>([]);
 
@@ -28,8 +29,8 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
       activeAnimationsRef.current.forEach(animation => {
         animation.cancel();
         const effect = animation.effect;
-        if (effect && effect instanceof KeyframeEffect && effect.target) {
-          effect.target.remove();
+        if (effect && 'target' in effect && effect.target) {
+          (effect.target as Element).remove();
         }
       });
       activeAnimationsRef.current = [];
@@ -43,13 +44,14 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
     }
   };
 
-  const handleSurpriseMe = () => {
+  const handleSurpriseMe = (sourceButton?: HTMLButtonElement | null) => {
     // Trigger magical animation
     setIsMagicAnimating(true);
 
-    // Create sparkle particles
-    if (buttonRef.current) {
-      createSparkleEffect(buttonRef.current);
+    // Create sparkle particles from the clicked button (or default to right button)
+    const targetButton = sourceButton || buttonRef.current;
+    if (targetButton) {
+      createSparkleEffect(targetButton);
     }
 
     // Pick a random surprise prompt after brief animation delay
@@ -66,7 +68,15 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
     const sparkleCount = 12;
     let completedCount = 0;
 
-    // Clear any previous animations
+    // Cancel previous animations and remove their DOM elements before clearing
+    // Note: animation.cancel() does not trigger onfinish, so we must manually remove elements
+    activeAnimationsRef.current.forEach(animation => {
+      animation.cancel();
+      const effect = animation.effect;
+      if (effect && 'target' in effect && effect.target) {
+        (effect.target as Element).remove();
+      }
+    });
     activeAnimationsRef.current = [];
 
     for (let i = 0; i < sparkleCount; i++) {
@@ -110,7 +120,9 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
       activeAnimationsRef.current.push(animation);
 
       animation.onfinish = () => {
-        sparkle.remove();
+        if (isMountedRef.current) {
+          sparkle.remove();
+        }
         completedCount++;
         // Only update state if component is still mounted
         if (completedCount === sparkleCount && isMountedRef.current) {
@@ -138,10 +150,25 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
         {/* Main chat input */}
         <div className="relative bg-card border-2 border-border rounded-xl sm:rounded-2xl shadow-lg overflow-hidden">
           <div className="flex items-center gap-2 p-2.5 xs:p-3 sm:p-4">
-            {/* Icon */}
-            <div className="flex-shrink-0 w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-md">
-              <Sparkles className="w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 text-white" />
-            </div>
+            {/* Left Surprise Me button - always triggers surprise me */}
+            <button
+              ref={leftButtonRef}
+              type="button"
+              onClick={() => handleSurpriseMe(leftButtonRef.current)}
+              disabled={isMagicAnimating}
+              onPointerDown={(e) => {
+                // Prevent focus from moving away from input on mobile/touch devices
+                e.preventDefault();
+              }}
+              className={`flex-shrink-0 w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-md cursor-pointer transition-all hover:scale-105 hover:shadow-lg active:scale-95 ${
+                isMagicAnimating ? 'animate-pulse scale-110' : 'surprise-me-shimmer animate-bounce-subtle'
+              }`}
+              title="Surprise me!"
+            >
+              <Sparkles className={`w-4 h-4 xs:w-5 xs:h-5 sm:w-6 sm:h-6 text-white ${
+                isMagicAnimating ? 'animate-spin' : ''
+              }`} />
+            </button>
 
             {/* Input */}
             <Input
@@ -156,12 +183,17 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
             {/* Send button - shows Send icon when message is entered, Sparkles when empty */}
             <Button
               ref={buttonRef}
-              onClick={message.trim() ? handleSendMessage : handleSurpriseMe}
+              type="button"
+              onPointerDown={(e) => {
+                // Prevent focus from moving away from input on mobile/touch devices
+                e.preventDefault();
+              }}
+              onClick={message.trim() ? handleSendMessage : () => handleSurpriseMe(buttonRef.current)}
               size="icon"
               disabled={isMagicAnimating}
               className={`flex-shrink-0 w-9 h-9 xs:w-10 xs:h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 shadow-md transition-all ${
                 isMagicAnimating ? 'animate-pulse scale-110' : ''
-              }`}
+              } ${!message.trim() && !isMagicAnimating ? 'surprise-me-shimmer' : ''}`}
               title={message.trim() ? "Send message" : "Surprise me!"}
             >
               {message.trim() ? (

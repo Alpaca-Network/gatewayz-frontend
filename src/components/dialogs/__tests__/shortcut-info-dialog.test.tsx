@@ -14,17 +14,12 @@ jest.mock('@/lib/desktop/tauri', () => ({
   isWindows: jest.fn(() => false),
 }));
 
-// Mock localStorage
-const mockLocalStorage: { [key: string]: string } = {};
-Object.defineProperty(window, 'localStorage', {
-  value: {
-    getItem: (key: string) => mockLocalStorage[key] || null,
-    setItem: (key: string, value: string) => { mockLocalStorage[key] = value; },
-    removeItem: (key: string) => { delete mockLocalStorage[key]; },
-    clear: () => { Object.keys(mockLocalStorage).forEach(key => delete mockLocalStorage[key]); },
-  },
-  writable: true,
-});
+// Mock safe storage utilities
+const mockStorage: { [key: string]: string } = {};
+jest.mock('@/lib/safe-storage', () => ({
+  safeLocalStorageGet: jest.fn((key: string) => mockStorage[key] || null),
+  safeLocalStorageSet: jest.fn((key: string, value: string) => { mockStorage[key] = value; }),
+}));
 
 // Mock UI components
 jest.mock('@/components/ui/dialog', () => ({
@@ -52,7 +47,7 @@ jest.mock('lucide-react', () => ({
 describe('ShortcutInfoDialog', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    window.localStorage.clear();
+    Object.keys(mockStorage).forEach(key => delete mockStorage[key]);
   });
 
   describe('Dialog Visibility', () => {
@@ -158,6 +153,7 @@ describe('ShortcutInfoDialog', () => {
     });
 
     it('should mark shortcut info as shown when dismissed', async () => {
+      const { safeLocalStorageSet } = require('@/lib/safe-storage');
       render(<ShortcutInfoDialog />);
 
       await act(async () => {
@@ -171,26 +167,30 @@ describe('ShortcutInfoDialog', () => {
       const button = screen.getByText('Got it!');
       fireEvent.click(button);
 
-      expect(window.localStorage.getItem('gatewayz_shortcut_info_shown')).toBe('true');
+      expect(safeLocalStorageSet).toHaveBeenCalledWith('gatewayz_shortcut_info_shown', 'true');
     });
   });
 
   describe('Helper Functions', () => {
     describe('hasShownShortcutInfo', () => {
       it('should return false when not shown before', () => {
+        const { safeLocalStorageGet } = require('@/lib/safe-storage');
+        safeLocalStorageGet.mockReturnValue(null);
         expect(hasShownShortcutInfo()).toBe(false);
       });
 
       it('should return true when previously shown', () => {
-        window.localStorage.setItem('gatewayz_shortcut_info_shown', 'true');
+        const { safeLocalStorageGet } = require('@/lib/safe-storage');
+        safeLocalStorageGet.mockReturnValue('true');
         expect(hasShownShortcutInfo()).toBe(true);
       });
     });
 
     describe('markShortcutInfoShown', () => {
-      it('should set the localStorage flag', () => {
+      it('should set the storage flag using safe storage', () => {
+        const { safeLocalStorageSet } = require('@/lib/safe-storage');
         markShortcutInfoShown();
-        expect(window.localStorage.getItem('gatewayz_shortcut_info_shown')).toBe('true');
+        expect(safeLocalStorageSet).toHaveBeenCalledWith('gatewayz_shortcut_info_shown', 'true');
       });
     });
 

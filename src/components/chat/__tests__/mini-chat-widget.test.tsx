@@ -550,4 +550,84 @@ describe('MiniChatWidget', () => {
       });
     });
   });
+
+  describe('Left Surprise Me Button', () => {
+    // Helper to get the left button (first button with "Surprise me!" title, which is the native button)
+    const getLeftButton = () => {
+      const buttons = screen.getAllByTitle('Surprise me!');
+      // The left button is the native button element (not the mocked Button with data-testid="button")
+      return buttons.find(btn => !btn.hasAttribute('data-testid')) || buttons[0];
+    };
+
+    it('should render left surprise me button with correct title', () => {
+      render(<MiniChatWidget />);
+
+      const leftButton = getLeftButton();
+      expect(leftButton).toBeInTheDocument();
+      expect(leftButton.className).toContain('rounded-full');
+    });
+
+    it('should trigger surprise me when left button is clicked', async () => {
+      render(<MiniChatWidget />);
+
+      const leftButton = getLeftButton();
+      fireEvent.click(leftButton);
+
+      // Advance timers for the setTimeout in handleSurpriseMe
+      jest.advanceTimersByTime(300);
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith('/chat?message=Test%20prompt%201');
+      });
+    });
+
+    it('should create sparkle particles when left button is clicked', () => {
+      render(<MiniChatWidget />);
+
+      const leftButton = getLeftButton();
+      fireEvent.click(leftButton);
+
+      // Check that sparkle particles were created
+      const sparkles = document.querySelectorAll('.sparkle-particle');
+      expect(sparkles.length).toBe(12);
+    });
+
+    it('should disable left button during animation', () => {
+      render(<MiniChatWidget />);
+
+      const leftButton = getLeftButton();
+      fireEvent.click(leftButton);
+
+      // Button should be disabled during animation
+      expect(leftButton).toBeDisabled();
+    });
+
+    it('should apply animation classes to left button when animating', () => {
+      render(<MiniChatWidget />);
+
+      const leftButton = getLeftButton();
+
+      // Before click, should have shimmer and bounce classes
+      expect(leftButton.className).toContain('surprise-me-shimmer');
+      expect(leftButton.className).toContain('animate-bounce-subtle');
+
+      fireEvent.click(leftButton);
+
+      // During animation, should have pulse class instead
+      expect(leftButton.className).toContain('animate-pulse');
+      expect(leftButton.className).not.toContain('surprise-me-shimmer');
+    });
+
+    it('should prevent focus stealing on pointerdown', () => {
+      render(<MiniChatWidget />);
+
+      const leftButton = getLeftButton();
+      const event = new MouseEvent('pointerdown', { bubbles: true });
+      const preventDefaultSpy = jest.spyOn(event, 'preventDefault');
+
+      leftButton.dispatchEvent(event);
+
+      expect(preventDefaultSpy).toHaveBeenCalled();
+    });
+  });
 });
