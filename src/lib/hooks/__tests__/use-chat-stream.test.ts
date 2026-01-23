@@ -396,6 +396,59 @@ describe('useChatStream routing logic', () => {
       expect(url).toBe('/api/chat/ai-sdk-completions?session_id=456');
     });
   });
+
+  describe('Tauri desktop URL construction', () => {
+    /**
+     * Helper function that mirrors the URL construction logic for Tauri desktop
+     * In the desktop app (static export), we need to call the backend API directly
+     * since there's no Next.js server running.
+     */
+    function getUrlForEnvironment(
+      isTauri: boolean,
+      useFlexibleRoute: boolean,
+      sessionId: number,
+      backendBaseUrl: string = 'https://api.gatewayz.ai'
+    ): string {
+      if (isTauri) {
+        // Desktop app: Call backend API directly with session_id
+        return `${backendBaseUrl}/v1/chat/completions?session_id=${sessionId}`;
+      } else {
+        // Web app: Use Next.js API routes as proxy
+        return useFlexibleRoute
+          ? `/api/chat/completions?session_id=${sessionId}`
+          : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+      }
+    }
+
+    test('should use backend API directly for Tauri desktop app', () => {
+      const url = getUrlForEnvironment(true, false, 123);
+      expect(url).toBe('https://api.gatewayz.ai/v1/chat/completions?session_id=123');
+    });
+
+    test('should use backend API for Tauri regardless of route type', () => {
+      // Even for models that would use "flexible route" in web,
+      // Tauri uses direct backend API
+      const urlFlexible = getUrlForEnvironment(true, true, 123);
+      const urlAiSdk = getUrlForEnvironment(true, false, 456);
+
+      expect(urlFlexible).toBe('https://api.gatewayz.ai/v1/chat/completions?session_id=123');
+      expect(urlAiSdk).toBe('https://api.gatewayz.ai/v1/chat/completions?session_id=456');
+    });
+
+    test('should use Next.js proxy routes for web app', () => {
+      const urlAiSdk = getUrlForEnvironment(false, false, 123);
+      const urlFlexible = getUrlForEnvironment(false, true, 456);
+
+      expect(urlAiSdk).toBe('/api/chat/ai-sdk-completions?session_id=123');
+      expect(urlFlexible).toBe('/api/chat/completions?session_id=456');
+    });
+
+    test('should support custom backend URL for Tauri', () => {
+      const customUrl = 'https://custom-api.example.com';
+      const url = getUrlForEnvironment(true, false, 123, customUrl);
+      expect(url).toBe('https://custom-api.example.com/v1/chat/completions?session_id=123');
+    });
+  });
 });
 
 describe('Reasoning parameter handling', () => {
