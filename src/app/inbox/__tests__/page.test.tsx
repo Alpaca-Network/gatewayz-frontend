@@ -452,6 +452,49 @@ describe("InboxPage", () => {
 
       expect(screen.getByText("Loading Coding Inbox...")).toBeInTheDocument();
     });
+
+    it("should fetch a fresh auth token when retrying after token expiration", async () => {
+      render(<InboxPage />);
+
+      // Wait for initial auth token fetch
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // Verify initial fetch was called
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+
+      // Fast-forward past the 15 second timeout to trigger connection error
+      act(() => {
+        jest.advanceTimersByTime(15000);
+      });
+
+      expect(screen.getByText("Connection Failed")).toBeInTheDocument();
+
+      // Click retry button
+      const retryButton = screen.getByRole("button", {
+        name: /retry connection/i,
+      });
+
+      // Clear the mock to track new calls
+      (global.fetch as jest.Mock).mockClear();
+
+      // Click retry - this should trigger a fresh token fetch
+      await act(async () => {
+        fireEvent.click(retryButton);
+        // Wait for the useEffect to run and fetch a new token
+        await Promise.resolve();
+      });
+
+      // Verify that a new auth token was fetched (the fix ensures handleRetry
+      // clears authToken and terragonUrl, which triggers the useEffect to re-fetch)
+      expect(global.fetch).toHaveBeenCalledWith(
+        "/api/terragon/auth",
+        expect.objectContaining({
+          method: "POST",
+        })
+      );
+    });
   });
 
   describe("when authenticating", () => {

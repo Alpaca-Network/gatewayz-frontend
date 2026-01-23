@@ -73,6 +73,7 @@ export default function InboxPage() {
   }, [apiKey, userData]);
 
   // Build the iframe URL with authentication token
+  // Note: iframeKey is included to trigger a fresh fetch when retry is clicked
   useEffect(() => {
     if (!baseTerragonUrl) {
       setError(
@@ -132,7 +133,7 @@ export default function InboxPage() {
         clearTimeout(loadTimeoutRef.current);
       }
     };
-  }, [baseTerragonUrl, status, apiKey, userData, fetchAuthToken]);
+  }, [baseTerragonUrl, status, apiKey, userData, fetchAuthToken, iframeKey]);
 
   // Send auth token to iframe via postMessage when ready
   const sendAuthToIframe = useCallback(() => {
@@ -190,23 +191,21 @@ export default function InboxPage() {
     return () => window.removeEventListener("message", handleMessage);
   }, [baseTerragonUrl, sendAuthToIframe]);
 
-  // Retry connection handler
+  // Retry connection handler - clears auth state to trigger fresh token fetch
   const handleRetry = useCallback(() => {
     setConnectionError(false);
     setIsLoading(true);
     iframeLoadedRef.current = false;
     authSentRef.current = false;
+    // Clear auth token and URL to trigger the useEffect to fetch a fresh token
+    // This ensures retries work even if the original token has expired
+    setAuthToken(null);
+    setTerragonUrl(null);
     setIframeKey((prev) => prev + 1);
 
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current);
     }
-    loadTimeoutRef.current = setTimeout(() => {
-      if (!iframeLoadedRef.current) {
-        setConnectionError(true);
-        setIsLoading(false);
-      }
-    }, 15000);
   }, []);
 
   // Configuration error UI
