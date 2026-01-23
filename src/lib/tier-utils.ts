@@ -41,21 +41,24 @@ export const TIER_CONFIG = {
     name: 'Basic',
     description: 'Pay-per-use credits',
     monthlyPrice: null, // Pay per use
-    creditAllocation: 0, // No monthly allocation
+    creditAllocation: 0, // No monthly allocation (legacy field)
+    monthlyAllowance: 0, // No subscription allowance
     isSubscription: false,
   },
   pro: {
     name: 'Pro',
     description: '$10/month subscription',
     monthlyPrice: 1000, // $10.00 in cents
-    creditAllocation: 1000, // $10 equivalent in credits (cents)
+    creditAllocation: 1000, // Legacy - keep for backward compatibility
+    monthlyAllowance: 1500, // $15.00 in cents - NEW: actual monthly allowance
     isSubscription: true,
   },
   max: {
     name: 'Max',
     description: '$75/month subscription',
     monthlyPrice: 7500, // $75.00 in cents
-    creditAllocation: 15000, // $150 equivalent in credits
+    creditAllocation: 15000, // Legacy - keep for backward compatibility
+    monthlyAllowance: 15000, // $150.00 in cents - monthly allowance
     isSubscription: true,
   },
 } as const;
@@ -343,4 +346,23 @@ export const formatSubscriptionStatus = (status: SubscriptionStatus | undefined)
     default:
       return 'Unknown';
   }
+};
+
+/**
+ * Get the monthly subscription allowance for a tier in dollars
+ */
+export const getMonthlyAllowance = (tier: UserTier): number => {
+  return TIER_CONFIG[tier].monthlyAllowance / 100;
+};
+
+/**
+ * Calculate remaining allowance percentage
+ */
+export const getAllowancePercentage = (
+  subscriptionAllowance: number,
+  tier: UserTier
+): number => {
+  const maxAllowance = getMonthlyAllowance(tier);
+  if (maxAllowance <= 0) return 0;
+  return Math.min(100, Math.max(0, (subscriptionAllowance / maxAllowance) * 100));
 };
