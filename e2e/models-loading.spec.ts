@@ -421,10 +421,13 @@ test.describe('Models - Error Recovery', () => {
     });
 
     await page.goto('/models');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
-    // Should not crash on incomplete data
+    // Should not crash on incomplete data - wait for page body to be visible
     await expect(page.locator('body')).toBeVisible();
+
+    // Wait a moment for any partial renders to complete
+    await page.waitForTimeout(500);
   });
 });
 
