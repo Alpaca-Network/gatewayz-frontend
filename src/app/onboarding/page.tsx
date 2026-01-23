@@ -13,6 +13,7 @@ import { CodeHighlighter } from '@/components/code-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { isTauri, isMacOS, isWindows } from '@/lib/desktop/tauri';
 import { showShortcutInfoDialog, hasShownShortcutInfo, markShortcutInfoShown } from '@/components/dialogs/shortcut-info-dialog';
+import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemove } from '@/lib/safe-storage';
 
 interface OnboardingTask {
   id: string;
@@ -122,7 +123,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     // Check if user has already seen onboarding
-    const hasSeenOnboarding = localStorage.getItem('gatewayz_onboarding_completed');
+    const hasSeenOnboarding = safeLocalStorageGet('gatewayz_onboarding_completed');
     if (hasSeenOnboarding) {
       // Redirect to chat if they've already completed onboarding
       router.push('/chat');
@@ -136,7 +137,7 @@ export default function OnboardingPage() {
     }
 
     // Load completed tasks from localStorage
-    const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
+    const savedTasks = safeLocalStorageGet('gatewayz_onboarding_tasks');
     if (savedTasks) {
       const parsedTasks = JSON.parse(savedTasks);
       setTasks(prev => prev.map(task => ({
@@ -158,7 +159,7 @@ export default function OnboardingPage() {
           updated.forEach(task => {
             taskState[task.id] = task.completed;
           });
-          localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+          safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
           return updated;
         });
       }
@@ -171,7 +172,7 @@ export default function OnboardingPage() {
         credits: false,
         ...(isTauri() ? { shortcut: hasShownShortcutInfo() } : {})
       };
-      localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+      safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
       setTasks(prev => prev.map(task =>
         task.id === 'welcome' ? { ...task, completed: true } : task
       ));
@@ -221,10 +222,10 @@ export default function OnboardingPage() {
 
   // Check for referral bonus notification
   useEffect(() => {
-    const showReferralBonus = localStorage.getItem('gatewayz_show_referral_bonus');
+    const showReferralBonus = safeLocalStorageGet('gatewayz_show_referral_bonus');
     if (showReferralBonus === 'true') {
       // Remove the flag
-      localStorage.removeItem('gatewayz_show_referral_bonus');
+      safeLocalStorageRemove('gatewayz_show_referral_bonus');
 
       // Show the bonus credits notification
       setTimeout(() => {
@@ -248,7 +249,7 @@ export default function OnboardingPage() {
       updated.forEach(task => {
         taskState[task.id] = task.completed;
       });
-      localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+      safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
 
       return updated;
     });
@@ -265,7 +266,7 @@ export default function OnboardingPage() {
       updated.forEach(task => {
         taskState[task.id] = task.completed;
       });
-      localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+      safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
 
       return updated;
     });
@@ -336,7 +337,7 @@ console.log(response.choices[0].message.content);`
   };
 
   const handleFinishOnboarding = () => {
-    localStorage.setItem('gatewayz_onboarding_completed', 'true');
+    safeLocalStorageSet('gatewayz_onboarding_completed', 'true');
     router.push('/chat');
   };
 
