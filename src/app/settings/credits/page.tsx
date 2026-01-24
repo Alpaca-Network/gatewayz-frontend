@@ -292,12 +292,17 @@ function CreditsPageContent() {
               setCredits(data.credits);
             }
 
-            // Update localStorage with fresh credits, tier, and subscription info
+            // Update localStorage with fresh credits, tier, subscription info, and tiered credit fields
             const userData = getUserData();
             if (userData) {
               const updatedUserData = {
                 ...userData,
                 credits: data.credits || userData.credits,
+                // Tiered credit fields (in cents from backend)
+                subscription_allowance: data.subscription_allowance ?? userData.subscription_allowance,
+                purchased_credits: data.purchased_credits ?? userData.purchased_credits,
+                total_credits: data.total_credits ?? userData.total_credits,
+                allowance_reset_date: data.allowance_reset_date || userData.allowance_reset_date,
                 // Ensure tier is normalized to lowercase
                 tier: data.tier ? data.tier.toLowerCase() : userData.tier,
                 tier_display_name: data.tier_display_name || userData.tier_display_name,
@@ -353,6 +358,11 @@ function CreditsPageContent() {
                     if (retryUserData) {
                       saveUserData({
                         ...retryUserData,
+                        // Tiered credit fields (in cents from backend)
+                        subscription_allowance: retryData.subscription_allowance ?? retryUserData.subscription_allowance,
+                        purchased_credits: retryData.purchased_credits ?? retryUserData.purchased_credits,
+                        total_credits: retryData.total_credits ?? retryUserData.total_credits,
+                        allowance_reset_date: retryData.allowance_reset_date || retryUserData.allowance_reset_date,
                         tier: retryData.tier.toLowerCase(),
                         tier_display_name: retryData.tier_display_name,
                         subscription_status: retryData.subscription_status,
@@ -405,12 +415,17 @@ function CreditsPageContent() {
           if (data.credits !== undefined) {
             currentCredits = data.credits;
             setCredits(data.credits);
-            // Update localStorage with fresh tier and subscription info
+            // Update localStorage with fresh tier, subscription info, and tiered credit fields
             const userData = getUserData();
             if (userData) {
               saveUserData({
                 ...userData,
                 credits: data.credits,
+                // Tiered credit fields (in cents from backend)
+                subscription_allowance: data.subscription_allowance ?? userData.subscription_allowance,
+                purchased_credits: data.purchased_credits ?? userData.purchased_credits,
+                total_credits: data.total_credits ?? userData.total_credits,
+                allowance_reset_date: data.allowance_reset_date || userData.allowance_reset_date,
                 // Normalize tier to lowercase to match frontend expectations
                 tier: data.tier?.toLowerCase(),
                 tier_display_name: data.tier_display_name,
