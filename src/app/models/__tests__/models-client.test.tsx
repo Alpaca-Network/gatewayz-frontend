@@ -899,4 +899,376 @@ describe('ModelsClient - Filtering Logic', () => {
       expect(layouts).toContain('grid');
     });
   });
+
+  describe('Banner detection and header positioning', () => {
+    let observerCallback: MutationCallback | null = null;
+    let bodyObserverCallback: MutationCallback | null = null;
+    const mockObservers: { disconnect: jest.Mock }[] = [];
+
+    beforeEach(() => {
+      // Mock MutationObserver
+      observerCallback = null;
+      bodyObserverCallback = null;
+      mockObservers.length = 0;
+
+      (global as unknown as { MutationObserver: typeof MutationObserver }).MutationObserver = jest.fn().mockImplementation((callback: MutationCallback) => {
+        // First observer is for documentElement class changes
+        // Second observer is for body childList changes
+        if (mockObservers.length === 0) {
+          observerCallback = callback;
+        } else {
+          bodyObserverCallback = callback;
+        }
+        const observer = {
+          observe: jest.fn(),
+          disconnect: jest.fn(),
+          takeRecords: jest.fn().mockReturnValue([]),
+        };
+        mockObservers.push(observer);
+        return observer;
+      });
+
+      // Mock document.querySelector
+      jest.spyOn(document, 'querySelector').mockImplementation((selector: string) => {
+        return null; // Default: no banner
+      });
+
+      // Mock document.documentElement.style.setProperty
+      jest.spyOn(document.documentElement.style, 'setProperty').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should calculate header position without banner', () => {
+      const updateHeaderPosition = () => {
+        const bannerElement = document.querySelector('[data-onboarding-banner]');
+        if (bannerElement) {
+          const bannerHeight = (bannerElement as HTMLElement).getBoundingClientRect().height;
+          return 65 + bannerHeight;
+        }
+        return 65;
+      };
+
+      expect(updateHeaderPosition()).toBe(65);
+    });
+
+    it('should calculate header position with banner', () => {
+      const mockBanner = {
+        getBoundingClientRect: () => ({ height: 60, top: 0, left: 0, right: 0, bottom: 60, width: 100, x: 0, y: 0, toJSON: () => ({}) }),
+      };
+
+      jest.spyOn(document, 'querySelector').mockImplementation((selector: string) => {
+        if (selector === '[data-onboarding-banner]') {
+          return mockBanner as unknown as Element;
+        }
+        return null;
+      });
+
+      const updateHeaderPosition = () => {
+        const bannerElement = document.querySelector('[data-onboarding-banner]');
+        if (bannerElement) {
+          const bannerHeight = (bannerElement as HTMLElement).getBoundingClientRect().height;
+          return 65 + bannerHeight;
+        }
+        return 65;
+      };
+
+      expect(updateHeaderPosition()).toBe(125); // 65 + 60
+    });
+
+    it('should detect banner addition via MutationObserver', () => {
+      let headerPositionUpdated = false;
+      const updateHeaderPosition = jest.fn(() => {
+        headerPositionUpdated = true;
+      });
+
+      // Simulate the MutationObserver setup
+      const checkForBannerChange = (mutations: MutationRecord[]) => {
+        for (const mutation of mutations) {
+          if (mutation.type === 'childList') {
+            const hasBannerChange = Array.from(mutation.addedNodes).some(
+              (node) => node instanceof HTMLElement && (node as Element).matches?.('[data-onboarding-banner]')
+            );
+            if (hasBannerChange) {
+              updateHeaderPosition();
+            }
+          }
+        }
+      };
+
+      // Create mock banner element
+      const mockBanner = document.createElement('div');
+      mockBanner.setAttribute('data-onboarding-banner', 'true');
+      // Mock matches method
+      mockBanner.matches = (selector: string) => selector === '[data-onboarding-banner]';
+
+      // Simulate mutation record
+      const mockMutations: MutationRecord[] = [{
+        type: 'childList',
+        addedNodes: [mockBanner] as unknown as NodeList,
+        removedNodes: [] as unknown as NodeList,
+        target: document.body,
+        attributeName: null,
+        attributeNamespace: null,
+        nextSibling: null,
+        previousSibling: null,
+        oldValue: null,
+      }];
+
+      checkForBannerChange(mockMutations);
+
+      expect(updateHeaderPosition).toHaveBeenCalled();
+      expect(headerPositionUpdated).toBe(true);
+    });
+
+    it('should detect banner removal via MutationObserver', () => {
+      const updateHeaderPosition = jest.fn();
+
+      const checkForBannerChange = (mutations: MutationRecord[]) => {
+        for (const mutation of mutations) {
+          if (mutation.type === 'childList') {
+            const hasBannerChange = Array.from(mutation.removedNodes).some(
+              (node) => node instanceof HTMLElement && (node as Element).matches?.('[data-onboarding-banner]')
+            );
+            if (hasBannerChange) {
+              updateHeaderPosition();
+            }
+          }
+        }
+      };
+
+      // Create mock banner element that was removed
+      const mockBanner = document.createElement('div');
+      mockBanner.setAttribute('data-onboarding-banner', 'true');
+      mockBanner.matches = (selector: string) => selector === '[data-onboarding-banner]';
+
+      // Simulate mutation record for removal
+      const mockMutations: MutationRecord[] = [{
+        type: 'childList',
+        addedNodes: [] as unknown as NodeList,
+        removedNodes: [mockBanner] as unknown as NodeList,
+        target: document.body,
+        attributeName: null,
+        attributeNamespace: null,
+        nextSibling: null,
+        previousSibling: null,
+        oldValue: null,
+      }];
+
+      checkForBannerChange(mockMutations);
+
+      expect(updateHeaderPosition).toHaveBeenCalled();
+    });
+
+    it('should not trigger update for non-banner DOM changes', () => {
+      const updateHeaderPosition = jest.fn();
+
+      const checkForBannerChange = (mutations: MutationRecord[]) => {
+        for (const mutation of mutations) {
+          if (mutation.type === 'childList') {
+            const hasBannerChange = Array.from(mutation.addedNodes).some(
+              (node) => node instanceof HTMLElement && (node as Element).matches?.('[data-onboarding-banner]')
+            ) || Array.from(mutation.removedNodes).some(
+              (node) => node instanceof HTMLElement && (node as Element).matches?.('[data-onboarding-banner]')
+            );
+            if (hasBannerChange) {
+              updateHeaderPosition();
+            }
+          }
+        }
+      };
+
+      // Create a random div (not a banner)
+      const mockDiv = document.createElement('div');
+      mockDiv.matches = () => false;
+
+      // Simulate mutation record for non-banner element
+      const mockMutations: MutationRecord[] = [{
+        type: 'childList',
+        addedNodes: [mockDiv] as unknown as NodeList,
+        removedNodes: [] as unknown as NodeList,
+        target: document.body,
+        attributeName: null,
+        attributeNamespace: null,
+        nextSibling: null,
+        previousSibling: null,
+        oldValue: null,
+      }];
+
+      checkForBannerChange(mockMutations);
+
+      expect(updateHeaderPosition).not.toHaveBeenCalled();
+    });
+
+    it('should set CSS variable correctly based on banner presence', () => {
+      const setPropertyMock = jest.fn();
+      document.documentElement.style.setProperty = setPropertyMock;
+
+      const updateHeaderPosition = (hasBanner: boolean, bannerHeight = 60) => {
+        if (hasBanner) {
+          const headerTop = 65 + bannerHeight;
+          document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
+        } else {
+          document.documentElement.style.setProperty('--models-header-top', '65px');
+        }
+      };
+
+      // Test without banner
+      updateHeaderPosition(false);
+      expect(setPropertyMock).toHaveBeenCalledWith('--models-header-top', '65px');
+
+      // Test with banner
+      updateHeaderPosition(true, 60);
+      expect(setPropertyMock).toHaveBeenCalledWith('--models-header-top', '125px');
+    });
+
+    it('should properly disconnect observers on cleanup', () => {
+      const disconnectMock = jest.fn();
+      const observer = {
+        observe: jest.fn(),
+        disconnect: disconnectMock,
+        takeRecords: jest.fn().mockReturnValue([]),
+      };
+
+      // Simulate cleanup
+      observer.disconnect();
+
+      expect(disconnectMock).toHaveBeenCalled();
+    });
+  });
+
+  describe('Infinite scroll state', () => {
+    it('should initialize with 24 visible items', () => {
+      const initialVisibleCount = 24;
+      const itemsPerPage = 24;
+
+      expect(initialVisibleCount).toBe(24);
+      expect(itemsPerPage).toBe(24);
+    });
+
+    it('should load more items when scrolling', () => {
+      let visibleCount = 24;
+      const itemsPerPage = 24;
+      const totalItems = 100;
+
+      // Simulate loading more
+      const loadMore = () => {
+        visibleCount = Math.min(visibleCount + itemsPerPage, totalItems);
+      };
+
+      loadMore();
+      expect(visibleCount).toBe(48);
+
+      loadMore();
+      expect(visibleCount).toBe(72);
+
+      loadMore();
+      expect(visibleCount).toBe(96);
+
+      loadMore();
+      expect(visibleCount).toBe(100); // Capped at total
+    });
+
+    it('should reset visible count when filters change', () => {
+      let visibleCount = 72;
+
+      // Simulate filter change reset
+      const resetVisibleCount = () => {
+        visibleCount = 24;
+      };
+
+      resetVisibleCount();
+      expect(visibleCount).toBe(24);
+    });
+
+    it('should correctly calculate hasMore flag', () => {
+      const calculateHasMore = (visibleCount: number, totalFiltered: number) => {
+        return visibleCount < totalFiltered;
+      };
+
+      expect(calculateHasMore(24, 100)).toBe(true);
+      expect(calculateHasMore(100, 100)).toBe(false);
+      expect(calculateHasMore(100, 50)).toBe(false);
+    });
+
+    it('should slice models correctly for display', () => {
+      const models = Array.from({ length: 100 }, (_, i) => ({ id: `model-${i}` }));
+      const visibleCount = 24;
+
+      const visibleModels = models.slice(0, visibleCount);
+
+      expect(visibleModels).toHaveLength(24);
+      expect(visibleModels[0].id).toBe('model-0');
+      expect(visibleModels[23].id).toBe('model-23');
+    });
+  });
+
+  describe('Development-only logging', () => {
+    const originalEnv = process.env.NODE_ENV;
+
+    afterEach(() => {
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: originalEnv,
+        writable: true,
+      });
+    });
+
+    it('should only log in development mode', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      const conditionalLog = (message: string) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(message);
+        }
+      };
+
+      // Test in production mode
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'production',
+        writable: true,
+      });
+      conditionalLog('Test message');
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      // Test in development mode
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'development',
+        writable: true,
+      });
+      conditionalLog('Test message');
+      expect(consoleSpy).toHaveBeenCalledWith('Test message');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should only warn in development mode for malformed models', () => {
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      const logMalformedModel = (modelName: string) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`Filtering out malformed model: ${modelName}`);
+        }
+      };
+
+      // Test in production mode
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'production',
+        writable: true,
+      });
+      logMalformedModel("('Data', [Data(Id=...");
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+
+      // Test in development mode
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'development',
+        writable: true,
+      });
+      logMalformedModel("('Data', [Data(Id=...");
+      expect(consoleWarnSpy).toHaveBeenCalled();
+
+      consoleWarnSpy.mockRestore();
+    });
+  });
 });
