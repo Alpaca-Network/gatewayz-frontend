@@ -15,6 +15,38 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
+    date: "January 25, 2026",
+    features: [
+      "Credit Usage Progress Bar: Visual indicator in the header showing remaining credits with color-coded status (green/yellow/red) and quick-access \"Add Credits\" button",
+      "Models Table View: New OpenRouter-style table view for the Models page with improved data density, provider column, and formatted context lengths",
+      "Interactive 404 Page: Conway's Game of Life themed 404 page with play/pause controls, speed adjustment, and auto-starting \"404\" pattern",
+      "Smart Auto-Router: New prompt-level router (auto, auto:price, auto:quality, auto:fast) that intelligently selects models optimized for price/performance with fail-open design",
+      "New Providers: Added Nosana GPU provider, Sybil provider, and Canopy Wave provider integrations",
+      "Infron AI Rebrand: OneRouter provider rebranded to Infron AI with updated endpoints and improved model routing",
+    ],
+    bugFixes: [
+      {
+        category: "Gatewayz Chat",
+        items: [
+          "Fixed tiered credits authentication and localStorage issues with proper legacy fallback support",
+          "Fixed PostHog initialization configuration errors",
+          "Fixed wallet extension conflicts with pre-configured ethereum property",
+        ],
+      },
+      {
+        category: "Gatewayz API",
+        items: [
+          "OpenAI and Anthropic models now prioritize native provider connections for improved reliability",
+          "Fixed Windows installer freeze issue when run via irm | iex for OpenCode",
+          "Improved Claude Code model ID aliases for better compatibility",
+          "Fixed Next.js security vulnerabilities (updated to 15.5.9)",
+        ],
+      },
+    ],
+    infrastructure: [],
+    documentation: [],
+  },
+  {
     date: "January 18, 2026",
     features: [
       "Automatic Web Search: Chat now automatically searches the web for queries that benefit from real-time information (travel questions, current prices, news) without any manual toggle needed",
