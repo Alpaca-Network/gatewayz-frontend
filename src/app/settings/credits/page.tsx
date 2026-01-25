@@ -256,6 +256,7 @@ function CreditsPageContent() {
   const [showEmojiExplosion, setShowEmojiExplosion] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
+  const [customAmount, setCustomAmount] = useState<string>('');
 
   // Check for buy parameter to auto-open dialog
   useEffect(() => {
@@ -475,6 +476,13 @@ function CreditsPageContent() {
   }, []);
 
   const handleBuyCredits = () => {
+    // If user entered a custom amount, go directly to checkout
+    if (customAmount && parseFloat(customAmount) > 0) {
+      const amount = parseFloat(customAmount);
+      router.push(`/checkout?package=custom&amount=${amount}&mode=credits`);
+      return;
+    }
+    // Otherwise, show the package selection dialog
     setShowDialog(true);
   };
 
@@ -555,28 +563,50 @@ function CreditsPageContent() {
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <h2 className="text-xl sm:text-2xl font-semibold">Available Balance</h2>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-            <Card
-              className="w-full sm:w-auto sm:min-w-[240px] h-14 text-xl md:text-2xl font-semibold bg-muted/50 border-border px-4 sm:px-8"
-            >
-              <CardContent className="py-[13px] flex items-center justify-center">
-                {loadingCredits ? (
-                  <span className="text-xl md:text-2xl font-bold text-muted-foreground">Loading...</span>
-                ) : credits !== null ? (
-                  <span className="text-xl md:text-2xl font-bold">${credits.toFixed(2)}</span>
-                ) : (
-                  <span className="text-xl md:text-2xl font-bold text-muted-foreground">$0.00</span>
-                )}
-              </CardContent>
-            </Card>
-            <Button
-              className="bg-black text-white h-12 px-6 sm:px-12 w-full sm:w-auto"
-              onClick={handleBuyCredits}
-              disabled={isLoading || loadingCredits}
-            >
-              {isLoading ? 'Loading...' : loadingCredits ? 'Authenticating...' : 'Buy Credits'}
-            </Button>
+          <div className="w-full sm:w-auto sm:min-w-[240px] h-14 flex items-center justify-center bg-muted/50 border border-border rounded-md px-4 sm:px-8">
+            {loadingCredits ? (
+              <span className="text-xl md:text-2xl font-bold text-muted-foreground">Loading...</span>
+            ) : credits !== null ? (
+              <span className="text-xl md:text-2xl font-bold">${credits.toFixed(2)}</span>
+            ) : (
+              <span className="text-xl md:text-2xl font-bold text-muted-foreground">$0.00</span>
+            )}
           </div>
+        </div>
+
+        {/* Buy Credits Section */}
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-4 border-t">
+          <div className="space-y-2">
+            <Label htmlFor="custom-amount" className="text-sm font-medium">Enter custom amount or select a package</Label>
+            <div className="relative w-full sm:w-auto sm:min-w-[240px]">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl md:text-2xl font-bold text-muted-foreground pointer-events-none">$</span>
+              <Input
+                id="custom-amount"
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={customAmount}
+                onChange={(e) => {
+                  // Only allow numbers and decimal point
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  // Prevent multiple decimal points
+                  const parts = value.split('.');
+                  if (parts.length > 2) return;
+                  // Limit to 2 decimal places
+                  if (parts[1] && parts[1].length > 2) return;
+                  setCustomAmount(value);
+                }}
+                className="w-full h-14 text-xl md:text-2xl font-bold bg-background border-border pl-10 pr-4 text-center"
+              />
+            </div>
+          </div>
+          <Button
+            className="bg-black text-white h-12 px-6 sm:px-12 w-full sm:w-auto"
+            onClick={handleBuyCredits}
+            disabled={isLoading || loadingCredits}
+          >
+            {isLoading ? 'Loading...' : loadingCredits ? 'Authenticating...' : 'Buy Credits'}
+          </Button>
         </div>
 
         {/* Credit Breakdown for Pro/Max Users */}

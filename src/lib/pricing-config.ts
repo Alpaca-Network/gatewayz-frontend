@@ -136,6 +136,13 @@ export const creditPackages: Record<string, CreditPackage> = {
     price: 175,
     discount: '30% off',
   },
+  custom: {
+    id: 'custom',
+    name: 'Custom',
+    creditValue: 0, // Will be set dynamically
+    price: 0, // Will be set dynamically
+    discount: 'No discount',
+  },
 };
 
 // Helper to get tier configs as array for iteration
