@@ -1,6 +1,33 @@
 import { render, cleanup } from "@testing-library/react";
 import { InboxLayoutClient } from "../inbox-layout-client";
 import { inboxMetadata } from "../metadata";
+import InboxLayout, { metadata } from "../layout";
+
+describe("InboxLayout (server component)", () => {
+  afterEach(() => {
+    cleanup();
+    document.body.classList.remove("inbox-page");
+    document.body.style.overflow = "";
+  });
+
+  it("should render children through InboxLayoutClient", () => {
+    const { getByText } = render(
+      <InboxLayout>
+        <div>Server Layout Test Content</div>
+      </InboxLayout>
+    );
+
+    expect(getByText("Server Layout Test Content")).toBeInTheDocument();
+  });
+
+  it("should export metadata matching inboxMetadata", () => {
+    expect(metadata).toBe(inboxMetadata);
+  });
+
+  it("should have metadata with correct title", () => {
+    expect(metadata.title).toBe("AI Agent Inbox - Gatewayz x Terragon");
+  });
+});
 
 describe("InboxLayoutClient", () => {
   afterEach(() => {
