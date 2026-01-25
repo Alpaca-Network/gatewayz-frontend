@@ -21,6 +21,7 @@ function CheckoutPageContent() {
   const creditPackageId = searchParams.get('package') || '';
   const mode = searchParams.get('mode') || 'subscription'; // 'subscription' or 'credits'
   const customAmountParam = searchParams.get('amount') || '';
+  const action = searchParams.get('action') || ''; // 'upgrade' or 'downgrade'
 
   const [referralCode, setReferralCode] = useState<string>('');
   const [referralLink, setReferralLink] = useState<string>('');
@@ -28,6 +29,9 @@ function CheckoutPageContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const isDowngrade = action === 'downgrade';
+  const isUpgrade = action === 'upgrade';
 
   // Determine what we're purchasing
   const isSubscription = mode === 'subscription' && tier;
@@ -127,8 +131,34 @@ function CheckoutPageContent() {
         return;
       }
 
+      // Handle downgrade - redirect to Stripe Customer Portal
+      if (isDowngrade) {
+        const portalResponse = await fetch('/api/stripe/portal', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: userData.email,
+          }),
+        });
+
+        if (!portalResponse.ok) {
+          const errorData = await portalResponse.json();
+          throw new Error(errorData.error || 'Failed to access subscription management');
+        }
+
+        const portalData = await portalResponse.json();
+        if (portalData.url) {
+          window.location.href = portalData.url;
+        } else {
+          throw new Error('No portal URL received');
+        }
+        return;
+      }
+
       if (isSubscription && currentTier) {
-        // Handle subscription checkout
+        // Handle subscription checkout (works for both new subscriptions and upgrades)
         if (!currentTier.stripePriceId) {
           toast({
             title: "Subscription not configured",
@@ -280,9 +310,15 @@ function CheckoutPageContent() {
 
         {/* Header */}
         <div className="text-center space-y-4">
-          <h1 className="text-3xl font-bold">Confirm Your Order</h1>
+          <h1 className="text-3xl font-bold">
+            {isDowngrade ? 'Manage Your Subscription' : isUpgrade ? 'Upgrade Your Plan' : 'Confirm Your Order'}
+          </h1>
           <p className="text-muted-foreground text-lg">
-            Review your selection before proceeding to payment
+            {isDowngrade
+              ? 'You will be redirected to manage your subscription'
+              : isUpgrade
+              ? 'Review your upgrade before proceeding'
+              : 'Review your selection before proceeding to payment'}
           </p>
         </div>
 
@@ -406,7 +442,7 @@ function CheckoutPageContent() {
                 ) : (
                   <>
                     <CreditCard className="h-4 w-4 mr-2" />
-                    Proceed to Payment
+                    {isDowngrade ? 'Manage Subscription' : isUpgrade ? 'Proceed with Upgrade' : 'Proceed to Payment'}
                   </>
                 )}
               </Button>

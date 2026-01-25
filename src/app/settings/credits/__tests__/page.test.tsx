@@ -516,6 +516,34 @@ describe('CreditsPage', () => {
       alertMock.mockRestore();
     });
 
+    it('should show alert when custom amount exceeds $10,000 maximum', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+      const alertMock = jest.spyOn(window, 'alert').mockImplementation(() => {});
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      const customInput = screen.getByLabelText(/Enter custom amount or select a package/i);
+      await act(async () => {
+        await user.type(customInput, '15000');
+        jest.runAllTimers();
+      });
+
+      const buyButton = screen.getByText('Buy Credits');
+      await act(async () => {
+        await user.click(buyButton);
+        jest.runAllTimers();
+      });
+
+      expect(alertMock).toHaveBeenCalledWith('Maximum custom amount is $10,000.00');
+      expect(mockPush).not.toHaveBeenCalled();
+
+      alertMock.mockRestore();
+    });
+
     it('should open dialog when no custom amount is entered', async () => {
       const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
       (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);

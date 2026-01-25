@@ -106,6 +106,15 @@ const SUPPRESSED_ERROR_PATTERNS = {
     /auth\.privy\.io.*timeout/i,
     /auth\.privy\.io.*no response/i,
   ],
+
+  // Abort errors from cancelled requests (navigation, user actions)
+  abortErrors: [
+    /AbortError.*signal is aborted/i,
+    /signal is aborted without reason/i,
+    /user aborted/i,
+    /the operation was aborted/i,
+    /aborted without reason/i,
+  ],
 };
 
 /**
