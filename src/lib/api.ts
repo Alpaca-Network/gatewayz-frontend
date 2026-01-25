@@ -85,6 +85,13 @@ export interface UserData {
   subscription_status?: SubscriptionStatus;
   subscription_end_date?: number; // Unix timestamp
   trial_expires_at?: string; // ISO 8601 string of when trial expires
+
+  // User settings (stored in backend preferences)
+  settings?: {
+    auto_topup_enabled?: boolean;
+    auto_topup_threshold?: number; // In cents
+    auto_topup_amount?: number; // In cents
+  };
 }
 
 // API Key Management
