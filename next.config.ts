@@ -83,6 +83,11 @@ const nextConfig: NextConfig = {
           destination: '/inbox',
           permanent: false,
         },
+        {
+          source: '/terragon',
+          destination: '/inbox',
+          permanent: false,
+        },
       ];
     },
     async headers() {
