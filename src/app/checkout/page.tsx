@@ -36,11 +36,15 @@ function CheckoutPageContent() {
   const currentTier = tier ? tierConfigs[tier.toLowerCase()] : null;
 
   // Handle custom package with dynamic amount from URL
+  // Min $5 to meet Stripe requirements, max $10,000 for safety
+  const MIN_CUSTOM_AMOUNT = 5;
+  const MAX_CUSTOM_AMOUNT = 10000;
+
   const currentPackage = creditPackageId ? (() => {
     const pkg = creditPackages[creditPackageId];
     if (creditPackageId === 'custom' && customAmountParam) {
       const customAmount = parseFloat(customAmountParam);
-      if (!isNaN(customAmount) && customAmount > 0) {
+      if (!isNaN(customAmount) && customAmount >= MIN_CUSTOM_AMOUNT && customAmount <= MAX_CUSTOM_AMOUNT) {
         return {
           ...pkg,
           creditValue: customAmount,

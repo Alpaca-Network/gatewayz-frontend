@@ -506,6 +506,11 @@ function CreditsPageContent() {
         alert('Minimum custom amount is $5.00');
         return;
       }
+      // Enforce maximum $10,000 for custom amounts
+      if (amount > 10000) {
+        alert('Maximum custom amount is $10,000.00');
+        return;
+      }
       router.push(`/checkout?package=custom&amount=${amount}&mode=credits`);
       return;
     }
