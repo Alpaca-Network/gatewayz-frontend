@@ -548,7 +548,7 @@ describe('tier-utils', () => {
       expect(hasPurchasedCredits(userData)).toBe(false);
     });
 
-    it('should return false when credits is at trial threshold (3)', () => {
+    it('should return false when credits is at trial threshold (500 cents = $5)', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -556,7 +556,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 3, // Exactly at trial threshold
+        credits: 500, // Exactly at trial threshold (500 cents = $5)
       };
 
       expect(hasPurchasedCredits(userData)).toBe(false);
@@ -570,7 +570,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 4, // Just above trial threshold
+        credits: 501, // Just above trial threshold (500 cents = $5)
       };
 
       expect(hasPurchasedCredits(userData)).toBe(true);
@@ -584,7 +584,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 10000, // 10000 cents = $100
       };
 
       expect(hasPurchasedCredits(userData)).toBe(true);
@@ -892,7 +892,7 @@ describe('tier-utils', () => {
       expect(isOnTrial(null)).toBe(false);
     });
 
-    it('should return true when subscription status is trial and credits <= 3 (trial amount)', () => {
+    it('should return true when subscription status is trial and credits <= 500 cents ($5 trial amount)', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -900,7 +900,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 3, // Trial amount (users start with 3 credits)
+        credits: 500, // Trial amount in cents (users start with $5 = 500 cents)
         subscription_status: 'trial',
       };
 
@@ -978,7 +978,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 2, // Below trial threshold
+        credits: 400, // Below trial threshold (500 cents = $5)
         tier: 'basic',
         subscription_status: 'trial',
       };
@@ -995,7 +995,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 10, // More than trial threshold (3), indicating they've purchased credits
+        credits: 1000, // More than trial threshold (500 cents = $5), indicating they've purchased credits
         tier: 'basic',
         subscription_status: 'trial',
       };
@@ -1004,7 +1004,7 @@ describe('tier-utils', () => {
     });
 
     it('should return false when user has exactly at threshold with purchased credits', () => {
-      // 4 credits = 3 trial + purchased, so they've paid
+      // 501 cents = $5 trial + purchased, so they've paid
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -1012,7 +1012,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 4, // Just above trial threshold
+        credits: 501, // Just above trial threshold (500 cents = $5)
         subscription_status: 'trial',
       };
 
@@ -1048,7 +1048,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 2, // Trial credits
+        credits: 200, // 200 cents = $2 trial credits
         subscription_status: 'trial',
       };
 
@@ -1114,7 +1114,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 15, // More than trial threshold (3), indicating they've purchased credits
+        credits: 1500, // More than trial threshold (500 cents = $5), indicating they've purchased credits
         tier: 'basic',
         subscription_status: 'expired',
       };
@@ -1444,7 +1444,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-111',
         display_name: 'Trial User',
         email: 'trial@example.com',
-        credits: 3, // Trial users start with 3 credits
+        credits: 500, // Trial users start with 500 cents ($5)
         tier: 'basic',
         subscription_status: 'trial',
         trial_expires_at: threeDaysFromNow,
@@ -1493,7 +1493,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-333',
         display_name: 'Expiring Soon User',
         email: 'expiring@example.com',
-        credits: 2,
+        credits: 200, // 200 cents = $2
         tier: 'basic',
         subscription_status: 'trial',
         trial_expires_at: oneDayFromNow,
@@ -1561,7 +1561,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-666',
         display_name: 'Basic User with Purchased Credits',
         email: 'basic@example.com',
-        credits: 25, // More than 3 trial credits = purchased
+        credits: 2500, // More than 500 cents ($5 trial) = purchased (this is $25)
         tier: 'basic',
         subscription_status: 'trial', // Stale - should have been updated after payment
       };
@@ -1582,7 +1582,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-777',
         display_name: 'Basic User with Purchased Credits',
         email: 'basic-expired@example.com',
-        credits: 50, // More than 3 trial credits = purchased
+        credits: 5000, // More than 500 cents ($5 trial) = purchased (this is $50)
         tier: 'basic',
         subscription_status: 'expired', // Stale - user has paid for credits
       };

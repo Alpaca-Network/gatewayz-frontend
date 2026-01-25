@@ -49,8 +49,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show credit count
-      expect(screen.getByText('1,000')).toBeInTheDocument();
+      // Should show credit count in dollars (1000 cents = $10.00)
+      expect(screen.getByText('$10.00')).toBeInTheDocument();
       // Should not show tier badge
       expect(screen.queryByText('PRO')).not.toBeInTheDocument();
       expect(screen.queryByText('MAX')).not.toBeInTheDocument();
@@ -72,8 +72,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show 0 credits
-      expect(screen.getByText('0')).toBeInTheDocument();
+      // Should show $0.00
+      expect(screen.getByText('$0.00')).toBeInTheDocument();
     });
 
     it('should display credits when tier is undefined', () => {
@@ -91,8 +91,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show 500 credits
-      expect(screen.getByText('500')).toBeInTheDocument();
+      // Should show $5.00 (500 cents = $5.00)
+      expect(screen.getByText('$5.00')).toBeInTheDocument();
     });
   });
 
@@ -463,7 +463,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Basic User with Credits',
         email: 'basic@example.com',
-        credits: 25, // More than 3 trial credits = purchased credits
+        credits: 2500, // More than 500 cents ($5 trial) = purchased credits (this is $25)
         tier: 'basic',
         subscription_status: 'trial', // Stale status - should be ignored due to purchased credits
       };
@@ -472,8 +472,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show credits, not trial badge
-      expect(screen.getByText('25')).toBeInTheDocument();
+      // Should show credits (converted to dollars), not trial badge
+      expect(screen.getByText('$25.00')).toBeInTheDocument();
       expect(screen.queryByText(/Trial/)).not.toBeInTheDocument();
     });
 
@@ -486,7 +486,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Basic User with Credits',
         email: 'basic@example.com',
-        credits: 50, // More than 3 trial credits = purchased credits
+        credits: 5000, // More than 500 cents ($5 trial) = purchased credits (this is $50)
         tier: 'basic',
         subscription_status: 'expired', // Stale status - should be ignored due to purchased credits
       };
@@ -495,8 +495,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show credits, not upgrade prompt
-      expect(screen.getByText('50')).toBeInTheDocument();
+      // Should show credits (converted to dollars), not upgrade prompt
+      expect(screen.getByText('$50.00')).toBeInTheDocument();
       expect(screen.queryByText('Upgrade')).not.toBeInTheDocument();
     });
   });
@@ -666,8 +666,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show credits
-      expect(screen.getByText('50')).toBeInTheDocument();
+      // Should show credits in dollars (50 cents = $0.50)
+      expect(screen.getByText('$0.50')).toBeInTheDocument();
       // Should NOT show Add Credits button
       expect(screen.queryByText('Add Credits')).not.toBeInTheDocument();
     });
@@ -1031,8 +1031,8 @@ describe('CreditsDisplay', () => {
 
       const { rerender } = render(<CreditsDisplay />);
 
-      // Should show credit count
-      expect(screen.getByText('1,000')).toBeInTheDocument();
+      // Should show credit count in dollars (1000 cents = $10.00)
+      expect(screen.getByText('$10.00')).toBeInTheDocument();
 
       // Simulate upgrade to PRO
       const upgradedUserData: UserData = {

@@ -91,11 +91,11 @@ describe('TrialCreditsNotice', () => {
     });
   });
 
-  it('should render for users with trial credits (3 or less)', async () => {
+  it('should render for users with trial credits (500 cents = $5 or less)', async () => {
     const { getUserData } = require('@/lib/api');
     const { safeLocalStorageGet } = require('@/lib/safe-storage');
     safeLocalStorageGet.mockReturnValue(null);
-    getUserData.mockReturnValue({ credits: 3 });
+    getUserData.mockReturnValue({ credits: 500 }); // 500 cents = $5 trial credits
 
     render(<TrialCreditsNotice />);
 
@@ -108,11 +108,11 @@ describe('TrialCreditsNotice', () => {
     });
   });
 
-  it('should display correct credit amount', async () => {
+  it('should display correct credit amount in dollars', async () => {
     const { getUserData } = require('@/lib/api');
     const { safeLocalStorageGet } = require('@/lib/safe-storage');
     safeLocalStorageGet.mockReturnValue(null);
-    getUserData.mockReturnValue({ credits: 2 });
+    getUserData.mockReturnValue({ credits: 200 }); // 200 cents = $2.00
 
     render(<TrialCreditsNotice />);
 
@@ -121,7 +121,8 @@ describe('TrialCreditsNotice', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/2 free trial credits/)).toBeInTheDocument();
+      // Credits are displayed as dollars (200 cents = $2.00)
+      expect(screen.getByText(/\$2\.00 in free trial credits/)).toBeInTheDocument();
     });
   });
 
@@ -129,7 +130,7 @@ describe('TrialCreditsNotice', () => {
     const { getUserData } = require('@/lib/api');
     const { safeLocalStorageGet, safeLocalStorageSet } = require('@/lib/safe-storage');
     safeLocalStorageGet.mockReturnValue(null);
-    getUserData.mockReturnValue({ credits: 3 });
+    getUserData.mockReturnValue({ credits: 500 }); // 500 cents = $5
 
     render(<TrialCreditsNotice />);
 
@@ -151,7 +152,7 @@ describe('TrialCreditsNotice', () => {
     const { getUserData } = require('@/lib/api');
     const { safeLocalStorageGet, safeLocalStorageSet } = require('@/lib/safe-storage');
     safeLocalStorageGet.mockReturnValue(null);
-    getUserData.mockReturnValue({ credits: 3 });
+    getUserData.mockReturnValue({ credits: 500 }); // 500 cents = $5
 
     render(<TrialCreditsNotice />);
 
@@ -169,11 +170,11 @@ describe('TrialCreditsNotice', () => {
     expect(safeLocalStorageSet).toHaveBeenCalledWith('gatewayz_trial_notice_dismissed', 'true');
   });
 
-  it('should not render for users with more than 3 credits', async () => {
+  it('should not render for users with more than 500 cents ($5)', async () => {
     const { getUserData } = require('@/lib/api');
     const { safeLocalStorageGet } = require('@/lib/safe-storage');
     safeLocalStorageGet.mockReturnValue(null);
-    getUserData.mockReturnValue({ credits: 100 });
+    getUserData.mockReturnValue({ credits: 10000 }); // 10000 cents = $100
 
     render(<TrialCreditsNotice />);
 
