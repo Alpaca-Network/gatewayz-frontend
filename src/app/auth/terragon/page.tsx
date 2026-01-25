@@ -4,8 +4,36 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
-import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { getApiKey, getUserData } from "@/lib/api";
+
+/**
+ * Allowed callback URL domains for security.
+ * Only these domains can receive auth tokens via redirect.
+ */
+const ALLOWED_CALLBACK_DOMAINS = [
+  "terragon.ai",
+  "www.terragon.ai",
+  "app.terragon.ai",
+  "localhost",
+  "127.0.0.1",
+];
+
+/**
+ * Validates that a callback URL is from an allowed domain.
+ * Prevents open redirect vulnerabilities.
+ */
+function isAllowedCallbackUrl(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    const hostname = parsedUrl.hostname.toLowerCase();
+
+    // Check if hostname matches allowed domains or is a subdomain of terragon.ai
+    return ALLOWED_CALLBACK_DOMAINS.includes(hostname) ||
+           hostname.endsWith(".terragon.ai");
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Auth bridge page for Terragon integration.
@@ -20,7 +48,6 @@ export default function TerragonAuthPage() {
   const searchParams = useSearchParams();
   const callback = searchParams.get("callback");
   const { isAuthenticated, loading, login, privyReady } = useAuth();
-  const gatewayzAuth = useGatewayzAuth();
   const [status, setStatus] = useState<"loading" | "authenticating" | "redirecting" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -30,6 +57,13 @@ export default function TerragonAuthPage() {
       if (!callback) {
         setStatus("error");
         setErrorMessage("Missing callback URL. Please try logging in from Terragon again.");
+        return;
+      }
+
+      // Validate callback URL to prevent open redirect attacks
+      if (!isAllowedCallbackUrl(callback)) {
+        setStatus("error");
+        setErrorMessage("Invalid callback URL. Please try logging in from Terragon again.");
         return;
       }
 
@@ -100,7 +134,7 @@ export default function TerragonAuthPage() {
     }
 
     handleAuth();
-  }, [callback, isAuthenticated, loading, login, privyReady, gatewayzAuth]);
+  }, [callback, isAuthenticated, loading, login, privyReady]);
 
   // Render loading/status UI
   return (
