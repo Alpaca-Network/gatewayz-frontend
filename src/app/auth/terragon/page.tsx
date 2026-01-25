@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
@@ -50,6 +50,7 @@ export default function TerragonAuthPage() {
   const { isAuthenticated, loading, login, privyReady } = useAuth();
   const [status, setStatus] = useState<"loading" | "authenticating" | "redirecting" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const loginTriggeredRef = useRef(false);
 
   useEffect(() => {
     async function handleAuth() {
@@ -73,10 +74,13 @@ export default function TerragonAuthPage() {
         return;
       }
 
-      // If not authenticated, trigger login
+      // If not authenticated, trigger login (with one-shot guard to prevent repeated calls)
       if (!isAuthenticated && !loading) {
-        setStatus("authenticating");
-        login();
+        if (!loginTriggeredRef.current) {
+          loginTriggeredRef.current = true;
+          setStatus("authenticating");
+          login();
+        }
         return;
       }
 
