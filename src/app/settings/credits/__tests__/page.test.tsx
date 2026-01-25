@@ -420,4 +420,437 @@ describe('CreditsPage', () => {
       expect(screen.getByText('Loading...')).toBeInTheDocument();
     });
   });
+
+  describe('Custom Amount Input', () => {
+    it('should display custom amount input field', async () => {
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      expect(screen.getByLabelText(/Enter custom amount or select a package/i)).toBeInTheDocument();
+    });
+
+    it('should show minimum $5.00 hint text', async () => {
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      // Find the minimum hint text (there may be multiple for auto top-up)
+      const minHints = screen.getAllByText('Minimum $5.00');
+      expect(minHints.length).toBeGreaterThan(0);
+    });
+
+    it('should allow entering a custom amount', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      const customInput = screen.getByLabelText(/Enter custom amount or select a package/i);
+      await act(async () => {
+        await user.type(customInput, '25.00');
+        jest.runAllTimers();
+      });
+
+      expect(customInput).toHaveValue('25.00');
+    });
+
+    it('should redirect to checkout with custom amount when valid amount entered', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      const customInput = screen.getByLabelText(/Enter custom amount or select a package/i);
+      await act(async () => {
+        await user.type(customInput, '50');
+        jest.runAllTimers();
+      });
+
+      const buyButton = screen.getByText('Buy Credits');
+      await act(async () => {
+        await user.click(buyButton);
+        jest.runAllTimers();
+      });
+
+      expect(mockPush).toHaveBeenCalledWith('/checkout?package=custom&amount=50&mode=credits');
+    });
+
+    it('should show alert when custom amount is below $5 minimum', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+      const alertMock = jest.spyOn(window, 'alert').mockImplementation(() => {});
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      const customInput = screen.getByLabelText(/Enter custom amount or select a package/i);
+      await act(async () => {
+        await user.type(customInput, '3');
+        jest.runAllTimers();
+      });
+
+      const buyButton = screen.getByText('Buy Credits');
+      await act(async () => {
+        await user.click(buyButton);
+        jest.runAllTimers();
+      });
+
+      expect(alertMock).toHaveBeenCalledWith('Minimum custom amount is $5.00');
+      expect(mockPush).not.toHaveBeenCalled();
+
+      alertMock.mockRestore();
+    });
+
+    it('should open dialog when no custom amount is entered', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      const buyButton = screen.getByText('Buy Credits');
+      await act(async () => {
+        await user.click(buyButton);
+        jest.runAllTimers();
+      });
+
+      // Dialog should open instead of redirecting
+      expect(screen.getByText('Purchase Credits')).toBeInTheDocument();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('should only allow numbers and decimal point in custom amount', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      const customInput = screen.getByLabelText(/Enter custom amount or select a package/i);
+      await act(async () => {
+        await user.type(customInput, 'abc123.45xyz');
+        jest.runAllTimers();
+      });
+
+      // Should only contain numbers and decimal
+      expect(customInput).toHaveValue('123.45');
+    });
+
+    it('should limit decimal places to 2', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      const customInput = screen.getByLabelText(/Enter custom amount or select a package/i);
+      await act(async () => {
+        await user.type(customInput, '25.999');
+        jest.runAllTimers();
+      });
+
+      // Should only allow 2 decimal places
+      expect(customInput).toHaveValue('25.99');
+    });
+  });
+
+  describe('Auto Top-Up Settings', () => {
+    it('should display Auto Top-Up section', async () => {
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      expect(screen.getByText('Auto Top-Up')).toBeInTheDocument();
+      expect(screen.getByText(/Automatically add credits when your balance falls below/i)).toBeInTheDocument();
+    });
+
+    it('should have auto top-up toggle initially disabled', async () => {
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      // The switch should be rendered but the settings form should not be visible
+      expect(screen.queryByLabelText('When balance falls below')).not.toBeInTheDocument();
+    });
+
+    it('should show auto top-up form when toggle is enabled', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      // Find and click the switch (it's in the Auto Top-Up section)
+      const switches = screen.getAllByRole('switch');
+      const autoTopUpSwitch = switches[0]; // First switch is auto top-up
+
+      await act(async () => {
+        await user.click(autoTopUpSwitch);
+        jest.runAllTimers();
+      });
+
+      // Form should now be visible
+      expect(screen.getByLabelText('When balance falls below')).toBeInTheDocument();
+      expect(screen.getByLabelText('Automatically add')).toBeInTheDocument();
+      expect(screen.getByText('Save Settings')).toBeInTheDocument();
+    });
+
+    it('should show info notice about payment method', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      const switches = screen.getAllByRole('switch');
+      await act(async () => {
+        await user.click(switches[0]);
+        jest.runAllTimers();
+      });
+
+      expect(screen.getByText(/Auto top-up requires a saved payment method/i)).toBeInTheDocument();
+    });
+
+    it('should load saved auto top-up settings from user data', async () => {
+      const userWithAutoTopUp: UserData = {
+        ...mockBasicUserData,
+        settings: {
+          auto_topup_enabled: true,
+          auto_topup_threshold: 1500, // $15.00 in cents
+          auto_topup_amount: 5000, // $50.00 in cents
+        },
+      };
+      (getUserData as jest.Mock).mockReturnValue(userWithAutoTopUp);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      // Form should be visible since auto top-up is enabled
+      expect(screen.getByLabelText('When balance falls below')).toHaveValue('15.00');
+      expect(screen.getByLabelText('Automatically add')).toHaveValue('50.00');
+    });
+
+    it('should save auto top-up settings when Save Settings is clicked', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+      (makeAuthenticatedRequest as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      // Enable auto top-up
+      const switches = screen.getAllByRole('switch');
+      await act(async () => {
+        await user.click(switches[0]);
+        jest.runAllTimers();
+      });
+
+      // Fill in values
+      const thresholdInput = screen.getByLabelText('When balance falls below');
+      const amountInput = screen.getByLabelText('Automatically add');
+
+      await act(async () => {
+        await user.clear(thresholdInput);
+        await user.type(thresholdInput, '20');
+        await user.clear(amountInput);
+        await user.type(amountInput, '100');
+        jest.runAllTimers();
+      });
+
+      // Click save
+      const saveButton = screen.getByText('Save Settings');
+      await act(async () => {
+        await user.click(saveButton);
+        jest.runAllTimers();
+      });
+
+      // Verify API was called with correct data
+      expect(makeAuthenticatedRequest).toHaveBeenCalledWith(
+        'https://api.example.com/user/profile',
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            settings: {
+              auto_topup_enabled: true,
+              auto_topup_threshold: 2000, // $20.00 in cents
+              auto_topup_amount: 10000, // $100.00 in cents
+            },
+          }),
+        })
+      );
+    });
+
+    it('should show alert when threshold is below $5 minimum', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+      const alertMock = jest.spyOn(window, 'alert').mockImplementation(() => {});
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      // Enable auto top-up
+      const switches = screen.getAllByRole('switch');
+      await act(async () => {
+        await user.click(switches[0]);
+        jest.runAllTimers();
+      });
+
+      // Set threshold below $5
+      const thresholdInput = screen.getByLabelText('When balance falls below');
+      await act(async () => {
+        await user.clear(thresholdInput);
+        await user.type(thresholdInput, '3');
+        jest.runAllTimers();
+      });
+
+      // Click save
+      const saveButton = screen.getByText('Save Settings');
+      await act(async () => {
+        await user.click(saveButton);
+        jest.runAllTimers();
+      });
+
+      expect(alertMock).toHaveBeenCalledWith('Threshold must be at least $5.00');
+      alertMock.mockRestore();
+    });
+
+    it('should show alert when top-up amount is below $5 minimum', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+      const alertMock = jest.spyOn(window, 'alert').mockImplementation(() => {});
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      // Enable auto top-up
+      const switches = screen.getAllByRole('switch');
+      await act(async () => {
+        await user.click(switches[0]);
+        jest.runAllTimers();
+      });
+
+      // Set valid threshold but invalid amount
+      const thresholdInput = screen.getByLabelText('When balance falls below');
+      const amountInput = screen.getByLabelText('Automatically add');
+      await act(async () => {
+        await user.clear(thresholdInput);
+        await user.type(thresholdInput, '10');
+        await user.clear(amountInput);
+        await user.type(amountInput, '2');
+        jest.runAllTimers();
+      });
+
+      // Click save
+      const saveButton = screen.getByText('Save Settings');
+      await act(async () => {
+        await user.click(saveButton);
+        jest.runAllTimers();
+      });
+
+      expect(alertMock).toHaveBeenCalledWith('Top-up amount must be at least $5.00');
+      alertMock.mockRestore();
+    });
+
+    it('should show "Settings saved" after successful save', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+      (makeAuthenticatedRequest as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      // Enable auto top-up
+      const switches = screen.getAllByRole('switch');
+      await act(async () => {
+        await user.click(switches[0]);
+        jest.runAllTimers();
+      });
+
+      // Click save (default values should be valid)
+      const saveButton = screen.getByText('Save Settings');
+      await act(async () => {
+        await user.click(saveButton);
+        jest.runAllTimers();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Settings saved')).toBeInTheDocument();
+      });
+    });
+
+    it('should show "Changes not saved" when settings are modified', async () => {
+      const user = userEvent.setup({ advanceTimers: jest.advanceTimersByTime });
+      const userWithAutoTopUp: UserData = {
+        ...mockBasicUserData,
+        settings: {
+          auto_topup_enabled: true,
+          auto_topup_threshold: 1000,
+          auto_topup_amount: 2500,
+        },
+      };
+      (getUserData as jest.Mock).mockReturnValue(userWithAutoTopUp);
+
+      await act(async () => {
+        render(<CreditsPage />);
+        jest.runAllTimers();
+      });
+
+      // Modify a value
+      const thresholdInput = screen.getByLabelText('When balance falls below');
+      await act(async () => {
+        await user.clear(thresholdInput);
+        await user.type(thresholdInput, '15');
+        jest.runAllTimers();
+      });
+
+      expect(screen.getByText('Changes not saved')).toBeInTheDocument();
+    });
+  });
 });
