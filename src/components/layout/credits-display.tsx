@@ -224,7 +224,8 @@ export function CreditsDisplay() {
     );
   }
 
-  // Basic users - show credits
+  // Basic users - show credits (convert from cents to dollars)
+  const creditsDollars = credits / 100;
   return (
     <Link href="/settings/credits">
       <Button
@@ -234,7 +235,7 @@ export function CreditsDisplay() {
       >
         <Coins className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
         <span className="font-semibold text-xs sm:text-sm">
-          {credits.toLocaleString()}
+          ${creditsDollars.toFixed(2)}
         </span>
       </Button>
     </Link>

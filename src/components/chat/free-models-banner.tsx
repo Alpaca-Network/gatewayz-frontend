@@ -35,9 +35,10 @@ export function FreeModelsBanner() {
       return;
     }
 
-    // Show banner if user has 5 or fewer credits (low/expired trial)
-    if (userData.credits <= 5) {
-      setCredits(Math.floor(userData.credits));
+    // Show banner if user has $5 or fewer credits (low/expired trial)
+    // Credits are stored in cents, so 500 cents = $5
+    if (userData.credits <= 500) {
+      setCredits(userData.credits / 100); // Convert cents to dollars for display
       setShowBanner(true);
     }
   }, []);
@@ -65,7 +66,7 @@ export function FreeModelsBanner() {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="text-sm font-semibold text-green-900 dark:text-green-100">
-                  {credits === 0 ? "Trial Credits Used Up" : `Low Credits (${credits} remaining)`}
+                  {credits === 0 ? "Trial Credits Used Up" : `Low Credits ($${credits.toFixed(2)} remaining)`}
                 </h3>
                 <p className="text-sm text-green-800 dark:text-green-200 mt-1">
                   You can still use <strong className="font-semibold">FREE models</strong>! Look for the{' '}

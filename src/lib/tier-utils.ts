@@ -157,7 +157,8 @@ export const hasActiveSubscription = (userData: UserData | null): boolean => {
 };
 
 // Trial users start with 3 credits - if they have more, they've purchased credits
-const TRIAL_CREDIT_THRESHOLD = 3;
+// Trial credits threshold in cents ($5 = 500 cents)
+const TRIAL_CREDIT_THRESHOLD = 500;
 
 /**
  * Checks if a user has purchased credits (more than trial amount)
@@ -168,7 +169,7 @@ export const hasPurchasedCredits = (userData: UserData | null): boolean => {
   if (!userData) {
     return false;
   }
-  // Credits > 3 indicates user has added payment beyond initial trial credits
+  // Credits > 500 cents ($5) indicates user has added payment beyond initial trial credits
   return (userData.credits ?? 0) > TRIAL_CREDIT_THRESHOLD;
 };
 

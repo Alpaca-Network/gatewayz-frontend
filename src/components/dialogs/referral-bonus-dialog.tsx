@@ -41,14 +41,16 @@ export function ReferralBonusDialog() {
         return;
       }
 
-      // Calculate bonus: total credits - 3 (base trial credits)
-      const baseCredits = 3;
-      const total = Math.floor(userData.credits);
-      const bonus = Math.max(0, total - baseCredits);
+      // Calculate bonus: total credits - 500 cents ($5 base trial credits)
+      // Credits are stored in cents
+      const baseCredits = 500; // $5 in cents
+      const totalCents = Math.floor(userData.credits);
+      const bonusCents = Math.max(0, totalCents - baseCredits);
 
-      if (bonus > 0) {
-        setBonusAmount(bonus);
-        setTotalCredits(total);
+      if (bonusCents > 0) {
+        // Convert to dollars for display
+        setBonusAmount(bonusCents / 100);
+        setTotalCredits(totalCents / 100);
         setShowDialog(true);
       } else {
         // No bonus found, just dismiss
@@ -90,14 +92,14 @@ export function ReferralBonusDialog() {
             <p className="text-sm text-muted-foreground mb-2">Your Referral Bonus</p>
             <div className="flex items-baseline gap-3">
               <div className="text-4xl font-bold text-emerald-600 dark:text-emerald-400">
-                +${bonusAmount}
+                +${bonusAmount.toFixed(2)}
               </div>
               <p className="text-sm text-muted-foreground">
                 in bonus credits
               </p>
             </div>
             <p className="text-sm text-muted-foreground mt-3">
-              Plus your $3 in trial credits = <span className="font-semibold text-emerald-600 dark:text-emerald-400">${totalCredits} total</span>
+              Plus your $5 in trial credits = <span className="font-semibold text-emerald-600 dark:text-emerald-400">${totalCredits.toFixed(2)} total</span>
             </p>
           </div>
 

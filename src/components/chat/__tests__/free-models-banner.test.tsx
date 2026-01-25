@@ -67,7 +67,7 @@ describe('FreeModelsBanner', () => {
   describe('Pro/Max user handling', () => {
     it('should NOT show banner for Pro users even with low credits', () => {
       const proUserData = {
-        credits: 3,
+        credits: 300, // 300 cents = $3
         tier: 'pro',
         subscription_status: 'active' as const,
         user_id: '123',
@@ -103,7 +103,7 @@ describe('FreeModelsBanner', () => {
 
     it('should NOT show banner for Max users even with low credits', () => {
       const maxUserData = {
-        credits: 2,
+        credits: 200, // 200 cents = $2
         tier: 'max',
         subscription_status: 'active' as const,
         user_id: '123',
@@ -139,7 +139,7 @@ describe('FreeModelsBanner', () => {
 
     it('should NOT show banner for Pro users with case-insensitive tier check', () => {
       const proUserData = {
-        credits: 1,
+        credits: 100, // 100 cents = $1
         tier: 'Pro', // Uppercase
         subscription_status: 'active' as const,
         user_id: '123',
@@ -157,9 +157,9 @@ describe('FreeModelsBanner', () => {
   });
 
   describe('Basic/Trial user handling', () => {
-    it('should show banner for basic users with low credits (5 or fewer)', () => {
+    it('should show banner for basic users with low credits (500 cents = $5 or fewer)', () => {
       const basicUserData = {
-        credits: 3,
+        credits: 300, // 300 cents = $3
         tier: 'basic',
         subscription_status: 'trial' as const,
         user_id: '123',
@@ -170,8 +170,8 @@ describe('FreeModelsBanner', () => {
 
       render(<FreeModelsBanner />);
 
-      // Banner should be rendered for basic users with low credits
-      expect(screen.getByText(/Low Credits \(3 remaining\)/)).toBeInTheDocument();
+      // Banner should be rendered for basic users with low credits (displays as $3.00)
+      expect(screen.getByText(/Low Credits \(\$3\.00 remaining\)/)).toBeInTheDocument();
     });
 
     it('should show banner for basic users with 0 credits', () => {
@@ -191,9 +191,9 @@ describe('FreeModelsBanner', () => {
       expect(screen.getByText(/Trial Credits Used Up/)).toBeInTheDocument();
     });
 
-    it('should show banner for basic users with exactly 5 credits', () => {
+    it('should show banner for basic users with exactly 500 cents ($5)', () => {
       const basicUserData = {
-        credits: 5,
+        credits: 500, // 500 cents = $5
         tier: 'basic',
         subscription_status: 'trial' as const,
         user_id: '123',
@@ -204,13 +204,13 @@ describe('FreeModelsBanner', () => {
 
       render(<FreeModelsBanner />);
 
-      // Banner should be rendered for 5 credits (threshold is <= 5)
-      expect(screen.getByText(/Low Credits \(5 remaining\)/)).toBeInTheDocument();
+      // Banner should be rendered for 500 cents ($5) (threshold is <= 500 cents)
+      expect(screen.getByText(/Low Credits \(\$5\.00 remaining\)/)).toBeInTheDocument();
     });
 
-    it('should NOT show banner for basic users with more than 5 credits', () => {
+    it('should NOT show banner for basic users with more than 500 cents ($5)', () => {
       const basicUserData = {
-        credits: 6,
+        credits: 600, // 600 cents = $6
         tier: 'basic',
         subscription_status: 'trial' as const,
         user_id: '123',
@@ -221,7 +221,7 @@ describe('FreeModelsBanner', () => {
 
       render(<FreeModelsBanner />);
 
-      // Banner should NOT be rendered when credits > 5
+      // Banner should NOT be rendered when credits > 500 cents ($5)
       expect(screen.queryByText(/Low Credits/)).not.toBeInTheDocument();
     });
   });
@@ -238,7 +238,7 @@ describe('FreeModelsBanner', () => {
 
     it('should NOT show banner when banner was dismissed within 24 hours', () => {
       const basicUserData = {
-        credits: 3,
+        credits: 300, // 300 cents = $3
         tier: 'basic',
         subscription_status: 'trial' as const,
         user_id: '123',
@@ -259,7 +259,7 @@ describe('FreeModelsBanner', () => {
 
     it('should show banner when banner was dismissed more than 24 hours ago', () => {
       const basicUserData = {
-        credits: 3,
+        credits: 300, // 300 cents = $3
         tier: 'basic',
         subscription_status: 'trial' as const,
         user_id: '123',
@@ -274,13 +274,13 @@ describe('FreeModelsBanner', () => {
 
       render(<FreeModelsBanner />);
 
-      // Banner should be shown because dismissal was more than 24 hours ago
-      expect(screen.getByText(/Low Credits \(3 remaining\)/)).toBeInTheDocument();
+      // Banner should be shown because dismissal was more than 24 hours ago (displays as $3.00)
+      expect(screen.getByText(/Low Credits \(\$3\.00 remaining\)/)).toBeInTheDocument();
     });
 
-    it('should floor decimal credit values', () => {
+    it('should handle decimal credit values correctly', () => {
       const basicUserData = {
-        credits: 3.7,
+        credits: 370, // 370 cents = $3.70
         tier: 'basic',
         subscription_status: 'trial' as const,
         user_id: '123',
@@ -291,15 +291,15 @@ describe('FreeModelsBanner', () => {
 
       render(<FreeModelsBanner />);
 
-      // Credits should be floored to 3
-      expect(screen.getByText(/Low Credits \(3 remaining\)/)).toBeInTheDocument();
+      // Credits should display as $3.70
+      expect(screen.getByText(/Low Credits \(\$3\.70 remaining\)/)).toBeInTheDocument();
     });
   });
 
   describe('getUserTier integration', () => {
     it('should use getUserTier to determine tier accurately', () => {
       const userData = {
-        credits: 2,
+        credits: 200, // 200 cents = $2
         tier: 'basic', // Tier says basic
         subscription_status: 'active' as const, // But has active subscription
         user_id: '123',
@@ -320,7 +320,7 @@ describe('FreeModelsBanner', () => {
 
     it('should handle tier inference from tier_display_name', () => {
       const userData = {
-        credits: 1,
+        credits: 100, // 100 cents = $1
         tier: 'basic',
         tier_display_name: 'Pro',
         subscription_status: 'active' as const,
