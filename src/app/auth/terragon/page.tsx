@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { getApiKey, getUserData } from "@/lib/api";
@@ -73,7 +74,7 @@ export default function TerragonAuthPage() {
             body: JSON.stringify({
               userId: userData?.user_id,
               email: userData?.email,
-              username: userData?.username,
+              username: userData?.display_name,
               tier: userData?.tier || "free",
             }),
           });
@@ -158,12 +159,12 @@ export default function TerragonAuthPage() {
               >
                 Try Again
               </button>
-              <a
+              <Link
                 href="/"
                 className="px-4 py-2 border border-input bg-background rounded-md hover:bg-accent"
               >
                 Go Home
-              </a>
+              </Link>
             </div>
           </div>
         )}
