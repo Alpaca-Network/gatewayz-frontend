@@ -46,16 +46,21 @@ function CheckoutPageContent() {
 
   const currentPackage = creditPackageId ? (() => {
     const pkg = creditPackages[creditPackageId];
-    if (creditPackageId === 'custom' && customAmountParam) {
-      const customAmount = parseFloat(customAmountParam);
-      if (!isNaN(customAmount) && customAmount >= MIN_CUSTOM_AMOUNT && customAmount <= MAX_CUSTOM_AMOUNT) {
-        return {
-          ...pkg,
-          creditValue: customAmount,
-          price: customAmount, // Custom amounts have no discount
-          discount: 'No discount',
-        };
+    if (creditPackageId === 'custom') {
+      // For custom packages, we MUST have a valid amount from URL
+      if (!customAmountParam) {
+        return null; // No amount provided - show error page
       }
+      const customAmount = parseFloat(customAmountParam);
+      if (isNaN(customAmount) || customAmount < MIN_CUSTOM_AMOUNT || customAmount > MAX_CUSTOM_AMOUNT) {
+        return null; // Invalid amount - show error page instead of $0 checkout
+      }
+      return {
+        ...pkg,
+        creditValue: customAmount,
+        price: customAmount, // Custom amounts have no discount
+        discount: 'No discount',
+      };
     }
     return pkg;
   })() : null;
