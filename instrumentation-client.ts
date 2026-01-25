@@ -520,6 +520,30 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
+  // Filter out AbortError "signal is aborted without reason"
+  // These occur when:
+  // - Network requests are cancelled due to page navigation
+  // - Users quickly switch between models/chats
+  // - Timeout AbortControllers fire during normal operation
+  // These are expected behaviors, not application bugs
+  const isAbortError =
+    (errorMessage.includes('AbortError') ||
+     eventMessage.includes('AbortError') ||
+     event.exception?.values?.[0]?.type === 'AbortError') &&
+    (errorMessageLower.includes('signal is aborted') ||
+     errorMessageLower.includes('aborted without reason') ||
+     errorMessageLower.includes('user aborted') ||
+     errorMessageLower.includes('the operation was aborted') ||
+     eventMessageLower.includes('signal is aborted') ||
+     eventMessageLower.includes('aborted without reason') ||
+     eventMessageLower.includes('user aborted') ||
+     eventMessageLower.includes('the operation was aborted'));
+
+  if (isAbortError) {
+    console.debug('[Sentry] Filtered out AbortError (expected cancellation behavior)');
+    return true;
+  }
+
   return false;
 }
 
