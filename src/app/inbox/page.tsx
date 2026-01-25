@@ -23,7 +23,7 @@ import { Loader2, RefreshCw, ExternalLink, LogIn } from "lucide-react";
  * @see https://github.com/terragon-labs/terragon-oss
  */
 export default function InboxPage() {
-  const { status, apiKey, userData, login } = useGatewayzAuth();
+  const { status, apiKey, userData, login, privyReady } = useGatewayzAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connectionError, setConnectionError] = useState(false);
@@ -256,6 +256,7 @@ export default function InboxPage() {
 
   // Unauthenticated UI - prompt login
   if (status === "unauthenticated") {
+    const isPrivyLoading = !privyReady;
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 space-y-6">
         <div className="max-w-md text-center space-y-4">
@@ -266,9 +267,23 @@ export default function InboxPage() {
             review code, and collaborate with AI agents.
           </p>
 
-          <Button onClick={() => login()} size="lg" className="mt-4">
-            <LogIn className="w-4 h-4 mr-2" />
-            Sign In to Continue
+          <Button
+            onClick={() => login()}
+            size="lg"
+            className="mt-4"
+            disabled={isPrivyLoading}
+          >
+            {isPrivyLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                <LogIn className="w-4 h-4 mr-2" />
+                Sign In to Continue
+              </>
+            )}
           </Button>
         </div>
       </div>
