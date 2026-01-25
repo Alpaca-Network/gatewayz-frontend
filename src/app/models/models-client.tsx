@@ -519,53 +519,53 @@ export default function ModelsClient({
       const bannerElement = document.querySelector('[data-onboarding-banner]');
       const spacer = document.querySelector('[data-header-spacer]');
       const container = document.querySelector('[data-models-container]');
-      
+
       if (bannerElement) {
         const bannerHeight = bannerElement.getBoundingClientRect().height;
         const headerTop = 65 + bannerHeight;
         document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
-        
+
         // Update header element directly
         const header = document.querySelector('[data-models-header]');
         if (header) {
           (header as HTMLElement).style.top = `${headerTop}px`;
         }
-        
+
         // Update container margin
         if (container) {
           (container as HTMLElement).style.marginTop = `-${headerTop}px`;
         }
-        
+
         // Update models list margin - add more space when banner is visible
         const modelsList = document.querySelector('[data-models-list]');
         if (modelsList) {
           (modelsList as HTMLElement).style.marginTop = '140px';
         }
-        
+
         // Update spacer
         if (spacer) {
           (spacer as HTMLElement).style.height = `${headerTop}px`;
         }
       } else {
         document.documentElement.style.setProperty('--models-header-top', '65px');
-        
+
         // Update header element directly
         const header = document.querySelector('[data-models-header]');
         if (header) {
           (header as HTMLElement).style.top = '65px';
         }
-        
+
         // Update container margin - use negative margin to pull content up but keep header visible
         if (container) {
           (container as HTMLElement).style.marginTop = '-50px';
         }
-        
+
         // Update models list margin - keep normal spacing when banner is closed
         const modelsList = document.querySelector('[data-models-list]');
         if (modelsList) {
           (modelsList as HTMLElement).style.marginTop = '80px';
         }
-        
+
         // Update spacer
         if (spacer) {
           (spacer as HTMLElement).style.height = '65px';
@@ -576,21 +576,39 @@ export default function ModelsClient({
     // Initial update with delay to ensure banner is rendered
     setTimeout(updateHeaderPosition, 50);
 
-    // Watch for banner visibility changes
+    // Watch for banner visibility changes using MutationObserver
     const observer = new MutationObserver(() => {
-      setTimeout(updateHeaderPosition, 50);
+      updateHeaderPosition();
     });
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['class']
     });
 
-    // Also check periodically in case banner renders after initial check
-    const interval = setInterval(updateHeaderPosition, 200);
-    
+    // Also observe the body for banner additions/removals
+    const bodyObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList') {
+          // Check if banner was added or removed
+          const hasBannerChange = Array.from(mutation.addedNodes).some(
+            (node) => node instanceof HTMLElement && node.matches('[data-onboarding-banner]')
+          ) || Array.from(mutation.removedNodes).some(
+            (node) => node instanceof HTMLElement && node.matches('[data-onboarding-banner]')
+          );
+          if (hasBannerChange) {
+            updateHeaderPosition();
+          }
+        }
+      }
+    });
+    bodyObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
     return () => {
       observer.disconnect();
-      clearInterval(interval);
+      bodyObserver.disconnect();
     };
   }, []);
   const router = useRouter();
@@ -609,7 +627,9 @@ export default function ModelsClient({
   // Update models when initialModels changes (e.g., when deferred models finish loading)
   useEffect(() => {
     if (initialModels.length > 0 && initialModels.length !== models.length) {
-      console.log(`[Models] Updating models from ${models.length} to ${initialModels.length}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Models] Updating models from ${models.length} to ${initialModels.length}`);
+      }
       setModels(initialModels);
     }
   }, [initialModels, models.length]);
@@ -617,7 +637,9 @@ export default function ModelsClient({
   // Fetch models client-side if we only got the fallback static models
   useEffect(() => {
     if (initialModels.length < 50) {
-      console.log('[Models] Only got', initialModels.length, 'models from server, fetching from client...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Models] Only got', initialModels.length, 'models from server, fetching from client...');
+      }
       const controller = new AbortController();
       let isActive = true;
 
@@ -632,7 +654,9 @@ export default function ModelsClient({
             '[Models] client bootstrap'
           );
           if (isActive && payload?.data && payload.data.length > 0) {
-            console.log(`[Models] Fetched ${payload.data.length} models from client`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[Models] Fetched ${payload.data.length} models from client`);
+            }
             setModels(payload.data);
           }
         } catch (err) {
@@ -657,7 +681,6 @@ export default function ModelsClient({
 
   // Additional deduplication as a safety measure
   const deduplicatedModels = useMemo(() => {
-    console.log(`Models for deduplication: ${models.length}`);
     const seen = new Set<string>();
     const deduplicated = models.filter(model => {
       // Filter out malformed models from backend (e.g., Cerebras parsing errors)
@@ -670,7 +693,9 @@ export default function ModelsClient({
       );
 
       if (isMalformed) {
-        console.warn(`Filtering out malformed model: ${model.name} (ID: ${model.id})`);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`Filtering out malformed model: ${model.name} (ID: ${model.id})`);
+        }
         return false;
       }
 
@@ -680,7 +705,6 @@ export default function ModelsClient({
       seen.add(model.id);
       return true;
     });
-    console.log(`After client-side deduplication and validation: ${deduplicated.length} unique models`);
     return deduplicated;
   }, [models]);
 
@@ -717,7 +741,6 @@ export default function ModelsClient({
           if (!taskState.explore) {
             taskState.explore = true;
             safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
-            console.log('Onboarding - Explore task marked as complete');
 
             // Dispatch custom event to notify the banner
             window.dispatchEvent(new Event('onboarding-task-updated'));
@@ -726,7 +749,6 @@ export default function ModelsClient({
           // Initialize task state if it doesn't exist and mark explore as complete
           const taskState = { explore: true };
           safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
-          console.log('Onboarding - Explore task initialized and marked as complete');
 
           // Dispatch custom event to notify the banner
           window.dispatchEvent(new Event('onboarding-task-updated'));
@@ -865,7 +887,6 @@ export default function ModelsClient({
 
   // Memoize the filtering logic separately for better performance
   const filteredModels = useMemo(() => {
-    const startTime = performance.now();
     // First filter, then sort
     const filtered = searchFilteredModels.filter((model) => {
       const inputFormatMatch = selectedInputFormats.length === 0 || selectedInputFormats.every(m =>
@@ -961,8 +982,6 @@ export default function ModelsClient({
         }
     });
 
-    const endTime = performance.now();
-    console.log(`[Models] Filtering took ${(endTime - startTime).toFixed(2)}ms (${sorted.length} results)`);
     return sorted;
   }, [searchFilteredModels, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter, getModelSeries]);
 
@@ -1106,17 +1125,6 @@ export default function ModelsClient({
     // Use getAllActiveGatewayIds() to include dynamically registered gateways
     // To add a new gateway, simply add it to src/lib/gateway-registry.ts
     const allKnownGateways = getAllActiveGatewayIds();
-
-    // Log gateway counts for debugging
-    const gatewayStats = allKnownGateways.map(g => ({
-      gateway: g,
-      modelCount: counts[g] || 0
-    }));
-    console.log('📊 All Gateway Model Counts:', gatewayStats);
-    const emptyGateways = gatewayStats.filter(s => s.modelCount === 0).map(s => s.gateway);
-    if (emptyGateways.length > 0) {
-      console.warn('⚠️ Gateways with 0 models (may need backend fixes):', emptyGateways);
-    }
 
     // Include all known gateways, even if they have 0 models
     // This ensures users can see all available gateways and understand the complete picture
@@ -1317,7 +1325,7 @@ export default function ModelsClient({
               <div className="flex items-center gap-3 flex-shrink-0 w-full lg:w-auto justify-between lg:justify-end">
                 <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
                   {isLoadingModels || isLoadingMore
-                    ? `${deduplicatedModels.length} models available,  loading...`
+                    ? `${deduplicatedModels.length} models available, loading...`
                     : `${filteredModels.length} / ${deduplicatedModels.length} models`
                   }
                 </span>
