@@ -497,6 +497,11 @@ export function GatewayzAuthProvider({
             tier_display_name: authData.tier_display_name,
             subscription_status: authData.subscription_status,
             subscription_end_date: authData.subscription_end_date,
+            // Tiered credit fields
+            subscription_allowance: authData.subscription_allowance ?? storedUser.subscription_allowance,
+            purchased_credits: authData.purchased_credits ?? storedUser.purchased_credits,
+            total_credits: authData.total_credits ?? storedUser.total_credits,
+            allowance_reset_date: authData.allowance_reset_date ?? storedUser.allowance_reset_date,
           });
         } else {
           saveUserData({
@@ -511,6 +516,11 @@ export function GatewayzAuthProvider({
             tier_display_name: authData.tier_display_name,
             subscription_status: authData.subscription_status,
             subscription_end_date: authData.subscription_end_date,
+            // Tiered credit fields
+            subscription_allowance: authData.subscription_allowance,
+            purchased_credits: authData.purchased_credits,
+            total_credits: authData.total_credits,
+            allowance_reset_date: authData.allowance_reset_date,
           });
         }
 
