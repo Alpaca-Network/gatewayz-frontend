@@ -87,6 +87,19 @@ describe('CSP Configuration', () => {
       it('should allow Statsig scripts', () => {
         expect(cspHeader).toContain('https://*.statsig.com');
       });
+
+      it('should allow PostHog scripts', () => {
+        expect(cspHeader).toContain('https://*.posthog.com');
+      });
+
+      it('should allow Reddit ads scripts', () => {
+        expect(cspHeader).toContain('https://www.redditstatic.com');
+      });
+
+      it('should allow Google Ads scripts', () => {
+        expect(cspHeader).toContain('https://googleads.g.doubleclick.net');
+        expect(cspHeader).toContain('https://www.googleadservices.com');
+      });
     });
 
     describe('font-src directive', () => {
@@ -128,6 +141,16 @@ describe('CSP Configuration', () => {
       it('should allow Cloudflare DNS', () => {
         expect(cspHeader).toContain('https://cloudflare-dns.com');
       });
+
+      it('should allow PostHog connections', () => {
+        expect(cspHeader).toContain('https://us.i.posthog.com');
+        expect(cspHeader).toContain('https://us-assets.i.posthog.com');
+        expect(cspHeader).toContain('https://*.posthog.com');
+      });
+
+      it('should allow Google Ads connections', () => {
+        expect(cspHeader).toContain('https://googleads.g.doubleclick.net');
+      });
     });
 
     describe('frame-src directive', () => {
@@ -145,6 +168,10 @@ describe('CSP Configuration', () => {
 
       it('should allow Cloudflare challenges', () => {
         expect(cspHeader).toContain('https://challenges.cloudflare.com');
+      });
+
+      it('should allow Gatewayz iframes', () => {
+        expect(cspHeader).toContain('https://*.gatewayz.ai');
       });
     });
 
