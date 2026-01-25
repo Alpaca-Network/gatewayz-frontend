@@ -20,6 +20,7 @@ function CheckoutPageContent() {
   const tier = searchParams.get('tier') || '';
   const creditPackageId = searchParams.get('package') || '';
   const mode = searchParams.get('mode') || 'subscription'; // 'subscription' or 'credits'
+  const customAmountParam = searchParams.get('amount') || '';
   const action = searchParams.get('action') || ''; // 'upgrade' or 'downgrade'
 
   const [referralCode, setReferralCode] = useState<string>('');
@@ -37,7 +38,27 @@ function CheckoutPageContent() {
   const isCreditPurchase = mode === 'credits' && creditPackageId;
 
   const currentTier = tier ? tierConfigs[tier.toLowerCase()] : null;
-  const currentPackage = creditPackageId ? creditPackages[creditPackageId] : null;
+
+  // Handle custom package with dynamic amount from URL
+  // Min $5 to meet Stripe requirements, max $10,000 for safety
+  const MIN_CUSTOM_AMOUNT = 5;
+  const MAX_CUSTOM_AMOUNT = 10000;
+
+  const currentPackage = creditPackageId ? (() => {
+    const pkg = creditPackages[creditPackageId];
+    if (creditPackageId === 'custom' && customAmountParam) {
+      const customAmount = parseFloat(customAmountParam);
+      if (!isNaN(customAmount) && customAmount >= MIN_CUSTOM_AMOUNT && customAmount <= MAX_CUSTOM_AMOUNT) {
+        return {
+          ...pkg,
+          creditValue: customAmount,
+          price: customAmount, // Custom amounts have no discount
+          discount: 'No discount',
+        };
+      }
+    }
+    return pkg;
+  })() : null;
 
   useEffect(() => {
     const fetchReferralData = async () => {
