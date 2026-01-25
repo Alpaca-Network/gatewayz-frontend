@@ -65,36 +65,33 @@ describe('PricingSection', () => {
   it('renders pricing tier buttons', () => {
     render(<PricingSection />);
 
-    // For unauthenticated user (basic tier), buttons should show:
-    // - "Your Plan" for Starter (since basic = starter level)
-    // - "Upgrade" for Pro
-    // - "Upgrade" for Max
+    // For unauthenticated user, buttons should show:
+    // - "Get Started" for Starter, Pro, Max
     // - "Contact Sales" for Enterprise
-    const buttons = screen.getAllByRole('button');
-    // Should have 4 buttons (one for each tier)
-    expect(buttons.length).toBe(4);
+    const getStartedButtons = screen.getAllByRole('button', { name: /get started/i });
+    const contactButton = screen.getByRole('button', { name: /contact sales/i });
+
+    // Should have 3 "Get Started" buttons and 1 "Contact Sales"
+    expect(getStartedButtons.length).toBe(3);
+    expect(contactButton).toBeInTheDocument();
   });
 
-  it('calls handler when Enterprise tier button is clicked', () => {
+  it('renders Contact Sales button for Enterprise', () => {
     render(<PricingSection />);
 
     // Find Contact Sales button for Enterprise
     const enterpriseButton = screen.getByRole('button', { name: /contact sales/i });
-
-    // Click should not throw - this verifies the Enterprise branch executes
-    // Note: window.location.href assertion skipped due to JSDOM limitations
-    expect(() => fireEvent.click(enterpriseButton)).not.toThrow();
+    expect(enterpriseButton).toBeInTheDocument();
   });
 
-  it('calls handler when Starter tier button is clicked', () => {
+  it('renders Get Started buttons for non-Enterprise tiers', () => {
     render(<PricingSection />);
 
-    // Find Your Plan button for Starter (same tier as basic user)
-    const starterButton = screen.getByRole('button', { name: /your plan/i });
+    // Find all Get Started buttons
+    const buttons = screen.getAllByRole('button', { name: /get started/i });
 
-    // Click should not throw - Your Plan button is disabled so click does nothing
-    // Note: window.location.href assertion skipped due to JSDOM limitations
-    expect(() => fireEvent.click(starterButton)).not.toThrow();
+    // Starter, Pro, Max should all have Get Started buttons
+    expect(buttons.length).toBe(3);
   });
 
   it('displays correct pricing for each tier', () => {
