@@ -14,6 +14,8 @@ const ALLOWED_CALLBACK_DOMAINS = [
   "terragon.ai",
   "www.terragon.ai",
   "app.terragon.ai",
+  "gatewayz.ai",
+  "inbox.gatewayz.ai",
   "localhost",
   "127.0.0.1",
 ];
@@ -27,9 +29,10 @@ function isAllowedCallbackUrl(url: string): boolean {
     const parsedUrl = new URL(url);
     const hostname = parsedUrl.hostname.toLowerCase();
 
-    // Check if hostname matches allowed domains or is a subdomain of terragon.ai
+    // Check if hostname matches allowed domains or is a subdomain of terragon.ai/gatewayz.ai
     return ALLOWED_CALLBACK_DOMAINS.includes(hostname) ||
-           hostname.endsWith(".terragon.ai");
+           hostname.endsWith(".terragon.ai") ||
+           hostname.endsWith(".gatewayz.ai");
   } catch {
     return false;
   }
