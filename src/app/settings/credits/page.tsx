@@ -592,121 +592,7 @@ function CreditsPageContent() {
         </div>
       )}
 
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h2 className="text-xl sm:text-2xl font-semibold">Available Balance</h2>
-          <div className="w-full sm:w-auto sm:min-w-[240px] h-14 flex items-center justify-center bg-muted/50 border border-border rounded-md px-4 sm:px-8">
-            {loadingCredits ? (
-              <span className="text-xl md:text-2xl font-bold text-muted-foreground">Loading...</span>
-            ) : credits !== null ? (
-              <span className="text-xl md:text-2xl font-bold">${credits.toFixed(2)}</span>
-            ) : (
-              <span className="text-xl md:text-2xl font-bold text-muted-foreground">$0.00</span>
-            )}
-          </div>
-        </div>
-
-        {/* Buy Credits Section */}
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-4 border-t">
-          <div className="space-y-2">
-            <Label htmlFor="custom-amount" className="text-sm font-medium">Enter custom amount or select a package</Label>
-            <div className="relative w-full sm:w-auto sm:min-w-[240px]">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl md:text-2xl font-bold text-muted-foreground pointer-events-none">$</span>
-              <Input
-                id="custom-amount"
-                type="text"
-                inputMode="decimal"
-                placeholder="5.00"
-                value={customAmount}
-                onChange={(e) => {
-                  // Only allow numbers and decimal point
-                  const value = e.target.value.replace(/[^0-9.]/g, '');
-                  // Prevent multiple decimal points
-                  const parts = value.split('.');
-                  if (parts.length > 2) return;
-                  // Limit to 2 decimal places
-                  if (parts[1] && parts[1].length > 2) return;
-                  setCustomAmount(value);
-                }}
-                className="w-full h-14 text-xl md:text-2xl font-bold bg-background border-border pl-10 pr-4 text-center"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">Minimum $5.00</p>
-          </div>
-          <Button
-            className="bg-black text-white h-12 px-6 sm:px-12 w-full sm:w-auto"
-            onClick={handleBuyCredits}
-            disabled={isLoading || loadingCredits}
-          >
-            {isLoading ? 'Loading...' : loadingCredits ? 'Authenticating...' : 'Buy Credits'}
-          </Button>
-        </div>
-
-        {/* Credit Breakdown for Pro/Max Users */}
-        {(() => {
-          const userData = getUserData();
-          const tier = userData?.tier?.toLowerCase();
-          const isPaidTier = tier === 'pro' || tier === 'max';
-          const hasActiveSubscription = userData?.subscription_status === 'active';
-
-          if (!isPaidTier || !hasActiveSubscription || !userData) return null;
-
-          const subscriptionAllowance = (userData.subscription_allowance ?? 0) / 100;
-          const purchasedCredits = (userData.purchased_credits ?? 0) / 100;
-          const totalCredits = (userData.total_credits ?? userData.credits ?? 0) / 100;
-
-          return (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Monthly Allowance Card */}
-              <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-200 dark:border-green-800">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base text-green-900 dark:text-green-100">Monthly Allowance</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="text-2xl font-bold text-green-900 dark:text-green-100">
-                    ${subscriptionAllowance.toFixed(2)}
-                  </div>
-                  <p className="text-xs text-green-600 dark:text-green-400">
-                    Resets on billing date
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Purchased Credits Card */}
-              <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 border-blue-200 dark:border-blue-800">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base text-blue-900 dark:text-blue-100">Purchased Credits</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                    ${purchasedCredits.toFixed(2)}
-                  </div>
-                  <p className="text-xs text-blue-600 dark:text-blue-400">
-                    Never expire
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Total Available Card */}
-              <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/30 dark:to-violet-950/30 border-purple-200 dark:border-purple-800">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base text-purple-900 dark:text-purple-100">Total Available</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                    ${totalCredits.toFixed(2)}
-                  </div>
-                  <p className="text-xs text-purple-600 dark:text-purple-400">
-                    Combined balance
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* Auto Top-Up Section */}
+      {/* Auto Top-Up Section - moved to top for visibility */}
       <Card className="max-w-2xl mx-auto">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -855,6 +741,120 @@ function CreditsPageContent() {
           </CardContent>
         )}
       </Card>
+
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h2 className="text-xl sm:text-2xl font-semibold">Available Balance</h2>
+          <div className="w-full sm:w-auto sm:min-w-[240px] h-14 flex items-center justify-center bg-muted/50 border border-border rounded-md px-4 sm:px-8">
+            {loadingCredits ? (
+              <span className="text-xl md:text-2xl font-bold text-muted-foreground">Loading...</span>
+            ) : credits !== null ? (
+              <span className="text-xl md:text-2xl font-bold">${credits.toFixed(2)}</span>
+            ) : (
+              <span className="text-xl md:text-2xl font-bold text-muted-foreground">$0.00</span>
+            )}
+          </div>
+        </div>
+
+        {/* Buy Credits Section */}
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-4 border-t">
+          <div className="space-y-2">
+            <Label htmlFor="custom-amount" className="text-sm font-medium">Enter custom amount or select a package</Label>
+            <div className="relative w-full sm:w-auto sm:min-w-[240px]">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl md:text-2xl font-bold text-muted-foreground pointer-events-none">$</span>
+              <Input
+                id="custom-amount"
+                type="text"
+                inputMode="decimal"
+                placeholder="5.00"
+                value={customAmount}
+                onChange={(e) => {
+                  // Only allow numbers and decimal point
+                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                  // Prevent multiple decimal points
+                  const parts = value.split('.');
+                  if (parts.length > 2) return;
+                  // Limit to 2 decimal places
+                  if (parts[1] && parts[1].length > 2) return;
+                  setCustomAmount(value);
+                }}
+                className="w-full h-14 text-xl md:text-2xl font-bold bg-background border-border pl-10 pr-4 text-center"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">Minimum $5.00</p>
+          </div>
+          <Button
+            className="bg-black text-white h-12 px-6 sm:px-12 w-full sm:w-auto"
+            onClick={handleBuyCredits}
+            disabled={isLoading || loadingCredits}
+          >
+            {isLoading ? 'Loading...' : loadingCredits ? 'Authenticating...' : 'Buy Credits'}
+          </Button>
+        </div>
+
+        {/* Credit Breakdown for Pro/Max Users */}
+        {(() => {
+          const userData = getUserData();
+          const tier = userData?.tier?.toLowerCase();
+          const isPaidTier = tier === 'pro' || tier === 'max';
+          const hasActiveSubscription = userData?.subscription_status === 'active';
+
+          if (!isPaidTier || !hasActiveSubscription || !userData) return null;
+
+          const subscriptionAllowance = (userData.subscription_allowance ?? 0) / 100;
+          const purchasedCredits = (userData.purchased_credits ?? 0) / 100;
+          const totalCredits = (userData.total_credits ?? userData.credits ?? 0) / 100;
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Monthly Allowance Card */}
+              <Card className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-green-200 dark:border-green-800">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base text-green-900 dark:text-green-100">Monthly Allowance</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="text-2xl font-bold text-green-900 dark:text-green-100">
+                    ${subscriptionAllowance.toFixed(2)}
+                  </div>
+                  <p className="text-xs text-green-600 dark:text-green-400">
+                    Resets on billing date
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Purchased Credits Card */}
+              <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 border-blue-200 dark:border-blue-800">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base text-blue-900 dark:text-blue-100">Purchased Credits</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                    ${purchasedCredits.toFixed(2)}
+                  </div>
+                  <p className="text-xs text-blue-600 dark:text-blue-400">
+                    Never expire
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Total Available Card */}
+              <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-950/30 dark:to-violet-950/30 border-purple-200 dark:border-purple-800">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base text-purple-900 dark:text-purple-100">Total Available</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+                    ${totalCredits.toFixed(2)}
+                  </div>
+                  <p className="text-xs text-purple-600 dark:text-purple-400">
+                    Combined balance
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          );
+        })()}
+      </div>
 
       {/* Purchase Credits Dialog */}
       <Dialog open={showDialog} onOpenChange={(open) => {
