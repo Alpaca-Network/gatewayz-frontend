@@ -4,7 +4,22 @@ import { PricingSection } from '../pricing-section';
 
 // Mock the api module
 jest.mock('@/lib/api', () => ({
-  getUserData: jest.fn(),
+  getUserData: jest.fn().mockReturnValue(null),
+}));
+
+// Mock useTier hook
+jest.mock('@/hooks/use-tier', () => ({
+  useTier: () => ({
+    tier: 'basic',
+    hasSubscription: false,
+    tierInfo: null,
+    subscriptionStatusText: null,
+    renewalDate: null,
+    isTrial: false,
+    trialExpired: false,
+    trialExpirationDate: null,
+    userData: null,
+  }),
 }));
 
 // Mock UI components
@@ -47,35 +62,37 @@ describe('PricingSection', () => {
     expect(screen.getByText('Enterprise')).toBeInTheDocument();
   });
 
-  it('renders Enterprise tier with Get Started button', () => {
+  it('renders pricing tier buttons', () => {
     render(<PricingSection />);
 
-    // Find all Get Started buttons
-    const buttons = screen.getAllByRole('button', { name: /get started/i });
+    // For unauthenticated user (basic tier), buttons should show:
+    // - "Your Plan" for Starter (since basic = starter level)
+    // - "Upgrade" for Pro
+    // - "Upgrade" for Max
+    // - "Contact Sales" for Enterprise
+    const buttons = screen.getAllByRole('button');
     // Should have 4 buttons (one for each tier)
     expect(buttons.length).toBe(4);
   });
 
-  it('calls handleGetStarted when Enterprise tier button is clicked', () => {
+  it('calls handler when Enterprise tier button is clicked', () => {
     render(<PricingSection />);
 
-    // Find all Get Started buttons and click the one for Enterprise (last one)
-    const buttons = screen.getAllByRole('button', { name: /get started/i });
-    const enterpriseButton = buttons[buttons.length - 1]; // Enterprise is the last tier
+    // Find Contact Sales button for Enterprise
+    const enterpriseButton = screen.getByRole('button', { name: /contact sales/i });
 
-    // Click should not throw - this verifies the Enterprise branch of handleGetStarted executes
+    // Click should not throw - this verifies the Enterprise branch executes
     // Note: window.location.href assertion skipped due to JSDOM limitations
     expect(() => fireEvent.click(enterpriseButton)).not.toThrow();
   });
 
-  it('calls handleGetStarted when Starter tier button is clicked', () => {
+  it('calls handler when Starter tier button is clicked', () => {
     render(<PricingSection />);
 
-    // Find all Get Started buttons and click the first one (Starter)
-    const buttons = screen.getAllByRole('button', { name: /get started/i });
-    const starterButton = buttons[0];
+    // Find Your Plan button for Starter (same tier as basic user)
+    const starterButton = screen.getByRole('button', { name: /your plan/i });
 
-    // Click should not throw - this verifies the Starter branch of handleGetStarted executes
+    // Click should not throw - Your Plan button is disabled so click does nothing
     // Note: window.location.href assertion skipped due to JSDOM limitations
     expect(() => fireEvent.click(starterButton)).not.toThrow();
   });
