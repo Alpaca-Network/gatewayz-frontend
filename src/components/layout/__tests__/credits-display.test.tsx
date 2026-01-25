@@ -49,8 +49,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show credit count
-      expect(screen.getByText('1,000')).toBeInTheDocument();
+      // Should show credit count in dollars (1000 cents = $10.00)
+      expect(screen.getByText('$10.00')).toBeInTheDocument();
       // Should not show tier badge
       expect(screen.queryByText('PRO')).not.toBeInTheDocument();
       expect(screen.queryByText('MAX')).not.toBeInTheDocument();
@@ -72,8 +72,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show 0 credits
-      expect(screen.getByText('0')).toBeInTheDocument();
+      // Should show $0.00
+      expect(screen.getByText('$0.00')).toBeInTheDocument();
     });
 
     it('should display credits when tier is undefined', () => {
@@ -91,8 +91,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show 500 credits
-      expect(screen.getByText('500')).toBeInTheDocument();
+      // Should show $5.00 (500 cents = $5.00)
+      expect(screen.getByText('$5.00')).toBeInTheDocument();
     });
   });
 
@@ -666,8 +666,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show credits
-      expect(screen.getByText('50')).toBeInTheDocument();
+      // Should show credits in dollars (50 cents = $0.50)
+      expect(screen.getByText('$0.50')).toBeInTheDocument();
       // Should NOT show Add Credits button
       expect(screen.queryByText('Add Credits')).not.toBeInTheDocument();
     });
@@ -1031,8 +1031,8 @@ describe('CreditsDisplay', () => {
 
       const { rerender } = render(<CreditsDisplay />);
 
-      // Should show credit count
-      expect(screen.getByText('1,000')).toBeInTheDocument();
+      // Should show credit count in dollars (1000 cents = $10.00)
+      expect(screen.getByText('$10.00')).toBeInTheDocument();
 
       // Simulate upgrade to PRO
       const upgradedUserData: UserData = {
