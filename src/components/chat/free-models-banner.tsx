@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { AlertCircle, Sparkles, X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { getUserData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { getUserTier } from '@/lib/tier-utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const BANNER_DISMISSED_KEY = 'gatewayz_free_models_banner_dismissed';
 
 export function FreeModelsBanner() {
   const [showBanner, setShowBanner] = useState(false);
   const [credits, setCredits] = useState<number>(0);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     // Check if user has dismissed the banner recently (expires after 24 hours)
@@ -52,6 +54,40 @@ export function FreeModelsBanner() {
     return null;
   }
 
+  // Mobile: Compact single-line banner
+  if (isMobile) {
+    return (
+      <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-b border-green-200 dark:border-green-800">
+        <div className="flex items-center justify-between px-3 py-1.5 gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Sparkles className="h-3.5 w-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+            <span className="text-xs text-green-800 dark:text-green-200 truncate">
+              {credits === 0 ? "Credits used" : `$${credits.toFixed(2)} left`} · <span className="font-medium">FREE models available</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Link href="/settings/credits">
+              <Button
+                size="sm"
+                className="h-6 px-2 text-xs bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-600 text-white"
+              >
+                Add
+              </Button>
+            </Link>
+            <button
+              onClick={handleDismiss}
+              className="p-0.5 rounded text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900 transition-colors"
+              aria-label="Dismiss banner"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop: Full banner with details
   return (
     <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border-b border-green-200 dark:border-green-800">
       <div className="max-w-7xl mx-auto px-4 py-3">

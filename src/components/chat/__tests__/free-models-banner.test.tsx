@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { FreeModelsBanner } from '../free-models-banner';
 import * as api from '@/lib/api';
 import * as tierUtils from '@/lib/tier-utils';
+import * as useMobileHook from '@/hooks/use-mobile';
 
 // Mock the getUserData function
 jest.mock('@/lib/api', () => ({
@@ -12,6 +13,11 @@ jest.mock('@/lib/api', () => ({
 // Mock the tier-utils functions
 jest.mock('@/lib/tier-utils', () => ({
   getUserTier: jest.fn(),
+}));
+
+// Mock the useIsMobile hook
+jest.mock('@/hooks/use-mobile', () => ({
+  useIsMobile: jest.fn(),
 }));
 
 // Mock next/link
@@ -37,6 +43,7 @@ jest.mock('lucide-react', () => ({
 
 const mockGetUserData = api.getUserData as jest.MockedFunction<typeof api.getUserData>;
 const mockGetUserTier = tierUtils.getUserTier as jest.MockedFunction<typeof tierUtils.getUserTier>;
+const mockUseIsMobile = useMobileHook.useIsMobile as jest.MockedFunction<typeof useMobileHook.useIsMobile>;
 
 // Mock localStorage
 const mockLocalStorage: Record<string, string> = {};
@@ -61,6 +68,8 @@ beforeAll(() => {
 beforeEach(() => {
   jest.clearAllMocks();
   Object.keys(mockLocalStorage).forEach(key => delete mockLocalStorage[key]);
+  // Default to desktop view
+  mockUseIsMobile.mockReturnValue(false);
 });
 
 describe('FreeModelsBanner', () => {
@@ -335,6 +344,50 @@ describe('FreeModelsBanner', () => {
 
       // Banner should NOT be rendered for inferred pro users
       expect(screen.queryByText(/Low Credits/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Mobile view', () => {
+    beforeEach(() => {
+      mockUseIsMobile.mockReturnValue(true);
+    });
+
+    it('should show compact banner on mobile with low credits', () => {
+      const basicUserData = {
+        credits: 470, // 470 cents = $4.70
+        tier: 'basic',
+        subscription_status: 'trial' as const,
+        user_id: '123',
+      };
+
+      mockGetUserData.mockReturnValue(basicUserData as api.UserData);
+      mockGetUserTier.mockReturnValue('basic');
+
+      render(<FreeModelsBanner />);
+
+      // Mobile banner should show compact format
+      expect(screen.getByText(/\$4\.70 left/)).toBeInTheDocument();
+      expect(screen.getByText(/FREE models available/)).toBeInTheDocument();
+      // Should have compact "Add" button text
+      expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
+    });
+
+    it('should show "Credits used" on mobile when credits are 0', () => {
+      const basicUserData = {
+        credits: 0,
+        tier: 'basic',
+        subscription_status: 'expired' as const,
+        user_id: '123',
+      };
+
+      mockGetUserData.mockReturnValue(basicUserData as api.UserData);
+      mockGetUserTier.mockReturnValue('basic');
+
+      render(<FreeModelsBanner />);
+
+      // Mobile banner should show "Credits used" for 0 credits
+      expect(screen.getByText(/Credits used/)).toBeInTheDocument();
+      expect(screen.getByText(/FREE models available/)).toBeInTheDocument();
     });
   });
 });
