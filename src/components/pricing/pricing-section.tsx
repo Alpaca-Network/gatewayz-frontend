@@ -168,17 +168,27 @@ export function PricingSection() {
         return;
       }
 
-      if (tier.id === 'starter' || action === 'get_started') {
-        // Redirect to signup for unauthenticated users or starter tier
+      if (tier.id === 'starter') {
+        // Redirect to signup for unauthenticated users
         const userData = getUserData();
         if (!userData || !userData.api_key) {
           window.location.href = '/signup';
           return;
         }
-        // Authenticated user clicking starter - this is a downgrade
+        // Authenticated user clicking starter - this is a downgrade (cancel subscription)
         if (action === 'downgrade') {
-          // Redirect to manage subscription to cancel
-          window.location.href = '/settings/credits?action=manage';
+          // Redirect to checkout with cancel action
+          window.location.href = `/checkout?tier=starter&mode=subscription&action=cancel`;
+          return;
+        }
+        return;
+      }
+
+      if (action === 'get_started') {
+        // Redirect to signup for unauthenticated users
+        const userData = getUserData();
+        if (!userData || !userData.api_key) {
+          window.location.href = '/signup';
           return;
         }
         return;
@@ -204,9 +214,9 @@ export function PricingSection() {
         return;
       }
 
-      // Upgrade: redirect to checkout page
+      // Upgrade: redirect to checkout page with upgrade flag
       if (action === 'upgrade') {
-        window.location.href = `/checkout?tier=${tier.id}&mode=subscription`;
+        window.location.href = `/checkout?tier=${tier.id}&mode=subscription&action=upgrade`;
         return;
       }
 
