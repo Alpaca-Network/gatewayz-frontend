@@ -236,6 +236,161 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
   );
 });
 
+// Mobile-friendly provider sub-row component
+const MobileProviderSubRow = React.memo(function MobileProviderSubRow({
+  gateway,
+  pricing,
+  isLast
+}: {
+  gateway: string;
+  pricing: GatewayPricing;
+  isLast: boolean;
+}) {
+  const normalizedGateway = gateway.replace(/^@/, '').toLowerCase();
+  const gatewayConfig = GATEWAY_CONFIG[normalizedGateway] || {
+    name: gateway,
+    color: 'bg-gray-500'
+  };
+  const inputCost = formatPricingForDisplay(pricing.prompt, gateway);
+  const outputCost = formatPricingForDisplay(pricing.completion, gateway);
+
+  return (
+    <div className={`flex items-center justify-between py-2 px-4 pl-8 bg-muted/10 ${!isLast ? 'border-b border-border/30' : ''}`}>
+      <Badge
+        className={`${gatewayConfig.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
+        variant="secondary"
+      >
+        {gatewayConfig.icon}
+        {gatewayConfig.name}
+      </Badge>
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span>${inputCost} in</span>
+        <span>${outputCost} out</span>
+      </div>
+    </div>
+  );
+});
+
+// Mobile-friendly model row component
+const MobileModelRow = React.memo(function MobileModelRow({
+  model,
+  isExpanded,
+  onToggle
+}: {
+  model: Model;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = checkIsFreeModel(model);
+  const sourceGateway = getSourceGateway(model);
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
+
+  // Get all gateways with pricing
+  const gatewayPricing = model.gateway_pricing || {};
+  const gateways = Object.keys(gatewayPricing);
+  const hasMultipleProviders = gateways.length > 1;
+
+  // For display, use the best pricing (lowest input cost)
+  const bestGateway = useMemo(() => {
+    if (gateways.length === 0) return sourceGateway;
+    let best = gateways[0];
+    let bestInputPrice = Infinity;
+    for (const gw of gateways) {
+      const price = parseFloat(gatewayPricing[gw]?.prompt || '999999');
+      if (price < bestInputPrice) {
+        bestInputPrice = price;
+        best = gw;
+      }
+    }
+    return best;
+  }, [gateways, gatewayPricing, sourceGateway]);
+
+  const displayPricing = gatewayPricing[bestGateway] || model.pricing;
+  const inputCost = displayPricing ? formatPricingForDisplay(displayPricing.prompt, bestGateway) : null;
+  const outputCost = displayPricing ? formatPricingForDisplay(displayPricing.completion, bestGateway) : null;
+
+  // Get provider display name
+  const providerDisplay = model.provider_slug?.replace(/^@/, '') || 'Unknown';
+
+  // Format context
+  const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
+
+  return (
+    <div>
+      {/* Main row */}
+      <div
+        className={`py-3 px-4 hover:bg-muted/50 transition-colors ${hasMultipleProviders ? 'cursor-pointer' : ''}`}
+        onClick={hasMultipleProviders ? onToggle : undefined}
+      >
+        <div className="flex items-start gap-2">
+          {hasMultipleProviders && (
+            <button
+              className="flex-shrink-0 p-0.5 hover:bg-muted rounded mt-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
+            >
+              {isExpanded ? (
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            <Link href={modelUrl} className="group block" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-primary group-hover:underline">
+                  {model.name}
+                </span>
+                {isFree && (
+                  <Badge className="bg-green-600 text-white hover:bg-green-700 text-[10px] px-1.5 py-0 h-5">
+                    Free
+                  </Badge>
+                )}
+                {hasMultipleProviders && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                    {gateways.length} providers
+                  </Badge>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
+                {model.id}
+              </div>
+            </Link>
+            {/* Mobile metadata row */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
+              <span>by <span className="text-foreground/80">{providerDisplay}</span></span>
+              {contextK > 0 && <span>{contextK}K ctx</span>}
+              {hasPricing && inputCost !== null && outputCost !== null && (
+                <span className={hasMultipleProviders ? 'text-green-600 font-medium' : ''}>
+                  {isFree ? 'Free' : `$${inputCost}/$${outputCost}`}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded provider sub-rows */}
+      {isExpanded && hasMultipleProviders && (
+        <div className="border-t border-border/30">
+          {gateways.map((gateway, index) => (
+            <MobileProviderSubRow
+              key={gateway}
+              gateway={gateway}
+              pricing={gatewayPricing[gateway]}
+              isLast={index === gateways.length - 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 // Grouped model table row with expandable provider sub-rows
 const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
   model,
@@ -1408,18 +1563,18 @@ export default function ModelsClient({
                       variant="outline"
                       size="sm"
                       onClick={toggleAllRows}
-                      className="hidden lg:flex items-center gap-1.5 h-9"
+                      className="flex items-center gap-1.5 h-9"
                       title={allRowsExpanded ? "Collapse all rows" : "Expand all rows"}
                     >
                       {allRowsExpanded ? (
                         <>
                           <ChevronsDownUp className="w-4 h-4" />
-                          <span className="text-sm">Collapse All</span>
+                          <span className="text-sm hidden sm:inline">Collapse All</span>
                         </>
                       ) : (
                         <>
                           <ChevronsUpDown className="w-4 h-4" />
-                          <span className="text-sm">Expand All</span>
+                          <span className="text-sm hidden sm:inline">Expand All</span>
                         </>
                       )}
                     </Button>
@@ -1526,17 +1681,35 @@ export default function ModelsClient({
 
           <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20 has-onboarding-banner:mt-40" style={{ transition: 'margin-top 0.3s ease' }}>
           {layout === 'table' ? (
-            /* Table View - OpenRouter style */
-            <div className="overflow-x-auto rounded-lg border border-border" key={`models-table-${filteredModels.length}-${debouncedSearchTerm}`}>
-              <ModelTableHeader />
+            /* Table View - Responsive with mobile and desktop layouts */
+            <div className="rounded-lg border border-border" key={`models-table-${filteredModels.length}-${debouncedSearchTerm}`}>
+              {/* Desktop table header - hidden on mobile */}
+              <div className="hidden md:block">
+                <ModelTableHeader />
+              </div>
+              {/* Mobile header */}
+              <div className="md:hidden px-4 py-3 border-b border-border text-sm font-medium text-muted-foreground bg-muted/30">
+                Models
+              </div>
               <div className="divide-y divide-border/50">
                 {visibleModels.map((model, index) => (
                   <div key={model.id} className={index % 2 === 1 ? 'bg-muted/20' : ''}>
-                    <GroupedModelTableRow
-                      model={model}
-                      isExpanded={isRowExpanded(model.id)}
-                      onToggle={() => toggleRowExpansion(model.id)}
-                    />
+                    {/* Desktop row */}
+                    <div className="hidden md:block">
+                      <GroupedModelTableRow
+                        model={model}
+                        isExpanded={isRowExpanded(model.id)}
+                        onToggle={() => toggleRowExpansion(model.id)}
+                      />
+                    </div>
+                    {/* Mobile row */}
+                    <div className="md:hidden">
+                      <MobileModelRow
+                        model={model}
+                        isExpanded={isRowExpanded(model.id)}
+                        onToggle={() => toggleRowExpansion(model.id)}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

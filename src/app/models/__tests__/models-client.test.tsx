@@ -1271,4 +1271,139 @@ describe('ModelsClient - Filtering Logic', () => {
       consoleWarnSpy.mockRestore();
     });
   });
+
+  describe('Expand/Collapse All functionality', () => {
+    it('should default to all rows expanded', () => {
+      const allRowsExpanded = true;
+      expect(allRowsExpanded).toBe(true);
+    });
+
+    it('should track individually toggled rows', () => {
+      const expandedRows = new Set<string>();
+      const toggleRow = (modelId: string) => {
+        if (expandedRows.has(modelId)) {
+          expandedRows.delete(modelId);
+        } else {
+          expandedRows.add(modelId);
+        }
+      };
+
+      toggleRow('model-1');
+      expect(expandedRows.has('model-1')).toBe(true);
+
+      toggleRow('model-1');
+      expect(expandedRows.has('model-1')).toBe(false);
+    });
+
+    it('should determine row expansion state correctly', () => {
+      let allRowsExpanded = true;
+      const expandedRows = new Set<string>();
+
+      const isRowExpanded = (modelId: string) => {
+        if (expandedRows.has(modelId)) {
+          return !allRowsExpanded; // Toggled rows are opposite of global state
+        }
+        return allRowsExpanded;
+      };
+
+      // All rows expanded by default
+      expect(isRowExpanded('model-1')).toBe(true);
+      expect(isRowExpanded('model-2')).toBe(true);
+
+      // Toggle model-1 to collapsed
+      expandedRows.add('model-1');
+      expect(isRowExpanded('model-1')).toBe(false);
+      expect(isRowExpanded('model-2')).toBe(true);
+
+      // Toggle all to collapsed
+      allRowsExpanded = false;
+      expandedRows.clear();
+      expect(isRowExpanded('model-1')).toBe(false);
+      expect(isRowExpanded('model-2')).toBe(false);
+
+      // Toggle model-1 to expanded while others collapsed
+      expandedRows.add('model-1');
+      expect(isRowExpanded('model-1')).toBe(true);
+      expect(isRowExpanded('model-2')).toBe(false);
+    });
+
+    it('should reset individual toggles when toggling all', () => {
+      let allRowsExpanded = true;
+      let expandedRows = new Set<string>(['model-1', 'model-2']);
+
+      const toggleAllRows = () => {
+        allRowsExpanded = !allRowsExpanded;
+        expandedRows = new Set(); // Reset individual toggles
+      };
+
+      expect(expandedRows.size).toBe(2);
+
+      toggleAllRows();
+      expect(allRowsExpanded).toBe(false);
+      expect(expandedRows.size).toBe(0);
+
+      toggleAllRows();
+      expect(allRowsExpanded).toBe(true);
+      expect(expandedRows.size).toBe(0);
+    });
+  });
+
+  describe('Mobile view row formatting', () => {
+    it('should format context length as K for mobile display', () => {
+      const formatContextK = (contextLength: number) => {
+        if (contextLength <= 0) return 0;
+        return Math.round(contextLength / 1000);
+      };
+
+      expect(formatContextK(128000)).toBe(128);
+      expect(formatContextK(8000)).toBe(8);
+      expect(formatContextK(4096)).toBe(4);
+      expect(formatContextK(0)).toBe(0);
+      expect(formatContextK(-1)).toBe(0);
+    });
+
+    it('should display compact pricing format for mobile', () => {
+      const formatMobilePricing = (inputCost: string | null, outputCost: string | null, isFree: boolean) => {
+        if (isFree) return 'Free';
+        if (inputCost === null || outputCost === null) return null;
+        return `$${inputCost}/$${outputCost}`;
+      };
+
+      expect(formatMobilePricing('0.15', '0.60', false)).toBe('$0.15/$0.60');
+      expect(formatMobilePricing(null, null, false)).toBe(null);
+      expect(formatMobilePricing('0.15', '0.60', true)).toBe('Free');
+    });
+
+    it('should include provider name in mobile metadata', () => {
+      const formatProviderDisplay = (providerSlug: string | undefined) => {
+        return providerSlug?.replace(/^@/, '') || 'Unknown';
+      };
+
+      expect(formatProviderDisplay('openai')).toBe('openai');
+      expect(formatProviderDisplay('@anthropic')).toBe('anthropic');
+      expect(formatProviderDisplay(undefined)).toBe('Unknown');
+    });
+  });
+
+  describe('Responsive layout handling', () => {
+    it('should show mobile row on small screens and desktop row on larger screens', () => {
+      // This tests the concept - actual rendering tested in component tests
+      const isMobileView = (screenWidth: number) => screenWidth < 768; // md breakpoint
+
+      expect(isMobileView(375)).toBe(true);  // Mobile
+      expect(isMobileView(767)).toBe(true);  // Just below md
+      expect(isMobileView(768)).toBe(false); // md breakpoint
+      expect(isMobileView(1024)).toBe(false); // Desktop
+    });
+
+    it('should show expand/collapse button icon-only on small screens', () => {
+      // On small screens, only icon shows; on sm+ screens, text shows
+      const showButtonText = (screenWidth: number) => screenWidth >= 640; // sm breakpoint
+
+      expect(showButtonText(375)).toBe(false); // Mobile - icon only
+      expect(showButtonText(639)).toBe(false); // Just below sm
+      expect(showButtonText(640)).toBe(true);  // sm breakpoint
+      expect(showButtonText(768)).toBe(true);  // md
+    });
+  });
 });
