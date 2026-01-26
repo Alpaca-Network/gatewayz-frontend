@@ -151,6 +151,11 @@ describe('CSP Configuration', () => {
       it('should allow Google Ads connections', () => {
         expect(cspHeader).toContain('https://googleads.g.doubleclick.net');
       });
+
+      it('should allow Reddit pixel connections', () => {
+        expect(cspHeader).toContain('https://pixel-config.reddit.com');
+        expect(cspHeader).toContain('https://*.reddit.com');
+      });
     });
 
     describe('frame-src directive', () => {
