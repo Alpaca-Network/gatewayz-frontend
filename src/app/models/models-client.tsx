@@ -24,7 +24,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, List, Lock, Music, Search, Sliders as SlidersIcon, Table2, Video, X, Zap } from 'lucide-react';
+import { BookText, Bot, Box, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown, FileText, ImageIcon, LayoutGrid, List, Lock, Music, Search, Sliders as SlidersIcon, Table2, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
@@ -237,8 +237,15 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
 });
 
 // Grouped model table row with expandable provider sub-rows
-const GroupedModelTableRow = React.memo(function GroupedModelTableRow({ model }: { model: Model }) {
-  const [isExpanded, setIsExpanded] = useState(false);
+const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
+  model,
+  isExpanded,
+  onToggle
+}: {
+  model: Model;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
   const isFree = checkIsFreeModel(model);
   const sourceGateway = getSourceGateway(model);
@@ -282,7 +289,7 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({ model }:
       {/* Main row */}
       <div
         className={`grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-3 px-4 hover:bg-muted/50 transition-colors items-center ${hasMultipleProviders ? 'cursor-pointer' : ''}`}
-        onClick={hasMultipleProviders ? () => setIsExpanded(!isExpanded) : undefined}
+        onClick={hasMultipleProviders ? onToggle : undefined}
       >
         {/* Model Name & ID */}
         <div className="min-w-0">
@@ -292,7 +299,7 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({ model }:
                 className="flex-shrink-0 p-0.5 hover:bg-muted rounded"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsExpanded(!isExpanded);
+                  onToggle();
                 }}
               >
                 {isExpanded ? (
@@ -709,6 +716,8 @@ export default function ModelsClient({
   }, [models]);
 
   const [layout, setLayout] = useState<'table' | 'grid'>("table");
+  const [allRowsExpanded, setAllRowsExpanded] = useState(true); // Default to all expanded
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set()); // Track individually toggled rows
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || "");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchParams.get('search') || "");
   const [selectedInputFormats, setSelectedInputFormats] = useState<string[]>(searchParams.get('inputFormats')?.split(',').filter(Boolean) || []);
@@ -864,6 +873,34 @@ export default function ModelsClient({
     setSortBy('popular');
     setReleaseDateFilter('all');
   };
+
+  // Helper to check if a specific row is expanded
+  const isRowExpanded = useCallback((modelId: string) => {
+    // If row has been individually toggled, use that state
+    if (expandedRows.has(modelId)) {
+      return !allRowsExpanded; // Toggled rows are opposite of global state
+    }
+    return allRowsExpanded;
+  }, [allRowsExpanded, expandedRows]);
+
+  // Toggle a single row's expansion state
+  const toggleRowExpansion = useCallback((modelId: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(modelId)) {
+        next.delete(modelId);
+      } else {
+        next.add(modelId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Toggle all rows expanded/collapsed
+  const toggleAllRows = useCallback(() => {
+    setAllRowsExpanded(prev => !prev);
+    setExpandedRows(new Set()); // Reset individual toggles when toggling all
+  }, []);
 
   // Check if any filters are active
   const hasActiveFilters = searchTerm || selectedInputFormats.length > 0 || selectedOutputFormats.length > 0 ||
@@ -1366,6 +1403,27 @@ export default function ModelsClient({
                       <LayoutGrid className="w-4 h-4" />
                     </Button>
                   </div>
+                  {layout === 'table' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={toggleAllRows}
+                      className="hidden lg:flex items-center gap-1.5 h-9"
+                      title={allRowsExpanded ? "Collapse all rows" : "Expand all rows"}
+                    >
+                      {allRowsExpanded ? (
+                        <>
+                          <ChevronsDownUp className="w-4 h-4" />
+                          <span className="text-sm">Collapse All</span>
+                        </>
+                      ) : (
+                        <>
+                          <ChevronsUpDown className="w-4 h-4" />
+                          <span className="text-sm">Expand All</span>
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1474,7 +1532,11 @@ export default function ModelsClient({
               <div className="divide-y divide-border/50">
                 {visibleModels.map((model, index) => (
                   <div key={model.id} className={index % 2 === 1 ? 'bg-muted/20' : ''}>
-                    <GroupedModelTableRow model={model} />
+                    <GroupedModelTableRow
+                      model={model}
+                      isExpanded={isRowExpanded(model.id)}
+                      onToggle={() => toggleRowExpansion(model.id)}
+                    />
                   </div>
                 ))}
               </div>
