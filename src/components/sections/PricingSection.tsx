@@ -16,12 +16,12 @@ const tiers = [
   },
   {
     name: "Pro",
-    price: "$10",
+    price: "$8",
     period: "/month",
     subtitle: "Scale with confidence",
     description: "Only pay for what you use",
-    originalPrice: "$20",
-    discount: "50% discount on\nfirst $3 credits",
+    originalPrice: "$10",
+    discount: "Save 20%",
     features: [
       "50% discount on first $3 credits",
       "Access to 10,000+ models",

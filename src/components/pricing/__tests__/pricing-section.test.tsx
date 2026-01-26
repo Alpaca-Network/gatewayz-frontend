@@ -98,7 +98,7 @@ describe('PricingSection', () => {
     render(<PricingSection />);
 
     expect(screen.getByText('$0')).toBeInTheDocument();
-    expect(screen.getByText('$10')).toBeInTheDocument();
+    expect(screen.getByText('$8')).toBeInTheDocument();
     expect(screen.getByText('$75')).toBeInTheDocument();
     expect(screen.getByText('Custom')).toBeInTheDocument();
   });

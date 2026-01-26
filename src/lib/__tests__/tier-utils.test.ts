@@ -100,9 +100,9 @@ describe('tier-utils', () => {
     it('should have correct configuration for pro tier', () => {
       expect(TIER_CONFIG.pro).toEqual({
         name: 'Pro',
-        description: '$10/month subscription',
-        monthlyPrice: 1000,
-        creditAllocation: 1000, // $10 equivalent in credits (cents)
+        description: '$8/month subscription',
+        monthlyPrice: 800,
+        creditAllocation: 1000, // Legacy - keep for backward compatibility
         isSubscription: true,
         monthlyAllowance: 1500, // $15 subscription allowance (in cents)
       });
@@ -775,8 +775,8 @@ describe('tier-utils', () => {
       const result = formatTierInfo('pro');
       expect(result).toEqual({
         displayName: 'Pro',
-        description: '$10/month subscription',
-        monthlyPrice: '$10.00',
+        description: '$8/month subscription',
+        monthlyPrice: '$8.00',
         isSubscription: true,
       });
     });

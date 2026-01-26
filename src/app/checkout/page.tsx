@@ -32,6 +32,7 @@ function CheckoutPageContent() {
 
   const isDowngrade = action === 'downgrade';
   const isUpgrade = action === 'upgrade';
+  const isCancel = action === 'cancel';
 
   // Determine what we're purchasing
   const isSubscription = mode === 'subscription' && tier;
@@ -131,34 +132,38 @@ function CheckoutPageContent() {
         return;
       }
 
-      // Handle downgrade - redirect to Stripe Customer Portal
-      if (isDowngrade) {
-        const portalResponse = await fetch('/api/stripe/portal', {
+      // Handle cancel subscription (downgrade to free/starter tier)
+      if (isCancel) {
+        const cancelResponse = await fetch('/api/stripe/cancel', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             email: userData.email,
+            cancelImmediately: false, // Cancel at period end to let user keep access
           }),
         });
 
-        if (!portalResponse.ok) {
-          const errorData = await portalResponse.json();
-          throw new Error(errorData.error || 'Failed to access subscription management');
+        if (!cancelResponse.ok) {
+          const errorData = await cancelResponse.json();
+          throw new Error(errorData.error || 'Failed to cancel subscription');
         }
 
-        const portalData = await portalResponse.json();
-        if (portalData.url) {
-          window.location.href = portalData.url;
-        } else {
-          throw new Error('No portal URL received');
-        }
+        const cancelData = await cancelResponse.json();
+
+        toast({
+          title: "Subscription cancelled",
+          description: cancelData.message || "Your subscription has been cancelled.",
+        });
+
+        // Redirect to settings page after successful cancellation
+        router.push('/settings/credits?cancelled=success');
         return;
       }
 
-      if (isSubscription && currentTier) {
-        // Handle subscription checkout (works for both new subscriptions and upgrades)
+      // Handle downgrade - update subscription to lower tier (e.g., Max -> Pro)
+      if (isDowngrade && isSubscription && currentTier) {
         if (!currentTier.stripePriceId) {
           toast({
             title: "Subscription not configured",
@@ -168,6 +173,78 @@ function CheckoutPageContent() {
           return;
         }
 
+        const downgradeResponse = await fetch('/api/stripe/downgrade', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: userData.email,
+            newPriceId: currentTier.stripePriceId,
+            newTier: tier,
+          }),
+        });
+
+        if (!downgradeResponse.ok) {
+          const errorData = await downgradeResponse.json();
+          throw new Error(errorData.error || 'Failed to process downgrade');
+        }
+
+        const downgradeData = await downgradeResponse.json();
+
+        toast({
+          title: "Subscription updated!",
+          description: downgradeData.message || `You've been downgraded to the ${currentTier.name} plan.`,
+        });
+
+        // Redirect to settings page after successful downgrade
+        router.push('/settings/credits?downgrade=success');
+        return;
+      }
+
+      if (isSubscription && currentTier) {
+        // Handle subscription checkout
+        if (!currentTier.stripePriceId) {
+          toast({
+            title: "Subscription not configured",
+            description: "Please contact support.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Handle upgrade from existing subscription (e.g., Pro -> Max)
+        if (isUpgrade) {
+          const upgradeResponse = await fetch('/api/stripe/upgrade', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: userData.email,
+              newPriceId: currentTier.stripePriceId,
+              newTier: tier,
+            }),
+          });
+
+          if (!upgradeResponse.ok) {
+            const errorData = await upgradeResponse.json();
+            throw new Error(errorData.error || 'Failed to process upgrade');
+          }
+
+          const upgradeData = await upgradeResponse.json();
+
+          toast({
+            title: "Subscription upgraded!",
+            description: upgradeData.message || `You've been upgraded to the ${currentTier.name} plan.`,
+          });
+
+          // Redirect to settings page after successful upgrade
+          router.push('/settings/credits?upgrade=success');
+          return;
+        }
+
+        // Handle new subscription (no existing subscription)
         const response = await fetch('/api/stripe/subscribe', {
           method: 'POST',
           headers: {
@@ -311,11 +388,13 @@ function CheckoutPageContent() {
         {/* Header */}
         <div className="text-center space-y-4">
           <h1 className="text-3xl font-bold">
-            {isDowngrade ? 'Manage Your Subscription' : isUpgrade ? 'Upgrade Your Plan' : 'Confirm Your Order'}
+            {isCancel ? 'Cancel Your Subscription' : isDowngrade ? 'Downgrade Your Plan' : isUpgrade ? 'Upgrade Your Plan' : 'Confirm Your Order'}
           </h1>
           <p className="text-muted-foreground text-lg">
-            {isDowngrade
-              ? 'You will be redirected to manage your subscription'
+            {isCancel
+              ? 'You will keep access until the end of your billing period'
+              : isDowngrade
+              ? 'Review your plan change before confirming'
               : isUpgrade
               ? 'Review your upgrade before proceeding'
               : 'Review your selection before proceeding to payment'}
@@ -328,7 +407,7 @@ function CheckoutPageContent() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5" />
-                Order Summary
+                {isCancel ? 'Cancellation Summary' : 'Order Summary'}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -442,7 +521,7 @@ function CheckoutPageContent() {
                 ) : (
                   <>
                     <CreditCard className="h-4 w-4 mr-2" />
-                    {isDowngrade ? 'Manage Subscription' : isUpgrade ? 'Proceed with Upgrade' : 'Proceed to Payment'}
+                    {isCancel ? 'Cancel Subscription' : isDowngrade ? 'Confirm Downgrade' : isUpgrade ? 'Proceed with Upgrade' : 'Proceed to Payment'}
                   </>
                 )}
               </Button>
