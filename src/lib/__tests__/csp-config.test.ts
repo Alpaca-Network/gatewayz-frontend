@@ -58,6 +58,11 @@ describe('CSP Configuration', () => {
         expect(cspHeader).toContain('https://*.privy.io');
       });
 
+      it('should allow hCaptcha scripts for Privy CAPTCHA', () => {
+        expect(cspHeader).toContain('https://*.hcaptcha.com');
+        expect(cspHeader).toContain('https://hcaptcha.com');
+      });
+
       it('should allow Stripe scripts', () => {
         expect(cspHeader).toContain('https://js.stripe.com');
         expect(cspHeader).toContain('https://*.stripe.com');
@@ -165,6 +170,10 @@ describe('CSP Configuration', () => {
     describe('frame-src directive', () => {
       it('should allow Privy iframes', () => {
         expect(cspHeader).toContain('https://*.privy.io');
+      });
+
+      it('should allow hCaptcha iframes for Privy CAPTCHA', () => {
+        expect(cspHeader).toContain('https://*.hcaptcha.com');
       });
 
       it('should allow Stripe iframes', () => {
