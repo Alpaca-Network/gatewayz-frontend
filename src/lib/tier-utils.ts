@@ -47,8 +47,8 @@ export const TIER_CONFIG = {
   },
   pro: {
     name: 'Pro',
-    description: '$10/month subscription',
-    monthlyPrice: 1000, // $10.00 in cents
+    description: '$8/month subscription',
+    monthlyPrice: 800, // $8.00 in cents
     creditAllocation: 1000, // Legacy - keep for backward compatibility
     monthlyAllowance: 1500, // $15.00 in cents - NEW: actual monthly allowance
     isSubscription: true,

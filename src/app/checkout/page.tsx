@@ -131,29 +131,43 @@ function CheckoutPageContent() {
         return;
       }
 
-      // Handle downgrade - redirect to Stripe Customer Portal
-      if (isDowngrade) {
-        const portalResponse = await fetch('/api/stripe/portal', {
+      // Handle downgrade - update subscription to lower tier
+      if (isDowngrade && isSubscription && currentTier) {
+        if (!currentTier.stripePriceId) {
+          toast({
+            title: "Subscription not configured",
+            description: "Please contact support.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const downgradeResponse = await fetch('/api/stripe/downgrade', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             email: userData.email,
+            newPriceId: currentTier.stripePriceId,
+            newTier: tier,
           }),
         });
 
-        if (!portalResponse.ok) {
-          const errorData = await portalResponse.json();
-          throw new Error(errorData.error || 'Failed to access subscription management');
+        if (!downgradeResponse.ok) {
+          const errorData = await downgradeResponse.json();
+          throw new Error(errorData.error || 'Failed to process downgrade');
         }
 
-        const portalData = await portalResponse.json();
-        if (portalData.url) {
-          window.location.href = portalData.url;
-        } else {
-          throw new Error('No portal URL received');
-        }
+        const downgradeData = await downgradeResponse.json();
+
+        toast({
+          title: "Subscription updated!",
+          description: downgradeData.message || `You've been downgraded to the ${currentTier.name} plan.`,
+        });
+
+        // Redirect to settings page after successful downgrade
+        router.push('/settings/credits?downgrade=success');
         return;
       }
 
@@ -311,11 +325,11 @@ function CheckoutPageContent() {
         {/* Header */}
         <div className="text-center space-y-4">
           <h1 className="text-3xl font-bold">
-            {isDowngrade ? 'Manage Your Subscription' : isUpgrade ? 'Upgrade Your Plan' : 'Confirm Your Order'}
+            {isDowngrade ? 'Downgrade Your Plan' : isUpgrade ? 'Upgrade Your Plan' : 'Confirm Your Order'}
           </h1>
           <p className="text-muted-foreground text-lg">
             {isDowngrade
-              ? 'You will be redirected to manage your subscription'
+              ? 'Review your plan change before confirming'
               : isUpgrade
               ? 'Review your upgrade before proceeding'
               : 'Review your selection before proceeding to payment'}
@@ -442,7 +456,7 @@ function CheckoutPageContent() {
                 ) : (
                   <>
                     <CreditCard className="h-4 w-4 mr-2" />
-                    {isDowngrade ? 'Manage Subscription' : isUpgrade ? 'Proceed with Upgrade' : 'Proceed to Payment'}
+                    {isDowngrade ? 'Confirm Downgrade' : isUpgrade ? 'Proceed with Upgrade' : 'Proceed to Payment'}
                   </>
                 )}
               </Button>

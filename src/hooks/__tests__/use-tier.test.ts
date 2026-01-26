@@ -142,7 +142,7 @@ describe('useTier', () => {
       expect(result.current.tier).toBe('pro');
       expect(result.current.hasSubscription).toBe(true);
       expect(result.current.tierConfig.name).toBe('Pro');
-      expect(result.current.tierConfig.monthlyPrice).toBe(1000);
+      expect(result.current.tierConfig.monthlyPrice).toBe(800);
       expect(result.current.tierConfig.isSubscription).toBe(true);
     });
 
@@ -188,8 +188,8 @@ describe('useTier', () => {
 
       expect(result.current.tierInfo).toEqual({
         displayName: 'Pro',
-        description: '$10/month subscription',
-        monthlyPrice: '$10.00',
+        description: '$8/month subscription',
+        monthlyPrice: '$8.00',
         isSubscription: true,
       });
     });
@@ -717,7 +717,7 @@ describe('useTier', () => {
       expect(result.current.tier).toBe('pro');
       expect(result.current.hasSubscription).toBe(true);
       expect(result.current.canAccessModel('pro')).toBe(true);
-      expect(result.current.tierInfo.monthlyPrice).toBe('$10.00');
+      expect(result.current.tierInfo.monthlyPrice).toBe('$8.00');
     });
 
     it('should support downgrade from max to basic', () => {
