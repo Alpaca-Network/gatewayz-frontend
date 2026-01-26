@@ -140,8 +140,9 @@ async function getAllModels(): Promise<Model[]> {
       return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
     }
 
-    // During build time in CI, skip API calls to avoid build failures
-    if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.CI) {
+    // During build time, skip API calls to avoid build failures
+    // Note: Only check NEXT_PHASE, not CI env var, because CI is set in Vercel runtime too
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
       console.log('[Models Page] Build time detected, using static models as fallback');
       return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
     }
