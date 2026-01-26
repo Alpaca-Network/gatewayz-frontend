@@ -279,12 +279,13 @@ describe('model-pricing-utils', () => {
     });
 
     it('should return false for standard per-token pricing gateways', () => {
-      // Note: 'openai' and 'anthropic' are now per-million gateways because
-      // their pricing in manual_pricing.json is stored in per-million format.
-      // Only 'openrouter' is a per-token gateway (it returns per-token from its API).
+      // These gateways return per-token pricing from their APIs (e.g., 0.0000025 for $2.50/MTok)
+      // and need to be multiplied by 1,000,000 to convert to per-million for display.
       const perTokenGateways = [
         'openrouter',
         'huggingface',
+        'openai',      // Returns per-token (e.g., 0.0000025 for GPT-4o)
+        'anthropic',   // Returns per-token (e.g., 0.000003 for Claude)
       ];
 
       perTokenGateways.forEach((gateway) => {
@@ -312,9 +313,8 @@ describe('model-pricing-utils', () => {
         'simplismart',
         'akash',
         'cloudflare-workers-ai',
-        'openai',
-        'anthropic',
         'alpaca-network',
+        // NOTE: openai and anthropic are NOT in this list - they return per-token pricing
       ];
 
       perMillionGateways.forEach((gateway) => {
@@ -324,7 +324,8 @@ describe('model-pricing-utils', () => {
 
     it('should return true for newly added per-million pricing gateways', () => {
       // These gateways were added because their APIs return pricing in per-million format
-      // e.g., alibaba returns 0.005 for $0.005/MTok, openai returns 2.50 for $2.50/MTok
+      // e.g., alibaba returns 0.005 for $0.005/MTok
+      // NOTE: openai and anthropic return per-token pricing so are excluded
       const newlyAddedGateways = [
         'alibaba',
         'alibaba-cloud',
@@ -332,8 +333,6 @@ describe('model-pricing-utils', () => {
         'simplismart',
         'akash',
         'cloudflare-workers-ai',
-        'openai',
-        'anthropic',
         'alpaca-network',
       ];
 
@@ -343,8 +342,10 @@ describe('model-pricing-utils', () => {
     });
 
     it('should handle case-insensitive matching for newly added gateways', () => {
-      expect(isPerMillionPricingGateway('OpenAI')).toBe(true);
-      expect(isPerMillionPricingGateway('ANTHROPIC')).toBe(true);
+      // openai and anthropic are NOT per-million gateways - they return per-token pricing
+      expect(isPerMillionPricingGateway('OpenAI')).toBe(false);
+      expect(isPerMillionPricingGateway('ANTHROPIC')).toBe(false);
+      // These are per-million gateways
       expect(isPerMillionPricingGateway('Alibaba')).toBe(true);
       expect(isPerMillionPricingGateway('Cloudflare-Workers-AI')).toBe(true);
     });
@@ -396,6 +397,17 @@ describe('model-pricing-utils', () => {
       // OpenRouter GPT-4o-mini pricing: $0.00000015/token = $0.15/M
       expect(formatPricingForDisplay('0.00000015', 'openrouter')).toBe('0.15');
       expect(formatPricingForDisplay('0.0000006', 'openrouter')).toBe('0.60');
+    });
+
+    it('should multiply per-token pricing for openai and anthropic direct gateways', () => {
+      // OpenAI direct API returns per-token pricing (e.g., 0.0000025 for GPT-4o)
+      expect(formatPricingForDisplay('0.0000025', 'openai')).toBe('2.50'); // GPT-4o input: $2.50/M
+      expect(formatPricingForDisplay('0.00001', 'openai')).toBe('10.00'); // GPT-4o output: $10.00/M
+      expect(formatPricingForDisplay('0.00000015', 'openai')).toBe('0.15'); // GPT-4o-mini input: $0.15/M
+
+      // Anthropic direct API returns per-token pricing
+      expect(formatPricingForDisplay('0.000003', 'anthropic')).toBe('3.00'); // Claude input: $3.00/M
+      expect(formatPricingForDisplay('0.000015', 'anthropic')).toBe('15.00'); // Claude output: $15.00/M
     });
 
     it('should NOT multiply for per-million pricing gateways', () => {
@@ -454,14 +466,8 @@ describe('model-pricing-utils', () => {
       // Cloudflare Workers AI
       expect(formatPricingForDisplay('0.66', 'cloudflare-workers-ai')).toBe('0.66'); // $0.66/M
 
-      // OpenAI direct - uses manual_pricing.json which is per-million
-      expect(formatPricingForDisplay('2.50', 'openai')).toBe('2.50'); // GPT-4o input: $2.50/M
-      expect(formatPricingForDisplay('10.00', 'openai')).toBe('10.00'); // GPT-4o output: $10.00/M
-      expect(formatPricingForDisplay('0.15', 'openai')).toBe('0.15'); // GPT-4o-mini input: $0.15/M
-
-      // Anthropic direct - uses manual_pricing.json which is per-million
-      expect(formatPricingForDisplay('3.00', 'anthropic')).toBe('3.00'); // Claude 3.5 Sonnet input: $3.00/M
-      expect(formatPricingForDisplay('15.00', 'anthropic')).toBe('15.00'); // Claude 3.5 Sonnet output: $15.00/M
+      // NOTE: OpenAI and Anthropic direct gateways return per-TOKEN pricing from API
+      // (e.g., 0.0000025 for GPT-4o), NOT per-million. They are tested separately below.
 
       // Alpaca Network
       expect(formatPricingForDisplay('0.27', 'alpaca-network')).toBe('0.27'); // $0.27/M
