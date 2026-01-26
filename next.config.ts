@@ -163,6 +163,16 @@ const nextConfig: NextConfig = {
             // No X-Frame-Options or frame-ancestors CSP - allow embedding
           ],
         },
+        {
+          // Inbox page: Allow iframe embedding for terragon-oss integration
+          // The inbox page embeds terragon-oss in an iframe and needs postMessage communication
+          // IMPORTANT: Must come LAST to override the /:path* rule above
+          source: '/inbox',
+          headers: [
+            ...commonSecurityHeaders,
+            // No X-Frame-Options or frame-ancestors CSP - allow embedding
+          ],
+        },
       ];
     },
   }),
