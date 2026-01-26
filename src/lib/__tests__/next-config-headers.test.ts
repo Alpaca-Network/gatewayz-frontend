@@ -5,15 +5,20 @@
  * correctly sets frame protection headers based on route.
  */
 
-import { describe, it, expect, beforeAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll, jest } from '@jest/globals';
 
 // Import the next config to test
 // Note: We need to mock the environment first
 const originalEnv = process.env.NEXT_STATIC_EXPORT;
 
+// Type definitions for Next.js headers configuration
+type Header = { key: string; value: string };
+type HeaderRule = { source: string; headers: Header[] };
+type NextConfigWithHeaders = { headers?: () => Promise<HeaderRule[]> | HeaderRule[] };
+
 describe('Next.js Config Security Headers', () => {
-  let nextConfig: any;
-  let headersConfig: any[];
+  let nextConfig: NextConfigWithHeaders;
+  let headersConfig: HeaderRule[];
 
   beforeAll(async () => {
     // Ensure we're not in static export mode
