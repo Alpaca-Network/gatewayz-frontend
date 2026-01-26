@@ -64,7 +64,9 @@ describe('CSP Configuration', () => {
       });
 
       it('should allow Cloudflare Turnstile scripts for Privy CAPTCHA', () => {
-        expect(cspHeader).toContain('https://challenges.cloudflare.com');
+        expect(cspHeader).toMatch(
+          /script-src[^;]*https:\/\/challenges\.cloudflare\.com/
+        );
       });
 
       it('should allow Stripe scripts', () => {
