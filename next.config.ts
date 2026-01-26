@@ -163,6 +163,21 @@ const nextConfig: NextConfig = {
             // No X-Frame-Options or frame-ancestors CSP - allow embedding
           ],
         },
+        {
+          // Inbox page: Allow iframe embedding from trusted GatewayZ origins only
+          // GatewayZ embeds this inbox page in an iframe and uses postMessage for SSO with terragon-oss
+          // IMPORTANT: Must come LAST to override the /:path* rule above
+          source: '/inbox',
+          headers: [
+            ...commonSecurityHeaders,
+            {
+              // Allow embedding only from trusted GatewayZ origins
+              // Note: X-Frame-Options doesn't support multiple origins, so we use CSP frame-ancestors
+              key: 'Content-Security-Policy',
+              value: "frame-ancestors 'self' https://beta.gatewayz.ai https://gatewayz.ai https://www.gatewayz.ai https://inbox.gatewayz.ai",
+            },
+          ],
+        },
       ];
     },
   }),
