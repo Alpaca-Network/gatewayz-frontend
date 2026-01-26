@@ -156,6 +156,10 @@ describe('CSP Configuration', () => {
         expect(cspHeader).toContain('https://pixel-config.reddit.com');
         expect(cspHeader).toContain('https://*.reddit.com');
       });
+
+      it('should allow Statsig beyondwickedmapping domain', () => {
+        expect(cspHeader).toContain('https://beyondwickedmapping.org');
+      });
     });
 
     describe('frame-src directive', () => {
