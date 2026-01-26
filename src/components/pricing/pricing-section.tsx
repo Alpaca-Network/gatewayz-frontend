@@ -74,7 +74,7 @@ const pricingTiers: PricingTier[] = [
       'Early access to advanced features',
     ],
     stripePriceId: process.env.NEXT_PUBLIC_STRIPE_MAX_PRICE_ID,
-    stripeProductId: 'prod_TKOraBpWMxMAIu', // Max product ID for database
+    stripeProductId: 'prod_TMHUXL8p0onwwO', // Max product ID for database
   },
   {
     id: 'enterprise',
