@@ -16,6 +16,7 @@ const ALLOWED_CALLBACK_DOMAINS = [
   "app.terragon.ai",
   "gatewayz.ai",
   "inbox.gatewayz.ai",
+  "terragon-www-production.up.railway.app",
   "localhost",
   "127.0.0.1",
 ];
