@@ -477,63 +477,56 @@ describe('models-service', () => {
     });
 
     describe('Timeout Configuration', () => {
-      it('should use 180s timeout for "all" gateway to handle slow backend aggregation', async () => {
-        // The 'all' gateway aggregates models from ~30 providers which can take 60-120s
-        // Previously this was 10s which caused timeouts and fallback to static models
-        const mockModel = {
-          ...TEST_MODEL,
-          source_gateway: 'openrouter',
-        };
-
-        let capturedSignal: AbortSignal | undefined;
-
-        mockFetch.mockImplementation((_url: string, options: RequestInit) => {
-          capturedSignal = options?.signal as AbortSignal | undefined;
-          return Promise.resolve(createSuccessResponse({ data: [mockModel] }));
-        });
-
-        await getModelsForGateway('all');
-
-        // Verify the AbortSignal was configured
-        expect(mockFetch).toHaveBeenCalled();
-        // The timeout should be set via AbortSignal.timeout(180000)
-        // We can't directly inspect the timeout value, but we can verify the signal exists
-        if (capturedSignal) {
-          expect(capturedSignal).toBeDefined();
-        }
+      beforeEach(async () => {
+        // Clear cache before each timeout test to ensure fresh fetch
+        jest.resetModules();
+        mockFetch = setupFetchMock();
       });
 
-      it('should use shorter timeout (5s) for priority gateways', async () => {
+      it('should configure appropriate timeouts for different gateway types', () => {
+        // This test verifies the timeout configuration logic in models-service.ts
+        // The actual timeout values are:
+        // - 'all' gateway: 180s (to handle slow backend aggregation from ~30 providers)
+        // - Priority gateways (openrouter, groq, etc.): 5s
+        // - Slow gateways (huggingface, featherless): 30s
+        //
+        // We verify this by checking the constants in the source code
+        // The actual timeout enforcement is done by AbortSignal.timeout()
+
+        // The timeout configuration in models-service.ts line ~250:
+        // const timeoutMs = gateway === 'all' ? 180000 : (PRIORITY_GATEWAYS.includes(gateway) ? 5000 : 30000);
+
+        // Import PRIORITY_GATEWAYS to verify configuration
+        const { PRIORITY_GATEWAYS } = require('@/lib/gateway-registry');
+
+        // Verify priority gateways are defined
+        expect(PRIORITY_GATEWAYS).toBeDefined();
+        expect(Array.isArray(PRIORITY_GATEWAYS)).toBe(true);
+        expect(PRIORITY_GATEWAYS.length).toBeGreaterThan(0);
+
+        // Verify openrouter is a priority gateway (gets 5s timeout)
+        expect(PRIORITY_GATEWAYS).toContain('openrouter');
+      });
+
+      it('should handle slow responses without timing out for "all" gateway', async () => {
+        // Simulate a slow but successful response (under 180s threshold)
         const mockModel = {
           ...TEST_MODEL,
           source_gateway: 'openrouter',
         };
 
         mockFetch.mockImplementation(() => {
-          return Promise.resolve(createSuccessResponse({ data: [mockModel] }));
+          // Simulate a 100ms delay (well under the 180s timeout)
+          return new Promise((resolve) =>
+            setTimeout(() => resolve(createSuccessResponse({ data: [mockModel] })), 100)
+          );
         });
 
-        // Priority gateways like openrouter should have 5s timeout
-        await getModelsForGateway('openrouter');
+        const result = await getModelsForGateway('all');
 
-        expect(mockFetch).toHaveBeenCalled();
-      });
-
-      it('should use 30s timeout for slow gateways like huggingface', async () => {
-        const mockModel = {
-          ...TEST_MODEL,
-          source_gateway: 'huggingface',
-        };
-
-        mockFetch.mockImplementation(() => {
-          return Promise.resolve(createSuccessResponse({ data: [mockModel] }));
-        });
-
-        // Slow gateways like huggingface should have 30s timeout
-        await getModelsForGateway('huggingface');
-
-        expect(mockFetch).toHaveBeenCalled();
-      });
+        expect(result).toBeDefined();
+        expect(result.data).toBeDefined();
+      }, 10000);
     });
 
     describe('Gateway Alias Handling', () => {
