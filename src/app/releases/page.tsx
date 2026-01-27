@@ -11,11 +11,13 @@ interface ReleaseWeek {
   }[];
   infrastructure: string[];
   documentation: string[];
+  videoUrl?: string;
 }
 
 const releaseNotes: ReleaseWeek[] = [
   {
     date: "January 25, 2026",
+    videoUrl: "https://assets.gatewayz.ai/releases/january-25-2026-preview.gif",
     features: [
       "Credit Usage Progress Bar: Visual indicator in the header showing remaining credits with color-coded status (green/yellow/red) and quick-access \"Add Credits\" button",
       "Models Table View: New OpenRouter-style table view for the Models page with improved data density, provider column, and formatted context lengths",
@@ -39,7 +41,6 @@ const releaseNotes: ReleaseWeek[] = [
           "OpenAI and Anthropic models now prioritize native provider connections for improved reliability",
           "Fixed Windows installer freeze issue when run via irm | iex for OpenCode",
           "Improved Claude Code model ID aliases for better compatibility",
-          "Fixed Next.js security vulnerabilities (updated to 15.5.9)",
         ],
       },
     ],
@@ -481,6 +482,23 @@ export default function ReleasesPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
+                {/* Video Preview */}
+                {release.videoUrl && (
+                  <div className="relative w-full rounded-lg overflow-hidden border border-border/50 shadow-lg bg-gradient-to-br from-slate-900 to-slate-800">
+                    <img
+                      src={release.videoUrl}
+                      alt={`Release notes video for ${release.date}`}
+                      className="w-full h-auto object-cover"
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors cursor-pointer group">
+                      <div className="text-white/80 group-hover:text-white transition-colors text-center">
+                        <div className="text-4xl mb-2">▶</div>
+                        <p className="text-sm font-medium">Watch Release Notes</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Features */}
                 {release.features.length > 0 && (
                   <div>
