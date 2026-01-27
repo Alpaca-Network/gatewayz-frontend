@@ -15,6 +15,17 @@ import { isPerMillionPricingGateway, isPerBillionPricingGateway } from '@/lib/mo
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
+// TypeScript interface for paginated API response
+interface PaginatedResponse {
+  data: any[];
+  total?: number;        // Total models available
+  returned?: number;     // Models in this page
+  offset?: number;       // Current offset
+  limit?: number;        // Current limit
+  has_more?: boolean;    // More pages exist?
+  next_offset?: number;  // Next offset to use for pagination
+}
+
 // In-memory cache for models to reduce API calls (fallback if Redis unavailable)
 let modelsCache: { data: any[], timestamp: number } | null = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
@@ -242,7 +253,9 @@ function getApiBaseUrl(): string {
 // Helper function to fetch models from a specific gateway
 async function fetchModelsFromGateway(gateway: string, limit?: number, search?: string): Promise<any[]> {
   const allModels: any[] = [];
-  const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
+  // Updated to use reasonable page size: 500 models per page (was 50000)
+  // Backend now properly supports pagination with has_more and next_offset
+  const requestLimit = limit || 500;
   // Use centralized PRIORITY_GATEWAYS for fast gateway detection
   // Timeouts: 10s for 'all' (aggregated endpoint), 5s for fast gateways, 30s for slow (HuggingFace)
   // The 'all' endpoint should be fast since backend handles aggregation
@@ -259,7 +272,9 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
   // On client-side, pagination is handled by the server (via /api/models route)
   // so we only make a single request without offset. The server-side getModelsForGateway
   // handles all pagination internally before returning results.
-  const maxPages = isClientSide ? 1 : 10;
+  // For 'all' gateway on server-side, fetch all pages (no limit) to get complete model list
+  // For specific gateways, limit to 10 pages to avoid excessive fetching
+  const maxPages = isClientSide ? 1 : (gateway === 'all' ? 100 : 10);
 
   while (hasMore && pageCount < maxPages) {
     pageCount++;
@@ -330,22 +345,39 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
         }
 
         if (response.ok) {
-          const data = await response.json();
+          const data: PaginatedResponse = await response.json();
 
           if (data.data && Array.isArray(data.data) && data.data.length > 0) {
             // Normalize each model to ensure provider_slugs and source_gateways are arrays
             const normalizedModels = data.data.map((model: any) => normalizeModel(model, gateway));
             allModels.push(...normalizedModels);
-            console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})`);
 
-            const isFiveHundred = data.data.length === 500 && (gateway === 'huggingface' || gateway === 'featherless');
-            const hasReachedLimit = limit && allModels.length >= limit;
-            const gotFewerThanRequested = data.data.length < requestLimit && !isFiveHundred;
+            // Log pagination info with total count if available
+            const totalInfo = data.total ? ` (${allModels.length}/${data.total} total)` : '';
+            console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})${totalInfo}`);
 
-            if (gotFewerThanRequested || hasReachedLimit) {
-              hasMore = false;
+            // Use backend pagination metadata instead of guessing
+            // Backend now provides has_more and next_offset fields for reliable pagination
+            if (data.has_more !== undefined) {
+              // Backend explicitly tells us if there are more pages
+              hasMore = data.has_more;
+
+              // Use backend-provided next_offset if available
+              if (data.next_offset !== undefined) {
+                offset = data.next_offset;
+              } else {
+                offset += requestLimit;
+              }
             } else {
-              offset += requestLimit;
+              // Fallback to old logic if backend doesn't provide has_more
+              const hasReachedLimit = limit && allModels.length >= limit;
+              const gotFewerThanRequested = data.data.length < requestLimit;
+
+              if (gotFewerThanRequested || hasReachedLimit) {
+                hasMore = false;
+              } else {
+                offset += requestLimit;
+              }
             }
           } else {
             hasMore = false;
