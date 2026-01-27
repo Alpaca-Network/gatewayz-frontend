@@ -15,12 +15,12 @@ export const NEW_USER_WELCOME_EVENT = 'gatewayz:new-user-welcome';
 
 export function WelcomeDialog() {
   const [open, setOpen] = useState(false);
-  const [credits, setCredits] = useState(3);
+  const [credits, setCredits] = useState(500); // Credits in cents (default $5)
 
   useEffect(() => {
     const handleWelcome = (event: Event) => {
       const customEvent = event as CustomEvent<{ credits: number }>;
-      setCredits(customEvent.detail?.credits || 3);
+      setCredits(customEvent.detail?.credits || 500); // Credits in cents (default $5)
       setOpen(true);
     };
 
@@ -46,7 +46,7 @@ export function WelcomeDialog() {
             Welcome to Gatewayz!
           </DialogTitle>
           <DialogDescription className="text-center">
-            ${credits} in credits has been added to your account. Enjoy your 3-day trial and explore all the features Gatewayz has to offer.
+            ${(credits / 100).toFixed(2)} in credits has been added to your account. Enjoy your 3-day trial and explore all the features Gatewayz has to offer.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-4">

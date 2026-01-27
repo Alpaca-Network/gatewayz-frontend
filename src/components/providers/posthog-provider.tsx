@@ -2,7 +2,7 @@
 
 import posthog from 'posthog-js';
 import { PostHogProvider as PHProvider } from 'posthog-js/react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 
 interface PostHogProviderProps {
@@ -10,6 +10,8 @@ interface PostHogProviderProps {
 }
 
 export function PostHogProvider({ children }: PostHogProviderProps) {
+  const [isInitialized, setIsInitialized] = useState(false);
+
   useEffect(() => {
     const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
     const posthogHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -33,6 +35,9 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
           // Mobile optimization: disable expensive features on small screens
           disable_session_recording: isMobile, // Don't record sessions on mobile
         });
+
+        // Mark as initialized so PHProvider can render with the configured client
+        setIsInitialized(true);
 
         // Only initialize session recording on desktop after page is interactive
         if (!isMobile) {
@@ -63,6 +68,12 @@ export function PostHogProvider({ children }: PostHogProviderProps) {
 
     return () => clearTimeout(initTimeout);
   }, []);
+
+  // Only wrap with PHProvider after PostHog has been initialized with a token
+  // This prevents the "PostHog was initialized without a token" error
+  if (!isInitialized) {
+    return <>{children}</>;
+  }
 
   return <PHProvider client={posthog}>{children}</PHProvider>;
 }

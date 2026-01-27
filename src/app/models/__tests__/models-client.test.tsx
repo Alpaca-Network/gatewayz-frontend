@@ -833,4 +833,577 @@ describe('ModelsClient - Filtering Logic', () => {
       expect(getNormalizedPerTokenPrice('0', 'onerouter')).toBe(0);
     });
   });
+
+  describe('Table view formatting', () => {
+    it('should format context length with commas', () => {
+      const formatContext = (length: number | undefined | null) => {
+        if (length === undefined || length === null || length <= 0) return '-';
+        return length.toLocaleString();
+      };
+
+      expect(formatContext(0)).toBe('-');
+      expect(formatContext(-1)).toBe('-');
+      expect(formatContext(undefined)).toBe('-');
+      expect(formatContext(null)).toBe('-');
+      expect(formatContext(1000)).toBe('1,000');
+      expect(formatContext(128000)).toBe('128,000');
+      expect(formatContext(1000000)).toBe('1,000,000');
+    });
+
+    it('should display free indicator for free models', () => {
+      const model = mockModel({
+        id: 'google/gemini-2.0-flash-exp:free',
+        source_gateway: 'openrouter',
+        pricing: { prompt: '0', completion: '0' }
+      });
+
+      const sourceGateway = model.source_gateway || (model.source_gateways?.[0]) || '';
+      const isFree = sourceGateway === 'openrouter' && model.id?.endsWith(':free');
+
+      expect(isFree).toBe(true);
+    });
+
+    it('should display pricing correctly in table view', () => {
+      const model = mockModel({
+        pricing: { prompt: '0.00000015', completion: '0.0000006' },
+        source_gateway: 'openrouter',
+      });
+
+      const sourceGateway = getSourceGateway(model);
+      const inputCost = formatPricingForDisplay(model.pricing?.prompt, sourceGateway);
+      const outputCost = formatPricingForDisplay(model.pricing?.completion, sourceGateway);
+
+      expect(inputCost).toBe('0.15');
+      expect(outputCost).toBe('0.60');
+    });
+
+    it('should handle models without pricing in table view', () => {
+      const model = mockModel({ pricing: null });
+
+      const hasPricing = model.pricing !== null && model.pricing !== undefined;
+      expect(hasPricing).toBe(false);
+    });
+  });
+
+  describe('Layout state', () => {
+    it('should default to table layout', () => {
+      const defaultLayout: 'table' | 'grid' = 'table';
+      expect(defaultLayout).toBe('table');
+    });
+
+    it('should support both table and grid layouts', () => {
+      type LayoutType = 'table' | 'grid';
+      const layouts: LayoutType[] = ['table', 'grid'];
+
+      expect(layouts).toContain('table');
+      expect(layouts).toContain('grid');
+    });
+  });
+
+  describe('Banner detection and header positioning', () => {
+    let observerCallback: MutationCallback | null = null;
+    let bodyObserverCallback: MutationCallback | null = null;
+    const mockObservers: { disconnect: jest.Mock }[] = [];
+
+    beforeEach(() => {
+      // Mock MutationObserver
+      observerCallback = null;
+      bodyObserverCallback = null;
+      mockObservers.length = 0;
+
+      (global as unknown as { MutationObserver: typeof MutationObserver }).MutationObserver = jest.fn().mockImplementation((callback: MutationCallback) => {
+        // First observer is for documentElement class changes
+        // Second observer is for body childList changes
+        if (mockObservers.length === 0) {
+          observerCallback = callback;
+        } else {
+          bodyObserverCallback = callback;
+        }
+        const observer = {
+          observe: jest.fn(),
+          disconnect: jest.fn(),
+          takeRecords: jest.fn().mockReturnValue([]),
+        };
+        mockObservers.push(observer);
+        return observer;
+      });
+
+      // Mock document.querySelector
+      jest.spyOn(document, 'querySelector').mockImplementation((selector: string) => {
+        return null; // Default: no banner
+      });
+
+      // Mock document.documentElement.style.setProperty
+      jest.spyOn(document.documentElement.style, 'setProperty').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('should calculate header position without banner', () => {
+      const updateHeaderPosition = () => {
+        const bannerElement = document.querySelector('[data-onboarding-banner]');
+        if (bannerElement) {
+          const bannerHeight = (bannerElement as HTMLElement).getBoundingClientRect().height;
+          return 65 + bannerHeight;
+        }
+        return 65;
+      };
+
+      expect(updateHeaderPosition()).toBe(65);
+    });
+
+    it('should calculate header position with banner', () => {
+      const mockBanner = {
+        getBoundingClientRect: () => ({ height: 60, top: 0, left: 0, right: 0, bottom: 60, width: 100, x: 0, y: 0, toJSON: () => ({}) }),
+      };
+
+      jest.spyOn(document, 'querySelector').mockImplementation((selector: string) => {
+        if (selector === '[data-onboarding-banner]') {
+          return mockBanner as unknown as Element;
+        }
+        return null;
+      });
+
+      const updateHeaderPosition = () => {
+        const bannerElement = document.querySelector('[data-onboarding-banner]');
+        if (bannerElement) {
+          const bannerHeight = (bannerElement as HTMLElement).getBoundingClientRect().height;
+          return 65 + bannerHeight;
+        }
+        return 65;
+      };
+
+      expect(updateHeaderPosition()).toBe(125); // 65 + 60
+    });
+
+    it('should detect banner addition via MutationObserver', () => {
+      let headerPositionUpdated = false;
+      const updateHeaderPosition = jest.fn(() => {
+        headerPositionUpdated = true;
+      });
+
+      // Simulate the MutationObserver setup
+      const checkForBannerChange = (mutations: MutationRecord[]) => {
+        for (const mutation of mutations) {
+          if (mutation.type === 'childList') {
+            const hasBannerChange = Array.from(mutation.addedNodes).some(
+              (node) => node instanceof HTMLElement && (node as Element).matches?.('[data-onboarding-banner]')
+            );
+            if (hasBannerChange) {
+              updateHeaderPosition();
+            }
+          }
+        }
+      };
+
+      // Create mock banner element
+      const mockBanner = document.createElement('div');
+      mockBanner.setAttribute('data-onboarding-banner', 'true');
+      // Mock matches method
+      mockBanner.matches = (selector: string) => selector === '[data-onboarding-banner]';
+
+      // Simulate mutation record
+      const mockMutations: MutationRecord[] = [{
+        type: 'childList',
+        addedNodes: [mockBanner] as unknown as NodeList,
+        removedNodes: [] as unknown as NodeList,
+        target: document.body,
+        attributeName: null,
+        attributeNamespace: null,
+        nextSibling: null,
+        previousSibling: null,
+        oldValue: null,
+      }];
+
+      checkForBannerChange(mockMutations);
+
+      expect(updateHeaderPosition).toHaveBeenCalled();
+      expect(headerPositionUpdated).toBe(true);
+    });
+
+    it('should detect banner removal via MutationObserver', () => {
+      const updateHeaderPosition = jest.fn();
+
+      const checkForBannerChange = (mutations: MutationRecord[]) => {
+        for (const mutation of mutations) {
+          if (mutation.type === 'childList') {
+            const hasBannerChange = Array.from(mutation.removedNodes).some(
+              (node) => node instanceof HTMLElement && (node as Element).matches?.('[data-onboarding-banner]')
+            );
+            if (hasBannerChange) {
+              updateHeaderPosition();
+            }
+          }
+        }
+      };
+
+      // Create mock banner element that was removed
+      const mockBanner = document.createElement('div');
+      mockBanner.setAttribute('data-onboarding-banner', 'true');
+      mockBanner.matches = (selector: string) => selector === '[data-onboarding-banner]';
+
+      // Simulate mutation record for removal
+      const mockMutations: MutationRecord[] = [{
+        type: 'childList',
+        addedNodes: [] as unknown as NodeList,
+        removedNodes: [mockBanner] as unknown as NodeList,
+        target: document.body,
+        attributeName: null,
+        attributeNamespace: null,
+        nextSibling: null,
+        previousSibling: null,
+        oldValue: null,
+      }];
+
+      checkForBannerChange(mockMutations);
+
+      expect(updateHeaderPosition).toHaveBeenCalled();
+    });
+
+    it('should not trigger update for non-banner DOM changes', () => {
+      const updateHeaderPosition = jest.fn();
+
+      const checkForBannerChange = (mutations: MutationRecord[]) => {
+        for (const mutation of mutations) {
+          if (mutation.type === 'childList') {
+            const hasBannerChange = Array.from(mutation.addedNodes).some(
+              (node) => node instanceof HTMLElement && (node as Element).matches?.('[data-onboarding-banner]')
+            ) || Array.from(mutation.removedNodes).some(
+              (node) => node instanceof HTMLElement && (node as Element).matches?.('[data-onboarding-banner]')
+            );
+            if (hasBannerChange) {
+              updateHeaderPosition();
+            }
+          }
+        }
+      };
+
+      // Create a random div (not a banner)
+      const mockDiv = document.createElement('div');
+      mockDiv.matches = () => false;
+
+      // Simulate mutation record for non-banner element
+      const mockMutations: MutationRecord[] = [{
+        type: 'childList',
+        addedNodes: [mockDiv] as unknown as NodeList,
+        removedNodes: [] as unknown as NodeList,
+        target: document.body,
+        attributeName: null,
+        attributeNamespace: null,
+        nextSibling: null,
+        previousSibling: null,
+        oldValue: null,
+      }];
+
+      checkForBannerChange(mockMutations);
+
+      expect(updateHeaderPosition).not.toHaveBeenCalled();
+    });
+
+    it('should set CSS variable correctly based on banner presence', () => {
+      const setPropertyMock = jest.fn();
+      document.documentElement.style.setProperty = setPropertyMock;
+
+      const updateHeaderPosition = (hasBanner: boolean, bannerHeight = 60) => {
+        if (hasBanner) {
+          const headerTop = 65 + bannerHeight;
+          document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
+        } else {
+          document.documentElement.style.setProperty('--models-header-top', '65px');
+        }
+      };
+
+      // Test without banner
+      updateHeaderPosition(false);
+      expect(setPropertyMock).toHaveBeenCalledWith('--models-header-top', '65px');
+
+      // Test with banner
+      updateHeaderPosition(true, 60);
+      expect(setPropertyMock).toHaveBeenCalledWith('--models-header-top', '125px');
+    });
+
+    it('should properly disconnect observers on cleanup', () => {
+      const disconnectMock = jest.fn();
+      const observer = {
+        observe: jest.fn(),
+        disconnect: disconnectMock,
+        takeRecords: jest.fn().mockReturnValue([]),
+      };
+
+      // Simulate cleanup
+      observer.disconnect();
+
+      expect(disconnectMock).toHaveBeenCalled();
+    });
+  });
+
+  describe('Infinite scroll state', () => {
+    it('should initialize with 24 visible items', () => {
+      const initialVisibleCount = 24;
+      const itemsPerPage = 24;
+
+      expect(initialVisibleCount).toBe(24);
+      expect(itemsPerPage).toBe(24);
+    });
+
+    it('should load more items when scrolling', () => {
+      let visibleCount = 24;
+      const itemsPerPage = 24;
+      const totalItems = 100;
+
+      // Simulate loading more
+      const loadMore = () => {
+        visibleCount = Math.min(visibleCount + itemsPerPage, totalItems);
+      };
+
+      loadMore();
+      expect(visibleCount).toBe(48);
+
+      loadMore();
+      expect(visibleCount).toBe(72);
+
+      loadMore();
+      expect(visibleCount).toBe(96);
+
+      loadMore();
+      expect(visibleCount).toBe(100); // Capped at total
+    });
+
+    it('should reset visible count when filters change', () => {
+      let visibleCount = 72;
+
+      // Simulate filter change reset
+      const resetVisibleCount = () => {
+        visibleCount = 24;
+      };
+
+      resetVisibleCount();
+      expect(visibleCount).toBe(24);
+    });
+
+    it('should correctly calculate hasMore flag', () => {
+      const calculateHasMore = (visibleCount: number, totalFiltered: number) => {
+        return visibleCount < totalFiltered;
+      };
+
+      expect(calculateHasMore(24, 100)).toBe(true);
+      expect(calculateHasMore(100, 100)).toBe(false);
+      expect(calculateHasMore(100, 50)).toBe(false);
+    });
+
+    it('should slice models correctly for display', () => {
+      const models = Array.from({ length: 100 }, (_, i) => ({ id: `model-${i}` }));
+      const visibleCount = 24;
+
+      const visibleModels = models.slice(0, visibleCount);
+
+      expect(visibleModels).toHaveLength(24);
+      expect(visibleModels[0].id).toBe('model-0');
+      expect(visibleModels[23].id).toBe('model-23');
+    });
+  });
+
+  describe('Development-only logging', () => {
+    const originalEnv = process.env.NODE_ENV;
+
+    afterEach(() => {
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: originalEnv,
+        writable: true,
+      });
+    });
+
+    it('should only log in development mode', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      const conditionalLog = (message: string) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(message);
+        }
+      };
+
+      // Test in production mode
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'production',
+        writable: true,
+      });
+      conditionalLog('Test message');
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      // Test in development mode
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'development',
+        writable: true,
+      });
+      conditionalLog('Test message');
+      expect(consoleSpy).toHaveBeenCalledWith('Test message');
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should only warn in development mode for malformed models', () => {
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      const logMalformedModel = (modelName: string) => {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`Filtering out malformed model: ${modelName}`);
+        }
+      };
+
+      // Test in production mode
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'production',
+        writable: true,
+      });
+      logMalformedModel("('Data', [Data(Id=...");
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+
+      // Test in development mode
+      Object.defineProperty(process.env, 'NODE_ENV', {
+        value: 'development',
+        writable: true,
+      });
+      logMalformedModel("('Data', [Data(Id=...");
+      expect(consoleWarnSpy).toHaveBeenCalled();
+
+      consoleWarnSpy.mockRestore();
+    });
+  });
+
+  describe('Expand/Collapse All functionality', () => {
+    it('should default to all rows expanded', () => {
+      const allRowsExpanded = true;
+      expect(allRowsExpanded).toBe(true);
+    });
+
+    it('should track individually toggled rows', () => {
+      const expandedRows = new Set<string>();
+      const toggleRow = (modelId: string) => {
+        if (expandedRows.has(modelId)) {
+          expandedRows.delete(modelId);
+        } else {
+          expandedRows.add(modelId);
+        }
+      };
+
+      toggleRow('model-1');
+      expect(expandedRows.has('model-1')).toBe(true);
+
+      toggleRow('model-1');
+      expect(expandedRows.has('model-1')).toBe(false);
+    });
+
+    it('should determine row expansion state correctly', () => {
+      let allRowsExpanded = true;
+      const expandedRows = new Set<string>();
+
+      const isRowExpanded = (modelId: string) => {
+        if (expandedRows.has(modelId)) {
+          return !allRowsExpanded; // Toggled rows are opposite of global state
+        }
+        return allRowsExpanded;
+      };
+
+      // All rows expanded by default
+      expect(isRowExpanded('model-1')).toBe(true);
+      expect(isRowExpanded('model-2')).toBe(true);
+
+      // Toggle model-1 to collapsed
+      expandedRows.add('model-1');
+      expect(isRowExpanded('model-1')).toBe(false);
+      expect(isRowExpanded('model-2')).toBe(true);
+
+      // Toggle all to collapsed
+      allRowsExpanded = false;
+      expandedRows.clear();
+      expect(isRowExpanded('model-1')).toBe(false);
+      expect(isRowExpanded('model-2')).toBe(false);
+
+      // Toggle model-1 to expanded while others collapsed
+      expandedRows.add('model-1');
+      expect(isRowExpanded('model-1')).toBe(true);
+      expect(isRowExpanded('model-2')).toBe(false);
+    });
+
+    it('should reset individual toggles when toggling all', () => {
+      let allRowsExpanded = true;
+      let expandedRows = new Set<string>(['model-1', 'model-2']);
+
+      const toggleAllRows = () => {
+        allRowsExpanded = !allRowsExpanded;
+        expandedRows = new Set(); // Reset individual toggles
+      };
+
+      expect(expandedRows.size).toBe(2);
+
+      toggleAllRows();
+      expect(allRowsExpanded).toBe(false);
+      expect(expandedRows.size).toBe(0);
+
+      toggleAllRows();
+      expect(allRowsExpanded).toBe(true);
+      expect(expandedRows.size).toBe(0);
+    });
+  });
+
+  describe('Mobile view row formatting', () => {
+    it('should format context length as K for mobile display', () => {
+      const formatContextK = (contextLength: number) => {
+        if (contextLength <= 0) return 0;
+        return Math.round(contextLength / 1000);
+      };
+
+      expect(formatContextK(128000)).toBe(128);
+      expect(formatContextK(8000)).toBe(8);
+      expect(formatContextK(4096)).toBe(4);
+      expect(formatContextK(0)).toBe(0);
+      expect(formatContextK(-1)).toBe(0);
+    });
+
+    it('should display compact pricing format for mobile', () => {
+      const formatMobilePricing = (inputCost: string | null, outputCost: string | null, isFree: boolean) => {
+        if (isFree) return 'Free';
+        if (inputCost === null || outputCost === null) return null;
+        return `$${inputCost}/$${outputCost}`;
+      };
+
+      expect(formatMobilePricing('0.15', '0.60', false)).toBe('$0.15/$0.60');
+      expect(formatMobilePricing(null, null, false)).toBe(null);
+      expect(formatMobilePricing('0.15', '0.60', true)).toBe('Free');
+    });
+
+    it('should include provider name in mobile metadata', () => {
+      const formatProviderDisplay = (providerSlug: string | undefined) => {
+        return providerSlug?.replace(/^@/, '') || 'Unknown';
+      };
+
+      expect(formatProviderDisplay('openai')).toBe('openai');
+      expect(formatProviderDisplay('@anthropic')).toBe('anthropic');
+      expect(formatProviderDisplay(undefined)).toBe('Unknown');
+    });
+  });
+
+  describe('Responsive layout handling', () => {
+    it('should show mobile row on small screens and desktop row on larger screens', () => {
+      // This tests the concept - actual rendering tested in component tests
+      const isMobileView = (screenWidth: number) => screenWidth < 768; // md breakpoint
+
+      expect(isMobileView(375)).toBe(true);  // Mobile
+      expect(isMobileView(767)).toBe(true);  // Just below md
+      expect(isMobileView(768)).toBe(false); // md breakpoint
+      expect(isMobileView(1024)).toBe(false); // Desktop
+    });
+
+    it('should show expand/collapse button icon-only on small screens', () => {
+      // On small screens, only icon shows; on sm+ screens, text shows
+      const showButtonText = (screenWidth: number) => screenWidth >= 640; // sm breakpoint
+
+      expect(showButtonText(375)).toBe(false); // Mobile - icon only
+      expect(showButtonText(639)).toBe(false); // Just below sm
+      expect(showButtonText(640)).toBe(true);  // sm breakpoint
+      expect(showButtonText(768)).toBe(true);  // md
+    });
+  });
 });

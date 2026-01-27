@@ -226,13 +226,17 @@ export function AudioPlayer({
     audio.addEventListener("play", handlePlay);
 
     return () => {
-      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("error", handleError);
-      audio.removeEventListener("canplay", handleCanPlay);
-      audio.removeEventListener("pause", handlePause);
-      audio.removeEventListener("play", handlePlay);
+      // Use current ref to avoid closure issues where audio might be null during cleanup
+      const audioToCleanup = audioRef.current;
+      if (!audioToCleanup) return;
+
+      audioToCleanup.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audioToCleanup.removeEventListener("timeupdate", handleTimeUpdate);
+      audioToCleanup.removeEventListener("ended", handleEnded);
+      audioToCleanup.removeEventListener("error", handleError);
+      audioToCleanup.removeEventListener("canplay", handleCanPlay);
+      audioToCleanup.removeEventListener("pause", handlePause);
+      audioToCleanup.removeEventListener("play", handlePlay);
     };
   }, [autoPlay, onEnded, onPause, onPlay, src]);
 

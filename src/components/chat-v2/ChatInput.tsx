@@ -41,6 +41,7 @@ interface SpeechRecognition extends EventTarget {
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera, Globe, Search, Loader2 } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -52,7 +53,7 @@ import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useCreateSession, useSessionMessages } from "@/lib/hooks/use-chat-queries";
 import { useChatStream } from "@/lib/hooks/use-chat-stream";
 import { useAutoModelSwitch } from "@/lib/hooks/use-auto-model-switch";
-import { useAutoSearchDetection } from "@/lib/hooks/use-auto-search-detection";
+import { useCriticSearchDetection } from "@/lib/hooks/use-critic-search-detection";
 import { useToolDefinitions, filterEnabledTools } from "@/lib/hooks/use-tool-definitions";
 import { useSearchAugmentation } from "@/lib/hooks/use-search-augmentation";
 import { useToast } from "@/hooks/use-toast";
@@ -68,6 +69,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { usePrivy } from "@privy-io/react-auth";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
+import { useWhisperTranscription } from "@/lib/hooks/use-whisper-transcription";
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/safe-storage";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -204,7 +207,7 @@ export function ChatInput() {
   const createSession = useCreateSession();
   const { isStreaming, streamMessage, stopStream } = useChatStream();
   const { checkImageSupport, checkVideoSupport, checkAudioSupport, checkFileSupport } = useAutoModelSwitch();
-  const { shouldAutoEnableSearch } = useAutoSearchDetection();
+  const { checkIfSearchNeeded, isChecking: isCheckingSearch } = useCriticSearchDetection();
   const { data: toolDefinitions } = useToolDefinitions();
   const { augmentWithSearch, isSearching } = useSearchAugmentation();
   const { toast } = useToast();
@@ -226,7 +229,27 @@ export function ChatInput() {
   const [selectedDocumentName, setSelectedDocumentName] = useState<string | null>(null);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
+  // Whisper transcription - high quality backend-based transcription
+  const userLanguage = typeof navigator !== 'undefined' ? navigator.language?.split('-')[0] || 'en' : 'en';
+  const {
+    startRecording: whisperStartRecording,
+    stopRecording: whisperStopRecording,
+    isRecording: whisperIsRecording,
+    isTranscribing,
+    error: whisperError,
+  } = useWhisperTranscription({
+    language: userLanguage,
+    preprocess: true,
+    targetSampleRate: 16000,
+  });
+
+  // Recording state - combines Whisper recording state with local UI state
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [transcriptionStatus, setTranscriptionStatus] = useState<'idle' | 'recording' | 'transcribing'>('idle');
+
+  // Fallback: Web Speech API state (used when Whisper is unavailable)
+  const [useWebSpeechFallback, setUseWebSpeechFallback] = useState(false);
   const [speechRecognition, setSpeechRecognition] = useState<SpeechRecognition | null>(null);
   const [interimTranscript, setInterimTranscript] = useState<string>('');
   const [transcriptBeforeRecording, setTranscriptBeforeRecording] = useState<string>('');
@@ -234,6 +257,9 @@ export function ChatInput() {
   const [finalTranscriptDuringRecording, setFinalTranscriptDuringRecording] = useState<string>('');
   // Track if textarea has expanded to multiple lines
   const [isMultiline, setIsMultiline] = useState(false);
+  // Track minimum height to prevent jitter - once expanded, don't shrink until cleared
+  const [minTextareaHeight, setMinTextareaHeight] = useState(48);
+  const isMobile = useIsMobile();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -243,6 +269,8 @@ export function ChatInput() {
 
   // Ref for synchronous recording state check to prevent race conditions on rapid clicks
   const isRecordingRef = useRef(false);
+  // Ref for recording duration interval
+  const durationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Derive input empty state directly from inputValue to avoid desync issues
   const isInputEmpty = !inputValue.trim();
@@ -286,13 +314,35 @@ export function ChatInput() {
 
     parentNode.appendChild(clone);
 
-    let newHeight: number;
+    let contentHeight: number;
     try {
-      // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
-      newHeight = Math.min(Math.max(clone.scrollHeight, 48), 150);
+      // Calculate content height from clone
+      contentHeight = clone.scrollHeight;
     } finally {
       // Always remove the clone, even if an error occurs
       clone.remove();
+    }
+
+    // If text is empty or very short, reset to minimum single line height
+    const textLength = textarea.value.length;
+    if (textLength === 0) {
+      setMinTextareaHeight(48);
+      textarea.style.height = '48px';
+      setIsMultiline(false);
+      return;
+    }
+
+    // Calculate new height (min 48px for single line, max ~150px for ~4 lines)
+    const calculatedHeight = Math.min(Math.max(contentHeight, 48), 150);
+
+    // Only allow growing, never shrink below current minimum (prevents jitter)
+    // This means once the textarea expands to 2 lines, it stays that size
+    // until the user clears the text completely
+    const newHeight = Math.max(calculatedHeight, minTextareaHeight);
+
+    // Update minimum height if we've grown
+    if (newHeight > minTextareaHeight) {
+      setMinTextareaHeight(newHeight);
     }
 
     // Only update height if it changed to avoid unnecessary reflows
@@ -302,7 +352,7 @@ export function ChatInput() {
 
     // Track if textarea has expanded beyond single line (48px is single line height)
     setIsMultiline(newHeight > 48);
-  }, []);
+  }, [minTextareaHeight]);
 
   // Store focus function in window for access from ChatLayout
   useEffect(() => {
@@ -351,14 +401,23 @@ export function ChatInput() {
 
     // Auto-enable search if the query needs real-time information
     // Get fresh tools state from store
-    const freshEnabledTools = storeState.enabledTools;
+    let freshEnabledTools = storeState.enabledTools ?? [];
     const freshAutoEnableSearch = storeState.autoEnableSearch;
 
-    // Check if we should auto-enable web search for this query
-    if (shouldAutoEnableSearch(currentInputValue, freshSelectedModel, freshAutoEnableSearch)) {
+    // Use critic model to check if we should auto-enable web search
+    // This provides much better accuracy than keyword matching
+    const { needsSearch } = await checkIfSearchNeeded(
+      currentInputValue,
+      freshSelectedModel,
+      freshAutoEnableSearch
+    );
+
+    if (needsSearch) {
       // Auto-enable web search if not already enabled
       if (!freshEnabledTools.includes('web_search')) {
         toggleTool('web_search');
+        // Get fresh state after toggle to ensure we have the updated tools list
+        freshEnabledTools = useChatUIStore.getState().enabledTools ?? [];
       }
     }
 
@@ -411,8 +470,9 @@ export function ChatInput() {
 
     // Check if we need search augmentation (search enabled but model doesn't support tools)
     let finalMessageText = messageText;
+    // Use freshEnabledTools which was updated after the critic check
     const currentEnabledTools = useChatUIStore.getState().enabledTools ?? [];
-    const searchEnabled = currentEnabledTools.includes('web_search');
+    const searchEnabled = currentEnabledTools.includes('web_search') || (freshEnabledTools ?? []).includes('web_search');
     const modelSupportsTools = freshSelectedModel?.supportsTools ?? false;
 
     // If search is enabled but model doesn't support native tools, use search augmentation
@@ -469,11 +529,11 @@ export function ChatInput() {
         // Mark chat task as complete in onboarding after first message (authenticated users only)
         if (typeof window !== 'undefined' && isAuthenticated) {
             try {
-                const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
+                const savedTasks = safeLocalStorageGet('gatewayz_onboarding_tasks');
                 const taskState = savedTasks ? JSON.parse(savedTasks) : {};
                 if (!taskState.chat) {
                     taskState.chat = true;
-                    localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+                    safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
                     console.log('Onboarding - Chat task marked as complete');
 
                     // Dispatch custom event to notify the banner
@@ -693,21 +753,22 @@ export function ChatInput() {
       if (documentInputRef.current) documentInputRef.current.value = '';
   };
 
-  // Ref to track current recognition instance for race condition prevention
+  // Ref to track current recognition instance for race condition prevention (fallback mode)
   const currentRecognitionRef = useRef<SpeechRecognition | null>(null);
-  // Ref to track last processed result index to prevent duplicates
+  // Ref to track last processed result index to prevent duplicates (fallback mode)
   const lastProcessedIndexRef = useRef<number>(-1);
-  // Ref to track accumulated final transcript to detect and remove duplicates
+  // Ref to track accumulated final transcript to detect and remove duplicates (fallback mode)
   const accumulatedFinalTranscriptRef = useRef<string>('');
 
-  // Speech Recognition for transcription
-  const startRecording = useCallback(() => {
-    // Prevent race condition: use ref for synchronous check to avoid state timing issues
-    // State updates are asynchronous, so rapid double-clicks could bypass state-based guards
-    if (isRecordingRef.current) {
-      return;
-    }
+  // Format recording duration as mm:ss
+  const formatDuration = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
+  // Web Speech API fallback - used when Whisper is unavailable (guest users, API errors)
+  const startWebSpeechRecording = useCallback(() => {
     const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognitionAPI) {
@@ -719,43 +780,28 @@ export function ChatInput() {
       return;
     }
 
-    // Set ref IMMEDIATELY to block any concurrent calls (synchronous update)
-    isRecordingRef.current = true;
-    setIsRecording(true);
-
     // Reset tracking state for new recording session
     lastProcessedIndexRef.current = -1;
     accumulatedFinalTranscriptRef.current = '';
     setInterimTranscript('');
     setFinalTranscriptDuringRecording('');
-    // Save the current input value before recording starts
     setTranscriptBeforeRecording(useChatUIStore.getState().inputValue);
 
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    // Language setting - could be made configurable via user preferences
-    recognition.lang = 'en-US';
-    // Request multiple alternatives to improve accuracy
-    // The browser may return up to this many alternatives for each result
+    recognition.lang = userLanguage === 'en' ? 'en-US' : userLanguage;
     recognition.maxAlternatives = 3;
 
-    // Track this recognition instance to prevent stale handlers from corrupting state
     currentRecognitionRef.current = recognition;
-
-    // Set speechRecognition state BEFORE starting to ensure error handlers have access
     setSpeechRecognition(recognition);
 
     recognition.onstart = () => {
-      // Confirm state is set (should already be set above)
       setIsRecording(true);
       isRecordingRef.current = true;
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      // Build the complete final transcript from all final results
-      // The Web Speech API in continuous mode returns accumulated transcripts,
-      // so we need to track what we've already processed to avoid duplicates
       let totalFinalTranscript = '';
       let currentInterim = '';
 
@@ -764,66 +810,44 @@ export function ChatInput() {
         const transcript = result[0].transcript;
 
         if (result.isFinal) {
-          // Accumulate all final transcripts
           totalFinalTranscript += transcript;
           lastProcessedIndexRef.current = i;
         } else {
-          // Interim results - these are still being processed
           currentInterim += transcript;
         }
       }
 
-      // Update interim transcript display
       setInterimTranscript(currentInterim);
 
       const newTotal = totalFinalTranscript.trim();
       if (!newTotal) return;
 
       const accumulated = accumulatedFinalTranscriptRef.current.trim();
-
-      // Quick exit if identical (no new content)
       if (newTotal === accumulated) return;
 
-      // Use word-level comparison to handle overlapping phrases
-      // This fixes issues where the API returns "How are you How are you doing"
-      // instead of just "How are you doing"
       const newWords = getWords(newTotal);
       const accWords = getWords(accumulated);
 
       let wordsToAppend: string[] = [];
 
       if (accWords.length === 0) {
-        // First transcript - add all words
         wordsToAppend = newWords;
       } else {
-        // Find where accumulated content ends within the new transcript
-        // This handles:
-        // 1. Accumulated is prefix of new: "hello" -> "hello world"
-        // 2. Duplicated content: "hello world" -> "hello world hello world doing"
-        // 3. Suffix overlap: "hello world" -> "world how are you"
         const newContentStartIndex = findAccumulatedEndIndex(accWords, newWords);
-
         if (newContentStartIndex >= 0) {
-          // Found where new content begins - take everything after that point
           wordsToAppend = newWords.slice(newContentStartIndex);
         } else {
-          // No overlap found at all - the new transcript is completely unrelated
-          // or shorter than what we have. Ignore to preserve existing content
-          // and avoid random duplicates.
           return;
         }
       }
 
-      // Update accumulated tracking with the full new transcript
       accumulatedFinalTranscriptRef.current = newTotal;
 
-      // Only update input if we have genuinely new words
       if (wordsToAppend.length > 0) {
         const newText = wordsToAppend.join(' ');
         const currentValue = useChatUIStore.getState().inputValue;
         const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
         setInputValue(currentValue + separator + newText);
-        // Also track final transcript separately for display
         setFinalTranscriptDuringRecording(prev => {
           const prevSeparator = prev && !prev.endsWith(' ') ? ' ' : '';
           return prev + prevSeparator + newText;
@@ -832,14 +856,11 @@ export function ChatInput() {
     };
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      // Only handle error if this is still the current recognition instance
-      // This prevents stale handlers from corrupting state of a new recording
-      if (currentRecognitionRef.current !== recognition) {
-        return;
-      }
+      if (currentRecognitionRef.current !== recognition) return;
       console.error('Speech recognition error:', event.error);
       isRecordingRef.current = false;
       setIsRecording(false);
+      setTranscriptionStatus('idle');
       setSpeechRecognition(null);
       currentRecognitionRef.current = null;
 
@@ -859,13 +880,10 @@ export function ChatInput() {
     };
 
     recognition.onend = () => {
-      // Only clean up state if this is still the current recognition instance
-      // This prevents an old recognition's onend from corrupting a new recording's state
-      if (currentRecognitionRef.current !== recognition) {
-        return;
-      }
+      if (currentRecognitionRef.current !== recognition) return;
       isRecordingRef.current = false;
       setIsRecording(false);
+      setTranscriptionStatus('idle');
       setSpeechRecognition(null);
       currentRecognitionRef.current = null;
     };
@@ -873,11 +891,10 @@ export function ChatInput() {
     try {
       recognition.start();
     } catch (error) {
-      // Handle synchronous errors from recognition.start()
-      // This can happen when audio context is blocked by browser policy
       console.error('Speech recognition start failed:', error);
       isRecordingRef.current = false;
       setIsRecording(false);
+      setTranscriptionStatus('idle');
       setSpeechRecognition(null);
       currentRecognitionRef.current = null;
       toast({
@@ -886,23 +903,94 @@ export function ChatInput() {
         variant: "destructive"
       });
     }
-  }, [toast, setInputValue]);
+  }, [toast, setInputValue, userLanguage]);
 
-  const stopRecording = useCallback(() => {
-    if (speechRecognition) {
-      // Clear the current recognition ref BEFORE stopping to prevent onend handler
-      // from running (since we're intentionally stopping)
+  // Main recording function - uses Whisper by default, falls back to Web Speech API
+  const startRecording = useCallback(async () => {
+    // Prevent race condition: use ref for synchronous check
+    if (isRecordingRef.current) {
+      return;
+    }
+
+    // Set ref IMMEDIATELY to block any concurrent calls
+    isRecordingRef.current = true;
+    setIsRecording(true);
+    setTranscriptionStatus('recording');
+    setRecordingDuration(0);
+    setTranscriptBeforeRecording(useChatUIStore.getState().inputValue);
+
+    // Start duration timer
+    const startTime = Date.now();
+    durationIntervalRef.current = setInterval(() => {
+      setRecordingDuration(Math.floor((Date.now() - startTime) / 1000));
+    }, 100);
+
+    // Use Web Speech API fallback for guest users (no API key for Whisper)
+    if (!isAuthenticated) {
+      setUseWebSpeechFallback(true);
+      startWebSpeechRecording();
+      return;
+    }
+
+    // Try Whisper (high-quality transcription)
+    try {
+      setUseWebSpeechFallback(false);
+      await whisperStartRecording();
+    } catch (error) {
+      console.error('Whisper recording failed, falling back to Web Speech API:', error);
+      // Fall back to Web Speech API
+      setUseWebSpeechFallback(true);
+      startWebSpeechRecording();
+    }
+  }, [isAuthenticated, whisperStartRecording, startWebSpeechRecording]);
+
+  // Stop recording and get transcription
+  const stopRecording = useCallback(async () => {
+    // Clear duration timer
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+      durationIntervalRef.current = null;
+    }
+
+    // Handle Web Speech API fallback mode
+    if (useWebSpeechFallback && speechRecognition) {
       currentRecognitionRef.current = null;
       speechRecognition.stop();
       setSpeechRecognition(null);
       isRecordingRef.current = false;
       setIsRecording(false);
+      setTranscriptionStatus('idle');
       setInterimTranscript('');
       setFinalTranscriptDuringRecording('');
       lastProcessedIndexRef.current = -1;
       accumulatedFinalTranscriptRef.current = '';
+      return;
     }
-  }, [speechRecognition]);
+
+    // Whisper mode - show transcribing state
+    setTranscriptionStatus('transcribing');
+    setIsRecording(false);
+
+    try {
+      const result = await whisperStopRecording();
+
+      if (result?.text) {
+        const currentValue = useChatUIStore.getState().inputValue;
+        const separator = currentValue && !currentValue.endsWith(' ') ? ' ' : '';
+        setInputValue(currentValue + separator + result.text.trim());
+      }
+    } catch (error) {
+      console.error('Whisper transcription failed:', error);
+      toast({
+        title: "Transcription failed",
+        description: "Unable to transcribe audio. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      isRecordingRef.current = false;
+      setTranscriptionStatus('idle');
+    }
+  }, [useWebSpeechFallback, speechRecognition, whisperStopRecording, setInputValue, toast]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) {
@@ -912,9 +1000,10 @@ export function ChatInput() {
     }
   }, [isRecording, startRecording, stopRecording]);
 
-  // Cleanup speech recognition on component unmount
+  // Cleanup speech recognition and recording resources on component unmount
   useEffect(() => {
     return () => {
+      // Clean up speech recognition
       if (speechRecognition) {
         try {
           speechRecognition.abort();
@@ -922,66 +1011,98 @@ export function ChatInput() {
           // Ignore errors during cleanup
         }
       }
+      // Clean up duration interval
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+        durationIntervalRef.current = null;
+      }
+      // Reset recording state
+      isRecordingRef.current = false;
     };
   }, [speechRecognition]);
 
   return (
     <>
-      {/* Recording Overlay - Full screen modal when recording */}
-      {isRecording && (
+      {/* Recording/Transcribing Overlay - Full screen modal */}
+      {(transcriptionStatus === 'recording' || transcriptionStatus === 'transcribing') && (
         <div className="recording-overlay">
           <div className="recording-overlay-content">
-            {/* Animated waveform */}
-            <div className="recording-waveform">
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-              <span className="recording-waveform-bar" />
-            </div>
+            {transcriptionStatus === 'recording' ? (
+              <>
+                {/* Animated waveform */}
+                <div className="recording-waveform">
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                  <span className="recording-waveform-bar" />
+                </div>
 
-            {/* Transcription text display */}
-            <div className="recording-transcript-container">
-              {/* Show what was already in the input before recording */}
-              {transcriptBeforeRecording && (
-                <span className="recording-transcript-existing">
-                  {transcriptBeforeRecording}{' '}
-                </span>
-              )}
-              {/* Show newly captured text (tracked separately to avoid doubling) */}
-              {finalTranscriptDuringRecording && (
-                <span className="recording-transcript-final">
-                  {finalTranscriptDuringRecording}{' '}
-                </span>
-              )}
-              {/* Show interim (in-progress) text */}
-              {interimTranscript && (
-                <span className="recording-transcript-interim">
-                  {interimTranscript}
-                </span>
-              )}
-              {/* Show placeholder if nothing captured yet */}
-              {!finalTranscriptDuringRecording && !interimTranscript && (
-                <span className="recording-transcript-placeholder">
-                  Listening...
-                </span>
-              )}
-            </div>
+                {/* Recording duration display */}
+                <div className="recording-duration text-2xl font-mono text-white mb-4">
+                  {formatDuration(recordingDuration)}
+                </div>
 
-            {/* Stop button */}
-            <Button
-              size="lg"
-              variant="destructive"
-              onClick={toggleRecording}
-              className="recording-stop-button"
-            >
-              <Square className="h-5 w-5 mr-2" />
-              Stop Recording
-            </Button>
+                {/* Transcription text display - only for Web Speech API fallback mode */}
+                {useWebSpeechFallback && (
+                  <div className="recording-transcript-container">
+                    {transcriptBeforeRecording && (
+                      <span className="recording-transcript-existing">
+                        {transcriptBeforeRecording}{' '}
+                      </span>
+                    )}
+                    {finalTranscriptDuringRecording && (
+                      <span className="recording-transcript-final">
+                        {finalTranscriptDuringRecording}{' '}
+                      </span>
+                    )}
+                    {interimTranscript && (
+                      <span className="recording-transcript-interim">
+                        {interimTranscript}
+                      </span>
+                    )}
+                    {!finalTranscriptDuringRecording && !interimTranscript && (
+                      <span className="recording-transcript-placeholder">
+                        Listening...
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Whisper mode status */}
+                {!useWebSpeechFallback && (
+                  <div className="recording-transcript-container">
+                    <span className="recording-transcript-placeholder">
+                      Recording... Speak now
+                    </span>
+                  </div>
+                )}
+
+                {/* Stop button */}
+                <Button
+                  size="lg"
+                  variant="destructive"
+                  onClick={toggleRecording}
+                  className="recording-stop-button"
+                >
+                  <Square className="h-5 w-5 mr-2" />
+                  Stop Recording
+                </Button>
+              </>
+            ) : (
+              <>
+                {/* Transcribing state - show spinner */}
+                <div className="flex flex-col items-center gap-4">
+                  <Loader2 className="h-12 w-12 animate-spin text-white" />
+                  <span className="text-xl text-white font-medium">Transcribing...</span>
+                  <span className="text-sm text-white/70">Using high-quality AI transcription</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -1043,224 +1164,390 @@ export function ChatInput() {
             )}
         </div>
 
-        <div className={cn("flex gap-2 bg-muted p-3 rounded-2xl border", isMultiline ? "items-end" : "items-center")}>
+        <div className="bg-muted p-3 rounded-2xl border">
             {/* Hidden Inputs */}
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
             <input ref={videoInputRef} type="file" accept="video/*" onChange={handleVideoSelect} className="hidden" />
             <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioSelect} className="hidden" />
             <input ref={documentInputRef} type="file" accept=".pdf,.doc,.docx,.txt,.md,.csv,.json,.xml" onChange={handleDocumentSelect} className="hidden" />
 
-            <div className={cn("flex gap-1", isMultiline ? "flex-col self-end" : "flex-row items-center")}>
-                {/* Combined "Add photos & files" dropdown with [+] button */}
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            size="icon"
-                            variant="ghost"
-                            title={enabledTools.length > 0 ? `Tools enabled: ${enabledTools.join(', ')}` : "Add photos & files"}
-                            className={cn(
-                                "h-10 w-10 rounded-full border hover:bg-accent relative",
-                                enabledTools.length > 0
-                                    ? "border-blue-500 bg-blue-500/10"
-                                    : "border-border"
-                            )}
-                        >
-                            <Plus className={cn(
-                                "h-5 w-5",
-                                enabledTools.length > 0 ? "text-blue-500" : "text-muted-foreground"
-                            )} />
-                            {/* Badge indicator when tools are enabled */}
-                            {enabledTools.length > 0 && (
-                                <span className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 rounded-full flex items-center justify-center text-[10px] text-white font-medium">
-                                    {enabledTools.length}
-                                </span>
-                            )}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" side="top" className="w-80 p-4">
-                        {/* Top row: Camera, Photos, Files */}
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+            {/* Mobile: Pills and action buttons above textarea */}
+            {isMobile && (
+                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/50">
+                    {/* Combined "Add photos & files" dropdown with [+] button */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                size="icon"
+                                variant="ghost"
+                                title={enabledTools.length > 0 ? `Tools enabled: ${enabledTools.join(', ')}` : "Add photos & files"}
+                                className={cn(
+                                    "h-9 w-9 rounded-full border hover:bg-accent relative flex-shrink-0",
+                                    enabledTools.length > 0
+                                        ? "border-blue-500 bg-blue-500/10"
+                                        : "border-border"
+                                )}
                             >
-                                <Camera className="h-6 w-6 mb-2 text-foreground" />
-                                <span className="text-sm font-medium">Camera</span>
-                            </button>
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
-                            >
-                                <ImageIcon className="h-6 w-6 mb-2 text-foreground" />
-                                <span className="text-sm font-medium">Photos</span>
-                            </button>
-                            <button
-                                onClick={() => documentInputRef.current?.click()}
-                                className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
-                            >
-                                <FileText className="h-6 w-6 mb-2 text-foreground" />
-                                <span className="text-sm font-medium">Files</span>
-                            </button>
-                        </div>
-                        {/* Divider */}
-                        <div className="border-t border-border mb-3" />
-                        {/* Additional options */}
-                        <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="py-3">
-                            <VideoIcon className="h-5 w-5 mr-3" />
-                            <div>
-                                <p className="font-medium">Upload video</p>
-                                <p className="text-xs text-muted-foreground">Add video files</p>
+                                <Plus className={cn(
+                                    "h-4 w-4",
+                                    enabledTools.length > 0 ? "text-blue-500" : "text-muted-foreground"
+                                )} />
+                                {/* Badge indicator when tools are enabled */}
+                                {enabledTools.length > 0 && (
+                                    <span className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 rounded-full flex items-center justify-center text-[10px] text-white font-medium">
+                                        {enabledTools.length}
+                                    </span>
+                                )}
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" side="top" className="w-80 p-4">
+                            {/* Top row: Camera, Photos, Files */}
+                            <div className="grid grid-cols-3 gap-3 mb-4">
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                >
+                                    <Camera className="h-6 w-6 mb-2 text-foreground" />
+                                    <span className="text-sm font-medium">Camera</span>
+                                </button>
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                >
+                                    <ImageIcon className="h-6 w-6 mb-2 text-foreground" />
+                                    <span className="text-sm font-medium">Photos</span>
+                                </button>
+                                <button
+                                    onClick={() => documentInputRef.current?.click()}
+                                    className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                >
+                                    <FileText className="h-6 w-6 mb-2 text-foreground" />
+                                    <span className="text-sm font-medium">Files</span>
+                                </button>
                             </div>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => audioInputRef.current?.click()} className="py-3">
-                            <AudioIcon className="h-5 w-5 mr-3" />
-                            <div>
-                                <p className="font-medium">Upload audio</p>
-                                <p className="text-xs text-muted-foreground">Add audio files</p>
-                            </div>
-                        </DropdownMenuItem>
-
-                        {/* Tools Section */}
-                        <div className="border-t border-border my-3" />
-                        <div className="px-1">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-2">
-                                Tools
-                            </p>
-                            {/* Web Search Toggle */}
-                            <div className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-accent transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                                        <Globe className="h-5 w-5 text-blue-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium">Web Search</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {selectedModel?.supportsTools
-                                                ? "Search for current info"
-                                                : "Search augmentation mode"}
-                                        </p>
-                                    </div>
+                            {/* Divider */}
+                            <div className="border-t border-border mb-3" />
+                            {/* Additional options */}
+                            <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="py-3">
+                                <VideoIcon className="h-5 w-5 mr-3" />
+                                <div>
+                                    <p className="font-medium">Upload video</p>
+                                    <p className="text-xs text-muted-foreground">Add video files</p>
                                 </div>
-                                <Switch
-                                    checked={enabledTools.includes('web_search')}
-                                    onCheckedChange={() => toggleTool('web_search')}
-                                    aria-label="Toggle web search"
-                                />
-                            </div>
-                            {/* Auto-enable search preference */}
-                            <div className="flex items-center justify-between py-2 px-2 mt-1 rounded-md hover:bg-accent transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                                        <Search className="h-5 w-5 text-purple-500" />
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium">Auto Search</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Auto-enable for relevant queries
-                                        </p>
-                                    </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => audioInputRef.current?.click()} className="py-3">
+                                <AudioIcon className="h-5 w-5 mr-3" />
+                                <div>
+                                    <p className="font-medium">Upload audio</p>
+                                    <p className="text-xs text-muted-foreground">Add audio files</p>
                                 </div>
-                                <Switch
-                                    checked={autoEnableSearch}
-                                    onCheckedChange={setAutoEnableSearch}
-                                    aria-label="Toggle auto search detection"
-                                />
+                            </DropdownMenuItem>
+
+                            {/* Tools Section */}
+                            <div className="border-t border-border my-3" />
+                            <div className="px-1">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-2">
+                                    Tools
+                                </p>
+                                {/* Web Search Toggle */}
+                                <div className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-accent transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                            <Globe className="h-5 w-5 text-blue-500" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium">Web Search</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {selectedModel?.supportsTools
+                                                    ? "Search for current info"
+                                                    : "Search augmentation mode"}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Switch
+                                        checked={enabledTools.includes('web_search')}
+                                        onCheckedChange={() => toggleTool('web_search')}
+                                        aria-label="Toggle web search"
+                                    />
+                                </div>
+                                {/* Auto-enable search preference */}
+                                <div className="flex items-center justify-between py-2 px-2 mt-1 rounded-md hover:bg-accent transition-colors">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                            <Search className="h-5 w-5 text-purple-500" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium">Auto Search</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                Auto-enable for relevant queries
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Switch
+                                        checked={autoEnableSearch}
+                                        onCheckedChange={setAutoEnableSearch}
+                                        aria-label="Toggle auto search detection"
+                                    />
+                                </div>
                             </div>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Microphone button for speech-to-text */}
+                    <Button
+                        size="icon"
+                        variant={isRecording ? "destructive" : "ghost"}
+                        onClick={toggleRecording}
+                        title={isRecording ? "Stop recording" : "Start voice input"}
+                        className={cn("h-9 w-9 flex-shrink-0", isRecording && "animate-pulse")}
+                    >
+                        {isRecording ? (
+                            <Square className="h-4 w-4" />
+                        ) : (
+                            <Mic className="h-4 w-4 text-muted-foreground" />
+                        )}
+                    </Button>
+
+                    {/* Pill indicators for enabled tools */}
+                    {enabledTools.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 flex-1">
+                            {enabledTools.includes('web_search') && (
+                                <button
+                                    onClick={() => toggleTool('web_search')}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 transition-colors"
+                                    title="Click to disable web search"
+                                >
+                                    <Globe className="h-3 w-3" />
+                                    <span>Search</span>
+                                    <X className="h-3 w-3 opacity-60 hover:opacity-100" />
+                                </button>
+                            )}
                         </div>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-
-                {/* Microphone button for speech-to-text */}
-                <Button
-                    size="icon"
-                    variant={isRecording ? "destructive" : "ghost"}
-                    onClick={toggleRecording}
-                    title={isRecording ? "Stop recording" : "Start voice input"}
-                    className={cn(isRecording && "animate-pulse")}
-                >
-                    {isRecording ? (
-                        <Square className="h-4 w-4" />
-                    ) : (
-                        <Mic className="h-5 w-5 text-muted-foreground" />
-                    )}
-                </Button>
-            </div>
-
-            {/* Pill indicators for enabled tools */}
-            {enabledTools.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                    {enabledTools.includes('web_search') && (
-                        <button
-                            onClick={() => toggleTool('web_search')}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 transition-colors"
-                            title="Click to disable web search"
-                        >
-                            <Globe className="h-3 w-3" />
-                            <span>Search</span>
-                            <X className="h-3 w-3 opacity-60 hover:opacity-100" />
-                        </button>
                     )}
                 </div>
             )}
 
-            <textarea
-                ref={textareaRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                    }
-                }}
-                placeholder="Ask Gatewayz"
-                className="flex-1 border-0 bg-background focus-visible:ring-0 min-h-[48px] max-h-[150px] py-3 px-3 text-base resize-none overflow-y-auto rounded-xl"
-                disabled={isStreaming}
-                enterKeyHint="send"
-                rows={1}
-                data-testid="chat-textarea"
-            />
+            {/* Main input row */}
+            <div className={cn("flex gap-2", isMultiline ? "items-end" : "items-center")}>
+                {/* Desktop: Pills and action buttons inline with textarea */}
+                {!isMobile && (
+                    <>
+                        <div className={cn("flex gap-1", isMultiline ? "flex-col self-end" : "flex-row items-center")}>
+                            {/* Combined "Add photos & files" dropdown with [+] button */}
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        size="icon"
+                                        variant="ghost"
+                                        title={enabledTools.length > 0 ? `Tools enabled: ${enabledTools.join(', ')}` : "Add photos & files"}
+                                        className={cn(
+                                            "h-10 w-10 rounded-full border hover:bg-accent relative",
+                                            enabledTools.length > 0
+                                                ? "border-blue-500 bg-blue-500/10"
+                                                : "border-border"
+                                        )}
+                                    >
+                                        <Plus className={cn(
+                                            "h-5 w-5",
+                                            enabledTools.length > 0 ? "text-blue-500" : "text-muted-foreground"
+                                        )} />
+                                        {/* Badge indicator when tools are enabled */}
+                                        {enabledTools.length > 0 && (
+                                            <span className="absolute -top-1 -right-1 h-4 w-4 bg-blue-500 rounded-full flex items-center justify-center text-[10px] text-white font-medium">
+                                                {enabledTools.length}
+                                            </span>
+                                        )}
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" side="top" className="w-80 p-4">
+                                    {/* Top row: Camera, Photos, Files */}
+                                    <div className="grid grid-cols-3 gap-3 mb-4">
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                        >
+                                            <Camera className="h-6 w-6 mb-2 text-foreground" />
+                                            <span className="text-sm font-medium">Camera</span>
+                                        </button>
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                        >
+                                            <ImageIcon className="h-6 w-6 mb-2 text-foreground" />
+                                            <span className="text-sm font-medium">Photos</span>
+                                        </button>
+                                        <button
+                                            onClick={() => documentInputRef.current?.click()}
+                                            className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted hover:bg-accent transition-colors"
+                                        >
+                                            <FileText className="h-6 w-6 mb-2 text-foreground" />
+                                            <span className="text-sm font-medium">Files</span>
+                                        </button>
+                                    </div>
+                                    {/* Divider */}
+                                    <div className="border-t border-border mb-3" />
+                                    {/* Additional options */}
+                                    <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="py-3">
+                                        <VideoIcon className="h-5 w-5 mr-3" />
+                                        <div>
+                                            <p className="font-medium">Upload video</p>
+                                            <p className="text-xs text-muted-foreground">Add video files</p>
+                                        </div>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => audioInputRef.current?.click()} className="py-3">
+                                        <AudioIcon className="h-5 w-5 mr-3" />
+                                        <div>
+                                            <p className="font-medium">Upload audio</p>
+                                            <p className="text-xs text-muted-foreground">Add audio files</p>
+                                        </div>
+                                    </DropdownMenuItem>
 
-            {isStreaming ? (
-                <Button
-                    type="button"
-                    size="icon"
-                    variant="destructive"
-                    onPointerDown={(e) => {
-                        // Prevent focus loss on mobile which can cause state sync issues
-                        e.preventDefault();
+                                    {/* Tools Section */}
+                                    <div className="border-t border-border my-3" />
+                                    <div className="px-1">
+                                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-2">
+                                            Tools
+                                        </p>
+                                        {/* Web Search Toggle */}
+                                        <div className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-accent transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-9 w-9 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                                    <Globe className="h-5 w-5 text-blue-500" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Web Search</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {selectedModel?.supportsTools
+                                                            ? "Search for current info"
+                                                            : "Search augmentation mode"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={enabledTools.includes('web_search')}
+                                                onCheckedChange={() => toggleTool('web_search')}
+                                                aria-label="Toggle web search"
+                                            />
+                                        </div>
+                                        {/* Auto-enable search preference */}
+                                        <div className="flex items-center justify-between py-2 px-2 mt-1 rounded-md hover:bg-accent transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                                    <Search className="h-5 w-5 text-purple-500" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">Auto Search</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        Auto-enable for relevant queries
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <Switch
+                                                checked={autoEnableSearch}
+                                                onCheckedChange={setAutoEnableSearch}
+                                                aria-label="Toggle auto search detection"
+                                            />
+                                        </div>
+                                    </div>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+
+                            {/* Microphone button for speech-to-text */}
+                            <Button
+                                size="icon"
+                                variant={isRecording ? "destructive" : "ghost"}
+                                onClick={toggleRecording}
+                                title={isRecording ? "Stop recording" : "Start voice input"}
+                                className={cn(isRecording && "animate-pulse")}
+                            >
+                                {isRecording ? (
+                                    <Square className="h-4 w-4" />
+                                ) : (
+                                    <Mic className="h-5 w-5 text-muted-foreground" />
+                                )}
+                            </Button>
+                        </div>
+
+                        {/* Pill indicators for enabled tools */}
+                        {enabledTools.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                                {enabledTools.includes('web_search') && (
+                                    <button
+                                        onClick={() => toggleTool('web_search')}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-full text-xs font-medium text-blue-600 dark:text-blue-400 transition-colors"
+                                        title="Click to disable web search"
+                                    >
+                                        <Globe className="h-3 w-3" />
+                                        <span>Search</span>
+                                        <X className="h-3 w-3 opacity-60 hover:opacity-100" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </>
+                )}
+
+                <textarea
+                    ref={textareaRef}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSend();
+                        }
                     }}
-                    onClick={(e) => {
-                        e.preventDefault();
-                        handleStop();
-                    }}
-                    title="Stop generating"
-                >
-                    <Square className="h-4 w-4" />
-                </Button>
-            ) : (
-                <Button
-                    type="button"
-                    size="icon"
-                    onPointerDown={(e) => {
-                        // Prevent focus loss on mobile which can cause state sync issues
-                        e.preventDefault();
-                    }}
-                    onClick={(e) => {
-                        // Prevent any default behavior that might interfere
-                        e.preventDefault();
-                        handleSend();
-                    }}
-                    disabled={isSearching || (isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument)}
-                    className="bg-primary"
-                >
-                    {isSearching ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                        <Send className="h-4 w-4" />
-                    )}
-                </Button>
-            )}
+                    placeholder="Ask Gatewayz"
+                    className="flex-1 border-0 bg-background focus-visible:ring-0 min-h-[48px] max-h-[150px] py-3 px-3 text-base resize-none overflow-y-auto rounded-xl"
+                    style={{ minHeight: `${minTextareaHeight}px` }}
+                    disabled={isStreaming}
+                    enterKeyHint="send"
+                    rows={1}
+                    data-testid="chat-textarea"
+                />
+
+                {isStreaming ? (
+                    <Button
+                        type="button"
+                        size="icon"
+                        variant="destructive"
+                        onPointerDown={(e) => {
+                            // Prevent focus loss on mobile which can cause state sync issues
+                            e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            handleStop();
+                        }}
+                        title="Stop generating"
+                        className={cn(isMobile && "h-10 w-10")}
+                    >
+                        <Square className="h-4 w-4" />
+                    </Button>
+                ) : (
+                    <Button
+                        type="button"
+                        size="icon"
+                        onPointerDown={(e) => {
+                            // Prevent focus loss on mobile which can cause state sync issues
+                            e.preventDefault();
+                        }}
+                        onClick={(e) => {
+                            // Prevent any default behavior that might interfere
+                            e.preventDefault();
+                            handleSend();
+                        }}
+                        disabled={isSearching || isCheckingSearch || (isInputEmpty && !selectedImage && !selectedVideo && !selectedAudio && !selectedDocument)}
+                        className={cn("bg-primary", isMobile && "h-10 w-10")}
+                    >
+                        {isSearching || isCheckingSearch ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <Send className="h-4 w-4" />
+                        )}
+                    </Button>
+                )}
+            </div>
         </div>
       </div>
     </div>

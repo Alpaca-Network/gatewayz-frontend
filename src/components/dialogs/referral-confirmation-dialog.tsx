@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CheckCircle, Mail, Share2 } from "lucide-react";
 import Link from 'next/link';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 const REFERRAL_CONFIRMATION_SHOWN_KEY = 'gatewayz_referral_confirmation_shown';
 
@@ -26,7 +27,7 @@ export function ReferralConfirmationDialog({ newRefereeName }: { newRefereeName?
 
   useEffect(() => {
     // Check if we should show the confirmation
-    const shown = localStorage.getItem(REFERRAL_CONFIRMATION_SHOWN_KEY);
+    const shown = safeLocalStorageGet(REFERRAL_CONFIRMATION_SHOWN_KEY);
     if (shown === 'true') {
       return;
     }
@@ -45,7 +46,7 @@ export function ReferralConfirmationDialog({ newRefereeName }: { newRefereeName?
   }, [newRefereeName]);
 
   const handleClose = () => {
-    localStorage.setItem(REFERRAL_CONFIRMATION_SHOWN_KEY, 'true');
+    safeLocalStorageSet(REFERRAL_CONFIRMATION_SHOWN_KEY, 'true');
     setShowDialog(false);
   };
 

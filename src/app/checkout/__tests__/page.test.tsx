@@ -45,12 +45,16 @@ jest.mock('@/components/ui/button', () => ({
 }));
 
 jest.mock('@/components/ui/input', () => ({
-  Input: ({ value, readOnly, className }: any) => (
+  Input: ({ value, readOnly, className, type, min, max, onChange }: any) => (
     <input
       data-testid="input"
       value={value}
       readOnly={readOnly}
       className={className}
+      type={type}
+      min={min}
+      max={max}
+      onChange={onChange}
     />
   ),
 }));
@@ -75,6 +79,8 @@ jest.mock('lucide-react', () => ({
   Check: () => <span data-testid="icon-check">Check</span>,
   Shield: () => <span data-testid="icon-shield">Shield</span>,
   Zap: () => <span data-testid="icon-zap">Zap</span>,
+  Minus: () => <span data-testid="icon-minus">Minus</span>,
+  Plus: () => <span data-testid="icon-plus">Plus</span>,
 }));
 
 // Mock the API module
@@ -113,6 +119,27 @@ jest.mock('@/lib/pricing-config', () => ({
       ctaText: 'Get Started',
       stripePriceId: 'price_test_pro',
       stripeProductId: 'prod_test_pro',
+    },
+    max: {
+      id: 'max',
+      name: 'Max',
+      description: 'Higher limits, priority access',
+      price: '$75',
+      priceValue: 75,
+      originalPrice: '$150/month',
+      discount: 'Save 50%',
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100',
+      features: [
+        '50% discount on $150 credits',
+        '10x more usage than Pro',
+        'Higher output limits for all tasks',
+        'Early access to advanced features',
+      ],
+      ctaText: 'Get Started',
+      popular: true,
+      stripePriceId: 'price_test_max',
+      stripeProductId: 'prod_test_max',
     },
   },
   creditPackages: {
@@ -364,5 +391,149 @@ describe('CheckoutPage - Credit package mode', () => {
       // The page should load with the subscription mode by default
       expect(screen.getByText('Confirm Your Order')).toBeInTheDocument();
     });
+  });
+});
+
+describe('CheckoutPage - Quantity selector', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetUserData.mockReturnValue({
+      user_id: 1,
+      api_key: 'test-api-key',
+      email: 'test@example.com',
+    });
+    mockMakeAuthenticatedRequest.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
+    });
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ url: 'https://checkout.stripe.com/test' }),
+    });
+  });
+
+  it('should render quantity selector for subscription plans', async () => {
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Number of Licenses')).toBeInTheDocument();
+    });
+  });
+
+  it('should render increment and decrement buttons', async () => {
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('icon-minus')).toBeInTheDocument();
+      expect(screen.getByTestId('icon-plus')).toBeInTheDocument();
+    });
+  });
+
+  it('should display quantity input with default value of 1', async () => {
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      const inputs = screen.getAllByTestId('input');
+      const quantityInput = inputs.find(input =>
+        (input as HTMLInputElement).type === 'number'
+      );
+      expect(quantityInput).toBeInTheDocument();
+      expect((quantityInput as HTMLInputElement).value).toBe('1');
+    });
+  });
+});
+
+describe('CheckoutPage - Plan switcher', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetUserData.mockReturnValue({
+      user_id: 1,
+      api_key: 'test-api-key',
+      email: 'test@example.com',
+    });
+    mockMakeAuthenticatedRequest.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
+    });
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ url: 'https://checkout.stripe.com/test' }),
+    });
+  });
+
+  it('should render plan selection options', async () => {
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Select Plan')).toBeInTheDocument();
+    });
+  });
+
+  it('should display available tier options', async () => {
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      // Both Pro and Max tiers should be shown as options
+      expect(screen.getByText('Pro')).toBeInTheDocument();
+      expect(screen.getByText('Max')).toBeInTheDocument();
+    });
+  });
+
+  it('should allow switching between plans without page reload', async () => {
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      // Initially showing Pro plan details
+      expect(screen.getByText('Pro Plan')).toBeInTheDocument();
+    });
+
+    // Find the Max button and click it
+    const maxButton = screen.getByText('Max').closest('button');
+    if (maxButton) {
+      fireEvent.click(maxButton);
+    }
+
+    await waitFor(() => {
+      // Should now show Max plan details
+      expect(screen.getByText('Max Plan')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('CheckoutPage - Fast loading (no auth polling)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetUserData.mockReturnValue({
+      user_id: 1,
+      api_key: 'test-api-key',
+      email: 'test@example.com',
+    });
+    mockMakeAuthenticatedRequest.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
+    });
+  });
+
+  it('should render content immediately without waiting for auth polling', async () => {
+    const startTime = Date.now();
+    render(<CheckoutPage />);
+
+    // Content should be available quickly (< 100ms, not 2.5s from old polling)
+    await waitFor(() => {
+      expect(screen.getByText('Confirm Your Order')).toBeInTheDocument();
+    }, { timeout: 500 });
+
+    const endTime = Date.now();
+    expect(endTime - startTime).toBeLessThan(1000); // Should load in under 1 second
+  });
+
+  it('should show Proceed to Payment button immediately when authenticated', async () => {
+    render(<CheckoutPage />);
+
+    // Button should be immediately available, not disabled due to loading
+    await waitFor(() => {
+      const proceedButton = screen.getByText('Proceed to Payment');
+      expect(proceedButton).not.toBeDisabled();
+    }, { timeout: 500 });
   });
 });

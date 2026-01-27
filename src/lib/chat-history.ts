@@ -25,6 +25,7 @@ export interface ChatMessage {
   created_at: string; // ISO 8601 format
   // Extended fields
   reasoning?: string;
+  isReasoningStreaming?: boolean;
   image?: string;
   video?: string;
   audio?: string;

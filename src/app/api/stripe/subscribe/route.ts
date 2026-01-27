@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { priceId, productId, userEmail, userId, apiKey, tier, plan } = await req.json();
+    const { priceId, productId, userEmail, userId, apiKey, tier, plan, quantity = 1 } = await req.json();
 
     const normalizedEmail = typeof userEmail === 'string' && userEmail.includes('@') && !userEmail.startsWith('did:privy:')
       ? userEmail
@@ -46,13 +46,17 @@ export async function POST(req: NextRequest) {
     // Get the frontend URL - force beta.gatewayz.ai for Stripe redirects
     const frontendUrl = 'https://beta.gatewayz.ai';
 
+    // Validate and clamp quantity
+    const validQuantity = Math.max(1, Math.min(100, typeof quantity === 'number' ? quantity : 1));
+
     const requestBody = {
       price_id: priceId,
       product_id: productId, // Stripe Product ID to store in database (prod_TKOqQPhVRxNp4Q or prod_TKOraBpWMxMAIu)
       customer_email: normalizedEmail,
-      success_url: `${frontendUrl}/checkout/success?tier=${tier || 'pro'}${plan ? `&plan=${encodeURIComponent(plan)}` : ''}&session_id={{CHECKOUT_SESSION_ID}}`,
+      success_url: `${frontendUrl}/checkout/success?tier=${tier || 'pro'}${plan ? `&plan=${encodeURIComponent(plan)}` : ''}${validQuantity > 1 ? `&quantity=${validQuantity}` : ''}&session_id={{CHECKOUT_SESSION_ID}}`,
       cancel_url: `${frontendUrl}/settings/credits`,
       mode: 'subscription', // Subscription mode instead of payment
+      quantity: validQuantity, // Number of licenses/seats
       ...(tier && { tier }), // Pass tier for subscription metadata tracking
     };
 

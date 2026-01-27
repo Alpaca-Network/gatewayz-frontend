@@ -52,14 +52,14 @@ export const tierConfigs: Record<string, TierConfig> = {
     id: 'pro',
     name: 'Pro',
     description: 'Scale with confidence',
-    price: '$10',
-    priceValue: 10,
-    originalPrice: '$20/month',
-    discount: 'Save 50%',
+    price: '$8',
+    priceValue: 8,
+    originalPrice: '$10/month',
+    discount: 'Save 20%',
     color: 'text-blue-600',
     bgColor: 'bg-blue-100',
     features: [
-      '50% discount on first $10 credits',
+      '$15 monthly credit allowance',
       'Access to 10,000+ models',
       'Smart cost optimization',
       'Advanced analytics',
@@ -135,6 +135,13 @@ export const creditPackages: Record<string, CreditPackage> = {
     creditValue: 250,
     price: 175,
     discount: '30% off',
+  },
+  custom: {
+    id: 'custom',
+    name: 'Custom',
+    creditValue: 0, // Will be set dynamically
+    price: 0, // Will be set dynamically
+    discount: 'No discount',
   },
 };
 

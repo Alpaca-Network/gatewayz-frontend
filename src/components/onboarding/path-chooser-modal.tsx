@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 import { Code2, Terminal, MessageSquare, ChevronDown } from 'lucide-react';
 import { usePrivy } from '@privy-io/react-auth';
 import posthog from 'posthog-js';
+import { safeLocalStorageSet } from '@/lib/safe-storage';
 
 interface PathChooserModalProps {
   open: boolean;
@@ -30,7 +31,7 @@ export function PathChooserModal({ open, onOpenChange }: PathChooserModalProps) 
       // For API, Claude Code, and OpenCode, require auth first
       login();
       // Store the intended path in localStorage to redirect after auth
-      localStorage.setItem('onboarding_path', path);
+      safeLocalStorageSet('onboarding_path', path);
       onOpenChange(false);
     } else {
       // Navigate to the selected path

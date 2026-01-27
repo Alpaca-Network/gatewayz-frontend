@@ -150,10 +150,15 @@ describe('trackConversion', () => {
 
 describe('trackSignupConversion', () => {
   beforeEach(() => {
+    jest.useFakeTimers();
     delete (window as any).gtag;
   });
 
-  it('should call gtag with the correct sign-up conversion ID', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('should call gtag with the correct sign-up conversion ID (no callback)', () => {
     const mockGtag = jest.fn();
     (window as any).gtag = mockGtag;
 
@@ -161,11 +166,10 @@ describe('trackSignupConversion', () => {
 
     expect(mockGtag).toHaveBeenCalledWith('event', 'conversion', {
       'send_to': 'AW-17515449277/2RATCOzWnZAbEL2XgqBB',
-      'event_callback': undefined,
     });
   });
 
-  it('should include callback when provided', () => {
+  it('should call gtag with wrapped callback when provided', () => {
     const mockGtag = jest.fn();
     (window as any).gtag = mockGtag;
     const callback = jest.fn();
@@ -174,19 +178,111 @@ describe('trackSignupConversion', () => {
 
     expect(mockGtag).toHaveBeenCalledWith('event', 'conversion', {
       'send_to': 'AW-17515449277/2RATCOzWnZAbEL2XgqBB',
-      'event_callback': callback,
+      'event_callback': expect.any(Function),
     });
   });
 
-  it('should execute callback if gtag is not available', () => {
+  it('should execute callback when gtag calls event_callback', () => {
+    const mockGtag = jest.fn();
+    (window as any).gtag = mockGtag;
     const callback = jest.fn();
 
     trackSignupConversion(callback);
 
-    expect(callback).toHaveBeenCalled();
+    // Simulate gtag calling the event_callback
+    const eventCallback = mockGtag.mock.calls[0][2]['event_callback'];
+    eventCallback();
+
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('should execute callback via timeout fallback if gtag never calls event_callback (adblocker scenario)', () => {
+    const mockGtag = jest.fn();
+    (window as any).gtag = mockGtag;
+    const callback = jest.fn();
+
+    trackSignupConversion(callback);
+
+    // Callback should not be called immediately
+    expect(callback).not.toHaveBeenCalled();
+
+    // Fast-forward past the timeout
+    jest.advanceTimersByTime(1000);
+
+    // Callback should now be executed via timeout fallback
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not execute callback twice if gtag calls event_callback after timeout', () => {
+    const mockGtag = jest.fn();
+    (window as any).gtag = mockGtag;
+    const callback = jest.fn();
+
+    trackSignupConversion(callback);
+
+    // Fast-forward past the timeout (callback executes via fallback)
+    jest.advanceTimersByTime(1000);
+    expect(callback).toHaveBeenCalledTimes(1);
+
+    // Simulate late gtag callback
+    const eventCallback = mockGtag.mock.calls[0][2]['event_callback'];
+    eventCallback();
+
+    // Callback should still only be called once
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not execute callback twice if event_callback is called before timeout', () => {
+    const mockGtag = jest.fn();
+    (window as any).gtag = mockGtag;
+    const callback = jest.fn();
+
+    trackSignupConversion(callback);
+
+    // Simulate gtag calling event_callback before timeout
+    const eventCallback = mockGtag.mock.calls[0][2]['event_callback'];
+    eventCallback();
+    expect(callback).toHaveBeenCalledTimes(1);
+
+    // Fast-forward past the timeout
+    jest.advanceTimersByTime(1000);
+
+    // Callback should still only be called once
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('should execute callback immediately if gtag is not available', () => {
+    const callback = jest.fn();
+
+    trackSignupConversion(callback);
+
+    // Callback should be executed immediately (no need to wait for timeout)
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
+
+  it('should execute callback immediately if gtag throws an error (modified by adblocker)', () => {
+    const mockGtag = jest.fn().mockImplementation(() => {
+      throw new Error('gtag blocked');
+    });
+    (window as any).gtag = mockGtag;
+    const callback = jest.fn();
+
+    trackSignupConversion(callback);
+
+    // Callback should be executed immediately despite gtag error
+    expect(callback).toHaveBeenCalledTimes(1);
   });
 
   it('should not throw if gtag is not defined and no callback', () => {
+    expect(() => trackSignupConversion()).not.toThrow();
+  });
+
+  it('should not throw if gtag throws and no callback', () => {
+    const mockGtag = jest.fn().mockImplementation(() => {
+      throw new Error('gtag blocked');
+    });
+    (window as any).gtag = mockGtag;
+
     expect(() => trackSignupConversion()).not.toThrow();
   });
 

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { safeSessionStorage } from '@/lib/safe-session-storage';
 import { getUserData } from '@/lib/api';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 interface OnboardingTask {
   id: string;
@@ -38,7 +39,7 @@ export function OnboardingBanner() {
     }
 
     // Check if onboarding is completed
-    const completed = localStorage.getItem('gatewayz_onboarding_completed');
+    const completed = safeLocalStorageGet('gatewayz_onboarding_completed');
     if (completed) {
       setVisible(false);
       return;
@@ -51,7 +52,7 @@ export function OnboardingBanner() {
     }
 
     // Load task completion state
-    const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
+    const savedTasks = safeLocalStorageGet('gatewayz_onboarding_tasks');
     const taskState = savedTasks ? JSON.parse(savedTasks) : {};
 
     const taskList: OnboardingTask[] = [
@@ -60,6 +61,12 @@ export function OnboardingBanner() {
         title: 'Welcome to Gatewayz',
         path: '/onboarding',
         completed: taskState.welcome || true,
+      },
+      {
+        id: 'apikey',
+        title: 'Create Your API Key',
+        path: '/settings/keys',
+        completed: taskState.apikey || false,
       },
       {
         id: 'chat',

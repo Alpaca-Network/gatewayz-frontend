@@ -41,21 +41,24 @@ export const TIER_CONFIG = {
     name: 'Basic',
     description: 'Pay-per-use credits',
     monthlyPrice: null, // Pay per use
-    creditAllocation: 0, // No monthly allocation
+    creditAllocation: 0, // No monthly allocation (legacy field)
+    monthlyAllowance: 0, // No subscription allowance
     isSubscription: false,
   },
   pro: {
     name: 'Pro',
-    description: '$10/month subscription',
-    monthlyPrice: 1000, // $10.00 in cents
-    creditAllocation: 0, // Credits determined by separate balance
+    description: '$8/month subscription',
+    monthlyPrice: 800, // $8.00 in cents
+    creditAllocation: 1000, // Legacy - keep for backward compatibility
+    monthlyAllowance: 1500, // $15.00 in cents - NEW: actual monthly allowance
     isSubscription: true,
   },
   max: {
     name: 'Max',
     description: '$75/month subscription',
     monthlyPrice: 7500, // $75.00 in cents
-    creditAllocation: 15000, // $150 equivalent in credits
+    creditAllocation: 15000, // Legacy - keep for backward compatibility
+    monthlyAllowance: 15000, // $150.00 in cents - monthly allowance
     isSubscription: true,
   },
 } as const;
@@ -154,7 +157,8 @@ export const hasActiveSubscription = (userData: UserData | null): boolean => {
 };
 
 // Trial users start with 3 credits - if they have more, they've purchased credits
-const TRIAL_CREDIT_THRESHOLD = 3;
+// Trial credits threshold in cents ($5 = 500 cents)
+const TRIAL_CREDIT_THRESHOLD = 500;
 
 /**
  * Checks if a user has purchased credits (more than trial amount)
@@ -165,7 +169,7 @@ export const hasPurchasedCredits = (userData: UserData | null): boolean => {
   if (!userData) {
     return false;
   }
-  // Credits > 3 indicates user has added payment beyond initial trial credits
+  // Credits > 500 cents ($5) indicates user has added payment beyond initial trial credits
   return (userData.credits ?? 0) > TRIAL_CREDIT_THRESHOLD;
 };
 
@@ -343,4 +347,23 @@ export const formatSubscriptionStatus = (status: SubscriptionStatus | undefined)
     default:
       return 'Unknown';
   }
+};
+
+/**
+ * Get the monthly subscription allowance for a tier in dollars
+ */
+export const getMonthlyAllowance = (tier: UserTier): number => {
+  return TIER_CONFIG[tier].monthlyAllowance / 100;
+};
+
+/**
+ * Calculate remaining allowance percentage
+ */
+export const getAllowancePercentage = (
+  subscriptionAllowance: number,
+  tier: UserTier
+): number => {
+  const maxAllowance = getMonthlyAllowance(tier);
+  if (maxAllowance <= 0) return 0;
+  return Math.min(100, Math.max(0, (subscriptionAllowance / maxAllowance) * 100));
 };

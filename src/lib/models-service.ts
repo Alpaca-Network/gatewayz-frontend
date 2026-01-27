@@ -244,8 +244,9 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
   const allModels: any[] = [];
   const requestLimit = limit || 50000; // Request up to 50k models per page (backend limit)
   // Use centralized PRIORITY_GATEWAYS for fast gateway detection
-  // Increased timeouts to handle slow gateways: 5000ms for fast, 30000ms for slow (HuggingFace needs more time)
-  const timeoutMs = PRIORITY_GATEWAYS.includes(gateway) ? 5000 : 30000;
+  // Timeouts: 10s for 'all' (aggregated endpoint), 5s for fast gateways, 30s for slow (HuggingFace)
+  // The 'all' endpoint should be fast since backend handles aggregation
+  const timeoutMs = gateway === 'all' ? 10000 : (PRIORITY_GATEWAYS.includes(gateway) ? 5000 : 30000);
 
   let offset = 0;
   let hasMore = true;

@@ -1,33 +1,17 @@
 import type { Metadata } from 'next';
+import { inboxMetadata } from './metadata';
+import { InboxLayoutClient } from './inbox-layout-client';
 
-export const metadata: Metadata = {
-  title: 'AI Agent Inbox | Gatewayz x Terragon',
-  description: 'AI Agent Inbox - Intelligent automation powered by Gatewayz and Terragon partnership.',
-  openGraph: {
-    type: 'website',
-    locale: 'en_US',
-    url: 'https://beta.gatewayz.ai/inbox',
-    siteName: 'Gatewayz',
-    title: 'AI Agent Inbox | Gatewayz x Terragon',
-    description: 'AI Agent Inbox - Intelligent automation powered by Gatewayz and Terragon partnership.',
-    images: [
-      {
-        url: '/og-inbox.jpg',
-        width: 1200,
-        height: 630,
-        alt: 'Gatewayz x Terragon - AI Agent Inbox',
-        type: 'image/jpeg',
-      },
-    ],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'AI Agent Inbox | Gatewayz x Terragon',
-    description: 'AI Agent Inbox - Intelligent automation powered by Gatewayz and Terragon partnership.',
-    images: ['/og-inbox.jpg'],
-    creator: '@gatewayz_ai',
-  },
-};
+export const metadata: Metadata = inboxMetadata;
 
-// Re-export the agent layout to ensure consistent behavior
-export { default } from '../agent/layout';
+/**
+ * Inbox layout (server component) that exports metadata for OG tags
+ * and wraps the client-side layout for DOM manipulation.
+ */
+export default function InboxLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <InboxLayoutClient>{children}</InboxLayoutClient>;
+}

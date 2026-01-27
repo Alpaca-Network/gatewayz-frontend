@@ -4,7 +4,22 @@ import { PricingSection } from '../pricing-section';
 
 // Mock the api module
 jest.mock('@/lib/api', () => ({
-  getUserData: jest.fn(),
+  getUserData: jest.fn().mockReturnValue(null),
+}));
+
+// Mock useTier hook
+jest.mock('@/hooks/use-tier', () => ({
+  useTier: () => ({
+    tier: 'basic',
+    hasSubscription: false,
+    tierInfo: null,
+    subscriptionStatusText: null,
+    renewalDate: null,
+    isTrial: false,
+    trialExpired: false,
+    trialExpirationDate: null,
+    userData: null,
+  }),
 }));
 
 // Mock UI components
@@ -47,44 +62,43 @@ describe('PricingSection', () => {
     expect(screen.getByText('Enterprise')).toBeInTheDocument();
   });
 
-  it('renders Enterprise tier with Get Started button', () => {
+  it('renders pricing tier buttons', () => {
+    render(<PricingSection />);
+
+    // For unauthenticated user, buttons should show:
+    // - "Get Started" for Starter, Pro, Max
+    // - "Contact Sales" for Enterprise
+    const getStartedButtons = screen.getAllByRole('button', { name: /get started/i });
+    const contactButton = screen.getByRole('button', { name: /contact sales/i });
+
+    // Should have 3 "Get Started" buttons and 1 "Contact Sales"
+    expect(getStartedButtons.length).toBe(3);
+    expect(contactButton).toBeInTheDocument();
+  });
+
+  it('renders Contact Sales button for Enterprise', () => {
+    render(<PricingSection />);
+
+    // Find Contact Sales button for Enterprise
+    const enterpriseButton = screen.getByRole('button', { name: /contact sales/i });
+    expect(enterpriseButton).toBeInTheDocument();
+  });
+
+  it('renders Get Started buttons for non-Enterprise tiers', () => {
     render(<PricingSection />);
 
     // Find all Get Started buttons
     const buttons = screen.getAllByRole('button', { name: /get started/i });
-    // Should have 4 buttons (one for each tier)
-    expect(buttons.length).toBe(4);
-  });
 
-  it('calls handleGetStarted when Enterprise tier button is clicked', () => {
-    render(<PricingSection />);
-
-    // Find all Get Started buttons and click the one for Enterprise (last one)
-    const buttons = screen.getAllByRole('button', { name: /get started/i });
-    const enterpriseButton = buttons[buttons.length - 1]; // Enterprise is the last tier
-
-    // Click should not throw - this verifies the Enterprise branch of handleGetStarted executes
-    // Note: window.location.href assertion skipped due to JSDOM limitations
-    expect(() => fireEvent.click(enterpriseButton)).not.toThrow();
-  });
-
-  it('calls handleGetStarted when Starter tier button is clicked', () => {
-    render(<PricingSection />);
-
-    // Find all Get Started buttons and click the first one (Starter)
-    const buttons = screen.getAllByRole('button', { name: /get started/i });
-    const starterButton = buttons[0];
-
-    // Click should not throw - this verifies the Starter branch of handleGetStarted executes
-    // Note: window.location.href assertion skipped due to JSDOM limitations
-    expect(() => fireEvent.click(starterButton)).not.toThrow();
+    // Starter, Pro, Max should all have Get Started buttons
+    expect(buttons.length).toBe(3);
   });
 
   it('displays correct pricing for each tier', () => {
     render(<PricingSection />);
 
     expect(screen.getByText('$0')).toBeInTheDocument();
-    expect(screen.getByText('$10')).toBeInTheDocument();
+    expect(screen.getByText('$8')).toBeInTheDocument();
     expect(screen.getByText('$75')).toBeInTheDocument();
     expect(screen.getByText('Custom')).toBeInTheDocument();
   });

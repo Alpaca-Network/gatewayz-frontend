@@ -302,9 +302,6 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
             return (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} w-full`}>
               <div className={`max-w-[70%] ${msg.role === 'assistant' ? 'w-full max-w-full' : ''}`}>
-                {msg.role === 'assistant' && msg.thinking && (
-                  <ReasoningDisplay reasoning={msg.thinking} isStreaming={msg.isStreaming} className="mb-2" />
-                )}
                 <Card className={`p-4 ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-muted'}`}>
                   {msg.role === 'user' ? (
                     <p className="text-sm">{msg.content}</p>
@@ -336,6 +333,15 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
                       >
                         {msg.content || (msg.isStreaming ? '...' : '')}
                       </ReactMarkdown>
+                    </div>
+                  )}
+                  {msg.role === 'assistant' && msg.thinking && (
+                    <div className="mt-3">
+                      <ReasoningDisplay
+                        reasoning={msg.thinking}
+                        isStreaming={msg.isStreaming && !msg.content}
+                        hasContentStarted={Boolean(msg.content)}
+                      />
                     </div>
                   )}
                 </Card>

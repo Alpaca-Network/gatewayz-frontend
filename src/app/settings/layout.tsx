@@ -14,6 +14,7 @@ const navItems = [
   { href: "/settings/activity", label: "Activity" },
   { href: "/settings/memory", label: "AI Memory" },
   { href: "/settings/presets", label: "Presets" },
+  { href: "/settings/cache", label: "Prompt Cache" },
   { href: "/settings/provisioning", label: "Provisioning Keys" },
   { href: "/settings/integrations", label: "Integrations (BYOK)" },
   { href: "/settings/privacy", label: "Privacy" },
@@ -58,8 +59,8 @@ export default function SettingsLayout({
           </SidebarContent>
         </Sidebar>
 
-        <SidebarInset className="flex-1 overflow-auto">
-          <div className="p-4 sm:p-6 lg:p-8">
+        <SidebarInset className="flex-1 overflow-hidden">
+          <div className="h-full overflow-auto p-4 sm:p-6 lg:p-8">
             <div className="flex items-center gap-2 mb-6 lg:hidden">
                 <SidebarTrigger />
                 <h1 className="text-2xl font-bold">Settings</h1>

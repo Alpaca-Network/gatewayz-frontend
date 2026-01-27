@@ -19,12 +19,14 @@ import {
   createInitialStreamState,
 } from './types';
 import { getApiKey } from '@/lib/auth';
+import { getChatApiUrl } from '@/lib/config';
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
-const COMPLETIONS_ENDPOINT = '/api/chat/completions';
+// Use dynamic endpoint that works on both web (Next.js API routes) and desktop (direct backend)
+const getCompletionsEndpoint = () => getChatApiUrl('/v1/chat/completions');
 const STREAM_TIMEOUT = 60_000; // 1 minute max
 const FIRST_CHUNK_TIMEOUT = 30_000; // 30 seconds for first chunk
 const CHUNK_TIMEOUT = 30_000; // 30 seconds between chunks
@@ -142,7 +144,8 @@ export function useStreaming(options: UseStreamingOptions = {}): UseStreamingRet
 
     try {
       // Include session_id in query params
-      const url = `${COMPLETIONS_ENDPOINT}?session_id=${sessionId}`;
+      // Use dynamic endpoint for desktop (direct backend) vs web (Next.js API route)
+      const url = `${getCompletionsEndpoint()}?session_id=${sessionId}`;
 
       const response = await fetch(url, {
         method: 'POST',

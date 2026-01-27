@@ -1,4 +1,4 @@
-import { render, waitFor, act } from '@testing-library/react';
+import { render, waitFor, act, screen } from '@testing-library/react';
 import { PostHogProvider, PostHogPageView } from '../posthog-provider';
 import posthog from 'posthog-js';
 
@@ -8,6 +8,11 @@ jest.mock('posthog-js', () => ({
   startSessionRecording: jest.fn(),
   capture: jest.fn(),
   __loaded: false,
+}));
+
+// Mock posthog-js/react
+jest.mock('posthog-js/react', () => ({
+  PostHogProvider: ({ children }: { children: React.ReactNode }) => <div data-testid="ph-provider">{children}</div>,
 }));
 
 // Mock next/navigation
@@ -187,6 +192,30 @@ describe('PostHogProvider', () => {
     jest.useRealTimers();
   });
 
+  it('should not render PHProvider until PostHog is initialized', () => {
+    jest.useFakeTimers();
+
+    render(
+      <PostHogProvider>
+        <div>Test</div>
+      </PostHogProvider>
+    );
+
+    // Before initialization, PHProvider should not be rendered
+    expect(screen.queryByTestId('ph-provider')).not.toBeInTheDocument();
+    expect(posthog.init).not.toHaveBeenCalled();
+
+    // After initialization delay
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+
+    // Now PHProvider should be rendered
+    expect(screen.getByTestId('ph-provider')).toBeInTheDocument();
+
+    jest.useRealTimers();
+  });
+
   it('should not throw hydration errors', () => {
     // This test verifies the fix for the hydration error
     // by ensuring window.innerWidth is only accessed in useEffect (client-side)
@@ -256,6 +285,29 @@ describe('PostHogProvider', () => {
 
     // Verify timeout is cleared by checking that init is not called
     jest.runAllTimers();
+    expect(posthog.init).not.toHaveBeenCalled();
+
+    jest.useRealTimers();
+  });
+
+  it('should not wrap with PHProvider when env vars are missing', async () => {
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = '';
+
+    jest.useFakeTimers();
+
+    render(
+      <PostHogProvider>
+        <div>Test</div>
+      </PostHogProvider>
+    );
+
+    // Advance all timers
+    act(() => {
+      jest.runAllTimers();
+    });
+
+    // PHProvider should not be rendered when env vars are missing
+    expect(screen.queryByTestId('ph-provider')).not.toBeInTheDocument();
     expect(posthog.init).not.toHaveBeenCalled();
 
     jest.useRealTimers();

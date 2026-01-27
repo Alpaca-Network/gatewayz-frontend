@@ -1,77 +1,59 @@
-
 "use client";
 
-import { Switch } from "@/components/ui/switch";
-import { Info } from "lucide-react";
 import Link from "next/link";
-import { Separator } from "@/components/ui/separator";
-
-const PrivacySettingRow = ({ title, description, defaultChecked = false }: { title: string, description: string, defaultChecked?: boolean }) => (
-  <div className="flex items-start justify-between py-4">
-    <div className="flex-1 pr-8">
-      <h4 className="font-medium">{title}</h4>
-      <p className="text-sm text-muted-foreground flex items-center gap-1">
-        {description}
-        <Info className="h-4 w-4" />
-      </p>
-    </div>
-    <div>
-      <Switch defaultChecked={defaultChecked} />
-    </div>
-  </div>
-);
-
-const Section = ({ title, children }: { title: string, children: React.ReactNode }) => (
-    <div>
-        <h3 className="text-xl font-semibold mb-2">{title}</h3>
-        <div className="divide-y divide-border">{children}</div>
-    </div>
-);
-
 
 export default function PrivacyPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Privacy</h1>
-      
-      <Section title="Paid Models">
-        <PrivacySettingRow 
-          title="Enable providers that may train on inputs"
-          description="Control whether to enable paid providers that can anonymously use your data."
-        />
-        <PrivacySettingRow
-          title="Enable input/output logging"
-          description="Store inputs & outputs with OpenRouter and get a 1% discount on all LLMs."
-        />
-      </Section>
-      
-      <Section title="Free Models">
-        <PrivacySettingRow
-            title="Enable training and logging (chatroom and API)"
-            description="Enable free providers that may publish your prompts"
-            defaultChecked
-        />
-        <PrivacySettingRow
-            title="Free endpoints may log, retain, or train on your prompts"
-            description="You remain anonymous."
-        />
-      </Section>
 
       <div>
-        <h3 className="text-xl font-semibold mb-2">Chat History</h3>
+        <h3 className="text-xl font-semibold mb-4">How Gatewayz Handles Your Data</h3>
+        <ul className="text-sm text-muted-foreground space-y-3 list-disc list-inside">
+          <li>
+            <strong>API Requests:</strong> Your prompts are forwarded to the LLM providers you
+            select. Each provider has their own data retention and training policies.
+          </li>
+          <li>
+            <strong>Request Logging:</strong> Gatewayz logs metadata (tokens, costs, latency) for
+            billing and analytics, but does not store your prompt content long-term.
+          </li>
+          <li>
+            <strong>Provider Policies:</strong> Some providers may use anonymized data for model
+            improvement. Check each provider&apos;s terms for details.
+          </li>
+        </ul>
+      </div>
+
+      <div>
+        <h3 className="text-xl font-semibold mb-2">Prompt Caching</h3>
         <p className="text-sm text-muted-foreground">
-            Your chat history in the <Link href="#" className="text-primary underline">Chatroom</Link> is stored locally on your device. If logging is enabled, only LLM inputs and outputs are saved.
+          If you enable prompt caching, your requests are routed through a caching proxy. Manage
+          this setting in{" "}
+          <Link href="/settings/cache" className="text-primary underline">
+            Prompt Cache
+          </Link>
+          .
         </p>
       </div>
 
-       <div>
-        <h3 className="text-xl font-semibold mb-2">Analytics Cookies</h3>
-         <div className="flex items-center justify-between py-4">
-            <p className="text-sm text-muted-foreground flex-1 pr-8">
-                Enable analytics cookies to help us improve the user experience and site performance.
-            </p>
-            <Switch defaultChecked={true} />
-        </div>
+      <div>
+        <h3 className="text-xl font-semibold mb-2">Local Storage</h3>
+        <p className="text-sm text-muted-foreground">
+          Any chat history or preferences stored locally on your device can be cleared through your
+          browser settings. Gatewayz does not sync local chat history to our servers.
+        </p>
+      </div>
+
+      <div>
+        <h3 className="text-xl font-semibold mb-2">Questions?</h3>
+        <p className="text-sm text-muted-foreground">
+          For privacy concerns or data deletion requests, contact us at{" "}
+          <a href="mailto:support@gatewayz.ai" className="text-primary underline">
+            support@gatewayz.ai
+          </a>
+          .
+        </p>
       </div>
     </div>
   );

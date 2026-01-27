@@ -14,6 +14,8 @@ import {
   getTrialDaysRemaining,
   isTrialExpiringSoon,
   _resetLoggedWarnings,
+  getMonthlyAllowance,
+  getAllowancePercentage,
 } from '../tier-utils';
 import type { UserData, UserTier, SubscriptionStatus } from '../api';
 
@@ -91,16 +93,18 @@ describe('tier-utils', () => {
         monthlyPrice: null,
         creditAllocation: 0,
         isSubscription: false,
+        monthlyAllowance: 0, // No subscription allowance for basic tier
       });
     });
 
     it('should have correct configuration for pro tier', () => {
       expect(TIER_CONFIG.pro).toEqual({
         name: 'Pro',
-        description: '$10/month subscription',
-        monthlyPrice: 1000,
-        creditAllocation: 0,
+        description: '$8/month subscription',
+        monthlyPrice: 800,
+        creditAllocation: 1000, // Legacy - keep for backward compatibility
         isSubscription: true,
+        monthlyAllowance: 1500, // $15 subscription allowance (in cents)
       });
     });
 
@@ -111,6 +115,7 @@ describe('tier-utils', () => {
         monthlyPrice: 7500,
         creditAllocation: 15000,
         isSubscription: true,
+        monthlyAllowance: 15000, // $150 subscription allowance (in cents)
       });
     });
   });
@@ -543,7 +548,7 @@ describe('tier-utils', () => {
       expect(hasPurchasedCredits(userData)).toBe(false);
     });
 
-    it('should return false when credits is at trial threshold (3)', () => {
+    it('should return false when credits is at trial threshold (500 cents = $5)', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -551,7 +556,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 3, // Exactly at trial threshold
+        credits: 500, // Exactly at trial threshold (500 cents = $5)
       };
 
       expect(hasPurchasedCredits(userData)).toBe(false);
@@ -565,7 +570,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 4, // Just above trial threshold
+        credits: 501, // Just above trial threshold (500 cents = $5)
       };
 
       expect(hasPurchasedCredits(userData)).toBe(true);
@@ -579,7 +584,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 10000, // 10000 cents = $100
       };
 
       expect(hasPurchasedCredits(userData)).toBe(true);
@@ -770,8 +775,8 @@ describe('tier-utils', () => {
       const result = formatTierInfo('pro');
       expect(result).toEqual({
         displayName: 'Pro',
-        description: '$10/month subscription',
-        monthlyPrice: '$10.00',
+        description: '$8/month subscription',
+        monthlyPrice: '$8.00',
         isSubscription: true,
       });
     });
@@ -887,7 +892,7 @@ describe('tier-utils', () => {
       expect(isOnTrial(null)).toBe(false);
     });
 
-    it('should return true when subscription status is trial and credits <= 3 (trial amount)', () => {
+    it('should return true when subscription status is trial and credits <= 500 cents ($5 trial amount)', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -895,7 +900,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 3, // Trial amount (users start with 3 credits)
+        credits: 500, // Trial amount in cents (users start with $5 = 500 cents)
         subscription_status: 'trial',
       };
 
@@ -973,7 +978,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 2, // Below trial threshold
+        credits: 400, // Below trial threshold (500 cents = $5)
         tier: 'basic',
         subscription_status: 'trial',
       };
@@ -990,7 +995,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 10, // More than trial threshold (3), indicating they've purchased credits
+        credits: 1000, // More than trial threshold (500 cents = $5), indicating they've purchased credits
         tier: 'basic',
         subscription_status: 'trial',
       };
@@ -999,7 +1004,7 @@ describe('tier-utils', () => {
     });
 
     it('should return false when user has exactly at threshold with purchased credits', () => {
-      // 4 credits = 3 trial + purchased, so they've paid
+      // 501 cents = $5 trial + purchased, so they've paid
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -1007,7 +1012,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 4, // Just above trial threshold
+        credits: 501, // Just above trial threshold (500 cents = $5)
         subscription_status: 'trial',
       };
 
@@ -1043,7 +1048,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 2, // Trial credits
+        credits: 200, // 200 cents = $2 trial credits
         subscription_status: 'trial',
       };
 
@@ -1109,7 +1114,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 15, // More than trial threshold (3), indicating they've purchased credits
+        credits: 1500, // More than trial threshold (500 cents = $5), indicating they've purchased credits
         tier: 'basic',
         subscription_status: 'expired',
       };
@@ -1286,6 +1291,68 @@ describe('tier-utils', () => {
     });
   });
 
+  describe('getMonthlyAllowance', () => {
+    it('should return 0 for basic tier', () => {
+      expect(getMonthlyAllowance('basic')).toBe(0);
+    });
+
+    it('should return 15 for pro tier ($15.00 = 1500 cents / 100)', () => {
+      expect(getMonthlyAllowance('pro')).toBe(15);
+    });
+
+    it('should return 150 for max tier ($150.00 = 15000 cents / 100)', () => {
+      expect(getMonthlyAllowance('max')).toBe(150);
+    });
+  });
+
+  describe('getAllowancePercentage', () => {
+
+    it('should return 0 when tier has no monthly allowance (basic)', () => {
+      expect(getAllowancePercentage(10, 'basic')).toBe(0);
+    });
+
+    it('should return correct percentage for pro tier', () => {
+      // Pro tier has $15 allowance
+      // $7.50 remaining = 50%
+      expect(getAllowancePercentage(7.5, 'pro')).toBe(50);
+    });
+
+    it('should return 100 when full allowance remains for pro tier', () => {
+      // Pro tier has $15 allowance
+      expect(getAllowancePercentage(15, 'pro')).toBe(100);
+    });
+
+    it('should return 0 when no allowance remains', () => {
+      expect(getAllowancePercentage(0, 'pro')).toBe(0);
+    });
+
+    it('should cap percentage at 100 even if subscription_allowance exceeds max', () => {
+      // If somehow allowance is more than max (shouldn't happen normally)
+      expect(getAllowancePercentage(20, 'pro')).toBe(100);
+    });
+
+    it('should handle negative subscription_allowance by returning 0', () => {
+      // Negative values should be clamped to 0
+      expect(getAllowancePercentage(-5, 'pro')).toBe(0);
+    });
+
+    it('should return correct percentage for max tier', () => {
+      // Max tier has $150 allowance
+      // $75 remaining = 50%
+      expect(getAllowancePercentage(75, 'max')).toBe(50);
+    });
+
+    it('should return 100 when full allowance remains for max tier', () => {
+      // Max tier has $150 allowance
+      expect(getAllowancePercentage(150, 'max')).toBe(100);
+    });
+
+    it('should handle fractional percentages correctly', () => {
+      // Pro tier: $3 of $15 = 20%
+      expect(getAllowancePercentage(3, 'pro')).toBe(20);
+    });
+  });
+
   describe('Integration Scenarios', () => {
     it('should correctly handle new user workflow', () => {
       const newUser: UserData = {
@@ -1377,7 +1444,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-111',
         display_name: 'Trial User',
         email: 'trial@example.com',
-        credits: 3, // Trial users start with 3 credits
+        credits: 500, // Trial users start with 500 cents ($5)
         tier: 'basic',
         subscription_status: 'trial',
         trial_expires_at: threeDaysFromNow,
@@ -1426,7 +1493,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-333',
         display_name: 'Expiring Soon User',
         email: 'expiring@example.com',
-        credits: 2,
+        credits: 200, // 200 cents = $2
         tier: 'basic',
         subscription_status: 'trial',
         trial_expires_at: oneDayFromNow,
@@ -1494,7 +1561,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-666',
         display_name: 'Basic User with Purchased Credits',
         email: 'basic@example.com',
-        credits: 25, // More than 3 trial credits = purchased
+        credits: 2500, // More than 500 cents ($5 trial) = purchased (this is $25)
         tier: 'basic',
         subscription_status: 'trial', // Stale - should have been updated after payment
       };
@@ -1515,7 +1582,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-777',
         display_name: 'Basic User with Purchased Credits',
         email: 'basic-expired@example.com',
-        credits: 50, // More than 3 trial credits = purchased
+        credits: 5000, // More than 500 cents ($5 trial) = purchased (this is $50)
         tier: 'basic',
         subscription_status: 'expired', // Stale - user has paid for credits
       };

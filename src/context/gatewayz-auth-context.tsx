@@ -351,15 +351,17 @@ export function GatewayzAuthProvider({
       }
 
       try {
-        const credits = Math.floor(authData.credits ?? 0);
+        // Credits are stored in cents, 1000 cents = $10
+        const creditsCents = Math.floor(authData.credits ?? 0);
+        const MINIMUM_CREDITS_FOR_UPGRADE = 1000; // $10 in cents
         console.log("[Auth] Checking upgrade eligibility:", {
-          credits,
+          creditsCents,
           is_new_user: authData.is_new_user,
-          eligible: credits > 10 && !authData.is_new_user,
+          eligible: creditsCents > MINIMUM_CREDITS_FOR_UPGRADE && !authData.is_new_user,
         });
 
         // Skip upgrade if insufficient credits or new user
-        if (credits <= 10 || authData.is_new_user) {
+        if (creditsCents <= MINIMUM_CREDITS_FOR_UPGRADE || authData.is_new_user) {
           console.log("[Auth] Skipping upgrade - insufficient credits or new user");
           return;
         }
@@ -497,6 +499,11 @@ export function GatewayzAuthProvider({
             tier_display_name: authData.tier_display_name,
             subscription_status: authData.subscription_status,
             subscription_end_date: authData.subscription_end_date,
+            // Tiered credit fields
+            subscription_allowance: authData.subscription_allowance ?? storedUser.subscription_allowance,
+            purchased_credits: authData.purchased_credits ?? storedUser.purchased_credits,
+            total_credits: authData.total_credits ?? storedUser.total_credits,
+            allowance_reset_date: authData.allowance_reset_date ?? storedUser.allowance_reset_date,
           });
         } else {
           saveUserData({
@@ -511,6 +518,11 @@ export function GatewayzAuthProvider({
             tier_display_name: authData.tier_display_name,
             subscription_status: authData.subscription_status,
             subscription_end_date: authData.subscription_end_date,
+            // Tiered credit fields
+            subscription_allowance: authData.subscription_allowance,
+            purchased_credits: authData.purchased_credits,
+            total_credits: authData.total_credits,
+            allowance_reset_date: authData.allowance_reset_date,
           });
         }
 

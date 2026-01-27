@@ -99,9 +99,9 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
       lastScrollTimeRef.current = now;
     }
     // Scroll during streaming only if user hasn't scrolled away
-    // Throttle streaming scroll updates to avoid jitter (max once per 50ms)
+    // Throttle streaming scroll updates for controlled, deliberate feel (max once per 75ms)
     else if (lastMessage?.isStreaming && !userHasScrolled) {
-      if (now - lastScrollTimeRef.current > 50) {
+      if (now - lastScrollTimeRef.current > 75) {
         scrollToBottom(false); // Use instant scroll during streaming
         lastScrollTimeRef.current = now;
       }
@@ -179,6 +179,7 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
             role={msg.role}
             content={msg.content}
             reasoning={msg.reasoning}
+            isReasoningStreaming={msg.isReasoningStreaming}
             image={msg.image}
             video={msg.video}
             audio={msg.audio}

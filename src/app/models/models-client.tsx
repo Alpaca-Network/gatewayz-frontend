@@ -24,14 +24,21 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Slider } from "@/components/ui/slider";
-import { BookText, Bot, Box, ChevronDown, ChevronUp, FileText, ImageIcon, LayoutGrid, LayoutList, Lock, Music, Search, Sliders as SlidersIcon, Video, X, Zap } from 'lucide-react';
+import { BookText, Bot, Box, ChevronDown, ChevronUp, ChevronsDownUp, ChevronsUpDown, FileText, ImageIcon, LayoutGrid, List, Lock, Music, Search, Sliders as SlidersIcon, Table2, Video, X, Zap } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
 import { safeParseJson } from '@/lib/http';
 import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, getAllActiveGatewayIds } from '@/lib/gateway-registry';
 import { isFreeModel as checkIsFreeModel, getSourceGateway, formatPricingForDisplay, getNormalizedPerTokenPrice } from '@/lib/model-pricing-utils';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
+
+// Per-gateway pricing information
+interface GatewayPricing {
+  prompt: string;
+  completion: string;
+}
 
 interface Model {
   id: string;
@@ -51,6 +58,7 @@ interface Model {
   provider_slugs?: string[]; // NEW: Array of all providers offering this model
   source_gateways?: string[]; // Array of all gateways offering this model
   source_gateway?: string; // Keep for backwards compatibility
+  gateway_pricing?: Record<string, GatewayPricing>; // Per-gateway pricing map
   created?: number;
   is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
   is_free?: boolean; // Only true for OpenRouter models with :free suffix
@@ -92,6 +100,440 @@ const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
   alpaca: { name: 'Alpaca Network', color: 'bg-green-700' },
   // Add more providers as needed
 };
+
+// Table row component for OpenRouter-style table view
+const ModelTableRow = React.memo(function ModelTableRow({ model }: { model: Model }) {
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = checkIsFreeModel(model);
+  const sourceGateway = getSourceGateway(model);
+  const inputCost = hasPricing ? formatPricingForDisplay(model.pricing?.prompt, sourceGateway) : null;
+  const outputCost = hasPricing ? formatPricingForDisplay(model.pricing?.completion, sourceGateway) : null;
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
+
+  // Format context as number with commas
+  const formatContext = (length: number | undefined | null) => {
+    if (length === undefined || length === null || length <= 0) return '-';
+    return length.toLocaleString();
+  };
+
+  // Get provider display name
+  const providerDisplay = model.provider_slug?.replace(/^@/, '') || 'Unknown';
+
+  return (
+    <Link href={modelUrl} className="block group">
+      <div className="grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-3 px-4 hover:bg-muted/50 transition-colors items-center">
+        {/* Model Name & ID */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-primary group-hover:underline truncate">
+              {model.name}
+            </span>
+            {isFree && (
+              <Badge className="bg-green-600 text-white hover:bg-green-700 text-[10px] px-1.5 py-0 h-5 flex-shrink-0">
+                Free
+              </Badge>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
+            {model.id}
+          </div>
+        </div>
+
+        {/* Provider/Developer */}
+        <div className="text-sm text-muted-foreground truncate">
+          <span className="text-foreground/80">{providerDisplay}</span>
+        </div>
+
+        {/* Input Price */}
+        <div className="text-right text-sm tabular-nums">
+          {hasPricing && inputCost !== null ? (
+            <span>{isFree ? '$0' : `$${inputCost}`}</span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </div>
+
+        {/* Output Price */}
+        <div className="text-right text-sm tabular-nums">
+          {hasPricing && outputCost !== null ? (
+            <span>{isFree ? '$0' : `$${outputCost}`}</span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </div>
+
+        {/* Context Length */}
+        <div className="text-right text-sm tabular-nums">
+          {formatContext(model.context_length)}
+        </div>
+      </div>
+    </Link>
+  );
+});
+
+// Table header component
+const ModelTableHeader = React.memo(function ModelTableHeader() {
+  return (
+    <div className="grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-3 px-4 border-b border-border text-sm font-medium text-muted-foreground bg-muted/30">
+      <div>Model Name & ID</div>
+      <div>Provider</div>
+      <div className="text-right">Input ($/1M)</div>
+      <div className="text-right">Output ($/1M)</div>
+      <div className="text-right">Context</div>
+    </div>
+  );
+});
+
+// Provider sub-row component for expanded view
+const ProviderSubRow = React.memo(function ProviderSubRow({
+  gateway,
+  pricing,
+  isLast
+}: {
+  gateway: string;
+  pricing: GatewayPricing;
+  isLast: boolean;
+}) {
+  const normalizedGateway = gateway.replace(/^@/, '').toLowerCase();
+  const gatewayConfig = GATEWAY_CONFIG[normalizedGateway] || {
+    name: gateway,
+    color: 'bg-gray-500'
+  };
+  const inputCost = formatPricingForDisplay(pricing.prompt, gateway);
+  const outputCost = formatPricingForDisplay(pricing.completion, gateway);
+
+  return (
+    <div className={`grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-2 px-4 pl-12 bg-muted/10 items-center ${!isLast ? 'border-b border-border/30' : ''}`}>
+      {/* Empty space for alignment */}
+      <div className="min-w-0" />
+
+      {/* Gateway/Provider name with badge */}
+      <div className="flex items-center gap-2">
+        <Badge
+          className={`${gatewayConfig.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
+          variant="secondary"
+        >
+          {gatewayConfig.icon}
+          {gatewayConfig.name}
+        </Badge>
+      </div>
+
+      {/* Input Price */}
+      <div className="text-right text-sm tabular-nums text-muted-foreground">
+        ${inputCost}
+      </div>
+
+      {/* Output Price */}
+      <div className="text-right text-sm tabular-nums text-muted-foreground">
+        ${outputCost}
+      </div>
+
+      {/* Empty - context is same for all providers */}
+      <div className="text-right text-sm tabular-nums text-muted-foreground">
+        -
+      </div>
+    </div>
+  );
+});
+
+// Mobile-friendly provider sub-row component
+const MobileProviderSubRow = React.memo(function MobileProviderSubRow({
+  gateway,
+  pricing,
+  isLast
+}: {
+  gateway: string;
+  pricing: GatewayPricing;
+  isLast: boolean;
+}) {
+  const normalizedGateway = gateway.replace(/^@/, '').toLowerCase();
+  const gatewayConfig = GATEWAY_CONFIG[normalizedGateway] || {
+    name: gateway,
+    color: 'bg-gray-500'
+  };
+  const inputCost = formatPricingForDisplay(pricing.prompt, gateway);
+  const outputCost = formatPricingForDisplay(pricing.completion, gateway);
+
+  return (
+    <div className={`flex items-center justify-between py-2 px-4 pl-8 bg-muted/10 ${!isLast ? 'border-b border-border/30' : ''}`}>
+      <Badge
+        className={`${gatewayConfig.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
+        variant="secondary"
+      >
+        {gatewayConfig.icon}
+        {gatewayConfig.name}
+      </Badge>
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span>${inputCost} in</span>
+        <span>${outputCost} out</span>
+      </div>
+    </div>
+  );
+});
+
+// Mobile-friendly model row component
+const MobileModelRow = React.memo(function MobileModelRow({
+  model,
+  isExpanded,
+  onToggle
+}: {
+  model: Model;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = checkIsFreeModel(model);
+  const sourceGateway = getSourceGateway(model);
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
+
+  // Get all gateways with pricing
+  const gatewayPricing = model.gateway_pricing || {};
+  const gateways = Object.keys(gatewayPricing);
+  const hasMultipleProviders = gateways.length > 1;
+
+  // For display, use the best pricing (lowest input cost)
+  const bestGateway = useMemo(() => {
+    if (gateways.length === 0) return sourceGateway;
+    let best = gateways[0];
+    let bestInputPrice = Infinity;
+    for (const gw of gateways) {
+      const price = parseFloat(gatewayPricing[gw]?.prompt || '999999');
+      if (price < bestInputPrice) {
+        bestInputPrice = price;
+        best = gw;
+      }
+    }
+    return best;
+  }, [gateways, gatewayPricing, sourceGateway]);
+
+  const displayPricing = gatewayPricing[bestGateway] || model.pricing;
+  const inputCost = displayPricing ? formatPricingForDisplay(displayPricing.prompt, bestGateway) : null;
+  const outputCost = displayPricing ? formatPricingForDisplay(displayPricing.completion, bestGateway) : null;
+
+  // Get provider display name
+  const providerDisplay = model.provider_slug?.replace(/^@/, '') || 'Unknown';
+
+  // Format context
+  const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
+
+  return (
+    <div>
+      {/* Main row */}
+      <div
+        className={`py-3 px-4 hover:bg-muted/50 transition-colors ${hasMultipleProviders ? 'cursor-pointer' : ''}`}
+        onClick={hasMultipleProviders ? onToggle : undefined}
+      >
+        <div className="flex items-start gap-2">
+          {hasMultipleProviders && (
+            <button
+              className="flex-shrink-0 p-0.5 hover:bg-muted rounded mt-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggle();
+              }}
+            >
+              {isExpanded ? (
+                <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+              )}
+            </button>
+          )}
+          <div className="flex-1 min-w-0">
+            <Link href={modelUrl} className="group block" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-primary group-hover:underline">
+                  {model.name}
+                </span>
+                {isFree && (
+                  <Badge className="bg-green-600 text-white hover:bg-green-700 text-[10px] px-1.5 py-0 h-5">
+                    Free
+                  </Badge>
+                )}
+                {hasMultipleProviders && (
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                    {gateways.length} providers
+                  </Badge>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
+                {model.id}
+              </div>
+            </Link>
+            {/* Mobile metadata row */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
+              <span>by <span className="text-foreground/80">{providerDisplay}</span></span>
+              {contextK > 0 && <span>{contextK}K ctx</span>}
+              {hasPricing && inputCost !== null && outputCost !== null && (
+                <span className={hasMultipleProviders ? 'text-green-600 font-medium' : ''}>
+                  {isFree ? 'Free' : `$${inputCost}/$${outputCost}`}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded provider sub-rows */}
+      {isExpanded && hasMultipleProviders && (
+        <div className="border-t border-border/30">
+          {gateways.map((gateway, index) => (
+            <MobileProviderSubRow
+              key={gateway}
+              gateway={gateway}
+              pricing={gatewayPricing[gateway]}
+              isLast={index === gateways.length - 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// Grouped model table row with expandable provider sub-rows
+const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
+  model,
+  isExpanded,
+  onToggle
+}: {
+  model: Model;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const hasPricing = model.pricing !== null && model.pricing !== undefined;
+  const isFree = checkIsFreeModel(model);
+  const sourceGateway = getSourceGateway(model);
+  const modelUrl = getModelUrl(model.id, model.provider_slug);
+
+  // Get all gateways with pricing
+  const gatewayPricing = model.gateway_pricing || {};
+  const gateways = Object.keys(gatewayPricing);
+  const hasMultipleProviders = gateways.length > 1;
+
+  // For display, use the best pricing (lowest input cost)
+  const bestGateway = useMemo(() => {
+    if (gateways.length === 0) return sourceGateway;
+    let best = gateways[0];
+    let bestInputPrice = Infinity;
+    for (const gw of gateways) {
+      const price = parseFloat(gatewayPricing[gw]?.prompt || '999999');
+      if (price < bestInputPrice) {
+        bestInputPrice = price;
+        best = gw;
+      }
+    }
+    return best;
+  }, [gateways, gatewayPricing, sourceGateway]);
+
+  const displayPricing = gatewayPricing[bestGateway] || model.pricing;
+  const inputCost = displayPricing ? formatPricingForDisplay(displayPricing.prompt, bestGateway) : null;
+  const outputCost = displayPricing ? formatPricingForDisplay(displayPricing.completion, bestGateway) : null;
+
+  // Format context as number with commas
+  const formatContext = (length: number | undefined | null) => {
+    if (length === undefined || length === null || length <= 0) return '-';
+    return length.toLocaleString();
+  };
+
+  // Get provider display name
+  const providerDisplay = model.provider_slug?.replace(/^@/, '') || 'Unknown';
+
+  return (
+    <div>
+      {/* Main row */}
+      <div
+        className={`grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-3 px-4 hover:bg-muted/50 transition-colors items-center ${hasMultipleProviders ? 'cursor-pointer' : ''}`}
+        onClick={hasMultipleProviders ? onToggle : undefined}
+      >
+        {/* Model Name & ID */}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {hasMultipleProviders && (
+              <button
+                className="flex-shrink-0 p-0.5 hover:bg-muted rounded"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggle();
+                }}
+              >
+                {isExpanded ? (
+                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            )}
+            <Link href={modelUrl} className="group flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+              <span className="font-medium text-primary group-hover:underline truncate block">
+                {model.name}
+              </span>
+              <span className="text-xs text-muted-foreground font-mono truncate block mt-0.5">
+                {model.id}
+              </span>
+            </Link>
+            {isFree && (
+              <Badge className="bg-green-600 text-white hover:bg-green-700 text-[10px] px-1.5 py-0 h-5 flex-shrink-0">
+                Free
+              </Badge>
+            )}
+            {hasMultipleProviders && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 flex-shrink-0">
+                {gateways.length} providers
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Provider/Developer */}
+        <div className="text-sm text-muted-foreground truncate">
+          <span className="text-foreground/80">{providerDisplay}</span>
+        </div>
+
+        {/* Input Price (best/lowest) */}
+        <div className="text-right text-sm tabular-nums">
+          {hasPricing && inputCost !== null ? (
+            <span className={hasMultipleProviders ? 'text-green-600 font-medium' : ''}>
+              {isFree ? '$0' : `$${inputCost}`}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </div>
+
+        {/* Output Price (best/lowest) */}
+        <div className="text-right text-sm tabular-nums">
+          {hasPricing && outputCost !== null ? (
+            <span className={hasMultipleProviders ? 'text-green-600 font-medium' : ''}>
+              {isFree ? '$0' : `$${outputCost}`}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">-</span>
+          )}
+        </div>
+
+        {/* Context Length */}
+        <div className="text-right text-sm tabular-nums">
+          {formatContext(model.context_length)}
+        </div>
+      </div>
+
+      {/* Expanded provider sub-rows */}
+      {isExpanded && hasMultipleProviders && (
+        <div className="border-t border-border/30">
+          {gateways.map((gateway, index) => (
+            <ProviderSubRow
+              key={gateway}
+              gateway={gateway}
+              pricing={gatewayPricing[gateway]}
+              isLast={index === gateways.length - 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const hasPricing = model.pricing !== null && model.pricing !== undefined;
@@ -239,53 +681,53 @@ export default function ModelsClient({
       const bannerElement = document.querySelector('[data-onboarding-banner]');
       const spacer = document.querySelector('[data-header-spacer]');
       const container = document.querySelector('[data-models-container]');
-      
+
       if (bannerElement) {
         const bannerHeight = bannerElement.getBoundingClientRect().height;
         const headerTop = 65 + bannerHeight;
         document.documentElement.style.setProperty('--models-header-top', `${headerTop}px`);
-        
+
         // Update header element directly
         const header = document.querySelector('[data-models-header]');
         if (header) {
           (header as HTMLElement).style.top = `${headerTop}px`;
         }
-        
+
         // Update container margin
         if (container) {
           (container as HTMLElement).style.marginTop = `-${headerTop}px`;
         }
-        
+
         // Update models list margin - add more space when banner is visible
         const modelsList = document.querySelector('[data-models-list]');
         if (modelsList) {
           (modelsList as HTMLElement).style.marginTop = '140px';
         }
-        
+
         // Update spacer
         if (spacer) {
           (spacer as HTMLElement).style.height = `${headerTop}px`;
         }
       } else {
         document.documentElement.style.setProperty('--models-header-top', '65px');
-        
+
         // Update header element directly
         const header = document.querySelector('[data-models-header]');
         if (header) {
           (header as HTMLElement).style.top = '65px';
         }
-        
+
         // Update container margin - use negative margin to pull content up but keep header visible
         if (container) {
           (container as HTMLElement).style.marginTop = '-50px';
         }
-        
+
         // Update models list margin - keep normal spacing when banner is closed
         const modelsList = document.querySelector('[data-models-list]');
         if (modelsList) {
           (modelsList as HTMLElement).style.marginTop = '80px';
         }
-        
+
         // Update spacer
         if (spacer) {
           (spacer as HTMLElement).style.height = '65px';
@@ -296,21 +738,39 @@ export default function ModelsClient({
     // Initial update with delay to ensure banner is rendered
     setTimeout(updateHeaderPosition, 50);
 
-    // Watch for banner visibility changes
+    // Watch for banner visibility changes using MutationObserver
     const observer = new MutationObserver(() => {
-      setTimeout(updateHeaderPosition, 50);
+      updateHeaderPosition();
     });
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['class']
     });
 
-    // Also check periodically in case banner renders after initial check
-    const interval = setInterval(updateHeaderPosition, 200);
-    
+    // Also observe the body for banner additions/removals
+    const bodyObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === 'childList') {
+          // Check if banner was added or removed
+          const hasBannerChange = Array.from(mutation.addedNodes).some(
+            (node) => node instanceof HTMLElement && node.matches('[data-onboarding-banner]')
+          ) || Array.from(mutation.removedNodes).some(
+            (node) => node instanceof HTMLElement && node.matches('[data-onboarding-banner]')
+          );
+          if (hasBannerChange) {
+            updateHeaderPosition();
+          }
+        }
+      }
+    });
+    bodyObserver.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
     return () => {
       observer.disconnect();
-      clearInterval(interval);
+      bodyObserver.disconnect();
     };
   }, []);
   const router = useRouter();
@@ -329,7 +789,9 @@ export default function ModelsClient({
   // Update models when initialModels changes (e.g., when deferred models finish loading)
   useEffect(() => {
     if (initialModels.length > 0 && initialModels.length !== models.length) {
-      console.log(`[Models] Updating models from ${models.length} to ${initialModels.length}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Models] Updating models from ${models.length} to ${initialModels.length}`);
+      }
       setModels(initialModels);
     }
   }, [initialModels, models.length]);
@@ -337,7 +799,9 @@ export default function ModelsClient({
   // Fetch models client-side if we only got the fallback static models
   useEffect(() => {
     if (initialModels.length < 50) {
-      console.log('[Models] Only got', initialModels.length, 'models from server, fetching from client...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Models] Only got', initialModels.length, 'models from server, fetching from client...');
+      }
       const controller = new AbortController();
       let isActive = true;
 
@@ -352,7 +816,9 @@ export default function ModelsClient({
             '[Models] client bootstrap'
           );
           if (isActive && payload?.data && payload.data.length > 0) {
-            console.log(`[Models] Fetched ${payload.data.length} models from client`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[Models] Fetched ${payload.data.length} models from client`);
+            }
             setModels(payload.data);
           }
         } catch (err) {
@@ -377,7 +843,6 @@ export default function ModelsClient({
 
   // Additional deduplication as a safety measure
   const deduplicatedModels = useMemo(() => {
-    console.log(`Models for deduplication: ${models.length}`);
     const seen = new Set<string>();
     const deduplicated = models.filter(model => {
       // Filter out malformed models from backend (e.g., Cerebras parsing errors)
@@ -390,7 +855,9 @@ export default function ModelsClient({
       );
 
       if (isMalformed) {
-        console.warn(`Filtering out malformed model: ${model.name} (ID: ${model.id})`);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`Filtering out malformed model: ${model.name} (ID: ${model.id})`);
+        }
         return false;
       }
 
@@ -400,11 +867,12 @@ export default function ModelsClient({
       seen.add(model.id);
       return true;
     });
-    console.log(`After client-side deduplication and validation: ${deduplicated.length} unique models`);
     return deduplicated;
   }, [models]);
 
-  const [layout, setLayout] = useState("list");
+  const [layout, setLayout] = useState<'table' | 'grid'>("table");
+  const [allRowsExpanded, setAllRowsExpanded] = useState(true); // Default to all expanded
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set()); // Track individually toggled rows
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || "");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchParams.get('search') || "");
   const [selectedInputFormats, setSelectedInputFormats] = useState<string[]>(searchParams.get('inputFormats')?.split(',').filter(Boolean) || []);
@@ -431,13 +899,12 @@ export default function ModelsClient({
     // Only run on client side to prevent hydration errors
     if (typeof window !== 'undefined') {
       try {
-        const savedTasks = localStorage.getItem('gatewayz_onboarding_tasks');
+        const savedTasks = safeLocalStorageGet('gatewayz_onboarding_tasks');
         if (savedTasks) {
           const taskState = JSON.parse(savedTasks);
           if (!taskState.explore) {
             taskState.explore = true;
-            localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
-            console.log('Onboarding - Explore task marked as complete');
+            safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
 
             // Dispatch custom event to notify the banner
             window.dispatchEvent(new Event('onboarding-task-updated'));
@@ -445,8 +912,7 @@ export default function ModelsClient({
         } else {
           // Initialize task state if it doesn't exist and mark explore as complete
           const taskState = { explore: true };
-          localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify(taskState));
-          console.log('Onboarding - Explore task initialized and marked as complete');
+          safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
 
           // Dispatch custom event to notify the banner
           window.dispatchEvent(new Event('onboarding-task-updated'));
@@ -563,6 +1029,34 @@ export default function ModelsClient({
     setReleaseDateFilter('all');
   };
 
+  // Helper to check if a specific row is expanded
+  const isRowExpanded = useCallback((modelId: string) => {
+    // If row has been individually toggled, use that state
+    if (expandedRows.has(modelId)) {
+      return !allRowsExpanded; // Toggled rows are opposite of global state
+    }
+    return allRowsExpanded;
+  }, [allRowsExpanded, expandedRows]);
+
+  // Toggle a single row's expansion state
+  const toggleRowExpansion = useCallback((modelId: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(modelId)) {
+        next.delete(modelId);
+      } else {
+        next.add(modelId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Toggle all rows expanded/collapsed
+  const toggleAllRows = useCallback(() => {
+    setAllRowsExpanded(prev => !prev);
+    setExpandedRows(new Set()); // Reset individual toggles when toggling all
+  }, []);
+
   // Check if any filters are active
   const hasActiveFilters = searchTerm || selectedInputFormats.length > 0 || selectedOutputFormats.length > 0 ||
     contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024 ||
@@ -585,7 +1079,6 @@ export default function ModelsClient({
 
   // Memoize the filtering logic separately for better performance
   const filteredModels = useMemo(() => {
-    const startTime = performance.now();
     // First filter, then sort
     const filtered = searchFilteredModels.filter((model) => {
       const inputFormatMatch = selectedInputFormats.length === 0 || selectedInputFormats.every(m =>
@@ -681,8 +1174,6 @@ export default function ModelsClient({
         }
     });
 
-    const endTime = performance.now();
-    console.log(`[Models] Filtering took ${(endTime - startTime).toFixed(2)}ms (${sorted.length} results)`);
     return sorted;
   }, [searchFilteredModels, selectedInputFormats, selectedOutputFormats, contextLengthRange, promptPricingRange, selectedParameters, selectedDevelopers, selectedGateways, selectedModelSeries, pricingFilter, privacyFilter, sortBy, releaseDateFilter, getModelSeries]);
 
@@ -826,17 +1317,6 @@ export default function ModelsClient({
     // Use getAllActiveGatewayIds() to include dynamically registered gateways
     // To add a new gateway, simply add it to src/lib/gateway-registry.ts
     const allKnownGateways = getAllActiveGatewayIds();
-
-    // Log gateway counts for debugging
-    const gatewayStats = allKnownGateways.map(g => ({
-      gateway: g,
-      modelCount: counts[g] || 0
-    }));
-    console.log('📊 All Gateway Model Counts:', gatewayStats);
-    const emptyGateways = gatewayStats.filter(s => s.modelCount === 0).map(s => s.gateway);
-    if (emptyGateways.length > 0) {
-      console.warn('⚠️ Gateways with 0 models (may need backend fixes):', emptyGateways);
-    }
 
     // Include all known gateways, even if they have 0 models
     // This ensures users can see all available gateways and understand the complete picture
@@ -1037,7 +1517,7 @@ export default function ModelsClient({
               <div className="flex items-center gap-3 flex-shrink-0 w-full lg:w-auto justify-between lg:justify-end">
                 <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
                   {isLoadingModels || isLoadingMore
-                    ? `${deduplicatedModels.length} models available,  loading...`
+                    ? `${deduplicatedModels.length} models available, loading...`
                     : `${filteredModels.length} / ${deduplicatedModels.length} models`
                   }
                 </span>
@@ -1060,22 +1540,45 @@ export default function ModelsClient({
                   </Select>
                   <div className="hidden lg:flex items-center gap-1 bg-muted p-1 rounded-md">
                     <Button
+                      variant={layout === 'table' ? 'secondary' : 'ghost'}
+                      size="icon"
+                      onClick={() => setLayout('table')}
+                      className="h-8 w-8"
+                      title="Table view"
+                    >
+                      <Table2 className="w-4 h-4" />
+                    </Button>
+                    <Button
                       variant={layout === 'grid' ? 'secondary' : 'ghost'}
                       size="icon"
                       onClick={() => setLayout('grid')}
                       className="h-8 w-8"
+                      title="Grid view"
                     >
                       <LayoutGrid className="w-4 h-4" />
                     </Button>
-                    <Button
-                      variant={layout === 'list' ? 'secondary' : 'ghost'}
-                      size="icon"
-                      onClick={() => setLayout('list')}
-                      className="h-8 w-8"
-                    >
-                      <LayoutList className="w-4 h-4" />
-                    </Button>
                   </div>
+                  {layout === 'table' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={toggleAllRows}
+                      className="flex items-center gap-1.5 h-9"
+                      title={allRowsExpanded ? "Collapse all rows" : "Expand all rows"}
+                    >
+                      {allRowsExpanded ? (
+                        <>
+                          <ChevronsDownUp className="w-4 h-4" />
+                          <span className="text-sm hidden sm:inline">Collapse All</span>
+                        </>
+                      ) : (
+                        <>
+                          <ChevronsUpDown className="w-4 h-4" />
+                          <span className="text-sm hidden sm:inline">Expand All</span>
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1177,18 +1680,51 @@ export default function ModelsClient({
           </div>
 
           <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20 has-onboarding-banner:mt-40" style={{ transition: 'margin-top 0.3s ease' }}>
-          <div
-            className={
-              layout === 'grid'
-                ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden'
-                : 'flex flex-col gap-4 lg:gap-6 overflow-x-hidden'
-            }
-            key={`models-${filteredModels.length}-${debouncedSearchTerm}`}
-          >
-            {visibleModels.map((model, key) => (
-              <ModelCard key={key} model={model} />
-            ))}
-          </div>
+          {layout === 'table' ? (
+            /* Table View - Responsive with mobile and desktop layouts */
+            <div className="rounded-lg border border-border" key={`models-table-${filteredModels.length}-${debouncedSearchTerm}`}>
+              {/* Desktop table header - hidden on mobile */}
+              <div className="hidden md:block">
+                <ModelTableHeader />
+              </div>
+              {/* Mobile header */}
+              <div className="md:hidden px-4 py-3 border-b border-border text-sm font-medium text-muted-foreground bg-muted/30">
+                Models
+              </div>
+              <div className="divide-y divide-border/50">
+                {visibleModels.map((model, index) => (
+                  <div key={model.id} className={index % 2 === 1 ? 'bg-muted/20' : ''}>
+                    {/* Desktop row */}
+                    <div className="hidden md:block">
+                      <GroupedModelTableRow
+                        model={model}
+                        isExpanded={isRowExpanded(model.id)}
+                        onToggle={() => toggleRowExpansion(model.id)}
+                      />
+                    </div>
+                    {/* Mobile row */}
+                    <div className="md:hidden">
+                      <MobileModelRow
+                        model={model}
+                        isExpanded={isRowExpanded(model.id)}
+                        onToggle={() => toggleRowExpansion(model.id)}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* Grid View - Card style */
+            <div
+              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden"
+              key={`models-grid-${filteredModels.length}-${debouncedSearchTerm}`}
+            >
+              {visibleModels.map((model) => (
+                <ModelCard key={model.id} model={model} />
+              ))}
+            </div>
+          )}
 
           {/* No results message */}
           {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (

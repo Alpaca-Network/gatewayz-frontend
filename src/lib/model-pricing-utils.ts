@@ -86,9 +86,10 @@ export interface ModelPricingInfo {
  * - simplismart: Returns prices like 0.74 for $0.74/MTok
  * - akash: Returns prices like 0.13 for $0.13/MTok
  * - cloudflare-workers-ai: Returns prices like 0.66 for $0.66/MTok
- * - openai: Returns prices like 2.50 for $2.50/MTok
- * - anthropic: Returns prices like 3.00 for $3.00/MTok
  * - alpaca-network: Returns prices like 0.27 for $0.27/MTok
+ *
+ * NOTE: openai and anthropic direct gateways return per-TOKEN pricing (e.g., 0.0000025)
+ * NOT per-million, so they are excluded from this list and handled like openrouter.
  */
 const PER_MILLION_PRICING_GATEWAYS = [
   'onerouter',
@@ -113,8 +114,6 @@ const PER_MILLION_PRICING_GATEWAYS = [
   'simplismart',
   'akash',
   'cloudflare-workers-ai',
-  'openai',
-  'anthropic',
   'alpaca-network',
 ];
 

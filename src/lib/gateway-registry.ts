@@ -41,6 +41,8 @@ export interface GatewayConfig {
   icon?: string;
   /** Aliases that map to this gateway (e.g., 'hug' -> 'huggingface') */
   aliases?: string[];
+  /** Path to the gateway's logo image (e.g., '/openrouter-logo.svg') */
+  logo?: string;
 }
 
 /**
@@ -57,6 +59,7 @@ export const GATEWAYS: GatewayConfig[] = [
     priority: 'fast',
     requiresApiKey: true,
     apiKeyEnvVar: 'OPENAI_API_KEY',
+    logo: '/openai-logo.svg',
   },
   {
     id: 'anthropic',
@@ -65,12 +68,14 @@ export const GATEWAYS: GatewayConfig[] = [
     priority: 'fast',
     requiresApiKey: true,
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
+    logo: '/anthropic-logo.svg',
   },
   {
     id: 'openrouter',
     name: 'OpenRouter',
     color: 'bg-blue-500',
     priority: 'fast',
+    logo: '/openrouter-logo.svg',
   },
   {
     id: 'groq',
@@ -78,24 +83,28 @@ export const GATEWAYS: GatewayConfig[] = [
     color: 'bg-orange-500',
     priority: 'fast',
     icon: 'zap',
+    logo: '/groq-logo.svg',
   },
   {
     id: 'together',
-    name: 'Together',
+    name: 'Together AI',
     color: 'bg-indigo-500',
     priority: 'fast',
+    logo: '/together-logo.svg',
   },
   {
     id: 'fireworks',
     name: 'Fireworks',
     color: 'bg-red-500',
     priority: 'fast',
+    logo: '/fireworks-logo.svg',
   },
   {
     id: 'vercel-ai-gateway',
     name: 'Vercel AI',
     color: 'bg-slate-900',
     priority: 'fast',
+    logo: '/vercel-logo.svg',
   },
 
   // Slow gateways (load in background)
@@ -104,49 +113,57 @@ export const GATEWAYS: GatewayConfig[] = [
     name: 'Featherless',
     color: 'bg-green-500',
     priority: 'slow',
+    logo: '/featherless-logo.svg',
   },
   {
     id: 'chutes',
     name: 'Chutes',
     color: 'bg-yellow-500',
     priority: 'slow',
+    logo: '/chutes-logo.svg',
   },
   {
     id: 'deepinfra',
     name: 'DeepInfra',
     color: 'bg-cyan-500',
     priority: 'slow',
+    logo: '/deepinfra-logo.svg',
   },
   {
     id: 'google-vertex',
-    name: 'Google',
+    name: 'Google AI',
     color: 'bg-blue-600',
     priority: 'slow',
     aliases: ['google'], // Support both 'google' and 'google-vertex' for backwards compatibility
+    logo: '/google-logo.svg',
   },
   {
     id: 'cerebras',
     name: 'Cerebras',
     color: 'bg-amber-600',
     priority: 'slow',
+    logo: '/cerebras-logo.svg',
   },
   {
     id: 'nebius',
-    name: 'Nebius',
+    name: 'Nebius AI Studio',
     color: 'bg-slate-600',
     priority: 'slow',
+    logo: '/nebius-logo.svg',
   },
   {
     id: 'xai',
     name: 'xAI',
     color: 'bg-black',
     priority: 'slow',
+    logo: '/xai-logo.svg',
   },
   {
     id: 'novita',
-    name: 'Novita',
+    name: 'Novita AI',
     color: 'bg-violet-600',
     priority: 'slow',
+    logo: '/novita-logo.svg',
   },
   {
     id: 'huggingface',
@@ -156,46 +173,53 @@ export const GATEWAYS: GatewayConfig[] = [
     requiresApiKey: true,
     apiKeyEnvVar: 'HF_API_KEY',
     aliases: ['hug'], // Backend sometimes uses 'hug' abbreviation
+    logo: '/huggingface-logo.svg',
   },
   {
     id: 'aimo',
-    name: 'AiMo',
+    name: 'AIMO Network',
     color: 'bg-pink-600',
     priority: 'slow',
+    logo: '/aimo-logo.svg',
   },
   {
     id: 'near',
-    name: 'NEAR',
+    name: 'NEAR Protocol',
     color: 'bg-teal-600',
     priority: 'slow',
     requiresApiKey: true,
     apiKeyEnvVar: 'NEAR_API_KEY',
+    logo: '/near-logo.svg',
   },
   {
     id: 'fal',
-    name: 'Fal',
+    name: 'FAL AI',
     color: 'bg-emerald-600',
     priority: 'slow',
+    logo: '/fal-logo.svg',
   },
   {
     id: 'helicone',
     name: 'Helicone',
     color: 'bg-indigo-600',
     priority: 'slow',
+    logo: '/helicone-logo.svg',
   },
   {
     id: 'alpaca',
     name: 'Alpaca Network',
     color: 'bg-green-700',
     priority: 'slow',
+    logo: '/alpaca-logo.svg',
   },
   {
     id: 'alibaba',
-    name: 'Alibaba',
+    name: 'Alibaba Cloud',
     color: 'bg-orange-700',
     priority: 'slow',
     requiresApiKey: true,
     apiKeyEnvVar: 'ALIBABA_API_KEY',
+    logo: '/alibaba-logo.svg',
   },
   {
     id: 'clarifai',
@@ -204,18 +228,67 @@ export const GATEWAYS: GatewayConfig[] = [
     priority: 'slow',
     requiresApiKey: true,
     apiKeyEnvVar: 'CLARIFAI_API_KEY',
+    logo: '/clarifai-logo.svg',
   },
   {
     id: 'onerouter',
     name: 'OneRouter',
     color: 'bg-emerald-500',
     priority: 'slow',
+    logo: '/onerouter-logo.svg',
   },
   {
     id: 'simplismart',
     name: 'SimpliSmart',
     color: 'bg-sky-500',
     priority: 'slow',
+    logo: '/simplismart-logo.svg',
+  },
+  {
+    id: 'sybil',
+    name: 'Sybil',
+    color: 'bg-violet-500',
+    priority: 'slow',
+    requiresApiKey: true,
+    apiKeyEnvVar: 'SYBIL_API_KEY',
+    logo: '/sybil-logo.svg',
+  },
+  {
+    id: 'canopywave',
+    name: 'Canopy Wave',
+    color: 'bg-teal-500',
+    priority: 'slow',
+    requiresApiKey: true,
+    apiKeyEnvVar: 'CANOPYWAVE_API_KEY',
+    logo: '/canopywave-logo.svg',
+  },
+  {
+    id: 'aihubmix',
+    name: 'AiHubMix',
+    color: 'bg-rose-500',
+    priority: 'slow',
+    logo: '/aihubmix-logo.svg',
+  },
+  {
+    id: 'anannas',
+    name: 'Anannas',
+    color: 'bg-lime-600',
+    priority: 'slow',
+    logo: '/anannas-logo.svg',
+  },
+  {
+    id: 'cloudflare-workers-ai',
+    name: 'Cloudflare Workers AI',
+    color: 'bg-orange-500',
+    priority: 'slow',
+    logo: '/cloudflare-logo.svg',
+  },
+  {
+    id: 'morpheus',
+    name: 'Morpheus',
+    color: 'bg-cyan-600',
+    priority: 'slow',
+    logo: '/morpheus-logo.svg',
   },
 
   // Deprecated gateways (kept for backward compatibility)
@@ -225,6 +298,7 @@ export const GATEWAYS: GatewayConfig[] = [
     color: 'bg-purple-500',
     priority: 'slow',
     deprecated: true,
+    logo: '/portkey-logo.svg',
   },
 ];
 
@@ -265,12 +339,13 @@ GATEWAYS.forEach(g => {
 });
 
 /** Gateway display config for UI (compatible with existing GATEWAY_CONFIG format) */
-export const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: string }> = {};
+export const GATEWAY_CONFIG: Record<string, { name: string; color: string; icon?: string; logo?: string }> = {};
 GATEWAYS.forEach(g => {
   GATEWAY_CONFIG[g.id] = {
     name: g.name,
     color: g.color,
     icon: g.icon,
+    logo: g.logo,
   };
   // Also map aliases for backwards compatibility
   g.aliases?.forEach(alias => {
@@ -278,6 +353,7 @@ GATEWAYS.forEach(g => {
       name: g.name,
       color: g.color,
       icon: g.icon,
+      logo: g.logo,
     };
   });
 });
@@ -358,6 +434,28 @@ export function getGatewayDisplayName(gatewayId: string): string {
   // Try exact match first, then lowercase
   const config = GATEWAY_BY_ID[gatewayId] || GATEWAY_BY_ID[gatewayId.toLowerCase()];
   return config?.name || gatewayId;
+}
+
+/**
+ * Get gateway logo path
+ * Handles case-insensitive lookups
+ * @returns Logo path or undefined if not configured
+ */
+export function getGatewayLogo(gatewayId: string): string | undefined {
+  // Try exact match first, then lowercase
+  const config = GATEWAY_BY_ID[gatewayId] || GATEWAY_BY_ID[gatewayId.toLowerCase()];
+  return config?.logo;
+}
+
+/** Default fallback logo for gateways without a configured logo */
+export const DEFAULT_GATEWAY_LOGO = '/OpenAI_Logo-black.svg';
+
+/**
+ * Get gateway logo path with fallback
+ * @returns Logo path or default fallback if not configured
+ */
+export function getGatewayLogoWithFallback(gatewayId: string): string {
+  return getGatewayLogo(gatewayId) || DEFAULT_GATEWAY_LOGO;
 }
 
 /**

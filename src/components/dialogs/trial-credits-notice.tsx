@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, Sparkles } from "lucide-react";
 import Link from 'next/link';
 import { getUserData } from '@/lib/api';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 const TRIAL_NOTICE_DISMISSED_KEY = 'gatewayz_trial_notice_dismissed';
 
@@ -22,7 +23,7 @@ export function TrialCreditsNotice() {
 
   useEffect(() => {
     // Check if user has already dismissed this notice
-    const dismissed = localStorage.getItem(TRIAL_NOTICE_DISMISSED_KEY);
+    const dismissed = safeLocalStorageGet(TRIAL_NOTICE_DISMISSED_KEY);
     if (dismissed === 'true') {
       return;
     }
@@ -34,10 +35,10 @@ export function TrialCreditsNotice() {
         return;
       }
 
-      // Show dialog if user has trial credits (3 or less) and hasn't added payment
-      // This assumes users start with 3 credits and trial users haven't purchased more
-      if (userData.credits > 0 && userData.credits <= 3) {
-        setCredits(Math.floor(userData.credits));
+      // Show dialog if user has trial credits ($5 or less) and hasn't added payment
+      // Credits are stored in cents, so 500 cents = $5
+      if (userData.credits > 0 && userData.credits <= 500) {
+        setCredits(userData.credits / 100); // Convert cents to dollars for display
         setShowDialog(true);
       }
     }, 2000); // Wait 2 seconds after page load for better UX
@@ -46,7 +47,7 @@ export function TrialCreditsNotice() {
   }, []);
 
   const handleDismiss = () => {
-    localStorage.setItem(TRIAL_NOTICE_DISMISSED_KEY, 'true');
+    safeLocalStorageSet(TRIAL_NOTICE_DISMISSED_KEY, 'true');
     setShowDialog(false);
   };
 
@@ -66,7 +67,7 @@ export function TrialCreditsNotice() {
             <DialogTitle className="text-xl">Welcome to Gatewayz! 🎉</DialogTitle>
           </div>
           <DialogDescription className="text-sm text-muted-foreground">
-            You're starting with <span className="font-semibold text-amber-600 dark:text-amber-400">{credits} free trial credits</span> to explore our platform.
+            You're starting with <span className="font-semibold text-amber-600 dark:text-amber-400">${credits.toFixed(2)} in free trial credits</span> to explore our platform.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 pt-2">

@@ -10,6 +10,7 @@ import { getApiKey } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 import { sentryMetrics } from '@/lib/sentry-metrics';
+import { isTauriEnvironment } from '@/lib/config';
 
 // Stream stopped error for clean cancellation
 class StreamStoppedError extends Error {
@@ -371,11 +372,27 @@ export function useChatStream() {
 
         // Use flexible route for non-standard gateways UNLESS normalized by a gateway
         const useFlexibleRoute = (isNonStandardGateway || isFireworksModel) && !isNormalizedByGateway;
-        const url = useFlexibleRoute
-            ? `/api/chat/completions?session_id=${sessionId}`
-            : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+
+        // Determine the appropriate URL based on environment:
+        // - Tauri desktop: Always use backend API directly at /v1/chat/completions
+        //   (no Next.js server in static export, and ai-sdk-completions is a Next.js-only route)
+        // - Web: Use Next.js API routes as proxy (/api/chat/completions or /api/chat/ai-sdk-completions)
+        const isTauri = isTauriEnvironment();
+        let url: string;
+        if (isTauri) {
+            // Desktop app: Always use /v1/chat/completions directly
+            // The backend only has /v1/chat/completions, not /v1/chat/ai-sdk-completions
+            const backendBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+            url = `${backendBaseUrl}/v1/chat/completions?session_id=${sessionId}`;
+        } else {
+            // Web app: Use Next.js API routes as proxy
+            url = useFlexibleRoute
+                ? `/api/chat/completions?session_id=${sessionId}`
+                : `/api/chat/ai-sdk-completions?session_id=${sessionId}`;
+        }
 
         debugLog('Route selection', {
+            isTauri,
             useFlexibleRoute,
             isNonStandardGateway,
             isFireworksModel,
@@ -384,7 +401,7 @@ export function useChatStream() {
             url,
             model: model.value
         });
-        console.log('[Chat Stream] Using', useFlexibleRoute ? 'completions (flexible)' : 'AI SDK', 'route for model:', model.value, 'gateway:', gatewayLower || 'none');
+        console.log('[Chat Stream] Using', isTauri ? 'direct backend API' : (useFlexibleRoute ? 'completions (flexible)' : 'AI SDK'), 'route for model:', model.value, 'gateway:', gatewayLower || 'none');
 
         try {
             // 4. Stream Loop
@@ -432,11 +449,15 @@ export function useChatStream() {
                     debugLog('Stream progress', { chunkCount, totalContentLength });
                 }
 
-                // Throttle UI updates (every 16ms = ~60fps) for smooth streaming
+                // Throttle UI updates (every 35ms = ~28fps) for controlled streaming
+                // This makes fast streams feel more deliberate and less chaotic
                 const now = Date.now();
-                if (now - lastUpdate > 16 || chunk.done) {
+                if (now - lastUpdate > 35 || chunk.done) {
                     const currentContent = streamHandlerRef.current.getFinalContent();
                     const currentReasoning = streamHandlerRef.current.getFinalReasoning();
+
+                    // Determine if reasoning is still streaming (has reasoning but no content yet, or chunk has reasoning)
+                    const isReasoningStreaming = Boolean(chunk.reasoning) || (currentReasoning && !currentContent);
 
                     // Use flushSync to force React to render immediately instead of batching
                     // This is critical for real-time streaming updates in React 18+
@@ -450,6 +471,7 @@ export function useChatStream() {
                                 ...last,
                                 content: currentContent,
                                 reasoning: currentReasoning,
+                                isReasoningStreaming,
                                 isStreaming: true, // Ensure streaming flag stays true during updates
                             }];
                         });
@@ -460,7 +482,7 @@ export function useChatStream() {
                     // Use requestAnimationFrame with setTimeout fallback for background tabs
                     // RAF pauses when tab is backgrounded, so we race with a timeout
                     await new Promise(resolve => {
-                        const timeoutId = setTimeout(resolve, 16);
+                        const timeoutId = setTimeout(resolve, 35);
                         requestAnimationFrame(() => {
                             clearTimeout(timeoutId);
                             resolve(undefined);

@@ -15,7 +15,7 @@ export const metadata: Metadata = {
         url: '/og-inbox.jpg',
         width: 1200,
         height: 630,
-        alt: 'Gatewayz x Terragon - AI Agent Inbox',
+        alt: 'Gatewayz x Terragon - Claude Code + GatewayZ',
         type: 'image/jpeg',
       },
     ],

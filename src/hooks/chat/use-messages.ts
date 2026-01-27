@@ -21,12 +21,16 @@ import {
   MessageRole,
 } from './types';
 import { getApiKey } from '@/lib/auth';
+import { getChatApiUrl } from '@/lib/config';
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
+
+// Use dynamic endpoint for desktop (direct backend) vs web (Next.js API route)
+const getSessionMessagesUrl = (sessionId: number) => getChatApiUrl(`/v1/chat/sessions/${sessionId}`);
 
 // =============================================================================
 // HELPER: Fetch with timeout
@@ -101,7 +105,7 @@ export function useMessages(options: UseMessagesOptions = {}): UseMessagesReturn
     setError(null);
 
     try {
-      const response = await fetchWithTimeout(`/api/chat/sessions/${sessionId}`, {
+      const response = await fetchWithTimeout(getSessionMessagesUrl(sessionId), {
         headers: getAuthHeaders(),
       });
 
@@ -167,7 +171,7 @@ export function useMessages(options: UseMessagesOptions = {}): UseMessagesReturn
 
   const saveMessage = async (message: ChatMessage): Promise<void> => {
     try {
-      const response = await fetchWithTimeout(`/api/chat/sessions/${message.sessionId}/messages`, {
+      const response = await fetchWithTimeout(`${getSessionMessagesUrl(message.sessionId)}/messages`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({

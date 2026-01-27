@@ -14,6 +14,7 @@ jest.mock('lucide-react', () => ({
   CheckCircle: () => <span data-testid="check-icon">CheckCircle</span>,
   Clock: () => <span data-testid="clock-icon">Clock</span>,
   Sparkles: () => <span data-testid="sparkles-icon">Sparkles</span>,
+  RefreshCw: () => <span data-testid="refresh-icon">RefreshCw</span>,
 }));
 
 describe('TierInfoCard', () => {
@@ -320,6 +321,639 @@ describe('TierInfoCard', () => {
       render(<TierInfoCard />);
 
       expect(screen.getByText('Past due')).toBeInTheDocument();
+    });
+  });
+
+  describe('Credit Breakdown for Pro/Max users', () => {
+    it('should display credit breakdown section for Pro users with active subscription and userData', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'privy-1',
+          display_name: 'Pro User',
+          email: 'pro@example.com',
+          credits: 2000,
+          tier: 'pro',
+          subscription_status: 'active',
+          subscription_allowance: 1500, // $15.00
+          purchased_credits: 500, // $5.00
+          total_credits: 2000, // $20.00
+        },
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show credit breakdown section
+      expect(screen.getByText('Credit Breakdown')).toBeInTheDocument();
+      expect(screen.getByText('Monthly Allowance')).toBeInTheDocument();
+      expect(screen.getByText('$15.00')).toBeInTheDocument();
+      expect(screen.getByText('Resets on billing date')).toBeInTheDocument();
+      expect(screen.getByText('Purchased Credits')).toBeInTheDocument();
+      expect(screen.getByText('$5.00')).toBeInTheDocument();
+      expect(screen.getByText('Never expire')).toBeInTheDocument();
+      expect(screen.getByText('Total Available')).toBeInTheDocument();
+      expect(screen.getByText('$20.00')).toBeInTheDocument();
+    });
+
+    it('should display credit breakdown section for Max users with active subscription and userData', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 10);
+
+      mockUseTier.mockReturnValue({
+        tier: 'max',
+        tierInfo: {
+          name: 'max',
+          displayName: 'Max',
+          description: 'Maximum tier',
+          monthlyPrice: '$75/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'privy-1',
+          display_name: 'Max User',
+          email: 'max@example.com',
+          credits: 16000,
+          tier: 'max',
+          subscription_status: 'active',
+          subscription_allowance: 15000, // $150.00
+          purchased_credits: 1000, // $10.00
+          total_credits: 16000, // $160.00
+        },
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show credit breakdown section
+      expect(screen.getByText('Credit Breakdown')).toBeInTheDocument();
+      expect(screen.getByText('$150.00')).toBeInTheDocument();
+      expect(screen.getByText('$10.00')).toBeInTheDocument();
+      expect(screen.getByText('$160.00')).toBeInTheDocument();
+    });
+
+    it('should handle Pro user with 0 purchased credits', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 20);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'privy-1',
+          display_name: 'Pro User',
+          email: 'pro@example.com',
+          credits: 1500,
+          tier: 'pro',
+          subscription_status: 'active',
+          subscription_allowance: 1500, // $15.00
+          purchased_credits: 0, // $0.00
+          total_credits: 1500, // $15.00
+        },
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show credit breakdown with 0 purchased credits
+      expect(screen.getByText('Credit Breakdown')).toBeInTheDocument();
+      expect(screen.getByText('$0.00')).toBeInTheDocument();
+    });
+
+    it('should handle missing subscription_allowance (defaults to 0)', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'privy-1',
+          display_name: 'Pro User',
+          email: 'pro@example.com',
+          credits: 500,
+          tier: 'pro',
+          subscription_status: 'active',
+          // subscription_allowance is undefined
+          purchased_credits: 500,
+        },
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show credit breakdown section with default values
+      expect(screen.getByText('Credit Breakdown')).toBeInTheDocument();
+    });
+
+    it('should NOT display credit breakdown when userData is null', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null, // No userData
+      });
+
+      render(<TierInfoCard />);
+
+      // Should NOT show credit breakdown
+      expect(screen.queryByText('Credit Breakdown')).not.toBeInTheDocument();
+    });
+
+    it('should NOT display credit breakdown for basic tier even with userData', () => {
+      mockUseTier.mockReturnValue({
+        tier: 'basic',
+        tierInfo: {
+          name: 'basic',
+          displayName: 'Basic',
+          description: 'Pay-per-use access',
+          monthlyPrice: 'Pay-per-use',
+          features: [],
+        },
+        hasSubscription: false,
+        subscriptionStatusText: null,
+        renewalDate: null,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'privy-1',
+          display_name: 'Basic User',
+          email: 'basic@example.com',
+          credits: 500,
+          tier: 'basic',
+        },
+      });
+
+      render(<TierInfoCard />);
+
+      // Should NOT show credit breakdown for basic tier
+      expect(screen.queryByText('Credit Breakdown')).not.toBeInTheDocument();
+    });
+
+    it('should NOT display credit breakdown for Pro users without active subscription', () => {
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Cancelled',
+        renewalDate: null,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'privy-1',
+          display_name: 'Pro User',
+          email: 'pro@example.com',
+          credits: 500,
+          tier: 'pro',
+          subscription_status: 'cancelled',
+          subscription_allowance: 0,
+          purchased_credits: 500,
+        },
+      });
+
+      render(<TierInfoCard />);
+
+      // Should NOT show credit breakdown for cancelled subscription
+      expect(screen.queryByText('Credit Breakdown')).not.toBeInTheDocument();
+    });
+
+    it('should use total_credits from userData when available', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'privy-1',
+          display_name: 'Pro User',
+          email: 'pro@example.com',
+          credits: 2000, // This might be different
+          tier: 'pro',
+          subscription_status: 'active',
+          subscription_allowance: 1500,
+          purchased_credits: 500,
+          total_credits: 2500, // total_credits takes precedence
+        },
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show total_credits value
+      expect(screen.getByText('$25.00')).toBeInTheDocument();
+    });
+
+    it('should fallback to credits when total_credits is undefined', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'privy-1',
+          display_name: 'Pro User',
+          email: 'pro@example.com',
+          credits: 2000, // Fallback to this value
+          tier: 'pro',
+          subscription_status: 'active',
+          subscription_allowance: 1500,
+          purchased_credits: 500,
+          // total_credits is undefined
+        },
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show credits value as fallback
+      expect(screen.getByText('$20.00')).toBeInTheDocument();
+    });
+  });
+
+  describe('Credit Renewal for Pro/Max users', () => {
+    it('should display credit renewal info for Pro users with active subscription', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show credit renewal section
+      expect(screen.getByText('Credit Renewal')).toBeInTheDocument();
+      expect(screen.getByText('Days until renewal')).toBeInTheDocument();
+      expect(screen.getByText('15 days')).toBeInTheDocument();
+      expect(screen.getByText('Renewal date')).toBeInTheDocument();
+      expect(screen.getByText(/credits will be replenished/i)).toBeInTheDocument();
+    });
+
+    it('should display credit renewal info for Max users with active subscription', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 7);
+
+      mockUseTier.mockReturnValue({
+        tier: 'max',
+        tierInfo: {
+          name: 'max',
+          displayName: 'Max',
+          description: 'Maximum tier',
+          monthlyPrice: '$75/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      // Should show credit renewal section
+      expect(screen.getByText('Credit Renewal')).toBeInTheDocument();
+      expect(screen.getByText('7 days')).toBeInTheDocument();
+    });
+
+    it('should show "Today" when renewal is due today', () => {
+      const renewalDate = new Date();
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: true,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.getByText('Credit Renewal')).toBeInTheDocument();
+      expect(screen.getByText('Today')).toBeInTheDocument();
+    });
+
+    it('should show singular "day" when 1 day remaining', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 1);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.getByText('1 day')).toBeInTheDocument();
+    });
+
+    it('should NOT show credit renewal for basic tier users', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'basic',
+        tierInfo: {
+          name: 'basic',
+          displayName: 'Basic',
+          description: 'Pay-per-use access',
+          monthlyPrice: 'Pay-per-use',
+          features: [],
+        },
+        hasSubscription: false,
+        subscriptionStatusText: null,
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.queryByText('Credit Renewal')).not.toBeInTheDocument();
+    });
+
+    it('should NOT show credit renewal for cancelled subscriptions', () => {
+      const renewalDate = new Date();
+      renewalDate.setDate(renewalDate.getDate() + 15);
+
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Cancelled',
+        renewalDate: renewalDate,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.queryByText('Credit Renewal')).not.toBeInTheDocument();
+    });
+
+    it('should NOT show credit renewal when no renewal date is available', () => {
+      mockUseTier.mockReturnValue({
+        tier: 'pro',
+        tierInfo: {
+          name: 'pro',
+          displayName: 'Pro',
+          description: 'Professional tier',
+          monthlyPrice: '$10/month',
+          features: [],
+        },
+        hasSubscription: true,
+        subscriptionStatusText: 'Active',
+        renewalDate: null,
+        isExpiringSoon: false,
+        isTrial: false,
+        trialExpired: false,
+        trialExpirationDate: null,
+        trialDaysRemaining: null,
+        trialExpiringSoon: false,
+        isLoading: false,
+        error: null,
+        userData: null,
+      });
+
+      render(<TierInfoCard />);
+
+      expect(screen.queryByText('Credit Renewal')).not.toBeInTheDocument();
     });
   });
 });

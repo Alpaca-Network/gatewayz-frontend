@@ -3,8 +3,9 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Check, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { getUserData } from "@/lib/api";
+import { useTier } from "@/hooks/use-tier";
 
 interface PricingTier {
   id: 'starter' | 'pro' | 'max' | 'enterprise';
@@ -40,13 +41,13 @@ const pricingTiers: PricingTier[] = [
     id: 'pro',
     name: 'Pro',
     description: 'Scale with confidence',
-    price: '$10',
-    originalPrice: '$20/month',
-    discount: 'Save 50%',
+    price: '$8',
+    originalPrice: '$10/month',
+    discount: 'Save 20%',
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      '50% discount on first $3 credits',
+      '$15 monthly credit allowance',
       'Access to 10,000+ models',
       'Smart cost optimization',
       'Advanced analytics',
@@ -73,7 +74,7 @@ const pricingTiers: PricingTier[] = [
       'Early access to advanced features',
     ],
     stripePriceId: process.env.NEXT_PUBLIC_STRIPE_MAX_PRICE_ID,
-    stripeProductId: 'prod_TKOraBpWMxMAIu', // Max product ID for database
+    stripeProductId: 'prod_TMHUXL8p0onwwO', // Max product ID for database
   },
   {
     id: 'enterprise',
@@ -92,26 +93,114 @@ const pricingTiers: PricingTier[] = [
   },
 ];
 
+// Tier hierarchy for comparison (higher number = higher tier)
+const TIER_HIERARCHY: Record<string, number> = {
+  starter: 0,
+  basic: 0,  // basic and starter are same level
+  pro: 1,
+  max: 2,
+  enterprise: 3,
+};
+
+type ButtonAction = 'your_plan' | 'upgrade' | 'downgrade' | 'get_started' | 'contact';
+
 export function PricingSection() {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { tier: currentTier, hasSubscription } = useTier();
 
-  const handleGetStarted = async (tier: PricingTier) => {
+  // Determine button action for each tier
+  const getButtonAction = useMemo(() => {
+    return (tierId: string): ButtonAction => {
+      // Enterprise is always contact
+      if (tierId === 'enterprise') {
+        return 'contact';
+      }
+
+      // If user is not authenticated or doesn't have a subscription, show "Get Started"
+      const userData = getUserData();
+      if (!userData || !userData.api_key) {
+        return 'get_started';
+      }
+
+      // Map current tier to hierarchy (basic = starter level)
+      const normalizedCurrentTier = currentTier === 'basic' ? 'starter' : currentTier;
+      const currentLevel = TIER_HIERARCHY[normalizedCurrentTier] ?? 0;
+      const targetLevel = TIER_HIERARCHY[tierId] ?? 0;
+
+      // Same tier = Your Plan
+      if (targetLevel === currentLevel) {
+        return 'your_plan';
+      }
+
+      // Higher tier = Upgrade
+      if (targetLevel > currentLevel) {
+        return 'upgrade';
+      }
+
+      // Lower tier = Downgrade
+      return 'downgrade';
+    };
+  }, [currentTier, hasSubscription]);
+
+  // Get button text based on action
+  const getButtonText = (tierId: string, action: ButtonAction): string => {
+    switch (action) {
+      case 'your_plan':
+        return 'Your Plan';
+      case 'upgrade':
+        return 'Upgrade';
+      case 'downgrade':
+        return 'Downgrade';
+      case 'contact':
+        return 'Contact Sales';
+      default:
+        return 'Get Started';
+    }
+  };
+
+  const handleTierAction = async (tier: PricingTier) => {
+    const action = getButtonAction(tier.id);
     setIsLoading(tier.id);
 
     try {
-      if (tier.id === 'starter') {
-        // Redirect to signup or show auth modal
-        window.location.href = '/signup';
+      // "Your Plan" button does nothing
+      if (action === 'your_plan') {
         return;
       }
 
-      if (tier.id === 'enterprise') {
+      if (tier.id === 'starter') {
+        // Redirect to signup for unauthenticated users
+        const userData = getUserData();
+        if (!userData || !userData.api_key) {
+          window.location.href = '/signup';
+          return;
+        }
+        // Authenticated user clicking starter - this is a downgrade (cancel subscription)
+        if (action === 'downgrade') {
+          // Redirect to checkout with cancel action
+          window.location.href = `/checkout?tier=starter&mode=subscription&action=cancel`;
+          return;
+        }
+        return;
+      }
+
+      if (action === 'get_started') {
+        // Redirect to signup for unauthenticated users
+        const userData = getUserData();
+        if (!userData || !userData.api_key) {
+          window.location.href = '/signup';
+          return;
+        }
+        return;
+      }
+
+      if (tier.id === 'enterprise' || action === 'contact') {
         // Redirect to enterprise page
         window.location.href = 'https://gatewayz.ai/enterprise';
         return;
       }
 
-      // For Pro and Max tiers, check authentication and redirect to checkout page
+      // For Pro and Max tiers, check authentication
       const userData = getUserData();
 
       if (!userData || !userData.api_key) {
@@ -125,11 +214,23 @@ export function PricingSection() {
         return;
       }
 
-      // Redirect to checkout page with tier info
+      // Upgrade: redirect to checkout page with upgrade flag
+      if (action === 'upgrade') {
+        window.location.href = `/checkout?tier=${tier.id}&mode=subscription&action=upgrade`;
+        return;
+      }
+
+      // Downgrade: redirect to checkout with downgrade flag
+      if (action === 'downgrade') {
+        window.location.href = `/checkout?tier=${tier.id}&mode=subscription&action=downgrade`;
+        return;
+      }
+
+      // Default: new subscription
       window.location.href = `/checkout?tier=${tier.id}&mode=subscription`;
     } catch (error) {
       console.error('Subscription error:', error);
-      alert(error instanceof Error ? error.message : 'Failed to start subscription. Please try again.');
+      alert(error instanceof Error ? error.message : 'Failed to process request. Please try again.');
     } finally {
       setIsLoading(null);
     }
@@ -214,21 +315,35 @@ export function PricingSection() {
                 </div>
 
                 {/* CTA Button */}
-                <Button
-                  className={`w-full ${
-                    tier.popular
-                      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                      : tier.ctaVariant === 'secondary'
-                      ? ''
-                      : 'bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90'
-                  }`}
-                  variant={tier.popular ? 'default' : tier.ctaVariant}
-                  size="lg"
-                  onClick={() => handleGetStarted(tier)}
-                  disabled={isLoading !== null}
-                >
-                  {isLoading === tier.id ? 'Loading...' : tier.ctaText}
-                </Button>
+                {(() => {
+                  const action = getButtonAction(tier.id);
+                  const buttonText = getButtonText(tier.id, action);
+                  const isCurrentPlan = action === 'your_plan';
+                  const isDowngrade = action === 'downgrade';
+
+                  return (
+                    <Button
+                      className={`w-full ${
+                        isCurrentPlan
+                          ? 'bg-green-600 text-white hover:bg-green-700 cursor-default'
+                          : isDowngrade
+                          ? 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                          : tier.popular
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          : tier.ctaVariant === 'secondary'
+                          ? ''
+                          : 'bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90'
+                      }`}
+                      variant={isCurrentPlan ? 'default' : isDowngrade ? 'secondary' : tier.popular ? 'default' : tier.ctaVariant}
+                      size="lg"
+                      onClick={() => !isCurrentPlan && handleTierAction(tier)}
+                      disabled={isLoading !== null || isCurrentPlan}
+                    >
+                      {isLoading === tier.id ? 'Loading...' : buttonText}
+                    </Button>
+                  );
+                })()}
+
               </CardContent>
             </Card>
           ))}
