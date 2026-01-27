@@ -377,7 +377,7 @@ export default function InboxPage() {
           title="Coding Inbox"
           onLoad={handleIframeLoad}
           allow="clipboard-read; clipboard-write"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
         />
       )}
     </div>

@@ -234,7 +234,7 @@ describe("InboxPage", () => {
       const iframe = screen.getByTitle("Coding Inbox");
       expect(iframe).toHaveAttribute(
         "sandbox",
-        "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+        "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
       );
     });
 
