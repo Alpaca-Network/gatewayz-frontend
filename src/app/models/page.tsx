@@ -140,12 +140,9 @@ async function getAllModels(): Promise<Model[]> {
       return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
     }
 
-    // During build time, skip API calls to avoid build failures
-    // Note: Only check NEXT_PHASE, not CI env var, because CI is set in Vercel runtime too
-    if (process.env.NEXT_PHASE === 'phase-production-build') {
-      console.log('[Models Page] Build time detected, using static models as fallback');
-      return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
-    }
+    // During build time, we WANT to fetch real models for ISR pre-rendering
+    // The server can make API calls during build, so we don't need the fallback
+    // This ensures the initial pre-rendered page has all models, not just 18 static ones
 
     console.log('[Models Page] Fetching all models with gateway=all (single request)');
     const startTime = Date.now();
