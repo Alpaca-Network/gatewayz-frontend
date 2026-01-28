@@ -12,12 +12,19 @@ async function validateApiKeyWithBackend(apiKey: string): Promise<{ valid: boole
     return { valid: true }; // Allow in dev without backend
   }
 
+  // Add timeout to prevent hanging requests that cause 504s
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
   try {
     const response = await fetch(`${backendUrl}/api/user/me`, {
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (response.ok) {
       const data = await response.json();
@@ -25,7 +32,12 @@ async function validateApiKeyWithBackend(apiKey: string): Promise<{ valid: boole
     }
     return { valid: false };
   } catch (error) {
-    console.error("[API /api/terragon/auth] Backend validation error:", error);
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error("[API /api/terragon/auth] Backend validation timed out after 5s");
+    } else {
+      console.error("[API /api/terragon/auth] Backend validation error:", error);
+    }
     // On network error, fail closed for security
     return { valid: false };
   }
