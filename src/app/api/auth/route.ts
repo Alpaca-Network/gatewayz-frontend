@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
             signal: controller.signal,
           }),
         {
-          maxRetries: 3,
+          maxRetries: 2, // Reduced from 3 to keep total retry time under 90s guard timeout
           initialDelayMs: 1000, // Increased from 500ms to give backend more recovery time
           maxDelayMs: 10000, // Increased from 5s to 10s
           backoffMultiplier: 2,
