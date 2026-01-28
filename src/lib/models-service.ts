@@ -257,9 +257,10 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
   // Backend now properly supports pagination with has_more and next_offset
   const requestLimit = limit || 500;
   // Use centralized PRIORITY_GATEWAYS for fast gateway detection
-  // Timeouts: 10s for 'all' (aggregated endpoint), 5s for fast gateways, 30s for slow (HuggingFace)
-  // The 'all' endpoint should be fast since backend handles aggregation
-  const timeoutMs = gateway === 'all' ? 10000 : (PRIORITY_GATEWAYS.includes(gateway) ? 5000 : 30000);
+  // Timeouts: 180s for 'all' (aggregated endpoint needs time to fetch from all gateways),
+  // 5s for fast gateways, 30s for slow (HuggingFace)
+  // Note: The 'all' endpoint aggregates from many providers and can take 60-120s under load
+  const timeoutMs = gateway === 'all' ? 180000 : (PRIORITY_GATEWAYS.includes(gateway) ? 5000 : 30000);
 
   let offset = 0;
   let hasMore = true;
