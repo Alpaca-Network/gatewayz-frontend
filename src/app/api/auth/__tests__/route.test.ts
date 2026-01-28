@@ -857,8 +857,9 @@ describe('POST /api/auth', () => {
       expect(response.status).toBe(502);
       expect(data.error).toBe('Bad Gateway');
 
-      // Should have retried 3 times (initial + 3 retries = 4 total calls)
-      expect(mockProxyFetch).toHaveBeenCalledTimes(4);
+      // Should have retried 2 times (initial + 2 retries = 3 total calls)
+      // Note: maxRetries was reduced from 3 to 2 to keep total retry time under 90s guard timeout
+      expect(mockProxyFetch).toHaveBeenCalledTimes(3);
     });
 
     it('should handle 503 Service Unavailable with retry', async () => {

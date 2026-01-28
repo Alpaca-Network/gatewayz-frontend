@@ -97,9 +97,9 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
       expect(result.current.status).toBe('authenticating');
     });
 
-    // Fast-forward 60 seconds (AUTHENTICATING_TIMEOUT_MS)
+    // Fast-forward 90 seconds (AUTHENTICATING_TIMEOUT_MS)
     act(() => {
-      jest.advanceTimersByTime(60000);
+      jest.advanceTimersByTime(90000);
     });
 
     // Should auto-retry (AUTH_REFRESH_EVENT dispatched, which retries and clears the error)
@@ -147,9 +147,9 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
     // Trigger 3 timeout cycles to hit max retries
     for (let i = 0; i < 3; i++) {
-      // Timeout each attempt (60 seconds)
+      // Timeout each attempt (90 seconds)
       act(() => {
-        jest.advanceTimersByTime(60000);
+        jest.advanceTimersByTime(90000);
       });
 
       // Allow retry event to process if not final attempt
@@ -210,7 +210,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
     // Timeout
     act(() => {
-      jest.advanceTimersByTime(60000);
+      jest.advanceTimersByTime(90000);
     });
 
     // Wait for auto-retry to trigger (should still be authenticating after retry)
@@ -260,7 +260,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
 
     // Timeout (first attempt)
     act(() => {
-      jest.advanceTimersByTime(60000);
+      jest.advanceTimersByTime(90000);
     });
 
     // Verify event was dispatched for retry
@@ -303,7 +303,7 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
     // Exhaust retries by timing out 3 times
     for (let i = 0; i < 3; i++) {
       act(() => {
-        jest.advanceTimersByTime(60000);
+        jest.advanceTimersByTime(90000);
       });
 
       // Allow retry event to process if not final attempt
