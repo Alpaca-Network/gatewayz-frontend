@@ -34,11 +34,16 @@ async function validateApiKeyWithBackend(apiKey: string): Promise<{ valid: boole
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === "AbortError") {
-      console.error("[API /api/terragon/auth] Backend validation timed out after 5s");
+      console.warn("[API /api/terragon/auth] Backend validation timed out after 5s - allowing request (fail open)");
+      // On timeout, allow the request to proceed since:
+      // 1. The token is still HMAC-signed and verified by Terragon
+      // 2. API keys are controlled by GatewayZ
+      // 3. Better UX than blocking auth when backend is slow/cold-starting
+      return { valid: true };
     } else {
       console.error("[API /api/terragon/auth] Backend validation error:", error);
     }
-    // On network error, fail closed for security
+    // On non-timeout errors (network failure, etc), fail closed for security
     return { valid: false };
   }
 }
