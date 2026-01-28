@@ -94,12 +94,12 @@ interface GatewayzAuthProviderProps {
 export const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
 const TEMP_API_KEY_PREFIX = "gw_temp_";
 
-// Backend proxy configuration - increased timeouts to handle slow responses
-const BACKEND_PROXY_TIMEOUT_MS = 20000; // 20 seconds per retry
-const BACKEND_PROXY_MAX_RETRIES = 3;
+// Backend proxy configuration - aligned with src/app/api/auth/route.ts
+const BACKEND_PROXY_TIMEOUT_MS = 30000; // 30 seconds per retry (matches route.ts)
+const BACKEND_PROXY_MAX_RETRIES = 2; // Reduced from 3 to align with route.ts changes
 const BACKEND_PROXY_SAFETY_BUFFER_MS = 10000; // 10 seconds buffer
 const MIN_AUTH_SYNC_TIMEOUT_MS =
-  BACKEND_PROXY_TIMEOUT_MS * BACKEND_PROXY_MAX_RETRIES + BACKEND_PROXY_SAFETY_BUFFER_MS; // 70 seconds total
+  BACKEND_PROXY_TIMEOUT_MS * (BACKEND_PROXY_MAX_RETRIES + 1) + BACKEND_PROXY_SAFETY_BUFFER_MS; // ~100 seconds total (3 attempts × 30s + buffer)
 
 const stripUndefined = <T,>(value: T): T => {
   if (Array.isArray(value)) {
@@ -985,7 +985,7 @@ export function GatewayzAuthProvider({
                 signal: controller.signal,
               }),
             {
-              maxRetries: 3,
+              maxRetries: 1, // Reduced to prevent nested retry multiplication with backend proxy retries
               initialDelayMs: 500,
               maxDelayMs: 5000,
               backoffMultiplier: 2,
