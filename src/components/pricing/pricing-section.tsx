@@ -237,7 +237,7 @@ export function PricingSection() {
   };
 
   return (
-    <div className="w-full py-8 sm:py-12 lg:py-20 bg-white">
+    <div className="w-full py-8 sm:py-12 lg:py-20 bg-background">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
         <div className="text-center mb-8 sm:mb-12 space-y-3">
