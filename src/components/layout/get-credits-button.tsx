@@ -1,57 +1,102 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
-import { getUserData } from '@/lib/api';
+import { getUserData, AUTH_REFRESH_COMPLETE_EVENT } from '@/lib/api';
 import { getUserTier } from '@/lib/tier-utils';
 
 export function GetCreditsButton() {
   const [shouldShow, setShouldShow] = useState(true);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const checkVisibility = useCallback(() => {
+    const userData = getUserData();
+
+    if (!userData) {
+      // No user data - show button (guest/logged out users)
+      setShouldShow(true);
+      return true;
+    }
+
+    // Hide button for pro/max users
+    const tier = getUserTier(userData);
+    if (tier === 'pro' || tier === 'max') {
+      setShouldShow(false);
+      return false;
+    }
+
+    // Hide button for users with credits (credits are stored in cents, 100 cents = $1)
+    // Consider users with more than $0.50 (50 cents) as having credits
+    const credits = userData.credits ?? 0;
+    if (credits > 50) {
+      setShouldShow(false);
+      return false;
+    }
+
+    // Show button for basic users with low/no credits
+    setShouldShow(true);
+    return true;
+  }, []);
+
+  // Manage polling interval - only poll when button is visible
+  const startPolling = useCallback(() => {
+    if (intervalRef.current) return; // Already polling
+    intervalRef.current = setInterval(() => {
+      const isVisible = checkVisibility();
+      // Stop polling if button becomes hidden
+      if (!isVisible && intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }, 5000);
+  }, [checkVisibility]);
+
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
-    const checkVisibility = () => {
-      const userData = getUserData();
-
-      if (!userData) {
-        // No user data - show button (guest/logged out users)
-        setShouldShow(true);
-        return;
-      }
-
-      // Hide button for pro/max users
-      const tier = getUserTier(userData);
-      if (tier === 'pro' || tier === 'max') {
-        setShouldShow(false);
-        return;
-      }
-
-      // Hide button for users with credits (credits are stored in cents, 100 cents = $1)
-      // Consider users with more than $0.50 (50 cents) as having credits
-      const credits = userData.credits ?? 0;
-      if (credits > 50) {
-        setShouldShow(false);
-        return;
-      }
-
-      // Show button for basic users with low/no credits
-      setShouldShow(true);
-    };
-
     // Initial check
-    checkVisibility();
+    const isVisible = checkVisibility();
 
-    // Listen for storage events (updates from other tabs or auth changes)
-    window.addEventListener('storage', checkVisibility);
+    // Only start polling if button is visible
+    if (isVisible) {
+      startPolling();
+    }
 
-    // Poll for updates every 5 seconds to catch auth state changes
-    const interval = setInterval(checkVisibility, 5000);
+    // Listen for storage events (updates from other tabs)
+    const handleStorageChange = () => {
+      const isVisible = checkVisibility();
+      if (isVisible) {
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // Listen for AUTH_REFRESH_COMPLETE_EVENT for same-tab auth updates
+    // This fires when auth sync completes (e.g., after login, credit purchase, tier upgrade)
+    const handleAuthRefreshComplete = () => {
+      const isVisible = checkVisibility();
+      if (isVisible) {
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+    window.addEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleAuthRefreshComplete);
 
     return () => {
-      window.removeEventListener('storage', checkVisibility);
-      clearInterval(interval);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener(AUTH_REFRESH_COMPLETE_EVENT, handleAuthRefreshComplete);
+      stopPolling();
     };
-  }, []);
+  }, [checkVisibility, startPolling, stopPolling]);
 
   const handleClick = () => {
     // Track Twitter conversion for ad attribution
