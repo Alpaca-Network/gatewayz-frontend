@@ -359,7 +359,7 @@ export function AppHeader() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 sm:h-10 sm:w-10"
+                  className="h-9 w-9 sm:h-10 sm:w-10 text-foreground"
                 >
                   <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
                   <span className="sr-only">Open menu</span>
