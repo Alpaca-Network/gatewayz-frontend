@@ -34,35 +34,10 @@ import { isFreeModel as checkIsFreeModel, getSourceGateway, formatPricingForDisp
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 
-// Per-gateway pricing information
-interface GatewayPricing {
-  prompt: string;
-  completion: string;
-}
+import type { UniqueModel, Provider } from '@/types/models';
 
-interface Model {
-  id: string;
-  name: string;
-  description: string | null;
-  context_length: number;
-  pricing: {
-    prompt: string;
-    completion: string;
-  } | null;
-  architecture: {
-    input_modalities: string[] | null;
-    output_modalities: string[] | null;
-  } | null;
-  supported_parameters: string[] | null;
-  provider_slug: string;
-  provider_slugs?: string[]; // NEW: Array of all providers offering this model
-  source_gateways?: string[]; // Array of all gateways offering this model
-  source_gateway?: string; // Keep for backwards compatibility
-  gateway_pricing?: Record<string, GatewayPricing>; // Per-gateway pricing map
-  created?: number;
-  is_private?: boolean; // Indicates if model is on a private network (e.g., NEAR)
-  is_free?: boolean; // Only true for OpenRouter models with :free suffix
-}
+// Re-export for backwards compatibility
+type Model = UniqueModel;
 
 // Gateway display configuration - now uses centralized gateway registry
 // To add a new gateway, simply add it to src/lib/gateway-registry.ts
@@ -103,12 +78,14 @@ const PROVIDER_CONFIG: Record<string, { name: string; color: string }> = {
 
 // Table row component for OpenRouter-style table view
 const ModelTableRow = React.memo(function ModelTableRow({ model }: { model: Model }) {
-  const hasPricing = model.pricing !== null && model.pricing !== undefined;
-  const isFree = checkIsFreeModel(model);
-  const sourceGateway = getSourceGateway(model);
-  const inputCost = hasPricing ? formatPricingForDisplay(model.pricing?.prompt, sourceGateway) : null;
-  const outputCost = hasPricing ? formatPricingForDisplay(model.pricing?.completion, sourceGateway) : null;
-  const modelUrl = getModelUrl(model.id, model.provider_slug);
+  const providers = model.providers || [];
+  const cheapestProvider = providers.find(p => p.slug === model.cheapest_provider) || providers[0];
+
+  const hasPricing = cheapestProvider && cheapestProvider.pricing;
+  const isFree = model.cheapest_prompt_price === 0;
+  const inputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.prompt, cheapestProvider.slug) : null;
+  const outputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.completion, cheapestProvider.slug) : null;
+  const modelUrl = getModelUrl(model.id, cheapestProvider?.slug || 'unknown');
 
   // Format context as number with commas
   const formatContext = (length: number | undefined | null) => {
@@ -117,7 +94,7 @@ const ModelTableRow = React.memo(function ModelTableRow({ model }: { model: Mode
   };
 
   // Get provider display name
-  const providerDisplay = model.provider_slug?.replace(/^@/, '') || 'Unknown';
+  const providerDisplay = cheapestProvider?.name || 'Unknown';
 
   return (
     <Link href={modelUrl} className="block group">
@@ -186,28 +163,34 @@ const ModelTableHeader = React.memo(function ModelTableHeader() {
 
 // Provider sub-row component for expanded view
 const ProviderSubRow = React.memo(function ProviderSubRow({
-  gateway,
-  pricing,
-  isLast
+  provider,
+  isLast,
+  isCheapest,
+  isFastest
 }: {
-  gateway: string;
-  pricing: GatewayPricing;
+  provider: Provider;
   isLast: boolean;
+  isCheapest?: boolean;
+  isFastest?: boolean;
 }) {
-  const normalizedGateway = gateway.replace(/^@/, '').toLowerCase();
+  const normalizedGateway = provider.slug.replace(/^@/, '').toLowerCase();
   const gatewayConfig = GATEWAY_CONFIG[normalizedGateway] || {
-    name: gateway,
+    name: provider.name,
     color: 'bg-gray-500'
   };
-  const inputCost = formatPricingForDisplay(pricing.prompt, gateway);
-  const outputCost = formatPricingForDisplay(pricing.completion, gateway);
+  const inputCost = formatPricingForDisplay(provider.pricing.prompt, provider.slug);
+  const outputCost = formatPricingForDisplay(provider.pricing.completion, provider.slug);
+
+  // Health status badge color
+  const healthColor = provider.health_status === 'healthy' ? 'bg-green-600' :
+                      provider.health_status === 'degraded' ? 'bg-yellow-600' : 'bg-red-600';
 
   return (
     <div className={`grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-2 px-4 pl-12 bg-muted/10 items-center ${!isLast ? 'border-b border-border/30' : ''}`}>
       {/* Empty space for alignment */}
       <div className="min-w-0" />
 
-      {/* Gateway/Provider name with badge */}
+      {/* Gateway/Provider name with badges */}
       <div className="flex items-center gap-2">
         <Badge
           className={`${gatewayConfig.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
@@ -216,6 +199,19 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
           {gatewayConfig.icon}
           {gatewayConfig.name}
         </Badge>
+        {isCheapest && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-green-600 border-green-600">
+            Cheapest
+          </Badge>
+        )}
+        {isFastest && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-blue-600 border-blue-600">
+            Fastest
+          </Badge>
+        )}
+        {provider.health_status !== 'healthy' && (
+          <div className={`w-2 h-2 rounded-full ${healthColor}`} title={`Status: ${provider.health_status}`} />
+        )}
       </div>
 
       {/* Input Price */}
@@ -228,9 +224,9 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
         ${outputCost}
       </div>
 
-      {/* Empty - context is same for all providers */}
+      {/* Response Time */}
       <div className="text-right text-sm tabular-nums text-muted-foreground">
-        -
+        {provider.average_response_time_ms}ms
       </div>
     </div>
   );
@@ -238,34 +234,56 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
 
 // Mobile-friendly provider sub-row component
 const MobileProviderSubRow = React.memo(function MobileProviderSubRow({
-  gateway,
-  pricing,
-  isLast
+  provider,
+  isLast,
+  isCheapest,
+  isFastest
 }: {
-  gateway: string;
-  pricing: GatewayPricing;
+  provider: Provider;
   isLast: boolean;
+  isCheapest?: boolean;
+  isFastest?: boolean;
 }) {
-  const normalizedGateway = gateway.replace(/^@/, '').toLowerCase();
+  const normalizedGateway = provider.slug.replace(/^@/, '').toLowerCase();
   const gatewayConfig = GATEWAY_CONFIG[normalizedGateway] || {
-    name: gateway,
+    name: provider.name,
     color: 'bg-gray-500'
   };
-  const inputCost = formatPricingForDisplay(pricing.prompt, gateway);
-  const outputCost = formatPricingForDisplay(pricing.completion, gateway);
+  const inputCost = formatPricingForDisplay(provider.pricing.prompt, provider.slug);
+  const outputCost = formatPricingForDisplay(provider.pricing.completion, provider.slug);
+
+  // Health status badge color
+  const healthColor = provider.health_status === 'healthy' ? 'bg-green-600' :
+                      provider.health_status === 'degraded' ? 'bg-yellow-600' : 'bg-red-600';
 
   return (
     <div className={`flex items-center justify-between py-2 px-4 pl-8 bg-muted/10 ${!isLast ? 'border-b border-border/30' : ''}`}>
-      <Badge
-        className={`${gatewayConfig.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
-        variant="secondary"
-      >
-        {gatewayConfig.icon}
-        {gatewayConfig.name}
-      </Badge>
+      <div className="flex items-center gap-2">
+        <Badge
+          className={`${gatewayConfig.color} text-white text-[10px] px-1.5 py-0 h-5 flex items-center gap-0.5`}
+          variant="secondary"
+        >
+          {gatewayConfig.icon}
+          {gatewayConfig.name}
+        </Badge>
+        {isCheapest && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-green-600 border-green-600">
+            $
+          </Badge>
+        )}
+        {isFastest && (
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 text-blue-600 border-blue-600">
+            ⚡
+          </Badge>
+        )}
+        {provider.health_status !== 'healthy' && (
+          <div className={`w-2 h-2 rounded-full ${healthColor}`} />
+        )}
+      </div>
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
         <span>${inputCost} in</span>
         <span>${outputCost} out</span>
+        <span>{provider.average_response_time_ms}ms</span>
       </div>
     </div>
   );
@@ -281,37 +299,19 @@ const MobileModelRow = React.memo(function MobileModelRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const hasPricing = model.pricing !== null && model.pricing !== undefined;
-  const isFree = checkIsFreeModel(model);
-  const sourceGateway = getSourceGateway(model);
-  const modelUrl = getModelUrl(model.id, model.provider_slug);
+  const providers = model.providers || [];
+  const hasMultipleProviders = model.provider_count > 1;
 
-  // Get all gateways with pricing
-  const gatewayPricing = model.gateway_pricing || {};
-  const gateways = Object.keys(gatewayPricing);
-  const hasMultipleProviders = gateways.length > 1;
-
-  // For display, use the best pricing (lowest input cost)
-  const bestGateway = useMemo(() => {
-    if (gateways.length === 0) return sourceGateway;
-    let best = gateways[0];
-    let bestInputPrice = Infinity;
-    for (const gw of gateways) {
-      const price = parseFloat(gatewayPricing[gw]?.prompt || '999999');
-      if (price < bestInputPrice) {
-        bestInputPrice = price;
-        best = gw;
-      }
-    }
-    return best;
-  }, [gateways, gatewayPricing, sourceGateway]);
-
-  const displayPricing = gatewayPricing[bestGateway] || model.pricing;
-  const inputCost = displayPricing ? formatPricingForDisplay(displayPricing.prompt, bestGateway) : null;
-  const outputCost = displayPricing ? formatPricingForDisplay(displayPricing.completion, bestGateway) : null;
+  // Use backend-calculated cheapest provider
+  const cheapestProvider = providers.find(p => p.slug === model.cheapest_provider) || providers[0];
+  const hasPricing = cheapestProvider && cheapestProvider.pricing;
+  const inputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.prompt, cheapestProvider.slug) : null;
+  const outputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.completion, cheapestProvider.slug) : null;
+  const isFree = model.cheapest_prompt_price === 0;
+  const modelUrl = getModelUrl(model.id, cheapestProvider?.slug || 'unknown');
 
   // Get provider display name
-  const providerDisplay = model.provider_slug?.replace(/^@/, '') || 'Unknown';
+  const providerDisplay = cheapestProvider?.name || 'Unknown';
 
   // Format context
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
@@ -377,12 +377,13 @@ const MobileModelRow = React.memo(function MobileModelRow({
       {/* Expanded provider sub-rows */}
       {isExpanded && hasMultipleProviders && (
         <div className="border-t border-border/30">
-          {gateways.map((gateway, index) => (
+          {providers.map((provider, index) => (
             <MobileProviderSubRow
-              key={gateway}
-              gateway={gateway}
-              pricing={gatewayPricing[gateway]}
-              isLast={index === gateways.length - 1}
+              key={provider.slug}
+              provider={provider}
+              isLast={index === providers.length - 1}
+              isCheapest={provider.slug === model.cheapest_provider}
+              isFastest={provider.slug === model.fastest_provider}
             />
           ))}
         </div>
@@ -401,34 +402,16 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const hasPricing = model.pricing !== null && model.pricing !== undefined;
-  const isFree = checkIsFreeModel(model);
-  const sourceGateway = getSourceGateway(model);
-  const modelUrl = getModelUrl(model.id, model.provider_slug);
+  const providers = model.providers || [];
+  const hasMultipleProviders = model.provider_count > 1;
+  const modelUrl = getModelUrl(model.id, providers[0]?.slug || 'unknown');
 
-  // Get all gateways with pricing
-  const gatewayPricing = model.gateway_pricing || {};
-  const gateways = Object.keys(gatewayPricing);
-  const hasMultipleProviders = gateways.length > 1;
-
-  // For display, use the best pricing (lowest input cost)
-  const bestGateway = useMemo(() => {
-    if (gateways.length === 0) return sourceGateway;
-    let best = gateways[0];
-    let bestInputPrice = Infinity;
-    for (const gw of gateways) {
-      const price = parseFloat(gatewayPricing[gw]?.prompt || '999999');
-      if (price < bestInputPrice) {
-        bestInputPrice = price;
-        best = gw;
-      }
-    }
-    return best;
-  }, [gateways, gatewayPricing, sourceGateway]);
-
-  const displayPricing = gatewayPricing[bestGateway] || model.pricing;
-  const inputCost = displayPricing ? formatPricingForDisplay(displayPricing.prompt, bestGateway) : null;
-  const outputCost = displayPricing ? formatPricingForDisplay(displayPricing.completion, bestGateway) : null;
+  // Use backend-calculated cheapest provider
+  const cheapestProvider = providers.find(p => p.slug === model.cheapest_provider) || providers[0];
+  const hasPricing = cheapestProvider && cheapestProvider.pricing;
+  const inputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.prompt, cheapestProvider.slug) : null;
+  const outputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.completion, cheapestProvider.slug) : null;
+  const isFree = model.cheapest_prompt_price === 0;
 
   // Format context as number with commas
   const formatContext = (length: number | undefined | null) => {
@@ -437,7 +420,7 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
   };
 
   // Get provider display name
-  const providerDisplay = model.provider_slug?.replace(/^@/, '') || 'Unknown';
+  const providerDisplay = providers[0]?.name || 'Unknown';
 
   return (
     <div>
@@ -479,7 +462,7 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
             )}
             {hasMultipleProviders && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 flex-shrink-0">
-                {gateways.length} providers
+                {model.provider_count} providers
               </Badge>
             )}
           </div>
@@ -521,12 +504,13 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
       {/* Expanded provider sub-rows */}
       {isExpanded && hasMultipleProviders && (
         <div className="border-t border-border/30">
-          {gateways.map((gateway, index) => (
+          {providers.map((provider, index) => (
             <ProviderSubRow
-              key={gateway}
-              gateway={gateway}
-              pricing={gatewayPricing[gateway]}
-              isLast={index === gateways.length - 1}
+              key={provider.slug}
+              provider={provider}
+              isLast={index === providers.length - 1}
+              isCheapest={provider.slug === model.cheapest_provider}
+              isFastest={provider.slug === model.fastest_provider}
             />
           ))}
         </div>
@@ -536,13 +520,13 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
 });
 
 const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
-  const hasPricing = model.pricing !== null && model.pricing !== undefined;
-  // Only OpenRouter models with :free suffix are legitimately free
-  const isFree = checkIsFreeModel(model);
-  // Get source gateway early so we can use it for pricing normalization
-  const sourceGateway = getSourceGateway(model);
-  const inputCost = hasPricing ? formatPricingForDisplay(model.pricing?.prompt, sourceGateway) : null;
-  const outputCost = hasPricing ? formatPricingForDisplay(model.pricing?.completion, sourceGateway) : null;
+  const providers = model.providers || [];
+  const cheapestProvider = providers.find(p => p.slug === model.cheapest_provider) || providers[0];
+
+  const hasPricing = cheapestProvider && cheapestProvider.pricing;
+  const isFree = model.cheapest_prompt_price === 0;
+  const inputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.prompt, cheapestProvider.slug) : null;
+  const outputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.completion, cheapestProvider.slug) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
 
   // Determine if model is multi-lingual (simple heuristic - can be improved)
@@ -551,24 +535,14 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
                           model.description?.toLowerCase().includes('multilingual') ||
                           model.description?.toLowerCase().includes('multi-lingual'));
 
-  // Get gateways - support both old and new format (sourceGateway already defined above)
-  const gateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (sourceGateway ? [sourceGateway] : []);
-
-  // NEW: Get providers - support both old and new format
-  const providers = (model.provider_slugs && model.provider_slugs.length > 0) ? model.provider_slugs : (model.provider_slug ? [model.provider_slug] : []);
-
-  // NEW: Deduplicate and combine providers that are also gateways
-  // Deduplicate by display name to avoid showing "Alpaca Network" twice (once from provider, once from gateway)
-  const allSourcesRaw = [...new Set([...providers, ...gateways])];
+  // Deduplicate providers for display
   const sourcesByName = new Map<string, string>();
-  allSourcesRaw.forEach(source => {
-    // Normalize source: remove @ prefix and handle both singular and configured names
-    let normalizedSource = source.replace(/^@/, '').toLowerCase();
-
+  providers.forEach(provider => {
+    const normalizedSource = provider.slug.replace(/^@/, '').toLowerCase();
     const providerConfig = PROVIDER_CONFIG[normalizedSource];
     const gatewayConfig = GATEWAY_CONFIG[normalizedSource];
     const config = providerConfig || gatewayConfig;
-    const displayName = config?.name || source.replace(/^@/, '');
+    const displayName = config?.name || provider.name;
     // Only keep first occurrence of each display name
     if (!sourcesByName.has(displayName)) {
       sourcesByName.set(displayName, normalizedSource);
@@ -577,7 +551,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const allSources = Array.from(sourcesByName.values());
 
   // Generate clean URLs in format /models/[developer]/[model]
-  const modelUrl = getModelUrl(model.id, model.provider_slug);
+  const modelUrl = getModelUrl(model.id, cheapestProvider?.slug || 'unknown');
 
   return (
     <Link href={modelUrl} className="h-full block">

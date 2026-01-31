@@ -12,6 +12,7 @@ import {
 } from '@/lib/gateway-registry';
 import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
 import { isPerMillionPricingGateway, isPerBillionPricingGateway } from '@/lib/model-pricing-utils';
+import type { UniqueModel, UniqueModelsResponse, UniqueModelsQueryOptions } from '@/types/models';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -532,6 +533,266 @@ export async function invalidateModelsCache(gateway?: string): Promise<number> {
     console.error('[Models] Error invalidating cache:', error);
     // Clear in-memory cache as fallback
     modelsCache = null;
+    return 0;
+  }
+}
+
+// ============================================================================
+// New /models/unique endpoint functions
+// ============================================================================
+
+// In-memory cache for unique models
+let uniqueModelsCache: { data: UniqueModel[], timestamp: number } | null = null;
+
+/**
+ * Fetch unique models with provider arrays from /models/unique endpoint
+ *
+ * This endpoint provides deduplicated models with many-to-many provider relationships.
+ * It eliminates the need for client-side deduplication and provides additional insights:
+ * - Provider arrays with pricing, health status, and performance metrics
+ * - Auto-calculated cheapest and fastest providers
+ * - Provider count for each model
+ *
+ * @param options Query options for filtering, sorting, and pagination
+ * @returns Promise with unique models array and pagination metadata
+ *
+ * @example
+ * // Get models with 3+ providers, sorted by provider count
+ * const result = await getUniqueModels({
+ *   min_providers: 3,
+ *   sort_by: 'provider_count',
+ *   order: 'desc',
+ *   limit: 100
+ * });
+ *
+ * @example
+ * // Search for GPT models
+ * const result = await getUniqueModels({
+ *   search: 'gpt',
+ *   sort_by: 'cheapest_price',
+ *   order: 'asc'
+ * });
+ */
+export async function getUniqueModels(
+  options: UniqueModelsQueryOptions = {}
+): Promise<UniqueModelsResponse> {
+  const {
+    min_providers,
+    sort_by = 'provider_count',
+    order = 'desc',
+    limit = 500,
+    offset = 0,
+    search
+  } = options;
+
+  // Build cache key (skip caching for search queries)
+  const cacheKeyStr = search ? null : cacheKey(
+    CACHE_PREFIX.MODELS,
+    'unique',
+    `${sort_by}:${order}:${limit}:${offset}:${min_providers || 'all'}`
+  );
+
+  // If there's a search query, skip cache and fetch directly
+  if (search) {
+    return await fetchUniqueModelsLogic(options);
+  }
+
+  // Use stale-while-revalidate caching strategy
+  // - Fresh for 4 hours (TTL.MODELS_ALL)
+  // - Serve stale for up to 12 additional hours (3x TTL)
+  // - Revalidate in background when stale
+  return await cacheStaleWhileRevalidate(
+    cacheKeyStr!,
+    async () => fetchUniqueModelsLogic(options),
+    TTL.MODELS_ALL,        // Fresh TTL: 4 hours
+    TTL.MODELS_ALL * 3,    // Stale TTL: 12 hours
+    'unique-models'        // Metrics category
+  );
+}
+
+/**
+ * Internal function to fetch unique models from backend
+ * Handles retries, timeouts, and error tracking
+ */
+async function fetchUniqueModelsLogic(
+  options: UniqueModelsQueryOptions
+): Promise<UniqueModelsResponse> {
+  const {
+    min_providers,
+    sort_by = 'provider_count',
+    order = 'desc',
+    limit = 500,
+    offset = 0,
+    search
+  } = options;
+
+  // Check in-memory cache as fallback (only if no search query)
+  if (uniqueModelsCache && !search) {
+    const now = Date.now();
+    if (now - uniqueModelsCache.timestamp < CACHE_DURATION) {
+      console.log(`[UniqueModels] Returning in-memory cached models (${uniqueModelsCache.data.length} models)`);
+      return { data: uniqueModelsCache.data };
+    }
+  }
+
+  // Determine base URL based on runtime environment
+  const baseUrl = getApiBaseUrl();
+  const isClientSide = typeof window !== 'undefined';
+
+  // Build query parameters
+  const params = new URLSearchParams({
+    sort_by,
+    order,
+    limit: limit.toString(),
+    offset: offset.toString(),
+  });
+
+  if (min_providers !== undefined) {
+    params.append('min_providers', min_providers.toString());
+  }
+
+  if (search) {
+    params.append('search', search);
+  }
+
+  // Build URL - use Next.js API route on client, direct backend on server
+  const url = isClientSide
+    ? `/api/models/unique?${params.toString()}`
+    : `${baseUrl}/models/unique?${params.toString()}`;
+
+  // Timeout: 180s for initial load (large dataset), 10s for subsequent requests
+  const timeoutMs = offset === 0 ? 180000 : 10000;
+
+  const maxRetries = 3;
+  let retryCount = 0;
+  let lastError: { status: number; retryAfter: string | null } | null = null;
+
+  while (retryCount <= maxRetries) {
+    try {
+      // Add delay for retries
+      if (retryCount > 0 && lastError) {
+        const waitTime = calculateRetryDelay(retryCount - 1, lastError.retryAfter);
+        console.log(`[UniqueModels] Rate limited, retry ${retryCount}/${maxRetries} after ${waitTime}ms`);
+        await sleep(waitTime);
+      }
+
+      // Build fetch options
+      const fetchOptions: RequestInit = {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(timeoutMs)
+      };
+
+      // Add Next.js specific caching options only on server-side
+      if (!isClientSide) {
+        (fetchOptions as any).next = {
+          revalidate: 300,
+          tags: ['models:unique', 'models:all']
+        };
+      }
+
+      console.log(`[UniqueModels] Fetching from ${isClientSide ? 'API route' : 'backend'}: ${url}`);
+      const startTime = Date.now();
+
+      const response = await fetch(url, fetchOptions);
+
+      // Handle rate limit errors with retry
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('retry-after');
+
+        if (retryCount < maxRetries) {
+          lastError = { status: 429, retryAfter };
+          retryCount++;
+          continue; // Retry
+        } else {
+          console.error(`[UniqueModels] Rate limit exceeded after ${maxRetries} retries`);
+          throw new Error('Rate limit exceeded');
+        }
+      }
+
+      if (!response.ok) {
+        // Track non-OK responses
+        await trackBadBackendResponse(response, {
+          endpoint: url,
+          method: 'GET',
+          retryCount,
+        });
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data: UniqueModelsResponse = await response.json();
+      const duration = Date.now() - startTime;
+
+      console.log(`[UniqueModels] Fetched ${data.data?.length || 0} unique models in ${duration}ms`);
+
+      // Cache successful response (only if not searching)
+      if (!search && data.data && data.data.length > 0) {
+        uniqueModelsCache = {
+          data: data.data,
+          timestamp: Date.now()
+        };
+      }
+
+      return data;
+
+    } catch (error: any) {
+      const message = getErrorMessage(error);
+
+      if (isAbortOrNetworkError(error)) {
+        // Track network/timeout errors
+        trackBackendNetworkError(error, {
+          endpoint: url,
+          method: 'GET',
+          timeoutMs,
+        });
+
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`[UniqueModels] Request timed out after ${timeoutMs}ms`);
+        }
+      } else {
+        // Track processing errors
+        trackBackendProcessingError(error, {
+          endpoint: url,
+          method: 'GET',
+        });
+        console.error(`[UniqueModels] Failed to fetch:`, message);
+      }
+
+      // On final retry failure, return empty response
+      if (retryCount >= maxRetries) {
+        console.error(`[UniqueModels] All retries exhausted, returning empty response`);
+        return { data: [] };
+      }
+
+      retryCount++;
+    }
+  }
+
+  // Fallback return (should never reach here)
+  return { data: [] };
+}
+
+/**
+ * Invalidate unique models cache
+ *
+ * @returns Number of cache keys invalidated
+ */
+export async function invalidateUniqueModelsCache(): Promise<number> {
+  try {
+    const pattern = cacheKey(CACHE_PREFIX.MODELS, 'unique', '*');
+    const deleted = await cacheInvalidate(pattern);
+    console.log(`[UniqueModels] Invalidated ${deleted} cache entries`);
+
+    // Also clear in-memory cache
+    uniqueModelsCache = null;
+
+    return deleted;
+  } catch (error) {
+    console.error('[UniqueModels] Error invalidating cache:', error);
+    // Clear in-memory cache as fallback
+    uniqueModelsCache = null;
     return 0;
   }
 }
