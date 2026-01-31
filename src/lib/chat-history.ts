@@ -281,12 +281,12 @@ export class ChatHistoryAPI {
    * Retrieves all chat sessions for the authenticated user
    */
   async getSessions(limit: number = 50, offset: number = 0): Promise<ChatSession[]> {
-    // Use longer timeout for background sync to prevent timeout errors
+    // Use chat-specific timeout for session listing
     const result = await this.makeRequest<ChatSession[]>(
       'GET',
       `/sessions?limit=${limit}&offset=${offset}`,
       null,
-      TIMEOUT_CONFIG.api.long // 60 seconds for background sync
+      TIMEOUT_CONFIG.chat.sessionsList // 10 seconds - sufficient for session listing
     );
     return result.data || [];
   }

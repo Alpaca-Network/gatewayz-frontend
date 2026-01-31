@@ -46,6 +46,8 @@ const SUPPRESSED_ERROR_PATTERNS = {
   privyNonBlocking: [
     /iframe not initialized/i,
     /Origin not allowed/i, // Privy origin configuration - handled by Privy internally
+    /Object Not Found Matching Id.*MethodName.*update/i, // Privy internal state management
+    /Non-Error promise rejection.*Object Not Found/i,
   ],
 
   // Third-party service errors (analytics, ad blockers)
@@ -56,6 +58,7 @@ const SUPPRESSED_ERROR_PATTERNS = {
     /Failed to flush events/i,
     /WalletConnect.*relay/i,
     /explorer-api\.walletconnect\.com/i,
+    /^\[GlobalError\] Script error\.$/i, // Generic cross-origin script errors
   ],
 
   // DOM manipulation errors from third-party scripts (Statsig Session Replay, etc.)
@@ -94,10 +97,20 @@ const SUPPRESSED_ERROR_PATTERNS = {
     /ReferenceError.*tH.*before initialization/i,
   ],
 
+  // Chunk loading errors from deployments (transient, requires page reload)
+  chunkLoadErrors: [
+    /ChunkLoadError/i,
+    /Loading chunk.*failed/i,
+    /Loading CSS chunk.*failed/i,
+    /Failed to fetch dynamically imported module/i,
+  ],
+
   // Safari/browser compatibility errors
   browserCompat: [
     /Invalid regular expression.*invalid group specifier/i,
     /Invalid regular expression.*group specifier name/i,
+    /Cross-Origin-Opener-Policy/i,
+    /Error checking Cross-Origin-Opener-Policy/i,
   ],
 
   // External service timeouts (Privy, etc.)
@@ -114,6 +127,14 @@ const SUPPRESSED_ERROR_PATTERNS = {
     /user aborted/i,
     /the operation was aborted/i,
     /aborted without reason/i,
+  ],
+
+  // AI SDK streaming errors (expected model behavior, not application errors)
+  aiSdkStreaming: [
+    /No response received from model.*Part types received/i,
+    /StreamingError.*No response received/i,
+    /completed without generating any content/i,
+    /may not be properly configured or may not support/i,
   ],
 };
 
