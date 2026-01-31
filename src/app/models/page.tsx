@@ -198,6 +198,20 @@ async function getAllModels(): Promise<UniqueModel[]> {
  * Used to ensure consistent rendering regardless of which endpoint is used
  */
 function transformLegacyToUniqueModels(legacyModels: Model[]): UniqueModel[] {
+  console.log('[transformLegacyToUniqueModels] Transforming', legacyModels.length, 'models');
+
+  // Log first model to see data structure
+  if (legacyModels.length > 0) {
+    console.log('[transformLegacyToUniqueModels] Sample model:', {
+      id: legacyModels[0].id,
+      name: legacyModels[0].name,
+      pricing: legacyModels[0].pricing,
+      source_gateway: legacyModels[0].source_gateway,
+      source_gateways: legacyModels[0].source_gateways,
+      gateway_pricing: legacyModels[0].gateway_pricing,
+    });
+  }
+
   return legacyModels.map(model => {
     // Extract all gateways
     const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
@@ -227,7 +241,7 @@ function transformLegacyToUniqueModels(legacyModels: Model[]): UniqueModel[] {
     const fastestProvider = providers[0]?.slug || '';
     const fastestResponseTime = providers[0]?.average_response_time_ms || 1000;
 
-    return {
+    const transformed = {
       id: model.id,
       name: model.name,
       description: model.description,
@@ -243,6 +257,20 @@ function transformLegacyToUniqueModels(legacyModels: Model[]): UniqueModel[] {
       created: model.created,
       is_private: model.is_private,
     };
+
+    // Log first transformed model
+    if (model.id === legacyModels[0].id) {
+      console.log('[transformLegacyToUniqueModels] Transformed sample:', {
+        id: transformed.id,
+        name: transformed.name,
+        provider_count: transformed.provider_count,
+        providers: transformed.providers,
+        cheapest_provider: transformed.cheapest_provider,
+        cheapest_prompt_price: transformed.cheapest_prompt_price,
+      });
+    }
+
+    return transformed;
   });
 }
 

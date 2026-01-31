@@ -352,7 +352,7 @@ const MobileModelRow = React.memo(function MobileModelRow({
                 )}
                 {hasMultipleProviders && (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-                    {gateways.length} providers
+                    {model.provider_count} providers
                   </Badge>
                 )}
               </div>
@@ -769,6 +769,21 @@ export default function ModelsClient({
       setModels(initialModels);
     }
   }, [initialModels, models.length]);
+
+  // Debug logging: Check what data we're receiving
+  useEffect(() => {
+    if (initialModels.length > 0) {
+      console.log('[ModelsClient] Received', initialModels.length, 'models');
+      console.log('[ModelsClient] Sample model:', {
+        id: initialModels[0].id,
+        name: initialModels[0].name,
+        provider_count: initialModels[0].provider_count,
+        providers: initialModels[0].providers,
+        cheapest_provider: initialModels[0].cheapest_provider,
+        cheapest_prompt_price: initialModels[0].cheapest_prompt_price,
+      });
+    }
+  }, [initialModels]);
 
   // Fetch models client-side if we only got the fallback static models
   useEffect(() => {

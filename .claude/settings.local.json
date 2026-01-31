@@ -128,7 +128,14 @@
       "Skill(superpowers:using-superpowers)",
       "Skill(episodic-memory:remembering-conversations)",
       "Skill(superpowers-developing-for-claude-code:developing-claude-code-plugins)",
-      "Skill(working-with-claude-code)"
+      "Skill(working-with-claude-code)",
+      "Bash(git fsck:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(./clear-cache-restart.sh)",
+      "Bash(lsof:*)",
+      "Bash(.vercel-deploy)",
+      "Bash(git stash:*)",
+      "Bash(node debug-api.js:*)"
     ],
     "deny": [],
     "ask": [],
