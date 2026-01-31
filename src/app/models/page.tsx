@@ -1,7 +1,9 @@
 import ModelsClient from './models-client';
-import { getModelsForGateway } from '@/lib/models-service';
+import { getModelsForGateway, getUniqueModels } from '@/lib/models-service';
 import { models as staticModels } from '@/lib/models-data';
 import { transformStaticModel } from '@/lib/model-detail-utils';
+import { USE_UNIQUE_MODELS_ENDPOINT } from '@/lib/config';
+import type { Model, UniqueModel, adaptLegacyToUniqueModel } from '@/types/models';
 
 /**
  * Models page rendering configuration
@@ -129,15 +131,16 @@ function deduplicateModels(models: Model[]): Model[] {
   return Array.from(modelMap.values());
 }
 
-async function getAllModels(): Promise<Model[]> {
+async function getAllModels(): Promise<UniqueModel[]> {
   try {
     // During static export (desktop builds), use static models only
     // API routes are not available during static export
     const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true';
     if (isStaticExport) {
       console.log('[Models Page] Static export mode - using static models');
-      // Transform static models to match the Model interface
-      return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
+      // Transform static models to UniqueModel format
+      const legacyModels = staticModels.map((model) => transformStaticModel(model) as unknown as Model);
+      return transformLegacyToUniqueModels(legacyModels);
     }
 
     // During CI builds, use static models to avoid timeout failures
@@ -147,30 +150,100 @@ async function getAllModels(): Promise<Model[]> {
     const isCI = process.env.CI === 'true' && !process.env.VERCEL;
     if (isCI) {
       console.log('[Models Page] CI build detected - using static models to avoid timeout');
-      return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
+      const legacyModels = staticModels.map((model) => transformStaticModel(model) as unknown as Model);
+      return transformLegacyToUniqueModels(legacyModels);
     }
 
-    // During Vercel builds and runtime, fetch real models for ISR pre-rendering
-    // This ensures the initial pre-rendered page has all models, not just 18 static ones
-    console.log('[Models Page] Fetching all models with gateway=all (single request)');
-    const startTime = Date.now();
+    // Feature flag: Use new /models/unique endpoint or legacy /models endpoint
+    if (USE_UNIQUE_MODELS_ENDPOINT) {
+      console.log('[Models Page] 🆕 Fetching from /models/unique endpoint (feature flag enabled)');
+      const startTime = Date.now();
 
-    // Fetch all models from all gateways in a single request
-    // This automatically discovers and registers new gateways from the backend response
-    const result = await getModelsForGateway('all');
-    const allModels = result.data || [];
+      const result = await getUniqueModels({
+        sort_by: 'provider_count',
+        order: 'desc',
+        limit: 1000
+      });
 
-    // Deduplicate intelligently using shared function
-    const uniqueModels = deduplicateModels(allModels);
+      const duration = Date.now() - startTime;
+      console.log(`[Models Page] ✅ Unique models fetched: ${result.data.length} models in ${duration}ms`);
+      return result.data;
+    } else {
+      // Legacy path: Fetch from /models endpoint and deduplicate on frontend
+      console.log('[Models Page] Fetching all models with gateway=all (legacy endpoint)');
+      const startTime = Date.now();
 
-    const duration = Date.now() - startTime;
-    console.log(`[Models Page] All models fetched: ${uniqueModels.length} models in ${duration}ms`);
-    return uniqueModels;
+      const result = await getModelsForGateway('all');
+      const allModels = result.data || [];
+
+      // Deduplicate intelligently using shared function
+      const uniqueModels = deduplicateModels(allModels);
+
+      const duration = Date.now() - startTime;
+      console.log(`[Models Page] All models fetched (legacy): ${uniqueModels.length} models in ${duration}ms`);
+
+      // Convert legacy Model format to UniqueModel format for consistent rendering
+      return transformLegacyToUniqueModels(uniqueModels);
+    }
   } catch (error) {
     console.error('[Models Page] Failed to fetch models:', error);
     // Fallback to static models on error
-    return staticModels.map((model) => transformStaticModel(model) as unknown as Model);
+    const legacyModels = staticModels.map((model) => transformStaticModel(model) as unknown as Model);
+    return transformLegacyToUniqueModels(legacyModels);
   }
+}
+
+/**
+ * Transform array of legacy Model format to UniqueModel format
+ * Used to ensure consistent rendering regardless of which endpoint is used
+ */
+function transformLegacyToUniqueModels(legacyModels: Model[]): UniqueModel[] {
+  return legacyModels.map(model => {
+    // Extract all gateways
+    const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
+    const gatewayPricing = model.gateway_pricing || {};
+
+    // Convert gateway pricing to Provider array
+    const providers = gateways.map(gateway => ({
+      slug: gateway,
+      name: gateway.charAt(0).toUpperCase() + gateway.slice(1),
+      pricing: gatewayPricing[gateway] || model.pricing || { prompt: '0', completion: '0' },
+      health_status: 'healthy' as const,
+      average_response_time_ms: 1000,
+    }));
+
+    // Find cheapest provider
+    let cheapestProvider = providers[0]?.slug || '';
+    let cheapestPrice = Infinity;
+    providers.forEach(p => {
+      const price = parseFloat(p.pricing.prompt);
+      if (!isNaN(price) && price < cheapestPrice) {
+        cheapestPrice = price;
+        cheapestProvider = p.slug;
+      }
+    });
+
+    // Find fastest provider (use first one as default)
+    const fastestProvider = providers[0]?.slug || '';
+    const fastestResponseTime = providers[0]?.average_response_time_ms || 1000;
+
+    return {
+      id: model.id,
+      name: model.name,
+      description: model.description,
+      context_length: model.context_length,
+      architecture: model.architecture,
+      supported_parameters: model.supported_parameters,
+      provider_count: providers.length,
+      providers,
+      cheapest_provider: cheapestProvider,
+      fastest_provider: fastestProvider,
+      cheapest_prompt_price: cheapestPrice === Infinity ? 0 : cheapestPrice,
+      fastest_response_time: fastestResponseTime,
+      created: model.created,
+      is_private: model.is_private,
+    };
+  });
 }
 
 export default async function ModelsPage() {
