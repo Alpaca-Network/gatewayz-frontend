@@ -15,6 +15,39 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
+    date: "February 1, 2026",
+    features: [
+      "Mobile-Friendly Models Table: Responsive layout for the models table on mobile devices with compact MobileModelRow and MobileProviderSubRow components",
+      "Expand/Collapse All: New button to expand or collapse all model rows at once, with all rows expanded by default for better visibility",
+      "Parallel Model Fetching Optimization: Reduced cold catalog build time from ~120s to ~60s with increased thread pool and as_completed() processing",
+      "Code Review Feedback Integration: Integrated PR feedback indicators and address feedback dialogs for improved code review workflow",
+      "Kanban Task Management: Added Kanban view with task panels, sidebar view toggle, and improved mobile kanban support",
+    ],
+    bugFixes: [
+      {
+        category: "Gatewayz Chat",
+        items: [
+          "Fixed auth timeout issues and auth event listener handling",
+          "Fixed models page only loading 18 models instead of full catalog",
+          "Optimized checkout rendering for faster plan switching",
+          "Fixed CI build issues for models page",
+        ],
+      },
+      {
+        category: "Gatewayz API",
+        items: [
+          "Added Stripe PRO activation reconciliation workflow to fix trial status mismatches",
+          "Fixed Butter.dev provider configuration",
+          "Fixed Helicone and Vercel AI Gateway pricing data",
+          "Fixed provider credit monitoring issues",
+          "Added diagnostic tooling for missing PRO Stripe linkage",
+        ],
+      },
+    ],
+    infrastructure: [],
+    documentation: [],
+  },
+  {
     date: "January 25, 2026",
     features: [
       "Credit Usage Progress Bar: Visual indicator in the header showing remaining credits with color-coded status (green/yellow/red) and quick-access \"Add Credits\" button",
