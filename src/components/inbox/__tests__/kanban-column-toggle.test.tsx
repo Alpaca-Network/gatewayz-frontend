@@ -1,11 +1,14 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { KanbanColumnToggle } from "../kanban-column-toggle";
+import React from "react";
 
 // Mock lucide-react icons
 jest.mock("lucide-react", () => ({
   Columns2: () => <div data-testid="columns2-icon" />,
   Square: () => <div data-testid="square-icon" />,
 }));
+
+// Store the onValueChange callback to test it
+let capturedOnValueChange: ((value: string) => void) | null = null;
 
 // Mock the UI components
 jest.mock("@/components/ui/toggle-group", () => ({
@@ -20,34 +23,34 @@ jest.mock("@/components/ui/toggle-group", () => ({
     value: string;
     onValueChange: (value: string) => void;
     className?: string;
-  }) => (
-    <div
-      data-testid="toggle-group"
-      data-value={value}
-      className={className}
-      {...props}
-    >
-      {/* Pass onValueChange down to children via context simulation */}
-      {React.Children.map(children, (child) =>
-        React.isValidElement(child)
-          ? React.cloneElement(child as React.ReactElement<{ onClick?: () => void; value?: string }>, {
-              onClick: () => onValueChange((child as React.ReactElement<{ value?: string }>).props.value || ""),
-            })
-          : child
-      )}
-    </div>
-  ),
+  }) => {
+    // Capture the onValueChange for testing
+    capturedOnValueChange = onValueChange;
+    return (
+      <div
+        data-testid="toggle-group"
+        data-value={value}
+        className={className}
+        {...props}
+      >
+        {children}
+      </div>
+    );
+  },
   ToggleGroupItem: ({
     children,
     value,
-    onClick,
     ...props
   }: {
     children: React.ReactNode;
     value: string;
-    onClick?: () => void;
   }) => (
-    <button data-testid={`toggle-item-${value}`} onClick={onClick} data-value={value} {...props}>
+    <button
+      data-testid={`toggle-item-${value}`}
+      data-value={value}
+      onClick={() => capturedOnValueChange?.(value)}
+      {...props}
+    >
       {children}
     </button>
   ),
@@ -56,35 +59,32 @@ jest.mock("@/components/ui/toggle-group", () => ({
 jest.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  TooltipTrigger: ({ children, asChild }: { children: React.ReactNode; asChild?: boolean }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode; asChild?: boolean }) => <>{children}</>,
   TooltipContent: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="tooltip-content">{children}</div>
   ),
 }));
 
 // Mock the store
-const mockColumnView = { current: "1" as "1" | "2" };
-const mockSetColumnView = jest.fn((view: "1" | "2") => {
-  mockColumnView.current = view;
-});
+const mockSetColumnView = jest.fn();
 const mockSyncColumnViewState = jest.fn();
 
 jest.mock("@/lib/store/inbox-ui-store", () => ({
   useInboxUIStore: () => ({
-    columnView: mockColumnView.current,
+    columnView: "1",
     setColumnView: mockSetColumnView,
     syncColumnViewState: mockSyncColumnViewState,
   }),
 }));
 
-// Need to import React for the mock
-import React from "react";
+// Import the component after mocks are set up
+import { KanbanColumnToggle } from "../kanban-column-toggle";
 
 describe("KanbanColumnToggle", () => {
   beforeEach(() => {
-    mockColumnView.current = "1";
     mockSetColumnView.mockClear();
     mockSyncColumnViewState.mockClear();
+    capturedOnValueChange = null;
   });
 
   it("should render the toggle group", () => {
@@ -157,5 +157,18 @@ describe("KanbanColumnToggle", () => {
       "aria-label",
       "Two column view"
     );
+  });
+
+  it("should not call callbacks when invalid value is provided", () => {
+    const mockOnViewChange = jest.fn();
+    render(<KanbanColumnToggle onViewChange={mockOnViewChange} />);
+
+    // Manually trigger with an invalid value
+    if (capturedOnValueChange) {
+      capturedOnValueChange("");
+    }
+
+    expect(mockSetColumnView).not.toHaveBeenCalled();
+    expect(mockOnViewChange).not.toHaveBeenCalled();
   });
 });
