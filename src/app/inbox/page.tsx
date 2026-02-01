@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { Button } from "@/components/ui/button";
 import { Loader2, RefreshCw, ExternalLink, LogIn } from "lucide-react";
+import { KanbanColumnToggle } from "@/components/inbox/kanban-column-toggle";
+import { useInboxUIStore, ColumnView } from "@/lib/store/inbox-ui-store";
 
 /**
  * Inbox page that embeds the Terragon inbox application.
@@ -34,9 +36,18 @@ export default function InboxPage() {
   const iframeLoadedRef = useRef(false);
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const authSentRef = useRef(false);
+  const columnViewSentRef = useRef(false);
+
+  // Get column view preference from store
+  const { columnView, syncColumnViewState } = useInboxUIStore();
 
   // Get the Terragon URL from environment variable
   const baseTerragonUrl = process.env.NEXT_PUBLIC_TERRAGON_URL;
+
+  // Sync column view state from localStorage on mount
+  useEffect(() => {
+    syncColumnViewState();
+  }, [syncColumnViewState]);
 
   // Fetch a signed auth token from the bridge API
   const fetchAuthToken = useCallback(async () => {
@@ -157,6 +168,32 @@ export default function InboxPage() {
     }
   }, [authToken, baseTerragonUrl]);
 
+  // Send column view preference to iframe via postMessage
+  const sendColumnViewToIframe = useCallback((view: ColumnView) => {
+    if (!iframeRef.current?.contentWindow || !baseTerragonUrl) {
+      return;
+    }
+
+    try {
+      const targetOrigin = new URL(baseTerragonUrl).origin;
+      iframeRef.current.contentWindow.postMessage(
+        {
+          type: "GATEWAYZ_COLUMN_VIEW",
+          columnView: view,
+        },
+        targetOrigin
+      );
+      console.log("[Inbox] Column view preference sent via postMessage:", view);
+    } catch (err) {
+      console.error("[Inbox] Failed to send column view:", err);
+    }
+  }, [baseTerragonUrl]);
+
+  // Handle column view change from toggle
+  const handleColumnViewChange = useCallback((view: ColumnView) => {
+    sendColumnViewToIframe(view);
+  }, [sendColumnViewToIframe]);
+
   // Handle iframe load event
   const handleIframeLoad = useCallback(() => {
     iframeLoadedRef.current = true;
@@ -167,9 +204,14 @@ export default function InboxPage() {
     }
     // Send auth token after iframe loads
     sendAuthToIframe();
-  }, [sendAuthToIframe]);
+    // Send initial column view preference after iframe loads
+    if (!columnViewSentRef.current) {
+      sendColumnViewToIframe(columnView);
+      columnViewSentRef.current = true;
+    }
+  }, [sendAuthToIframe, sendColumnViewToIframe, columnView]);
 
-  // Listen for auth request from iframe
+  // Listen for auth request and column view request from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!baseTerragonUrl) return;
@@ -182,6 +224,11 @@ export default function InboxPage() {
           console.log("[Inbox] Received auth request from iframe");
           sendAuthToIframe();
         }
+
+        if (event.data?.type === "GATEWAYZ_COLUMN_VIEW_REQUEST") {
+          console.log("[Inbox] Received column view request from iframe");
+          sendColumnViewToIframe(columnView);
+        }
       } catch {
         // Ignore invalid URLs
       }
@@ -189,7 +236,7 @@ export default function InboxPage() {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [baseTerragonUrl, sendAuthToIframe]);
+  }, [baseTerragonUrl, sendAuthToIframe, sendColumnViewToIframe, columnView]);
 
   // Retry connection handler - clears auth state to trigger fresh token fetch
   const handleRetry = useCallback(() => {
@@ -197,6 +244,7 @@ export default function InboxPage() {
     setIsLoading(true);
     iframeLoadedRef.current = false;
     authSentRef.current = false;
+    columnViewSentRef.current = false;
     // Clear auth token and URL to trigger the useEffect to fetch a fresh token
     // This ensures retries work even if the original token has expired
     setAuthToken(null);
@@ -353,33 +401,42 @@ export default function InboxPage() {
   }
 
   return (
-    <div className="relative flex-1 w-full h-full min-h-0 overflow-hidden">
-      {isLoading && (
-        <div
-          className="absolute inset-0 flex items-center justify-center bg-background z-10"
-          role="status"
-          aria-live="polite"
-          aria-label="Loading"
-        >
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-muted-foreground">Loading Coding Inbox...</p>
-          </div>
-        </div>
-      )}
+    <div className="relative flex-1 w-full h-full min-h-0 overflow-hidden flex flex-col">
+      {/* Inbox header with column view toggle */}
+      <div className="flex items-center justify-between px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <h1 className="text-sm font-medium text-muted-foreground">Task View</h1>
+        <KanbanColumnToggle onViewChange={handleColumnViewChange} />
+      </div>
 
-      {terragonUrl && (
-        <iframe
-          ref={iframeRef}
-          key={iframeKey}
-          src={terragonUrl}
-          className="w-full h-full border-0"
-          title="Coding Inbox"
-          onLoad={handleIframeLoad}
-          allow="clipboard-read; clipboard-write"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-        />
-      )}
+      {/* Main content area */}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        {isLoading && (
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-background z-10"
+            role="status"
+            aria-live="polite"
+            aria-label="Loading"
+          >
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-muted-foreground">Loading Coding Inbox...</p>
+            </div>
+          </div>
+        )}
+
+        {terragonUrl && (
+          <iframe
+            ref={iframeRef}
+            key={iframeKey}
+            src={terragonUrl}
+            className="w-full h-full border-0"
+            title="Coding Inbox"
+            onLoad={handleIframeLoad}
+            allow="clipboard-read; clipboard-write"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
+          />
+        )}
+      </div>
     </div>
   );
 }

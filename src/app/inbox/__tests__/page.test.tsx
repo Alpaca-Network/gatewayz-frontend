@@ -7,6 +7,8 @@ jest.mock("lucide-react", () => ({
   RefreshCw: () => <div data-testid="refresh-icon" />,
   ExternalLink: () => <div data-testid="external-link-icon" />,
   LogIn: () => <div data-testid="login-icon" />,
+  Columns2: () => <div data-testid="columns2-icon" />,
+  Square: () => <div data-testid="square-icon" />,
 }));
 
 // Mock UI components
@@ -17,6 +19,44 @@ jest.mock("@/components/ui/button", () => ({
     }
     return <button onClick={onClick} {...props}>{children}</button>;
   },
+}));
+
+// Mock KanbanColumnToggle component
+const mockOnViewChange = jest.fn();
+jest.mock("@/components/inbox/kanban-column-toggle", () => ({
+  KanbanColumnToggle: ({ onViewChange }: { onViewChange?: (view: string) => void }) => (
+    <div data-testid="kanban-column-toggle">
+      <button
+        data-testid="column-toggle-1"
+        onClick={() => onViewChange?.("1")}
+        aria-label="Single column view"
+      >
+        1 Column
+      </button>
+      <button
+        data-testid="column-toggle-2"
+        onClick={() => onViewChange?.("2")}
+        aria-label="Two column view"
+      >
+        2 Columns
+      </button>
+    </div>
+  ),
+}));
+
+// Mock inbox UI store
+const mockColumnView = { current: "1" as "1" | "2" };
+const mockSetColumnView = jest.fn((view: "1" | "2") => {
+  mockColumnView.current = view;
+});
+const mockSyncColumnViewState = jest.fn();
+
+jest.mock("@/lib/store/inbox-ui-store", () => ({
+  useInboxUIStore: () => ({
+    columnView: mockColumnView.current,
+    setColumnView: mockSetColumnView,
+    syncColumnViewState: mockSyncColumnViewState,
+  }),
 }));
 
 // Mock the auth context
@@ -71,6 +111,10 @@ describe("InboxPage", () => {
       tier: "pro",
     };
     (global.fetch as jest.Mock).mockReset();
+    mockColumnView.current = "1";
+    mockSetColumnView.mockClear();
+    mockSyncColumnViewState.mockClear();
+    mockOnViewChange.mockClear();
   });
 
   afterEach(() => {
@@ -509,6 +553,189 @@ describe("InboxPage", () => {
       render(<InboxPage />);
 
       expect(screen.queryByTitle("Coding Inbox")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("column view toggle", () => {
+    const testTerragonUrl = "https://test-terragon.railway.app";
+
+    beforeEach(() => {
+      process.env.NEXT_PUBLIC_TERRAGON_URL = testTerragonUrl;
+      mockAuthContext.status = "authenticated";
+      mockAuthContext.apiKey = "gw_live_test_api_key";
+      mockAuthContext.userData = {
+        user_id: "user-123",
+        email: "test@example.com",
+        display_name: "Test User",
+        tier: "pro",
+      };
+
+      // Mock successful auth token fetch
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            token: "test-token-payload.test-signature",
+            expiresAt: new Date(Date.now() + 3600000).toISOString(),
+          }),
+      });
+    });
+
+    it("should render the column view toggle", async () => {
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByTestId("kanban-column-toggle")).toBeInTheDocument();
+    });
+
+    it("should render Task View header", async () => {
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText("Task View")).toBeInTheDocument();
+    });
+
+    it("should sync column view state on mount", async () => {
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(mockSyncColumnViewState).toHaveBeenCalled();
+    });
+
+    it("should send column view via postMessage when iframe loads", async () => {
+      const mockPostMessage = jest.fn();
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const iframe = screen.getByTitle("Coding Inbox");
+      Object.defineProperty(iframe, "contentWindow", {
+        value: { postMessage: mockPostMessage },
+        writable: true,
+      });
+
+      fireEvent.load(iframe);
+
+      // Should send both auth and column view
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        {
+          type: "GATEWAYZ_COLUMN_VIEW",
+          columnView: "1",
+        },
+        "https://test-terragon.railway.app"
+      );
+    });
+
+    it("should send column view via postMessage when toggle changes", async () => {
+      const mockPostMessage = jest.fn();
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const iframe = screen.getByTitle("Coding Inbox");
+      Object.defineProperty(iframe, "contentWindow", {
+        value: { postMessage: mockPostMessage },
+        writable: true,
+      });
+
+      // Load iframe first
+      fireEvent.load(iframe);
+      mockPostMessage.mockClear();
+
+      // Click the 2-column toggle button
+      const twoColumnButton = screen.getByTestId("column-toggle-2");
+      fireEvent.click(twoColumnButton);
+
+      // Should send column view update
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        {
+          type: "GATEWAYZ_COLUMN_VIEW",
+          columnView: "2",
+        },
+        "https://test-terragon.railway.app"
+      );
+    });
+
+    it("should respond to column view request from iframe", async () => {
+      const mockPostMessage = jest.fn();
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const iframe = screen.getByTitle("Coding Inbox");
+      Object.defineProperty(iframe, "contentWindow", {
+        value: { postMessage: mockPostMessage },
+        writable: true,
+      });
+
+      // Load iframe first
+      fireEvent.load(iframe);
+      mockPostMessage.mockClear();
+
+      // Simulate message from iframe requesting column view
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: "https://test-terragon.railway.app",
+            data: { type: "GATEWAYZ_COLUMN_VIEW_REQUEST" },
+          })
+        );
+      });
+
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        {
+          type: "GATEWAYZ_COLUMN_VIEW",
+          columnView: "1",
+        },
+        "https://test-terragon.railway.app"
+      );
+    });
+
+    it("should ignore column view requests from unauthorized origins", async () => {
+      const mockPostMessage = jest.fn();
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const iframe = screen.getByTitle("Coding Inbox");
+      Object.defineProperty(iframe, "contentWindow", {
+        value: { postMessage: mockPostMessage },
+        writable: true,
+      });
+
+      // Load iframe first
+      fireEvent.load(iframe);
+      mockPostMessage.mockClear();
+
+      // Simulate message from unauthorized origin
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: "https://evil-site.com",
+            data: { type: "GATEWAYZ_COLUMN_VIEW_REQUEST" },
+          })
+        );
+      });
+
+      // Should not send column view to unauthorized origin
+      expect(mockPostMessage).not.toHaveBeenCalled();
     });
   });
 });
