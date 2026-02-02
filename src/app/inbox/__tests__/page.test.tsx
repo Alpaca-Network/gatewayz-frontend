@@ -1,10 +1,28 @@
-import { render, screen, act, fireEvent } from "@testing-library/react";
+/**
+ * @jest-environment jsdom
+ */
+import { render, screen, fireEvent, waitFor, cleanup, act } from "@testing-library/react";
+
+// Track redirect calls for assertions
+let lastRedirectUrl: string | null = null;
+
+// Mock the redirect utility BEFORE importing the component
+jest.mock("@/lib/utils", () => ({
+  ...jest.requireActual("@/lib/utils"),
+  redirectTo: jest.fn((url: string) => {
+    lastRedirectUrl = url;
+  }),
+}));
+
+// Import the mocked function for assertions
+import { redirectTo } from "@/lib/utils";
+
+// Import the component AFTER setting up the mock
 import InboxPage from "../page";
 
 // Mock lucide-react icons
 jest.mock("lucide-react", () => ({
   Loader2: () => <div data-testid="loader-icon" />,
-  RefreshCw: () => <div data-testid="refresh-icon" />,
   ExternalLink: () => <div data-testid="external-link-icon" />,
   LogIn: () => <div data-testid="login-icon" />,
 }));
@@ -59,8 +77,7 @@ const originalEnv = process.env;
 
 describe("InboxPage", () => {
   beforeEach(() => {
-    jest.useFakeTimers();
-    jest.resetModules();
+    // Reset environment but NOT modules (to keep mocks intact)
     process.env = { ...originalEnv };
     mockAuthContext.status = "authenticated";
     mockAuthContext.apiKey = "gw_live_test_api_key";
@@ -70,11 +87,16 @@ describe("InboxPage", () => {
       display_name: "Test User",
       tier: "pro",
     };
+    // Reset all mock implementations and calls
+    jest.clearAllMocks();
     (global.fetch as jest.Mock).mockReset();
+    lastRedirectUrl = null;
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    // Clean up rendered components between tests
+    cleanup();
+    jest.clearAllTimers();
   });
 
   afterAll(() => {
@@ -166,8 +188,11 @@ describe("InboxPage", () => {
         subscription_allowance: 2000, // $20 monthly allowance
         purchased_credits: 3000, // $30 purchased
       };
+      // Note: Individual tests set up their own fetch mocks
+    });
 
-      // Mock successful auth token fetch
+    const setupSuccessfulFetch = () => {
+      (global.fetch as jest.Mock).mockReset();
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: () =>
@@ -176,386 +201,138 @@ describe("InboxPage", () => {
             expiresAt: new Date(Date.now() + 3600000).toISOString(),
           }),
       });
-    });
+    };
 
-    it("should render loading state initially", async () => {
-      render(<InboxPage />);
-
-      // Need to wait for the auth token fetch effect to run
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      expect(screen.getByText("Loading Coding Inbox...")).toBeInTheDocument();
-    });
-
-    it("should call auth bridge API with credits information", async () => {
-      render(<InboxPage />);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        "/api/terragon/auth",
-        expect.objectContaining({
-          method: "POST",
-          headers: expect.objectContaining({
-            "Content-Type": "application/json",
-            Authorization: "Bearer gw_live_test_api_key",
-          }),
-          body: JSON.stringify({
-            userId: "user-123",
-            email: "test@example.com",
-            username: "Test User",
-            tier: "pro",
-            credits: 5000,
-            subscriptionAllowance: 2000,
-            purchasedCredits: 3000,
-          }),
-        })
-      );
-    });
-
-    it("should render iframe with embed mode (token sent via postMessage for security)", async () => {
-      render(<InboxPage />);
-
-      // Wait for auth token fetch
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      const iframe = screen.getByTitle("Coding Inbox");
-      expect(iframe).toBeInTheDocument();
-
-      const iframeSrc = iframe.getAttribute("src");
-      expect(iframeSrc).toContain(testTerragonUrl);
-      expect(iframeSrc).toContain("embed=true");
-      expect(iframeSrc).toContain("awaitAuth=true");
-      // Token should NOT be in URL for security (passed via postMessage instead)
-      expect(iframeSrc).not.toContain("gwauth=");
-    });
-
-    it("should have proper iframe sandbox attributes", async () => {
-      render(<InboxPage />);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      const iframe = screen.getByTitle("Coding Inbox");
-      expect(iframe).toHaveAttribute(
-        "sandbox",
-        "allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
-      );
-    });
-
-    it("should have clipboard permissions", async () => {
-      render(<InboxPage />);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      const iframe = screen.getByTitle("Coding Inbox");
-      expect(iframe).toHaveAttribute(
-        "allow",
-        "clipboard-read; clipboard-write"
-      );
-    });
-
-    it("should send auth token via postMessage when iframe loads", async () => {
-      const mockPostMessage = jest.fn();
-      render(<InboxPage />);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      const iframe = screen.getByTitle("Coding Inbox");
-      // Mock the iframe contentWindow
-      Object.defineProperty(iframe, "contentWindow", {
-        value: { postMessage: mockPostMessage },
-        writable: true,
-      });
-
-      fireEvent.load(iframe);
-
-      expect(mockPostMessage).toHaveBeenCalledWith(
-        {
-          type: "GATEWAYZ_AUTH",
-          token: "test-token-payload.test-signature",
-        },
-        "https://test-terragon.railway.app"
-      );
-    });
-
-    it("should respond to auth request from iframe via message event", async () => {
-      const mockPostMessage = jest.fn();
-      render(<InboxPage />);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      const iframe = screen.getByTitle("Coding Inbox");
-      Object.defineProperty(iframe, "contentWindow", {
-        value: { postMessage: mockPostMessage },
-        writable: true,
-      });
-
-      // Clear any previous calls
-      mockPostMessage.mockClear();
-
-      // Simulate message from iframe requesting auth
-      act(() => {
-        window.dispatchEvent(
-          new MessageEvent("message", {
-            origin: "https://test-terragon.railway.app",
-            data: { type: "GATEWAYZ_AUTH_REQUEST" },
-          })
-        );
-      });
-
-      expect(mockPostMessage).toHaveBeenCalledWith(
-        {
-          type: "GATEWAYZ_AUTH",
-          token: "test-token-payload.test-signature",
-        },
-        "https://test-terragon.railway.app"
-      );
-    });
-
-    it("should ignore messages from unauthorized origins", async () => {
-      const mockPostMessage = jest.fn();
-      render(<InboxPage />);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      const iframe = screen.getByTitle("Coding Inbox");
-      Object.defineProperty(iframe, "contentWindow", {
-        value: { postMessage: mockPostMessage },
-        writable: true,
-      });
-
-      // Load iframe to send initial auth
-      fireEvent.load(iframe);
-      mockPostMessage.mockClear();
-
-      // Simulate message from unauthorized origin
-      act(() => {
-        window.dispatchEvent(
-          new MessageEvent("message", {
-            origin: "https://evil-site.com",
-            data: { type: "GATEWAYZ_AUTH_REQUEST" },
-          })
-        );
-      });
-
-      // Should not send auth to unauthorized origin
-      expect(mockPostMessage).not.toHaveBeenCalled();
-    });
-
-    it("should handle TERRAGON_SETUP_COMPLETE message from iframe", async () => {
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {});
-      render(<InboxPage />);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      // Simulate setup complete message from Terragon
-      act(() => {
-        window.dispatchEvent(
-          new MessageEvent("message", {
-            origin: "https://test-terragon.railway.app",
-            data: { type: "TERRAGON_SETUP_COMPLETE", success: true },
-          })
-        );
-      });
-
-      // Should log the setup complete event
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "[Inbox] Terragon setup completed successfully"
-      );
-
-      consoleSpy.mockRestore();
-    });
-
-    it("should handle TERRAGON_AUTH_COMPLETE message from iframe", async () => {
-      const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {});
-      render(<InboxPage />);
-
-      await act(async () => {
-        await Promise.resolve();
-      });
-
-      // Simulate auth complete message from Terragon
-      act(() => {
-        window.dispatchEvent(
-          new MessageEvent("message", {
-            origin: "https://test-terragon.railway.app",
-            data: { type: "TERRAGON_AUTH_COMPLETE" },
-          })
-        );
-      });
-
-      // Should log the auth complete event
-      expect(consoleSpy).toHaveBeenCalledWith("[Inbox] Terragon auth completed");
-
-      consoleSpy.mockRestore();
-    });
-
-    it("should fallback to URL without auth token on API failure", async () => {
+    const setupFailedFetch = () => {
+      (global.fetch as jest.Mock).mockReset();
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: false,
         json: () => Promise.resolve({ error: "Auth bridge error" }),
       });
+    };
 
+    it("should render redirecting state", async () => {
+      setupSuccessfulFetch();
       render(<InboxPage />);
 
-      await act(async () => {
-        await Promise.resolve();
+      await waitFor(() => {
+        expect(screen.getByText(/Redirecting to Coding Inbox.../i)).toBeInTheDocument();
       });
-
-      const iframe = screen.getByTitle("Coding Inbox");
-      expect(iframe).toHaveAttribute("src", testTerragonUrl);
     });
 
-    it("should show connection error after timeout", async () => {
+    it("should call auth bridge API with credits information", async () => {
+      setupSuccessfulFetch();
       render(<InboxPage />);
 
-      // Wait for auth token fetch
-      await act(async () => {
-        await Promise.resolve();
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          "/api/terragon/auth",
+          expect.objectContaining({
+            method: "POST",
+            headers: expect.objectContaining({
+              "Content-Type": "application/json",
+              Authorization: "Bearer gw_live_test_api_key",
+            }),
+            body: JSON.stringify({
+              userId: "user-123",
+              email: "test@example.com",
+              username: "Test User",
+              tier: "pro",
+              credits: 5000,
+              subscriptionAllowance: 2000,
+              purchasedCredits: 3000,
+            }),
+          })
+        );
       });
-
-      // Fast-forward past the 15 second timeout
-      act(() => {
-        jest.advanceTimersByTime(15000);
-      });
-
-      // Should now show connection error
-      expect(screen.getByText("Connection Failed")).toBeInTheDocument();
-      expect(
-        screen.getByText(/Unable to connect to the Coding Inbox/i)
-      ).toBeInTheDocument();
     });
 
-    it("should show retry button on connection error", async () => {
+    it("should redirect to Terragon with auth token", async () => {
+      setupSuccessfulFetch();
       render(<InboxPage />);
 
-      await act(async () => {
-        await Promise.resolve();
+      await waitFor(() => {
+        expect(redirectTo).toHaveBeenCalledWith(
+          `${testTerragonUrl}/?gwauth=test-token-payload.test-signature`
+        );
       });
-
-      act(() => {
-        jest.advanceTimersByTime(15000);
-      });
-
-      const retryButton = screen.getByRole("button", {
-        name: /retry connection/i,
-      });
-      expect(retryButton).toBeInTheDocument();
     });
 
-    it("should show open directly link on connection error", async () => {
+    it("should show error on API failure", async () => {
+      setupFailedFetch();
       render(<InboxPage />);
 
-      await act(async () => {
-        await Promise.resolve();
+      await waitFor(() => {
+        expect(screen.getByText("Auth bridge error")).toBeInTheDocument();
       });
-
-      act(() => {
-        jest.advanceTimersByTime(15000);
-      });
-
-      const openDirectlyLink = screen.getByRole("link", {
-        name: /open directly/i,
-      });
-      expect(openDirectlyLink).toBeInTheDocument();
-      expect(openDirectlyLink).toHaveAttribute("href", testTerragonUrl);
     });
 
-    it("should hide loading state when iframe loads successfully", async () => {
+    it("should show try again button on error", async () => {
+      setupFailedFetch();
       render(<InboxPage />);
 
-      await act(async () => {
-        await Promise.resolve();
+      await waitFor(() => {
+        const tryAgainButton = screen.getByRole("button", {
+          name: /try again/i,
+        });
+        expect(tryAgainButton).toBeInTheDocument();
       });
-
-      const iframe = screen.getByTitle("Coding Inbox");
-      fireEvent.load(iframe);
-
-      expect(
-        screen.queryByText("Loading Coding Inbox...")
-      ).not.toBeInTheDocument();
     });
 
-    it("should retry connection when retry button is clicked", async () => {
+    it("should show open directly link on error", async () => {
+      setupFailedFetch();
       render(<InboxPage />);
 
-      await act(async () => {
-        await Promise.resolve();
+      await waitFor(() => {
+        const openDirectlyLink = screen.getByRole("link", {
+          name: /open terragon directly/i,
+        });
+        expect(openDirectlyLink).toBeInTheDocument();
+        expect(openDirectlyLink).toHaveAttribute("href", testTerragonUrl);
       });
-
-      act(() => {
-        jest.advanceTimersByTime(15000);
-      });
-
-      expect(screen.getByText("Connection Failed")).toBeInTheDocument();
-
-      const retryButton = screen.getByRole("button", {
-        name: /retry connection/i,
-      });
-      fireEvent.click(retryButton);
-
-      expect(screen.getByText("Loading Coding Inbox...")).toBeInTheDocument();
     });
 
-    it("should fetch a fresh auth token when retrying after token expiration", async () => {
+    it("should retry when try again button is clicked", async () => {
+      // Set up mock to return error first, then success on retry
+      let callCount = 0;
+      (global.fetch as jest.Mock).mockReset();
+      (global.fetch as jest.Mock).mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({
+            ok: false,
+            json: () => Promise.resolve({ error: "Auth bridge error" }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              token: "new-test-token",
+              expiresAt: new Date(Date.now() + 3600000).toISOString(),
+            }),
+        });
+      });
+
       render(<InboxPage />);
 
-      // Wait for initial auth token fetch
-      await act(async () => {
-        await Promise.resolve();
+      // Wait for error state (first fetch fails)
+      await waitFor(() => {
+        expect(screen.getByText("Auth bridge error")).toBeInTheDocument();
       });
 
-      // Verify initial fetch was called
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-
-      // Fast-forward past the 15 second timeout to trigger connection error
-      act(() => {
-        jest.advanceTimersByTime(15000);
+      // Click try again
+      const tryAgainButton = screen.getByRole("button", {
+        name: /try again/i,
       });
+      fireEvent.click(tryAgainButton);
 
-      expect(screen.getByText("Connection Failed")).toBeInTheDocument();
-
-      // Click retry button
-      const retryButton = screen.getByRole("button", {
-        name: /retry connection/i,
+      // Should redirect after retry succeeds (second fetch succeeds)
+      await waitFor(() => {
+        expect(redirectTo).toHaveBeenCalledWith(
+          `${testTerragonUrl}/?gwauth=new-test-token`
+        );
       });
-
-      // Clear the mock to track new calls
-      (global.fetch as jest.Mock).mockClear();
-
-      // Click retry - this should trigger a fresh token fetch
-      await act(async () => {
-        fireEvent.click(retryButton);
-        // Wait for the useEffect to run and fetch a new token
-        await Promise.resolve();
-      });
-
-      // Verify that a new auth token was fetched (the fix ensures handleRetry
-      // clears authToken and terragonUrl, which triggers the useEffect to re-fetch)
-      expect(global.fetch).toHaveBeenCalledWith(
-        "/api/terragon/auth",
-        expect.objectContaining({
-          method: "POST",
-        })
-      );
     });
   });
 
@@ -567,10 +344,37 @@ describe("InboxPage", () => {
       mockAuthContext.status = "authenticating";
     });
 
-    it("should not render iframe while authenticating", () => {
+    it("should show loading state while authenticating", () => {
       render(<InboxPage />);
 
-      expect(screen.queryByTitle("Coding Inbox")).not.toBeInTheDocument();
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
+    });
+
+    it("should not redirect while authenticating", () => {
+      render(<InboxPage />);
+
+      expect(redirectTo).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("when status is idle", () => {
+    const testTerragonUrl = "https://test-terragon.railway.app";
+
+    beforeEach(() => {
+      process.env.NEXT_PUBLIC_TERRAGON_URL = testTerragonUrl;
+      mockAuthContext.status = "idle";
+    });
+
+    it("should show loading state while idle", () => {
+      render(<InboxPage />);
+
+      expect(screen.getByText("Loading...")).toBeInTheDocument();
+    });
+
+    it("should not redirect while idle", () => {
+      render(<InboxPage />);
+
+      expect(redirectTo).not.toHaveBeenCalled();
     });
   });
 });

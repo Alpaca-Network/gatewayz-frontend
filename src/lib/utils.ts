@@ -205,3 +205,11 @@ export function throttle<T extends (...args: any[]) => any>(
     }
   };
 }
+
+/**
+ * Redirect to a URL - extracted to a function for testability
+ * In tests, this function can be mocked to capture redirects without triggering jsdom's navigation
+ */
+export function redirectTo(url: string): void {
+  window.location.href = url;
+}
