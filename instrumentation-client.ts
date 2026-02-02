@@ -384,6 +384,25 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     }
   }
 
+  // Filter out Privy internal state management errors
+  // These occur during Privy's internal state updates and are handled by their SDK
+  const isPrivyInternalError =
+    (errorMessageLower.includes('object not found matching id') &&
+     errorMessageLower.includes('methodname') &&
+     errorMessageLower.includes('update')) ||
+    (errorMessageLower.includes('non-error promise rejection') &&
+     errorMessageLower.includes('object not found')) ||
+    (eventMessageLower.includes('object not found matching id') &&
+     eventMessageLower.includes('methodname') &&
+     eventMessageLower.includes('update')) ||
+    (eventMessageLower.includes('non-error promise rejection') &&
+     eventMessageLower.includes('object not found'));
+
+  if (isPrivyInternalError) {
+    console.debug('[Sentry] Filtered out Privy internal state management error (handled by Privy SDK)');
+    return true;
+  }
+
   // Filter out "Large HTTP payload" info events
   // These are monitoring/info level events that don't indicate errors
   if (
@@ -437,6 +456,35 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
 
   if (isScriptError) {
     console.debug('[Sentry] Filtered out cross-origin Script error (third-party script without CORS)');
+    return true;
+  }
+
+  // Filter out generic "[GlobalError] Script error." messages from error handler
+  // These are wrapped versions of cross-origin script errors from third-party scripts
+  const isGlobalErrorScriptError =
+    /^\[GlobalError\] Script error\.$/i.test(errorMessage) ||
+    /^\[GlobalError\] Script error\.$/i.test(eventMessage);
+
+  if (isGlobalErrorScriptError) {
+    console.debug('[Sentry] Filtered out [GlobalError] Script error (third-party script)');
+    return true;
+  }
+
+  // Filter out ChunkLoadError from deployments
+  // These occur when a new deployment invalidates cached chunks while users have the page open
+  // Users need to reload the page - this is expected behavior, not an application bug
+  const isChunkLoadError =
+    errorMessageLower.includes('chunkloaderror') ||
+    errorMessageLower.includes('loading chunk') ||
+    errorMessageLower.includes('loading css chunk') ||
+    errorMessageLower.includes('failed to fetch dynamically imported module') ||
+    eventMessageLower.includes('chunkloaderror') ||
+    eventMessageLower.includes('loading chunk') ||
+    eventMessageLower.includes('loading css chunk') ||
+    eventMessageLower.includes('failed to fetch dynamically imported module');
+
+  if (isChunkLoadError) {
+    console.debug('[Sentry] Filtered out ChunkLoadError (deployment invalidated cached chunks, requires reload)');
     return true;
   }
 
@@ -502,6 +550,19 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
     return true;
   }
 
+  // Filter out Cross-Origin-Opener-Policy (COOP) errors
+  // These are browser/extension compatibility check errors that don't affect functionality
+  const isCOOPError =
+    errorMessageLower.includes('cross-origin-opener-policy') ||
+    errorMessageLower.includes('error checking cross-origin-opener-policy') ||
+    eventMessageLower.includes('cross-origin-opener-policy') ||
+    eventMessageLower.includes('error checking cross-origin-opener-policy');
+
+  if (isCOOPError) {
+    console.debug('[Sentry] Filtered out Cross-Origin-Opener-Policy error (browser compatibility check)');
+    return true;
+  }
+
   // Filter out Privy session timeout errors (external service)
   // These occur when the Privy authentication service times out
   // This is an external service issue, not an application bug
@@ -541,6 +602,30 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
 
   if (isAbortError) {
     console.debug('[Sentry] Filtered out AbortError (expected cancellation behavior)');
+    return true;
+  }
+
+  // Filter out AI SDK streaming errors
+  // These occur when models complete without generating content or return lifecycle events
+  // This is expected behavior for certain models/prompts, not an application error
+  // IMPORTANT: Don't filter payment errors or other critical streaming errors
+  const isAISDKStreamingError =
+    (errorMessageLower.includes('no response received from model') ||
+     errorMessageLower.includes('part types received') ||
+     errorMessageLower.includes('completed without generating any content') ||
+     errorMessageLower.includes('may not be properly configured') ||
+     errorMessageLower.includes('may not support') ||
+     eventMessageLower.includes('no response received from model') ||
+     eventMessageLower.includes('part types received') ||
+     eventMessageLower.includes('completed without generating any content') ||
+     eventMessageLower.includes('may not be properly configured') ||
+     eventMessageLower.includes('may not support')) &&
+    // Exclude payment errors - these are critical and should be captured
+    !errorMessageLower.includes('payment') &&
+    !eventMessageLower.includes('payment');
+
+  if (isAISDKStreamingError) {
+    console.debug('[Sentry] Filtered out AI SDK streaming error (expected model behavior)');
     return true;
   }
 
