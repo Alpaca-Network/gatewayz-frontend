@@ -608,19 +608,21 @@ function shouldFilterEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bo
   // Filter out AI SDK streaming errors
   // These occur when models complete without generating content or return lifecycle events
   // This is expected behavior for certain models/prompts, not an application error
+  // IMPORTANT: Don't filter payment errors or other critical streaming errors
   const isAISDKStreamingError =
-    errorMessageLower.includes('no response received from model') ||
-    errorMessageLower.includes('part types received') ||
-    errorMessageLower.includes('streamingerror') ||
-    errorMessageLower.includes('completed without generating any content') ||
-    errorMessageLower.includes('may not be properly configured') ||
-    errorMessageLower.includes('may not support') ||
-    eventMessageLower.includes('no response received from model') ||
-    eventMessageLower.includes('part types received') ||
-    eventMessageLower.includes('streamingerror') ||
-    eventMessageLower.includes('completed without generating any content') ||
-    eventMessageLower.includes('may not be properly configured') ||
-    eventMessageLower.includes('may not support');
+    (errorMessageLower.includes('no response received from model') ||
+     errorMessageLower.includes('part types received') ||
+     errorMessageLower.includes('completed without generating any content') ||
+     errorMessageLower.includes('may not be properly configured') ||
+     errorMessageLower.includes('may not support') ||
+     eventMessageLower.includes('no response received from model') ||
+     eventMessageLower.includes('part types received') ||
+     eventMessageLower.includes('completed without generating any content') ||
+     eventMessageLower.includes('may not be properly configured') ||
+     eventMessageLower.includes('may not support')) &&
+    // Exclude payment errors - these are critical and should be captured
+    !errorMessageLower.includes('payment') &&
+    !eventMessageLower.includes('payment');
 
   if (isAISDKStreamingError) {
     console.debug('[Sentry] Filtered out AI SDK streaming error (expected model behavior)');
