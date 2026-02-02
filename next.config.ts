@@ -79,14 +79,37 @@ const nextConfig: NextConfig = {
           permanent: false,
         },
         {
-          source: '/code',
-          destination: '/inbox',
+          source: '/inbox',
+          destination: 'https://terragon-www-production.up.railway.app/dashboard',
           permanent: false,
+          has: [
+            {
+              type: 'host',
+              value: 'beta.gatewayz.ai',
+            },
+          ],
+        },
+        {
+          source: '/code',
+          destination: 'https://terragon-www-production.up.railway.app/dashboard',
+          permanent: false,
+          has: [
+            {
+              type: 'host',
+              value: 'beta.gatewayz.ai',
+            },
+          ],
         },
         {
           source: '/terragon',
-          destination: '/inbox',
+          destination: 'https://terragon-www-production.up.railway.app/dashboard',
           permanent: false,
+          has: [
+            {
+              type: 'host',
+              value: 'beta.gatewayz.ai',
+            },
+          ],
         },
       ];
     },
