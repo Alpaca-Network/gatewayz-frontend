@@ -74,8 +74,8 @@ export async function POST(req: NextRequest): Promise<NextResponse<RefreshTokenR
         console.error('[token-refresh] Backend refresh failed:', response.status, errorText.substring(0, 200));
 
         // Check if response is HTML/XML (cloud provider error page)
-        const trimmed = errorText.trim();
-        const isNonJson = trimmed.startsWith('<!DOCTYPE') ||
+        const trimmed = errorText.trim().toLowerCase();
+        const isNonJson = trimmed.startsWith('<!doctype') ||
                          trimmed.startsWith('<html') ||
                          trimmed.startsWith('<?xml');
 

@@ -65,8 +65,8 @@ export async function POST(request: NextRequest) {
         });
 
         // Check if response is HTML/XML (cloud provider error page)
-        const trimmed = responseText.trim();
-        const isNonJson = trimmed.startsWith('<!DOCTYPE') ||
+        const trimmed = responseText.trim().toLowerCase();
+        const isNonJson = trimmed.startsWith('<!doctype') ||
                          trimmed.startsWith('<html') ||
                          trimmed.startsWith('<?xml');
 
