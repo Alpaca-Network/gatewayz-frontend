@@ -1,5 +1,6 @@
 import './globals.css';
 import 'katex/dist/katex.min.css';
+import Script from 'next/script';
 import { Toaster } from "@/components/ui/toaster";
 import { AppHeader } from '@/components/layout/app-header';
 import { AppFooter } from '@/components/layout/app-footer';
@@ -51,6 +52,12 @@ export default function RootLayout({
       <head>
         {/* Early error suppressor must run before wallet extensions inject ethereum */}
         <EarlyErrorSuppressor />
+        {/* Rybbit Analytics */}
+        <Script
+          src="https://app.rybbit.io/api/script.js"
+          data-site-id="c9d633bbdaac"
+          strategy="afterInteractive"
+        />
       </head>
         <body className={`${inter.className} antialiased bg-background min-h-screen flex flex-col`} suppressHydrationWarning>
           <SafeStorageShim />
