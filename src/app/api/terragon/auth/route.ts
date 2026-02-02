@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
 
     // Parse request body
     const body = await request.json();
-    const { userId, email, username, tier } = body;
+    const { userId, email, username, tier, credits, subscriptionAllowance, purchasedCredits } = body;
 
     if (!userId || !email) {
       return NextResponse.json(
@@ -139,6 +139,10 @@ export async function POST(request: NextRequest) {
       email,
       username: username || email.split("@")[0],
       tier: tier || "free",
+      // Include GatewayZ credits for display in Terragon
+      credits: credits ?? 0,
+      subscriptionAllowance: subscriptionAllowance ?? 0,
+      purchasedCredits: purchasedCredits ?? 0,
       keyHash, // Only store a hash, not the actual API key
       exp: now + 3600, // 1 hour expiration
       iat: now,

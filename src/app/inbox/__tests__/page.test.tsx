@@ -162,6 +162,9 @@ describe("InboxPage", () => {
         email: "test@example.com",
         display_name: "Test User",
         tier: "pro",
+        credits: 5000, // $50 in cents
+        subscription_allowance: 2000, // $20 monthly allowance
+        purchased_credits: 3000, // $30 purchased
       };
 
       // Mock successful auth token fetch
@@ -186,7 +189,7 @@ describe("InboxPage", () => {
       expect(screen.getByText("Loading Coding Inbox...")).toBeInTheDocument();
     });
 
-    it("should call auth bridge API", async () => {
+    it("should call auth bridge API with credits information", async () => {
       render(<InboxPage />);
 
       await act(async () => {
@@ -200,6 +203,15 @@ describe("InboxPage", () => {
           headers: expect.objectContaining({
             "Content-Type": "application/json",
             Authorization: "Bearer gw_live_test_api_key",
+          }),
+          body: JSON.stringify({
+            userId: "user-123",
+            email: "test@example.com",
+            username: "Test User",
+            tier: "pro",
+            credits: 5000,
+            subscriptionAllowance: 2000,
+            purchasedCredits: 3000,
           }),
         })
       );
@@ -344,6 +356,56 @@ describe("InboxPage", () => {
 
       // Should not send auth to unauthorized origin
       expect(mockPostMessage).not.toHaveBeenCalled();
+    });
+
+    it("should handle TERRAGON_SETUP_COMPLETE message from iframe", async () => {
+      const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // Simulate setup complete message from Terragon
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: "https://test-terragon.railway.app",
+            data: { type: "TERRAGON_SETUP_COMPLETE", success: true },
+          })
+        );
+      });
+
+      // Should log the setup complete event
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "[Inbox] Terragon setup completed successfully"
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should handle TERRAGON_AUTH_COMPLETE message from iframe", async () => {
+      const consoleSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+      render(<InboxPage />);
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // Simulate auth complete message from Terragon
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            origin: "https://test-terragon.railway.app",
+            data: { type: "TERRAGON_AUTH_COMPLETE" },
+          })
+        );
+      });
+
+      // Should log the auth complete event
+      expect(consoleSpy).toHaveBeenCalledWith("[Inbox] Terragon auth completed");
+
+      consoleSpy.mockRestore();
     });
 
     it("should fallback to URL without auth token on API failure", async () => {

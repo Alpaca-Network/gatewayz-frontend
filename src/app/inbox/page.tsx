@@ -56,6 +56,10 @@ export default function InboxPage() {
           email: userData.email,
           username: userData.display_name,
           tier: userData.tier || "free",
+          // Include GatewayZ credits information for display in Terragon
+          credits: userData.credits,
+          subscriptionAllowance: userData.subscription_allowance,
+          purchasedCredits: userData.purchased_credits,
         }),
       });
 
@@ -169,7 +173,7 @@ export default function InboxPage() {
     sendAuthToIframe();
   }, [sendAuthToIframe]);
 
-  // Listen for auth request from iframe
+  // Listen for messages from iframe (auth request, setup complete, etc.)
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!baseTerragonUrl) return;
@@ -181,6 +185,19 @@ export default function InboxPage() {
         if (event.data?.type === "GATEWAYZ_AUTH_REQUEST") {
           console.log("[Inbox] Received auth request from iframe");
           sendAuthToIframe();
+        }
+
+        // Handle setup completion from Terragon (after GitHub onboarding)
+        if (event.data?.type === "TERRAGON_SETUP_COMPLETE") {
+          console.log("[Inbox] Terragon setup completed successfully");
+          setIsLoading(false);
+          // The iframe will continue to show the dashboard
+        }
+
+        // Handle auth completion from Terragon
+        if (event.data?.type === "TERRAGON_AUTH_COMPLETE") {
+          console.log("[Inbox] Terragon auth completed");
+          setIsLoading(false);
         }
       } catch {
         // Ignore invalid URLs
