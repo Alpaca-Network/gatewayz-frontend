@@ -15,6 +15,83 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
+    date: "February 1, 2026",
+    features: [
+      "Many-to-Many Provider Support: Models page now shows all providers offering each model with per-provider pricing via the new /models/unique endpoint integration",
+      "Kanban Column Toggle: Inbox now supports customizable Kanban column visibility with persistent state and iframe synchronization",
+      "Terragon Inbox Integration: New /inbox and /code routes with custom OG images, auth bridge, and seamless iframe embedding",
+      "Rybbit Analytics: Added Rybbit analytics tracking script for beta.gatewayz.ai",
+      "Checkout Optimization: Improved checkout rendering speed with new plan and quantity controls",
+      "Prompt Cache Settings: New dedicated Prompt Cache page in settings for better cache management",
+      "Auto Top-Up Repositioned: Auto top-up section moved to top of credits page for better visibility",
+      "Custom Credit Amounts: Users can now enter custom amounts when purchasing credits",
+      "Subscription Plan Indicators: Upgrade/downgrade buttons now show based on user's current plan",
+      "Tiered Subscription Credits Display: Updated UI to properly display tiered subscription credit allocations",
+      "OpenCode Integration Page: Replaced PostHog snippet with comprehensive OpenCode overview in integrations",
+      "Butter.dev Caching Toggle: New response caching toggle for Butter.dev integration in settings",
+    ],
+    bugFixes: [
+      {
+        category: "Models & Pricing",
+        items: [
+          "Fixed provider-specific pricing display across all model components",
+          "Removed OpenAI/Anthropic from per-million pricing gateways for accurate pricing display",
+          "Fixed CI build timeouts with static fallback for models page",
+          "Fixed models SSR fetching that was blocked by CI environment check",
+          "Reduced excessive console logs and removed setInterval polling from models page",
+          "Increased models 'all' gateway timeout from 10s to 180s for reliability",
+        ],
+      },
+      {
+        category: "Authentication & Security",
+        items: [
+          "Increased auth timeout and aligned retry configuration for better reliability",
+          "Added Railway domain to Terragon callback allowlist",
+          "Added multiple CSP fixes: Cloudflare Turnstile, hCaptcha, Statsig SDK, Reddit, PostHog, Google Ads domains",
+          "Fixed iframe security for /inbox page with proper sandbox attributes",
+          "Disabled login button while Privy SDK initializes to prevent premature clicks",
+          "Preserved tiered credit fields when upgrading API key",
+        ],
+      },
+      {
+        category: "Credits & Billing",
+        items: [
+          "Fixed credits display to convert from cents to dollars correctly",
+          "Fixed tier detection using proper getUserTier function",
+          "Saved tiered credit fields to localStorage on profile fetch",
+        ],
+      },
+      {
+        category: "Mobile & UI",
+        items: [
+          "Fixed mobile hamburger menu visibility and conditional Get Credits button",
+          "Fixed background color in PricingSection component",
+          "Added mobile-friendly responsive layout for models page",
+          "Expanded all model rows by default with toggle button",
+          "Added compact mobile banner view for free models credit info",
+          "Fixed iframe navigation with allow-top-navigation-by-user-activation",
+          "Fixed GitHub link CSP errors with allow-popups-to-escape-sandbox",
+        ],
+      },
+      {
+        category: "Infrastructure",
+        items: [
+          "Deferred PHProvider render until PostHog is fully initialized",
+          "Pre-configured window.ethereum as configurable to prevent wallet extension conflicts",
+          "Filtered AbortError from Sentry network request cancellations",
+        ],
+      },
+    ],
+    infrastructure: [
+      "Frontend pagination updated to support new backend metadata",
+      "Dynamic API URLs for desktop vs web environments",
+      "Unified provider dropdown configurations across the codebase",
+    ],
+    documentation: [
+      "Added NEXT_PUBLIC_TERRAGON_URL and GATEWAYZ_AUTH_BRIDGE_SECRET to environment documentation",
+    ],
+  },
+  {
     date: "January 25, 2026",
     features: [
       "Credit Usage Progress Bar: Visual indicator in the header showing remaining credits with color-coded status (green/yellow/red) and quick-access \"Add Credits\" button",
