@@ -52,18 +52,19 @@ const tiers = [
   },
   {
     name: "Enterprise",
-    price: "Custom",
-    period: "",
+    price: "$350",
+    period: "/ 10 users / month",
     subtitle: "Tailored for scale",
     description: "Solutions for large organizations",
     features: [
+      "$350 / 10 users / month minimum",
       "Dedicated infrastructure",
       "Custom model training",
       "White-label options",
       "24/7 dedicated support",
       "99.99% uptime SLA",
     ],
-    cta: "Get Started",
+    cta: "Contact Sales",
     highlighted: false,
   },
 ];

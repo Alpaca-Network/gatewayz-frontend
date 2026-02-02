@@ -80,10 +80,11 @@ const pricingTiers: PricingTier[] = [
     id: 'enterprise',
     name: 'Enterprise',
     description: 'Tailored for scale',
-    price: 'Custom',
-    ctaText: 'Get Started',
+    price: '$350',
+    ctaText: 'Contact Sales',
     ctaVariant: 'default',
     features: [
+      '$350 / 10 users / month minimum',
       'Dedicated infrastructure',
       'Custom model training',
       'White-label options',
@@ -276,10 +277,13 @@ export function PricingSection() {
                 <div className="mb-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-bold">{tier.price}</span>
-                    {tier.price !== 'Custom' && tier.price !== '$0' && (
+                    {tier.price !== 'Custom' && tier.price !== '$0' && tier.id !== 'enterprise' && (
                       <span className="text-muted-foreground">/month</span>
                     )}
                   </div>
+                  {tier.id === 'enterprise' && (
+                    <p className="text-sm text-muted-foreground mt-1">10 users / month</p>
+                  )}
                   {tier.price === '$0' && (
                     <p className="text-sm text-muted-foreground mt-1">Get started with free credits</p>
                   )}
@@ -300,7 +304,7 @@ export function PricingSection() {
                     <p className="text-sm text-muted-foreground mt-2">Everything in Pro, plus enhanced limits</p>
                   )}
                   {tier.id === 'enterprise' && (
-                    <p className="text-sm text-muted-foreground mt-2">Solutions for large organizations</p>
+                    <p className="text-sm text-muted-foreground mt-2">Minimum package for large teams</p>
                   )}
                 </div>
 

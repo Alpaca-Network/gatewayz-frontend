@@ -53,19 +53,19 @@ describe('PricingSection (Landing Page)', () => {
     expect(screen.getByText('Enterprise')).toBeInTheDocument();
   });
 
-  it('renders Enterprise tier with Get Started button', () => {
+  it('renders Enterprise tier with Contact Sales button', () => {
     render(<PricingSection />);
 
-    // Enterprise tier should have a Get Started button (not Join Beta like others)
-    const getStartedButtons = screen.getAllByRole('button', { name: /get started/i });
-    expect(getStartedButtons.length).toBe(1); // Only Enterprise has "Get Started"
+    // Enterprise tier should have a Contact Sales button (not Join Beta like others)
+    const contactSalesButtons = screen.getAllByRole('button', { name: /contact sales/i });
+    expect(contactSalesButtons.length).toBe(1); // Only Enterprise has "Contact Sales"
   });
 
   it('calls handleClick when Enterprise tier button is clicked', () => {
     render(<PricingSection />);
 
-    // Find the Enterprise card's Get Started button
-    const enterpriseButton = screen.getByRole('button', { name: /get started/i });
+    // Find the Enterprise card's Contact Sales button
+    const enterpriseButton = screen.getByRole('button', { name: /contact sales/i });
 
     // Click should not throw - this verifies the Enterprise branch of handleClick executes
     // Note: window.location.href assertion skipped due to JSDOM limitations
@@ -78,7 +78,7 @@ describe('PricingSection (Landing Page)', () => {
     render(<PricingSection />);
 
     // Click Enterprise button
-    const enterpriseButton = screen.getByRole('button', { name: /get started/i });
+    const enterpriseButton = screen.getByRole('button', { name: /contact sales/i });
 
     fireEvent.click(enterpriseButton);
 
@@ -104,6 +104,6 @@ describe('PricingSection (Landing Page)', () => {
     expect(screen.getByText('$0')).toBeInTheDocument();
     expect(screen.getByText('$8')).toBeInTheDocument();
     expect(screen.getByText('$75')).toBeInTheDocument();
-    expect(screen.getByText('Custom')).toBeInTheDocument();
+    expect(screen.getByText('$350')).toBeInTheDocument();
   });
 });
