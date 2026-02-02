@@ -4,7 +4,10 @@ import { models as staticModels } from '@/lib/models-data';
 import { transformStaticModel } from '@/lib/model-detail-utils';
 import { USE_UNIQUE_MODELS_ENDPOINT } from '@/lib/config';
 import { adaptLegacyToUniqueModel } from '@/types/models';
-import type { GatewayPricing, Model, UniqueModel } from '@/types/models';
+import type { GatewayPricing, Model as LegacyModel, UniqueModel } from '@/types/models';
+
+// Alias LegacyModel as Model for this file's deduplication logic
+type Model = LegacyModel;
 
 /**
  * Models page rendering configuration

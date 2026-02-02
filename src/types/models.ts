@@ -47,6 +47,17 @@ export interface UniqueModel {
   fastest_response_time: number;     // Fastest response time across providers
   created?: number;                  // Unix timestamp of model creation
   is_private?: boolean;              // Whether model is on private network
+
+  // Legacy compatibility fields (from adaptLegacyToUniqueModel)
+  // These are populated when converting from legacy Model format
+  provider_slug?: string;            // Primary provider slug (legacy compatibility)
+  pricing?: {                        // Primary pricing (legacy compatibility)
+    prompt: string;
+    completion: string;
+  } | null;
+  source_gateway?: string;           // Single gateway (legacy compatibility)
+  source_gateways?: string[];        // Array of all gateways (legacy compatibility)
+  gateway_pricing?: Record<string, GatewayPricing>; // Per-gateway pricing (legacy compatibility)
 }
 
 /**
@@ -205,6 +216,12 @@ export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
     fastest_response_time: fastestResponseTime,
     created: model.created,
     is_private: model.is_private,
+    // Legacy compatibility fields
+    provider_slug: model.provider_slug,
+    pricing: model.pricing,
+    source_gateway: model.source_gateway,
+    source_gateways: model.source_gateways,
+    gateway_pricing: model.gateway_pricing,
   };
 }
 
