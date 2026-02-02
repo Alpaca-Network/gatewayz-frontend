@@ -87,26 +87,88 @@ export async function POST(req: NextRequest): Promise<NextResponse<InvalidateSes
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[session-invalidation] Backend invalidation failed:', response.status, errorText);
+        console.error('[session-invalidation] Backend invalidation failed:', response.status, errorText.substring(0, 200));
 
-        Sentry.captureException(
-          new Error(`Session invalidation failed: ${response.status}`),
-          {
-            tags: { service: 'auth', endpoint: 'invalidate' },
-            contexts: { http: { status: response.status } },
-          }
-        );
+        // Check if response is HTML/XML (cloud provider error page)
+        const trimmed = errorText.trim();
+        const isNonJson = trimmed.startsWith('<!DOCTYPE') ||
+                         trimmed.startsWith('<html') ||
+                         trimmed.startsWith('<?xml');
 
+        if (isNonJson) {
+          console.error('[session-invalidation] Backend returned non-JSON response (HTML/XML error)');
+
+          Sentry.captureException(
+            new Error(`Session invalidation failed with non-JSON response: ${response.status}`),
+            {
+              tags: { service: 'auth', endpoint: 'invalidate', error_type: 'non_json_response' },
+              contexts: { http: { status: response.status } },
+            }
+          );
+
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Authentication service returned an invalid response',
+            },
+            { status: 502 }
+          );
+        }
+
+        // Try to parse as JSON error
+        try {
+          const errorData = JSON.parse(errorText);
+
+          Sentry.captureException(
+            new Error(`Session invalidation failed: ${response.status}`),
+            {
+              tags: { service: 'auth', endpoint: 'invalidate' },
+              contexts: { http: { status: response.status }, response: errorData },
+            }
+          );
+
+          return NextResponse.json(
+            {
+              success: false,
+              error: errorData.error || errorData.message || 'Failed to invalidate session',
+            },
+            { status: response.status }
+          );
+        } catch {
+          Sentry.captureException(
+            new Error(`Session invalidation failed: ${response.status}`),
+            {
+              tags: { service: 'auth', endpoint: 'invalidate' },
+              contexts: { http: { status: response.status } },
+            }
+          );
+
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Failed to invalidate session',
+            },
+            { status: response.status }
+          );
+        }
+      }
+
+      const responseText = await response.text();
+
+      // Validate response is valid JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error('[session-invalidation] Backend returned non-JSON success response');
         return NextResponse.json(
           {
             success: false,
-            error: 'Failed to invalidate session',
+            error: 'Invalid response format from authentication service',
           },
-          { status: response.status }
+          { status: 502 }
         );
       }
-
-      const data = await response.json();
 
       Sentry.addBreadcrumb({
         category: 'auth',
