@@ -155,6 +155,13 @@ export function isLegacyModel(model: Model | UniqueModel): model is Model {
  * Useful during migration or when feature flag is being tested
  */
 export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
+  const architecture = model.architecture
+    ? {
+        input_modalities: model.architecture.input_modalities || [],
+        output_modalities: model.architecture.output_modalities || [],
+      }
+    : null;
+
   // Extract all gateways
   const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
   const gatewayPricing = model.gateway_pricing || {};
@@ -188,7 +195,7 @@ export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
     name: model.name,
     description: model.description,
     context_length: model.context_length,
-    architecture: model.architecture,
+    architecture,
     supported_parameters: model.supported_parameters,
     provider_count: providers.length,
     providers,

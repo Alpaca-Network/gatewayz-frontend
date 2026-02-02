@@ -1,27 +1,10 @@
 import { Suspense } from 'react';
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
+import { adaptLegacyToUniqueModel } from '@/types/models';
+import type { Model, UniqueModel } from '@/types/models';
 
-interface Model {
-  id: string;
-  name: string;
-  description: string | null;
-  context_length: number;
-  pricing: {
-    prompt: string;
-    completion: string;
-  } | null;
-  architecture: {
-    input_modalities: string[] | null;
-    output_modalities: string[] | null;
-  } | null;
-  supported_parameters: string[] | null;
-  provider_slug: string;
-  source_gateways: string[]; // Changed from source_gateway to array
-  created?: number;
-}
-
-async function getModels(): Promise<Model[]> {
+async function getModels(): Promise<UniqueModel[]> {
   try {
     // Fetch models from all gateways to build a complete picture
     const gateways = ['openrouter', 'portkey', 'featherless'];
@@ -90,7 +73,7 @@ async function getModels(): Promise<Model[]> {
     // Convert to array and sort gateways for consistency
     const uniqueModels = Array.from(modelGatewayMap.values()).map(({ model }) => ({
       ...model,
-      source_gateways: model.source_gateways.sort()
+      source_gateways: (model.source_gateways || []).sort()
     }));
 
     console.log(`Fetched models from ${gateways.length} gateways`);
@@ -100,7 +83,7 @@ async function getModels(): Promise<Model[]> {
     const multiGatewayModels = uniqueModels.filter(m => m.source_gateways.length > 1);
     console.log(`Models available on multiple gateways: ${multiGatewayModels.length}`);
 
-    return uniqueModels;
+    return uniqueModels.map(adaptLegacyToUniqueModel);
   } catch (error) {
     console.log('Failed to fetch models:', error);
     return [];

@@ -1,27 +1,10 @@
 import { Suspense } from 'react';
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
+import { adaptLegacyToUniqueModel } from '@/types/models';
+import type { Model, UniqueModel } from '@/types/models';
 
-interface Model {
-  id: string;
-  name: string;
-  description: string | null;
-  context_length: number;
-  pricing: {
-    prompt: string;
-    completion: string;
-  } | null;
-  architecture: {
-    input_modalities: string[] | null;
-    output_modalities: string[] | null;
-  } | null;
-  supported_parameters: string[] | null;
-  provider_slug: string;
-  source_gateway?: string;
-  created?: number;
-}
-
-async function getModels(): Promise<Model[]> {
+async function getModels(): Promise<UniqueModel[]> {
   try {
     // Fetch all models without limit to get the complete catalog
     const allModelsData = await getModelsForGateway('all');
@@ -65,7 +48,7 @@ async function getModels(): Promise<Model[]> {
     // Log final count after deduplication
     console.log(`After deduplication: ${uniqueModels.length} unique models`);
 
-    return uniqueModels;
+    return uniqueModels.map(adaptLegacyToUniqueModel);
   } catch (error) {
     console.log('Failed to fetch models:', error);
     return [];

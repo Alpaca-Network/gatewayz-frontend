@@ -193,7 +193,7 @@ const releaseNotes: ReleaseWeek[] = [
           "Added AIMO circuit breaker to handle API fetch errors gracefully",
           "Fixed Braintrust NoneType content error with deep sanitization",
           "Fixed Vertex AI streaming issues after submodule bump",
-          "Fixed health-service column name mismatches (current_status → last_status, last_check_at → last_called_at)",
+          "Fixed health-service column name mismatches (current_status -> last_status, last_check_at -> last_called_at)",
         ],
       },
       {
@@ -318,7 +318,7 @@ const releaseNotes: ReleaseWeek[] = [
         category: "Model & Provider Fixes",
         items: [
           "Fixed Cerebras Qwen-3-32b chat functionality",
-          "Fixed Gemini model configuration (2.1-pro → 2.5-pro)",
+          "Fixed Gemini model configuration (2.1-pro -> 2.5-pro)",
           "Fixed Google Vertex AI model initialization at startup",
           "Fixed OneRouter models display with authenticated /v1/models endpoint",
           "Removed Kimi-K2-Thinking from NEAR AI model lists",
