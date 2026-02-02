@@ -651,7 +651,7 @@ export class ChatHistoryAPI {
           return await this.getSessions(limit, offset);
         },
         {
-          timeout: TIMEOUT_CONFIG.chat.sessionsList, // 10 seconds - matches getSessions timeout
+          timeout: TIMEOUT_CONFIG.chat.sessionsList, // 10 seconds - wrapper timeout for session sync
           maxRetries: 2, // Reduced retries for background sync
           shouldRetry: (error) => {
             if (error instanceof Error) {
@@ -689,7 +689,7 @@ export class ChatHistoryAPI {
         return await this.getSessions(limit, offset);
       },
       {
-        timeout: TIMEOUT_CONFIG.chat.sessionsList, // 10 seconds - matches getSessions timeout
+        timeout: TIMEOUT_CONFIG.chat.sessionsList, // 10 seconds - wrapper timeout for session fetch
         maxRetries: 3,
         shouldRetry: (error) => {
           if (error instanceof Error) {
