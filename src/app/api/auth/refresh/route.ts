@@ -71,27 +71,92 @@ export async function POST(req: NextRequest): Promise<NextResponse<RefreshTokenR
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[token-refresh] Backend refresh failed:', response.status, errorText);
+        console.error('[token-refresh] Backend refresh failed:', response.status, errorText.substring(0, 200));
 
-        Sentry.captureException(
-          new Error(`Token refresh failed: ${response.status}`),
-          {
-            tags: { service: 'auth', endpoint: 'refresh' },
-            contexts: { http: { status: response.status } },
-          }
-        );
+        // Check if response is HTML/XML (cloud provider error page)
+        const trimmed = errorText.trim().toLowerCase();
+        const isNonJson = trimmed.startsWith('<!doctype') ||
+                         trimmed.startsWith('<html') ||
+                         trimmed.startsWith('<?xml');
 
+        if (isNonJson) {
+          console.error('[token-refresh] Backend returned non-JSON response (HTML/XML error)');
+
+          Sentry.captureException(
+            new Error(`Token refresh failed with non-JSON response: ${response.status}`),
+            {
+              tags: { service: 'auth', endpoint: 'refresh', error_type: 'non_json_response' },
+              contexts: { http: { status: response.status } },
+            }
+          );
+
+          return NextResponse.json(
+            {
+              success: false,
+              api_key: '',
+              error: 'Authentication service returned an invalid response',
+            },
+            { status: 502 }
+          );
+        }
+
+        // Try to parse as JSON error
+        try {
+          const errorData = JSON.parse(errorText);
+
+          Sentry.captureException(
+            new Error(`Token refresh failed: ${response.status}`),
+            {
+              tags: { service: 'auth', endpoint: 'refresh' },
+              contexts: { http: { status: response.status }, response: errorData },
+            }
+          );
+
+          return NextResponse.json(
+            {
+              success: false,
+              api_key: '',
+              error: errorData.error || errorData.message || 'Failed to refresh token',
+            },
+            { status: response.status }
+          );
+        } catch {
+          Sentry.captureException(
+            new Error(`Token refresh failed: ${response.status}`),
+            {
+              tags: { service: 'auth', endpoint: 'refresh' },
+              contexts: { http: { status: response.status } },
+            }
+          );
+
+          return NextResponse.json(
+            {
+              success: false,
+              api_key: '',
+              error: 'Failed to refresh token',
+            },
+            { status: response.status }
+          );
+        }
+      }
+
+      const responseText = await response.text();
+
+      // Validate response is valid JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error('[token-refresh] Backend returned non-JSON success response');
         return NextResponse.json(
           {
             success: false,
             api_key: '',
-            error: 'Failed to refresh token',
+            error: 'Invalid response format from authentication service',
           },
-          { status: response.status }
+          { status: 502 }
         );
       }
-
-      const data = await response.json();
 
       // Return new token and expiry
       return NextResponse.json({

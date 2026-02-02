@@ -63,12 +63,43 @@ export async function POST(request: NextRequest) {
           responsePreview: responseText.substring(0, 200),
           durationMs,
         });
-        return new NextResponse(responseText, {
-          status: response.status,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
+
+        // Check if response is HTML/XML (cloud provider error page)
+        const trimmed = responseText.trim().toLowerCase();
+        const isNonJson = trimmed.startsWith('<!doctype') ||
+                         trimmed.startsWith('<html') ||
+                         trimmed.startsWith('<?xml');
+
+        if (isNonJson) {
+          console.error("[API /api/auth] Backend returned non-JSON response (HTML/XML error)");
+          return NextResponse.json(
+            {
+              error: "Authentication service error",
+              status: response.status,
+              message: "The authentication service returned an invalid response. Please try again.",
+              detail: `Received ${response.status} error from backend`,
+            },
+            { status: 502 } // Bad Gateway - indicates backend issue
+          );
+        }
+
+        // Try to parse as JSON error response
+        try {
+          const errorData = JSON.parse(responseText);
+          return NextResponse.json(errorData, {
+            status: response.status,
+          });
+        } catch {
+          // Not valid JSON, return generic error
+          return NextResponse.json(
+            {
+              error: "Authentication failed",
+              status: response.status,
+              message: responseText.substring(0, 200),
+            },
+            { status: response.status }
+          );
+        }
       }
 
       console.log("[API /api/auth] Backend auth successful", {
@@ -76,12 +107,25 @@ export async function POST(request: NextRequest) {
         durationMs,
       });
 
-      return new NextResponse(responseText, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      // Validate response is JSON before returning
+      try {
+        JSON.parse(responseText);
+        return new NextResponse(responseText, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+      } catch {
+        console.error("[API /api/auth] Backend returned non-JSON success response");
+        return NextResponse.json(
+          {
+            error: "Invalid response format",
+            message: "Authentication service returned invalid data",
+          },
+          { status: 502 }
+        );
+      }
     } catch (fetchError) {
       clearTimeout(timeoutId);
       const durationMs = Date.now() - requestStartTime;
