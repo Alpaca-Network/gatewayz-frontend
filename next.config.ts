@@ -79,13 +79,18 @@ const nextConfig: NextConfig = {
           permanent: false,
         },
         {
+          source: '/inbox',
+          destination: 'https://terragon-www-production.up.railway.app/dashboard',
+          permanent: false,
+        },
+        {
           source: '/code',
-          destination: '/inbox',
+          destination: 'https://terragon-www-production.up.railway.app/dashboard',
           permanent: false,
         },
         {
           source: '/terragon',
-          destination: '/inbox',
+          destination: 'https://terragon-www-production.up.railway.app/dashboard',
           permanent: false,
         },
       ];
