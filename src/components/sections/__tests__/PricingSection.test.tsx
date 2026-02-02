@@ -104,6 +104,6 @@ describe('PricingSection (Landing Page)', () => {
     expect(screen.getByText('$0')).toBeInTheDocument();
     expect(screen.getByText('$8')).toBeInTheDocument();
     expect(screen.getByText('$75')).toBeInTheDocument();
-    expect(screen.getByText('$35')).toBeInTheDocument();
+    expect(screen.getByText('$350')).toBeInTheDocument();
   });
 });

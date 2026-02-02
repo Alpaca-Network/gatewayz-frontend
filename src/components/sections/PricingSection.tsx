@@ -52,12 +52,12 @@ const tiers = [
   },
   {
     name: "Enterprise",
-    price: "$35",
-    period: "/user/month",
+    price: "$350",
+    period: "/ 10 users / month",
     subtitle: "Tailored for scale",
     description: "Solutions for large organizations",
     features: [
-      "Minimum 10 licenses required",
+      "$350 / 10 users / month minimum",
       "Dedicated infrastructure",
       "Custom model training",
       "White-label options",
