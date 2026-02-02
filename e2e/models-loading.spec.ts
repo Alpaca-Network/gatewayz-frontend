@@ -59,7 +59,9 @@ test.describe('Models - Page Loading', () => {
     await mockModelsAPI();
     await page.goto('/models');
 
-    await page.waitForLoadState('networkidle');
+    // Use domcontentloaded instead of networkidle to avoid flaky timeouts in CI
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1000); // Give time for initial render
 
     // Look for model elements - could be cards, rows, or list items
     const modelElements = page.locator(
@@ -83,7 +85,9 @@ test.describe('Models - Search & Filter', () => {
   test('can search for models', async ({ page, mockModelsAPI }) => {
     await mockModelsAPI();
     await page.goto('/models');
-    await page.waitForLoadState('networkidle');
+    // Use domcontentloaded instead of networkidle to avoid flaky timeouts in CI
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1000); // Give time for initial render
 
     // Look for search input
     const searchInput = page.locator(
@@ -106,7 +110,9 @@ test.describe('Models - Search & Filter', () => {
   test('models page responds to filter changes', async ({ page, mockModelsAPI }) => {
     await mockModelsAPI();
     await page.goto('/models');
-    await page.waitForLoadState('networkidle');
+    // Use domcontentloaded instead of networkidle to avoid flaky timeouts in CI
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1000); // Give time for initial render
 
     // Get initial content
     const initialContent = await page.content();
@@ -182,7 +188,9 @@ test.describe('Models - Model Details', () => {
   test('can navigate to model details page', async ({ page, mockModelsAPI }) => {
     await mockModelsAPI();
     await page.goto('/models');
-    await page.waitForLoadState('networkidle');
+    // Use domcontentloaded instead of networkidle to avoid flaky timeouts in CI
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1000); // Give time for initial render
 
     // Look for model links or clickable elements
     const modelLinks = page.locator(
@@ -313,7 +321,9 @@ test.describe('Models - Performance Metrics', () => {
   test('models page has reasonable memory usage', async ({ page, mockModelsAPI }) => {
     await mockModelsAPI();
     await page.goto('/models');
-    await page.waitForLoadState('networkidle');
+    // Use domcontentloaded instead of networkidle to avoid flaky timeouts in CI
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1000); // Give time for initial render
 
     const metrics = await page.evaluate(() => {
       if ((performance as any).memory) {
@@ -421,7 +431,9 @@ test.describe('Models - Error Recovery', () => {
     });
 
     await page.goto('/models');
-    await page.waitForLoadState('networkidle');
+    // Use domcontentloaded instead of networkidle to avoid flaky timeouts in CI
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1000); // Give time for initial render
 
     // Should not crash on incomplete data
     await expect(page.locator('body')).toBeVisible();
@@ -432,7 +444,9 @@ test.describe('Models - Accessibility', () => {
   test('models are keyboard navigable', async ({ page, mockModelsAPI }) => {
     await mockModelsAPI();
     await page.goto('/models');
-    await page.waitForLoadState('networkidle');
+    // Use domcontentloaded instead of networkidle to avoid flaky timeouts in CI
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(1000); // Give time for initial render
 
     // Tab through page
     await page.keyboard.press('Tab');
