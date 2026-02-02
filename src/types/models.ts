@@ -47,6 +47,17 @@ export interface UniqueModel {
   fastest_response_time: number;     // Fastest response time across providers
   created?: number;                  // Unix timestamp of model creation
   is_private?: boolean;              // Whether model is on private network
+
+  // Legacy compatibility fields (from adaptLegacyToUniqueModel)
+  // These are populated when converting from legacy Model format
+  provider_slug?: string;            // Primary provider slug (legacy compatibility)
+  pricing?: {                        // Primary pricing (legacy compatibility)
+    prompt: string;
+    completion: string;
+  } | null;
+  source_gateway?: string;           // Single gateway (legacy compatibility)
+  source_gateways?: string[];        // Array of all gateways (legacy compatibility)
+  gateway_pricing?: Record<string, GatewayPricing>; // Per-gateway pricing (legacy compatibility)
 }
 
 /**
@@ -155,6 +166,13 @@ export function isLegacyModel(model: Model | UniqueModel): model is Model {
  * Useful during migration or when feature flag is being tested
  */
 export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
+  const architecture = model.architecture
+    ? {
+        input_modalities: model.architecture.input_modalities || [],
+        output_modalities: model.architecture.output_modalities || [],
+      }
+    : null;
+
   // Extract all gateways
   const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
   const gatewayPricing = model.gateway_pricing || {};
@@ -188,7 +206,7 @@ export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
     name: model.name,
     description: model.description,
     context_length: model.context_length,
-    architecture: model.architecture,
+    architecture,
     supported_parameters: model.supported_parameters,
     provider_count: providers.length,
     providers,
@@ -198,6 +216,12 @@ export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
     fastest_response_time: fastestResponseTime,
     created: model.created,
     is_private: model.is_private,
+    // Legacy compatibility fields
+    provider_slug: model.provider_slug,
+    pricing: model.pricing,
+    source_gateway: model.source_gateway,
+    source_gateways: model.source_gateways,
+    gateway_pricing: model.gateway_pricing,
   };
 }
 

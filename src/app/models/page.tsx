@@ -3,7 +3,11 @@ import { getModelsForGateway, getUniqueModels } from '@/lib/models-service';
 import { models as staticModels } from '@/lib/models-data';
 import { transformStaticModel } from '@/lib/model-detail-utils';
 import { USE_UNIQUE_MODELS_ENDPOINT } from '@/lib/config';
-import type { Model, UniqueModel, adaptLegacyToUniqueModel } from '@/types/models';
+import { adaptLegacyToUniqueModel } from '@/types/models';
+import type { GatewayPricing, Model as LegacyModel, UniqueModel } from '@/types/models';
+
+// Alias LegacyModel as Model for this file's deduplication logic
+type Model = LegacyModel;
 
 /**
  * Models page rendering configuration
@@ -22,33 +26,6 @@ import type { Model, UniqueModel, adaptLegacyToUniqueModel } from '@/types/model
  * static export. Instead, we rely on revalidation and client-side fetching.
  */
 export const revalidate = 60; // Revalidate every 60 seconds in server mode
-
-// Per-gateway pricing information
-interface GatewayPricing {
-  prompt: string;
-  completion: string;
-}
-
-interface Model {
-  id: string;
-  name: string;
-  description: string | null;
-  context_length: number;
-  pricing: {
-    prompt: string;
-    completion: string;
-  } | null;
-  architecture: {
-    input_modalities: string[] | null;
-    output_modalities: string[] | null;
-  } | null;
-  supported_parameters: string[] | null;
-  provider_slug: string;
-  source_gateway?: string; // From API, used to populate source_gateways
-  source_gateways: string[]; // Changed from source_gateway to array
-  gateway_pricing?: Record<string, GatewayPricing>; // Per-gateway pricing map
-  created?: number;
-}
 
 // Models are now fetched using gateway='all' which:
 // 1. Makes a single API call to the backend (more efficient)
@@ -213,52 +190,8 @@ function transformLegacyToUniqueModels(legacyModels: Model[]): UniqueModel[] {
   }
 
   return legacyModels.map(model => {
-    // Extract all gateways
-    const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
-    const gatewayPricing = model.gateway_pricing || {};
+    const transformed = adaptLegacyToUniqueModel(model);
 
-    // Convert gateway pricing to Provider array
-    const providers = gateways.map(gateway => ({
-      slug: gateway,
-      name: gateway.charAt(0).toUpperCase() + gateway.slice(1),
-      pricing: gatewayPricing[gateway] || model.pricing || { prompt: '0', completion: '0' },
-      health_status: 'healthy' as const,
-      average_response_time_ms: 1000,
-    }));
-
-    // Find cheapest provider
-    let cheapestProvider = providers[0]?.slug || '';
-    let cheapestPrice = Infinity;
-    providers.forEach(p => {
-      const price = parseFloat(p.pricing.prompt);
-      if (!isNaN(price) && price < cheapestPrice) {
-        cheapestPrice = price;
-        cheapestProvider = p.slug;
-      }
-    });
-
-    // Find fastest provider (use first one as default)
-    const fastestProvider = providers[0]?.slug || '';
-    const fastestResponseTime = providers[0]?.average_response_time_ms || 1000;
-
-    const transformed = {
-      id: model.id,
-      name: model.name,
-      description: model.description,
-      context_length: model.context_length,
-      architecture: model.architecture,
-      supported_parameters: model.supported_parameters,
-      provider_count: providers.length,
-      providers,
-      cheapest_provider: cheapestProvider,
-      fastest_provider: fastestProvider,
-      cheapest_prompt_price: cheapestPrice === Infinity ? 0 : cheapestPrice,
-      fastest_response_time: fastestResponseTime,
-      created: model.created,
-      is_private: model.is_private,
-    };
-
-    // Log first transformed model
     if (model.id === legacyModels[0].id) {
       console.log('[transformLegacyToUniqueModels] Transformed sample:', {
         id: transformed.id,

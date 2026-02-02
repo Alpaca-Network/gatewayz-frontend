@@ -30,7 +30,15 @@ import Link from 'next/link';
 import { stringToColor, getModelUrl } from '@/lib/utils';
 import { safeParseJson } from '@/lib/http';
 import { GATEWAY_CONFIG as REGISTRY_GATEWAY_CONFIG, getAllActiveGatewayIds } from '@/lib/gateway-registry';
-import { isFreeModel as checkIsFreeModel, getSourceGateway, formatPricingForDisplay, getNormalizedPerTokenPrice } from '@/lib/model-pricing-utils';
+import { formatPricingForDisplay } from '@/lib/model-pricing-utils';
+import {
+  getModelProviderNames,
+  getModelProviderSlugs,
+  getNormalizedPricingForFilter,
+  getPrimaryProvider,
+  isFreeUniqueModel,
+  normalizeGatewaySlug,
+} from '@/lib/unique-model-utils';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 
@@ -420,7 +428,7 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
   };
 
   // Get provider display name
-  const providerDisplay = providers[0]?.name || 'Unknown';
+  const providerDisplay = getPrimaryProvider(model)?.name || 'Unknown';
 
   return (
     <div>
@@ -528,6 +536,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const inputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.prompt, cheapestProvider.slug) : null;
   const outputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.completion, cheapestProvider.slug) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;
+  const providerDisplay = getPrimaryProvider(model)?.name || 'Unknown';
 
   // Determine if model is multi-lingual (simple heuristic - can be improved)
   const isMultiLingual = model.architecture?.input_modalities?.includes('text') &&
@@ -624,7 +633,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
         {/* Bottom metadata row */}
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground border-t pt-3">
           <span className="flex items-center gap-1">
-            By <span className="font-medium text-foreground">{model.provider_slug?.replace(/^@/, '') || 'Unknown'}</span>
+            By <span className="font-medium text-foreground">{providerDisplay}</span>
           </span>
           <span className="font-medium">{contextK > 0 ? `${contextK}M Tokens` : '0M Tokens'}</span>
           <span className="font-medium">{contextK > 0 ? `${contextK}K Context` : '0K Context'}</span>
@@ -1059,10 +1068,13 @@ export default function ModelsClient({
 
     const lowerSearch = debouncedSearchTerm.toLowerCase();
     return deduplicatedModels.filter((model) => {
+      const providerSlugs = getModelProviderSlugs(model);
+      const providerNames = getModelProviderNames(model).map(name => name.toLowerCase());
       return (model.name || '').toLowerCase().includes(lowerSearch) ||
         (model.description || '').toLowerCase().includes(lowerSearch) ||
         (model.id || '').toLowerCase().includes(lowerSearch) ||
-        (model.provider_slug || '').toLowerCase().includes(lowerSearch);
+        providerSlugs.some(slug => slug.includes(lowerSearch)) ||
+        providerNames.some(name => name.includes(lowerSearch));
     });
   }, [deduplicatedModels, debouncedSearchTerm]);
 
@@ -1080,26 +1092,20 @@ export default function ModelsClient({
       const contextMatch = model.context_length === 0 ||
         (contextLengthRange[0] === 0 && contextLengthRange[1] === 1024) || // No filter applied
         (model.context_length >= contextLengthRange[0] * 1000 && model.context_length <= contextLengthRange[1] * 1000);
-      // Only OpenRouter models with :free suffix are legitimately free
-      const isFree = checkIsFreeModel(model);
-      // Get source gateway for pricing normalization
-      const modelSourceGateway = getSourceGateway(model);
-      // Normalize prices to per-token format for consistent filtering across all gateways
-      const normalizedPromptPrice = getNormalizedPerTokenPrice(model.pricing?.prompt, modelSourceGateway);
-      const normalizedCompletionPrice = getNormalizedPerTokenPrice(model.pricing?.completion, modelSourceGateway);
-      const avgPrice = (normalizedPromptPrice + normalizedCompletionPrice) / 2;
+      const isFree = isFreeUniqueModel(model);
+      const normalizedPricing = getNormalizedPricingForFilter(model);
+      const avgPrice = (normalizedPricing.prompt + normalizedPricing.completion) / 2;
       const priceMatch = (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
         isFree ||
         (avgPrice >= promptPricingRange[0] / 1000000 && avgPrice <= promptPricingRange[1] / 1000000);
       const parameterMatch = selectedParameters.length === 0 || selectedParameters.every(p => (model.supported_parameters || []).includes(p));
-      const developerMatch = selectedDevelopers.length === 0 || selectedDevelopers.includes(model.provider_slug);
+      const providerSlugs = getModelProviderSlugs(model);
+      const developerMatch = selectedDevelopers.length === 0 || selectedDevelopers.some(dev => providerSlugs.includes(dev));
 
       // Updated gateway matching to support multiple gateways
-      const modelGateways = (model.source_gateways && model.source_gateways.length > 0) ? model.source_gateways : (model.source_gateway ? [model.source_gateway] : []);
-      // Normalize 'hug' to 'huggingface' for filtering
-      const normalizedModelGateways = modelGateways.map(g => g === 'hug' ? 'huggingface' : g);
+      const modelGateways = getModelProviderSlugs(model).map(normalizeGatewaySlug);
       const gatewayMatch = selectedGateways.length === 0 ||
-        selectedGateways.some(g => normalizedModelGateways.includes(g));
+        selectedGateways.some(g => modelGateways.includes(g));
 
       const seriesMatch = selectedModelSeries.length === 0 || selectedModelSeries.includes(getModelSeries(model));
       const pricingMatch = pricingFilter === 'all' || (pricingFilter === 'free' && isFree) || (pricingFilter === 'paid' && !isFree);
@@ -1131,10 +1137,8 @@ export default function ModelsClient({
     sorted.sort((a, b) => {
         switch (sortBy) {
             case 'popular':
-                // Sort by number of gateways (more gateways = more popular)
-                const aGateways = (a.source_gateways && a.source_gateways.length > 0) ? a.source_gateways.length : (a.source_gateway ? 1 : 0);
-                const bGateways = (b.source_gateways && b.source_gateways.length > 0) ? b.source_gateways.length : (b.source_gateway ? 1 : 0);
-                return bGateways - aGateways;
+                // Sort by number of providers (more providers = more popular)
+                return (b.provider_count || 0) - (a.provider_count || 0);
             case 'newest':
                 // Sort by creation date (newest first)
                 return (b.created || 0) - (a.created || 0);
@@ -1143,19 +1147,17 @@ export default function ModelsClient({
             case 'tokens-asc':
                 return a.context_length - b.context_length;
             case 'price-desc': {
-                // Normalize pricing for consistent sorting across gateways
-                const aGateway = getSourceGateway(a);
-                const bGateway = getSourceGateway(b);
-                const aTotalPrice = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway) + getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
-                const bTotalPrice = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway) + getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                const aPricing = getNormalizedPricingForFilter(a);
+                const bPricing = getNormalizedPricingForFilter(b);
+                const aTotalPrice = aPricing.prompt + aPricing.completion;
+                const bTotalPrice = bPricing.prompt + bPricing.completion;
                 return bTotalPrice - aTotalPrice;
             }
             case 'price-asc': {
-                // Normalize pricing for consistent sorting across gateways
-                const aGateway = getSourceGateway(a);
-                const bGateway = getSourceGateway(b);
-                const aTotalPrice = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway) + getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
-                const bTotalPrice = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway) + getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                const aPricing = getNormalizedPricingForFilter(a);
+                const bPricing = getNormalizedPricingForFilter(b);
+                const aTotalPrice = aPricing.prompt + aPricing.completion;
+                const bTotalPrice = bPricing.prompt + bPricing.completion;
                 return aTotalPrice - bTotalPrice;
             }
             default:
@@ -1223,8 +1225,7 @@ export default function ModelsClient({
     let freeCount = 0;
     let paidCount = 0;
     deduplicatedModels.forEach(m => {
-      // Only OpenRouter models with :free suffix are legitimately free
-      if (checkIsFreeModel(m)) {
+      if (isFreeUniqueModel(m)) {
         freeCount++;
       } else {
         paidCount++;
@@ -1261,9 +1262,12 @@ export default function ModelsClient({
   const allDevelopersWithCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     deduplicatedModels.forEach(m => {
-      if (m.provider_slug) {
-        counts[m.provider_slug] = (counts[m.provider_slug] || 0) + 1;
-      }
+      const providers = getModelProviderSlugs(m);
+      providers.forEach(provider => {
+        if (provider) {
+          counts[provider] = (counts[provider] || 0) + 1;
+        }
+      });
     });
 
     // Filter out nonsensical alphanumeric AIMO provider IDs (e.g., "vTdFo728T1zRvBUGMYGfvvVBgewzvZDbpdXekVBMi7N")
@@ -1293,11 +1297,10 @@ export default function ModelsClient({
   const allGatewaysWithCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     deduplicatedModels.forEach(m => {
-      const gateways = (m.source_gateways && m.source_gateways.length > 0) ? m.source_gateways : (m.source_gateway ? [m.source_gateway] : []);
+      const gateways = getModelProviderSlugs(m);
       gateways.forEach(gateway => {
         if (gateway) {
-          // Normalize 'hug' to 'huggingface' for consistent grouping
-          const normalizedGateway = gateway === 'hug' ? 'huggingface' : gateway;
+          const normalizedGateway = normalizeGatewaySlug(gateway);
           counts[normalizedGateway] = (counts[normalizedGateway] || 0) + 1;
         }
       });
