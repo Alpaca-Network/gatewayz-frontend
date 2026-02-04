@@ -11,6 +11,13 @@ jest.mock('@sampleapp.ai/sdk', () => ({
   ),
 }));
 
+// Mock lucide-react icons
+jest.mock('lucide-react', () => ({
+  AlertCircle: ({ className }: { className?: string }) => (
+    <div data-testid="alert-circle-icon" className={className}>AlertCircle</div>
+  ),
+}));
+
 describe('SandboxPage', () => {
   const originalEnv = process.env;
 
@@ -23,7 +30,9 @@ describe('SandboxPage', () => {
     process.env = originalEnv;
   });
 
-  it('should render the SandboxHome component', () => {
+  it('should render the SandboxHome component when API key is set', () => {
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'test-api-key';
+
     render(<SandboxPage />);
 
     expect(screen.getByTestId('sandbox-home')).toBeInTheDocument();
@@ -31,6 +40,8 @@ describe('SandboxPage', () => {
   });
 
   it('should pass the correct orgid prop', () => {
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'test-api-key';
+
     render(<SandboxPage />);
 
     const sandboxHome = screen.getByTestId('sandbox-home');
@@ -46,16 +57,28 @@ describe('SandboxPage', () => {
     expect(sandboxHome).toHaveAttribute('data-api-key', 'test-api-key');
   });
 
-  it('should pass empty string when API key is not set', () => {
+  it('should show error message when API key is not set', () => {
     delete process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY;
 
     render(<SandboxPage />);
 
-    const sandboxHome = screen.getByTestId('sandbox-home');
-    expect(sandboxHome).toHaveAttribute('data-api-key', '');
+    expect(screen.queryByTestId('sandbox-home')).not.toBeInTheDocument();
+    expect(screen.getByText('Sandbox Not Configured')).toBeInTheDocument();
+    expect(screen.getByText(/NEXT_PUBLIC_SAMPLEAPP_API_KEY/)).toBeInTheDocument();
+  });
+
+  it('should show error message when API key is empty string', () => {
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = '';
+
+    render(<SandboxPage />);
+
+    expect(screen.queryByTestId('sandbox-home')).not.toBeInTheDocument();
+    expect(screen.getByText('Sandbox Not Configured')).toBeInTheDocument();
   });
 
   it('should wrap SandboxHome in a scrollable viewport-filling container', () => {
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = 'test-api-key';
+
     const { container } = render(<SandboxPage />);
 
     const wrapper = container.firstChild as HTMLElement;

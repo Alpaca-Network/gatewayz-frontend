@@ -25,6 +25,13 @@ jest.mock('@sampleapp.ai/sdk', () => ({
   ),
 }));
 
+// Mock lucide-react icons
+jest.mock('lucide-react', () => ({
+  AlertCircle: ({ className }: { className?: string }) => (
+    <div data-testid="alert-circle-icon" className={className}>AlertCircle</div>
+  ),
+}));
+
 // Mock the getApiKey function
 jest.mock('@/lib/api', () => ({
   getApiKey: jest.fn(),
@@ -83,16 +90,25 @@ describe('SandboxClient', () => {
     });
   });
 
-  it('should pass empty string when sampleapp API key is not set', async () => {
+  it('should show error message when sampleapp API key is not set', async () => {
     mockGetApiKey.mockReturnValue('user-api-key');
     delete process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY;
 
     render(<SandboxClient sandboxId="test-sandbox" />);
 
-    await waitFor(() => {
-      const sandbox = screen.getByTestId('sandbox');
-      expect(sandbox).toHaveAttribute('data-api-key', '');
-    });
+    expect(screen.queryByTestId('sandbox')).not.toBeInTheDocument();
+    expect(screen.getByText('Sandbox Not Configured')).toBeInTheDocument();
+    expect(screen.getByText(/NEXT_PUBLIC_SAMPLEAPP_API_KEY/)).toBeInTheDocument();
+  });
+
+  it('should show error message when sampleapp API key is empty string', async () => {
+    mockGetApiKey.mockReturnValue('user-api-key');
+    process.env.NEXT_PUBLIC_SAMPLEAPP_API_KEY = '';
+
+    render(<SandboxClient sandboxId="test-sandbox" />);
+
+    expect(screen.queryByTestId('sandbox')).not.toBeInTheDocument();
+    expect(screen.getByText('Sandbox Not Configured')).toBeInTheDocument();
   });
 
   it('should pass user API key from getApiKey to env prop', async () => {
