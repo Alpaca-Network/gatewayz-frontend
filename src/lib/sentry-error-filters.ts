@@ -299,5 +299,9 @@ export function getIgnoreErrors(): RegExp[] {
     ...SUPPRESSED_ERROR_PATTERNS.buildErrors,
     ...SUPPRESSED_ERROR_PATTERNS.browserCompat,
     ...SUPPRESSED_ERROR_PATTERNS.externalServiceTimeouts,
+    ...SUPPRESSED_ERROR_PATTERNS.chunkLoadErrors,
+    ...SUPPRESSED_ERROR_PATTERNS.aiSdkStreaming,
+    ...SUPPRESSED_ERROR_PATTERNS.privyNonBlocking,
+    ...SUPPRESSED_ERROR_PATTERNS.abortErrors,
   ];
 }
