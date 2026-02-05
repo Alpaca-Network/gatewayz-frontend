@@ -68,10 +68,13 @@ export const useChatSessions = () => {
     staleTime: 5 * 60 * 1000, // 5 minutes cache
     // OPTIMIZATION: Provide initial data from localStorage cache for instant rendering
     // This eliminates the loading state for returning users with cached sessions
+    // SECURITY: Only return cached sessions when authenticated or still loading
+    // to prevent exposing previous user's sessions during auth transitions
     initialData: () => {
-      // For authenticated users, try to get cached sessions
+      // Only return cached sessions for authenticated users or during auth loading
+      // This prevents cross-user data exposure during logout/login transitions
       const cached = getCachedSessions();
-      if (cached.length > 0) return cached;
+      if (cached.length > 0 && (isAuthenticated || isLoading)) return cached;
       // For guest users or no cache, try guest sessions
       return getGuestSessions();
     },

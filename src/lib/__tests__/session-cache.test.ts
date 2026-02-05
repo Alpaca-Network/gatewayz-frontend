@@ -41,7 +41,9 @@ jest.mock('../safe-storage', () => {
     }),
     // Helper to reset the store between tests
     __resetStore: () => {
-      Object.keys(store).forEach(key => delete store[key]);
+      for (const key of Object.keys(store)) {
+        delete store[key];
+      }
     },
     __getStore: () => store,
   };
