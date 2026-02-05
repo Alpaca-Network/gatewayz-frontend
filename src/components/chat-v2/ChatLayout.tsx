@@ -603,13 +603,11 @@ export function ChatLayout() {
        }
    }, [createSession, selectedModel?.value, setActiveSessionId, toast]);
 
-   if (authLoading) {
-       return (
-           <div className="flex flex-1 items-center justify-center">
-               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-           </div>
-       );
-   }
+   // OPTIMIZATION: Removed full-page loading spinner that blocked the entire UI
+   // while auth was loading. With synchronous auth store initialization from localStorage,
+   // returning users now see cached sessions immediately. Guest users see the welcome
+   // screen immediately. Individual components (sidebar, messages) handle their own
+   // loading states instead of blocking the entire page.
 
    // Allow guest mode - no login required
 

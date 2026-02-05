@@ -102,6 +102,13 @@ export class ChatHistoryAPI {
   private privyUserId?: string;
   private useBatching: boolean;
 
+  // OPTIMIZATION: Static properties for sync deduplication
+  // Prevents duplicate background sync calls when getSessionsWithCache is called
+  // multiple times rapidly (e.g., during React strict mode or fast remounts)
+  private static syncInProgress: boolean = false;
+  private static lastSyncTime: number = 0;
+  private static readonly SYNC_DEBOUNCE_MS = 5000; // 5 seconds between syncs
+
   constructor(apiKey: string, baseUrl?: string, privyUserId?: string, useBatching: boolean = true) {
     this.apiKey = apiKey;
     this.baseUrl = baseUrl || `${API_BASE_URL}/v1/chat`;
@@ -642,40 +649,55 @@ export class ChatHistoryAPI {
     // Return cached sessions immediately for instant UI
     const cached = getCachedSessions();
     if (cached.length > 0) {
-      // Trigger background sync with retry logic
-      // Note: signal parameter is intentionally not used because makeRequest()
-      // creates its own AbortController internally. The retry wrapper provides
-      // retry logic on top of makeRequest's built-in timeout mechanism.
-      withTimeoutAndRetry(
-        async () => {
-          return await this.getSessions(limit, offset);
-        },
-        {
-          timeout: TIMEOUT_CONFIG.chat.sessionsList, // 10 seconds - matches getSessions timeout
-          maxRetries: 2, // Reduced retries for background sync
-          shouldRetry: (error) => {
-            if (error instanceof Error) {
-              // Retry on timeout and 504 gateway errors
-              return error.name === 'AbortError' ||
-                     error.message.toLowerCase().includes('timeout') ||
-                     error.message.toLowerCase().includes('timed out') ||
-                     error.message.includes('504');
-            }
-            return false;
+      // OPTIMIZATION: Check if sync is already in progress or was done recently
+      // This prevents duplicate API calls when this method is called multiple times
+      // (e.g., during React strict mode re-renders or fast component remounts)
+      const now = Date.now();
+      const shouldSync = !ChatHistoryAPI.syncInProgress &&
+                         (now - ChatHistoryAPI.lastSyncTime) > ChatHistoryAPI.SYNC_DEBOUNCE_MS;
+
+      if (shouldSync) {
+        ChatHistoryAPI.syncInProgress = true;
+
+        // Trigger background sync with retry logic
+        // Note: signal parameter is intentionally not used because makeRequest()
+        // creates its own AbortController internally. The retry wrapper provides
+        // retry logic on top of makeRequest's built-in timeout mechanism.
+        withTimeoutAndRetry(
+          async () => {
+            return await this.getSessions(limit, offset);
           },
-          onRetry: (attempt, error) => {
-            console.log(`[Session Sync Retry] Attempt ${attempt} failed:`, error);
+          {
+            timeout: TIMEOUT_CONFIG.chat.sessionsList, // 10 seconds - matches getSessions timeout
+            maxRetries: 2, // Reduced retries for background sync
+            shouldRetry: (error) => {
+              if (error instanceof Error) {
+                // Retry on timeout and 504 gateway errors
+                return error.name === 'AbortError' ||
+                       error.message.toLowerCase().includes('timeout') ||
+                       error.message.toLowerCase().includes('timed out') ||
+                       error.message.includes('504');
+              }
+              return false;
+            },
+            onRetry: (attempt, error) => {
+              console.log(`[Session Sync Retry] Attempt ${attempt} failed:`, error);
+            }
           }
-        }
-      )
-        .then(sessions => {
-          // Update cache with fresh data
-          setCachedSessions(sessions);
-        })
-        .catch(error => {
-          console.warn('[ChatHistoryAPI] Background sync failed after retries:', error);
-          // Silently fail - we already have cached data to show
-        });
+        )
+          .then(sessions => {
+            // Update cache with fresh data
+            setCachedSessions(sessions);
+            ChatHistoryAPI.lastSyncTime = Date.now();
+          })
+          .catch(error => {
+            console.warn('[ChatHistoryAPI] Background sync failed after retries:', error);
+            // Silently fail - we already have cached data to show
+          })
+          .finally(() => {
+            ChatHistoryAPI.syncInProgress = false;
+          });
+      }
 
       return cached;
     }

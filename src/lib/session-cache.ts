@@ -18,6 +18,43 @@ export interface SessionCacheData {
 const CACHE_KEY = 'gatewayz_session_cache';
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+// ============================================================================
+// In-Memory Cache Layer
+// ============================================================================
+// OPTIMIZATION: Add in-memory memoization to avoid repeated localStorage reads
+// and JSON parsing. The memory cache has a short TTL (5 seconds) to ensure
+// fresh data while reducing redundant operations during initialization.
+
+let memoryCachedData: SessionCacheData | null = null;
+let memoryCacheTimestamp: number = 0;
+const MEMORY_CACHE_TTL_MS = 5000; // 5 seconds in-memory cache
+
+/**
+ * Get cached data from memory if still valid
+ */
+function getMemoryCachedData(): SessionCacheData | null {
+  if (memoryCachedData && Date.now() - memoryCacheTimestamp < MEMORY_CACHE_TTL_MS) {
+    return memoryCachedData;
+  }
+  return null;
+}
+
+/**
+ * Update the in-memory cache
+ */
+function setMemoryCachedData(data: SessionCacheData): void {
+  memoryCachedData = data;
+  memoryCacheTimestamp = Date.now();
+}
+
+/**
+ * Invalidate the in-memory cache (call after any write operation)
+ */
+export function invalidateMemoryCache(): void {
+  memoryCachedData = null;
+  memoryCacheTimestamp = 0;
+}
+
 /**
  * Initialize empty cache data structure
  */
@@ -40,10 +77,17 @@ function isCacheValid(cache: SessionCacheData): boolean {
 }
 
 /**
- * Get cached sessions from localStorage
+ * Get cached sessions from localStorage (with in-memory memoization)
  */
 export function getCachedSessions(): ChatSession[] {
   try {
+    // OPTIMIZATION: Check memory cache first to avoid localStorage read + JSON parse
+    const memCached = getMemoryCachedData();
+    if (memCached && isCacheValid(memCached)) {
+      return memCached.sessions || [];
+    }
+
+    // Fall back to localStorage
     const cached = safeLocalStorageGet(CACHE_KEY);
     if (!cached) return [];
 
@@ -54,6 +98,8 @@ export function getCachedSessions(): ChatSession[] {
       return [];
     }
 
+    // Update memory cache for subsequent reads
+    setMemoryCachedData(data);
     return data.sessions || [];
   } catch (error) {
     console.warn('[SessionCache] Failed to read cached sessions:', error);
@@ -62,10 +108,16 @@ export function getCachedSessions(): ChatSession[] {
 }
 
 /**
- * Get user's cached default model
+ * Get user's cached default model (with in-memory memoization)
  */
 export function getCachedDefaultModel(): string | null {
   try {
+    // Check memory cache first
+    const memCached = getMemoryCachedData();
+    if (memCached && isCacheValid(memCached)) {
+      return memCached.defaultModel || 'fireworks/deepseek-r1';
+    }
+
     const cached = safeLocalStorageGet(CACHE_KEY);
     if (!cached) return null;
 
@@ -75,6 +127,8 @@ export function getCachedDefaultModel(): string | null {
       return null;
     }
 
+    // Update memory cache
+    setMemoryCachedData(data);
     return data.defaultModel || 'fireworks/deepseek-r1';
   } catch (error) {
     console.warn('[SessionCache] Failed to read cached default model:', error);
@@ -83,10 +137,16 @@ export function getCachedDefaultModel(): string | null {
 }
 
 /**
- * Get cached recent models
+ * Get cached recent models (with in-memory memoization)
  */
 export function getCachedRecentModels(): string[] {
   try {
+    // Check memory cache first
+    const memCached = getMemoryCachedData();
+    if (memCached && isCacheValid(memCached)) {
+      return memCached.recentModels || [];
+    }
+
     const cached = safeLocalStorageGet(CACHE_KEY);
     if (!cached) return [];
 
@@ -96,6 +156,8 @@ export function getCachedRecentModels(): string[] {
       return [];
     }
 
+    // Update memory cache
+    setMemoryCachedData(data);
     return data.recentModels || [];
   } catch (error) {
     console.warn('[SessionCache] Failed to read cached recent models:', error);
@@ -108,6 +170,9 @@ export function getCachedRecentModels(): string[] {
  */
 export function setCachedSessions(sessions: ChatSession[], defaultModel?: string): void {
   try {
+    // Invalidate memory cache before write
+    invalidateMemoryCache();
+
     const cached = safeLocalStorageGet(CACHE_KEY);
     let data: SessionCacheData;
 
@@ -137,6 +202,9 @@ export function setCachedSessions(sessions: ChatSession[], defaultModel?: string
     data.expiresAt = Date.now() + CACHE_TTL_MS;
 
     safeLocalStorageSet(CACHE_KEY, JSON.stringify(data));
+
+    // Update memory cache with new data
+    setMemoryCachedData(data);
   } catch (error) {
     console.warn('[SessionCache] Failed to cache sessions:', error);
   }
@@ -147,6 +215,9 @@ export function setCachedSessions(sessions: ChatSession[], defaultModel?: string
  */
 export function setCachedDefaultModel(model: string): void {
   try {
+    // Invalidate memory cache before write
+    invalidateMemoryCache();
+
     const cached = safeLocalStorageGet(CACHE_KEY);
     let data: SessionCacheData;
 
@@ -168,6 +239,9 @@ export function setCachedDefaultModel(model: string): void {
     data.expiresAt = Date.now() + CACHE_TTL_MS;
 
     safeLocalStorageSet(CACHE_KEY, JSON.stringify(data));
+
+    // Update memory cache with new data
+    setMemoryCachedData(data);
   } catch (error) {
     console.warn('[SessionCache] Failed to cache default model:', error);
   }
@@ -227,6 +301,8 @@ export function removeCachedSession(sessionId: number): void {
  */
 export function clearSessionCache(): void {
   try {
+    // Invalidate memory cache
+    invalidateMemoryCache();
     safeLocalStorageRemove(CACHE_KEY);
   } catch (error) {
     console.warn('[SessionCache] Failed to clear cache:', error);

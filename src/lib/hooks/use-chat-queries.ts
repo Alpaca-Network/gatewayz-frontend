@@ -4,6 +4,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { getApiKey, getUserData } from '@/lib/api';
 import { networkMonitor } from '@/lib/network-utils';
 import { executeWithOfflineRetry } from '@/lib/network-utils';
+import { getCachedSessions } from '@/lib/session-cache';
 import {
   getGuestSessions,
   getGuestMessages,
@@ -49,7 +50,9 @@ export const useChatSessions = () => {
   const { isAuthenticated, isLoading } = useAuthStore();
 
   return useQuery({
-    queryKey: ['chat-sessions', isAuthenticated],
+    // OPTIMIZATION: Remove isAuthenticated from queryKey to prevent cache invalidation
+    // when auth state changes. The queryFn handles guest vs authenticated logic.
+    queryKey: ['chat-sessions'],
     queryFn: async () => {
       // For guest users, return sessions from localStorage
       if (!isAuthenticated) {
@@ -59,9 +62,21 @@ export const useChatSessions = () => {
       // Use cache-aware loading that returns cached data immediately
       return api.getSessionsWithCache(50, 0);
     },
-    // Enable for both authenticated users and guests (when not in loading state)
+    // OPTIMIZATION: Enable immediately when we have cached data or are not loading
+    // This allows showing cached sessions before auth fully resolves
     enabled: !isLoading,
     staleTime: 5 * 60 * 1000, // 5 minutes cache
+    // OPTIMIZATION: Provide initial data from localStorage cache for instant rendering
+    // This eliminates the loading state for returning users with cached sessions
+    initialData: () => {
+      // For authenticated users, try to get cached sessions
+      const cached = getCachedSessions();
+      if (cached.length > 0) return cached;
+      // For guest users or no cache, try guest sessions
+      return getGuestSessions();
+    },
+    // Mark initialData as potentially stale to trigger background refetch
+    initialDataUpdatedAt: 0,
     // Always return cached data immediately while fetching in background
     placeholderData: (previousData) => previousData,
   });
@@ -87,7 +102,8 @@ export const useSessionMessages = (sessionId: number | null) => {
     },
     // Enable for both authenticated and guest sessions when sessionId exists
     enabled: !!sessionId && !isLoading,
-    staleTime: 60 * 1000,
+    // OPTIMIZATION: Increase staleTime from 60s to 5 minutes to reduce unnecessary refetches
+    staleTime: 5 * 60 * 1000,
     // Keep previous data while fetching to prevent UI flicker
     placeholderData: (previousData) => previousData,
   });
@@ -138,10 +154,9 @@ export const useCreateSession = () => {
       );
     },
     onSuccess: (newSession) => {
-      // Invalidate sessions list to refetch
-      queryClient.invalidateQueries({ queryKey: ['chat-sessions', isAuthenticated] });
-      // Pre-seed the cache for this new session
-      queryClient.setQueryData(['chat-sessions', newSession.id], newSession);
+      // Invalidate sessions list to refetch (use simplified key without isAuthenticated)
+      queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
+      // Pre-seed the cache for this new session's messages
       queryClient.setQueryData(['chat-messages', newSession.id], []);
     },
     // Configure retry behavior at the mutation level
@@ -182,12 +197,10 @@ export const useUpdateSession = () => {
       return api.updateSession(sessionId, title, model);
     },
     onSuccess: (updatedSession) => {
-        // Derive cache key from session type (negative ID = guest) rather than auth state
-        const isGuestSession = updatedSession.id < 0;
-        const cacheKey = ['chat-sessions', !isGuestSession];
-        queryClient.invalidateQueries({ queryKey: cacheKey });
+        // Use simplified cache key without isAuthenticated
+        queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
         // Update the specific session in cache if it exists
-        queryClient.setQueryData(cacheKey, (old: ChatSession[] | undefined) => {
+        queryClient.setQueryData(['chat-sessions'], (old: ChatSession[] | undefined) => {
             if (!old) return [updatedSession];
             return old.map(s => s.id === updatedSession.id ? updatedSession : s);
         });
@@ -213,9 +226,8 @@ export const useDeleteSession = () => {
       return sessionId;
     },
     onSuccess: (deletedSessionId) => {
-      // Derive cache key from session type (negative ID = guest) rather than auth state
-      const isGuestSession = deletedSessionId < 0;
-      queryClient.invalidateQueries({ queryKey: ['chat-sessions', !isGuestSession] });
+      // Use simplified cache key without isAuthenticated
+      queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
       // Remove from cache
       queryClient.removeQueries({ queryKey: ['chat-messages', deletedSessionId] });
     }
@@ -263,10 +275,9 @@ export const useSaveMessage = () => {
             // the optimistic updates from use-chat-stream.ts before the backend has persisted
             // the batched messages. The local cache already has the correct data.
 
-            // Derive cache key from session type (negative ID = guest) rather than auth state
-            const isGuestSession = variables.sessionId < 0;
+            // Use simplified cache key without isAuthenticated
             // Only invalidate sessions list to update "updated_at" timestamp in sidebar
-            queryClient.invalidateQueries({ queryKey: ['chat-sessions', !isGuestSession] });
+            queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
         }
     })
 }

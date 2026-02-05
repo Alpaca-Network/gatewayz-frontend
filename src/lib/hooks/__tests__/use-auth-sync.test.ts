@@ -2,9 +2,13 @@
  * Unit tests for use-auth-sync.ts
  *
  * Tests the authentication synchronization hook including:
- * - Initialization effect for guest users (no credentials)
- * - Initialization effect for authenticated users (cached credentials)
  * - Return value computation
+ * - Event listener behavior
+ *
+ * NOTE: The initialization effect that previously read from localStorage and called
+ * setAuth/setLoading was removed as part of a performance optimization.
+ * Auth state is now initialized synchronously in auth-store.ts during store creation.
+ * See auth-store.ts getInitialAuthState() for the new implementation.
  */
 
 import { renderHook } from '@testing-library/react';
@@ -44,6 +48,7 @@ jest.mock('@/lib/api', () => ({
   getUserData: () => mockGetUserData(),
   processAuthResponse: jest.fn(),
   AUTH_REFRESH_COMPLETE_EVENT: 'gatewayz:refresh-complete',
+  AUTH_REFRESH_EVENT: 'gatewayz:refresh-auth',
 }));
 
 jest.mock('@privy-io/react-auth', () => ({
@@ -78,8 +83,12 @@ describe('useAuthSync', () => {
     mockIsAuthenticated = false;
   });
 
-  describe('initialization effect', () => {
-    it('should call setLoading(false) when no stored credentials exist (guest user)', () => {
+  describe('initialization behavior', () => {
+    // NOTE: The initialization effect was removed as part of a performance optimization.
+    // Auth state is now initialized synchronously in auth-store.ts during store creation.
+    // These tests verify that useAuthSync no longer calls setAuth/setLoading during mount.
+
+    it('should NOT call setLoading on mount (initialization moved to auth-store)', () => {
       // Arrange: No credentials in localStorage
       mockGetApiKey.mockReturnValue(null);
       mockGetUserData.mockReturnValue(null);
@@ -87,12 +96,11 @@ describe('useAuthSync', () => {
       // Act
       renderHook(() => useAuthSync());
 
-      // Assert: setLoading(false) should be called for guest users
-      expect(mockSetLoading).toHaveBeenCalledWith(false);
-      expect(mockSetAuth).not.toHaveBeenCalled();
+      // Assert: setLoading should NOT be called - initialization happens in auth-store.ts
+      expect(mockSetLoading).not.toHaveBeenCalled();
     });
 
-    it('should call setAuth when stored credentials exist', () => {
+    it('should NOT call setAuth on mount (initialization moved to auth-store)', () => {
       // Arrange: User has cached credentials
       const mockApiKey = 'test-api-key-123';
       const mockUserData = {
@@ -111,34 +119,7 @@ describe('useAuthSync', () => {
       // Act
       renderHook(() => useAuthSync());
 
-      // Assert: setAuth should be called with credentials
-      expect(mockSetAuth).toHaveBeenCalledWith(mockApiKey, mockUserData);
-      expect(mockSetLoading).not.toHaveBeenCalledWith(false);
-    });
-
-    it('should call setLoading(false) when only apiKey exists but no userData', () => {
-      // Arrange: Partial credentials (edge case)
-      mockGetApiKey.mockReturnValue('some-key');
-      mockGetUserData.mockReturnValue(null);
-
-      // Act
-      renderHook(() => useAuthSync());
-
-      // Assert: Should treat as guest since both are needed
-      expect(mockSetLoading).toHaveBeenCalledWith(false);
-      expect(mockSetAuth).not.toHaveBeenCalled();
-    });
-
-    it('should call setLoading(false) when only userData exists but no apiKey', () => {
-      // Arrange: Partial credentials (edge case)
-      mockGetApiKey.mockReturnValue(null);
-      mockGetUserData.mockReturnValue({ user_id: 1 });
-
-      // Act
-      renderHook(() => useAuthSync());
-
-      // Assert: Should treat as guest since both are needed
-      expect(mockSetLoading).toHaveBeenCalledWith(false);
+      // Assert: setAuth should NOT be called on mount - initialization happens in auth-store.ts
       expect(mockSetAuth).not.toHaveBeenCalled();
     });
   });
