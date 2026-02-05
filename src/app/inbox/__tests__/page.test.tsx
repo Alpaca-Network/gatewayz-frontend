@@ -505,8 +505,8 @@ describe("InboxPage", () => {
         await Promise.resolve();
       });
 
-      // Verify initial fetch was called (health check + auth = 2 calls)
-      expect(global.fetch).toHaveBeenCalledTimes(2);
+      // Verify initial fetch was called (auth only = 1 call)
+      expect(global.fetch).toHaveBeenCalledTimes(1);
 
       // Fast-forward past the 15 second timeout to trigger connection error
       act(() => {
