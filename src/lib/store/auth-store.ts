@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { UserData, getApiKey, getUserData } from '@/lib/api';
+import { clearSessionCacheOnLogout } from '@/lib/session-cache';
 
 interface AuthState {
   apiKey: string | null;
@@ -66,7 +67,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: initialState.isLoading,
   error: null,
   setAuth: (apiKey, userData) => set({ apiKey, userData, isAuthenticated: true, isLoading: false, error: null }),
-  clearAuth: () => set({ apiKey: null, userData: null, isAuthenticated: false, isLoading: false }),
+  clearAuth: () => {
+    // Clear session cache BEFORE clearing auth state (while user ID is still available)
+    clearSessionCacheOnLogout();
+    set({ apiKey: null, userData: null, isAuthenticated: false, isLoading: false });
+  },
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 }));
