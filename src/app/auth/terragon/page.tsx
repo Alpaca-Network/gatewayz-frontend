@@ -50,7 +50,9 @@ function isAllowedCallbackUrl(url: string): boolean {
  */
 export default function TerragonAuthPage() {
   const searchParams = useSearchParams();
-  const callback = searchParams.get("callback");
+  // Support both "callback" and "redirect_uri" parameters for flexibility
+  // "callback" is the primary parameter, "redirect_uri" is for OAuth-style flows
+  const callback = searchParams.get("callback") || searchParams.get("redirect_uri");
   const { isAuthenticated, loading, login, privyReady } = useAuth();
   const [status, setStatus] = useState<"loading" | "authenticating" | "redirecting" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
