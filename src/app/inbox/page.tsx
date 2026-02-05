@@ -49,6 +49,31 @@ export default function InboxPage() {
     syncColumnViewState();
   }, [syncColumnViewState]);
 
+  // Preflight check to verify Terragon URL is accessible
+  const checkTerragonHealth = useCallback(async (url: string): Promise<boolean> => {
+    try {
+      // Make a simple HEAD/GET request to check if the URL is accessible
+      // Note: This may fail due to CORS, but we can catch specific error patterns
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(url, {
+        method: "HEAD",
+        mode: "no-cors", // Allow cross-origin but we won't get the response
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      // With no-cors mode, we get an opaque response
+      // If it doesn't throw, the server is reachable
+      return true;
+    } catch (err) {
+      console.error("[Inbox] Terragon health check failed:", err);
+      return false;
+    }
+  }, []);
+
   // Fetch a signed auth token from the bridge API
   const fetchAuthToken = useCallback(async () => {
     if (!apiKey || !userData) {
@@ -109,7 +134,16 @@ export default function InboxPage() {
     if (status === "authenticated" && apiKey && userData) {
       setIsLoading(true);
       authSentRef.current = false;
-      fetchAuthToken()
+
+      // First check if Terragon is accessible
+      checkTerragonHealth(baseTerragonUrl)
+        .then((isHealthy) => {
+          if (!isHealthy) {
+            console.warn("[Inbox] Terragon health check failed, proceeding anyway...");
+            // Don't block on health check failure - the iframe load timeout will catch issues
+          }
+          return fetchAuthToken();
+        })
         .then((token) => {
           if (token) {
             setAuthToken(token);
@@ -144,7 +178,7 @@ export default function InboxPage() {
         clearTimeout(loadTimeoutRef.current);
       }
     };
-  }, [baseTerragonUrl, status, apiKey, userData, fetchAuthToken, iframeKey]);
+  }, [baseTerragonUrl, status, apiKey, userData, fetchAuthToken, checkTerragonHealth, iframeKey]);
 
   // Send auth token to iframe via postMessage when ready
   const sendAuthToIframe = useCallback(() => {
@@ -197,11 +231,47 @@ export default function InboxPage() {
   // Handle iframe load event
   const handleIframeLoad = useCallback(() => {
     iframeLoadedRef.current = true;
-    setIsLoading(false);
-    setConnectionError(false);
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current);
     }
+
+    // Check if iframe loaded an error page (e.g., S3/CloudFront XML error)
+    // We detect this by listening for error messages from the iframe
+    // or checking if the iframe reports an error via postMessage
+    try {
+      // Try to detect if the iframe contains an error response
+      // Note: Due to cross-origin restrictions, we can't directly access iframe content
+      // Instead, we rely on the Terragon app to send a ready message
+      // Set a shorter timeout to detect if the app doesn't respond
+      const appReadyTimeout = setTimeout(() => {
+        // If we haven't received an auth request from the app within 5 seconds,
+        // and auth hasn't been sent, the app might have failed to load properly
+        if (!authSentRef.current && authToken) {
+          console.warn("[Inbox] Terragon app did not request auth within timeout - may have failed to load");
+          // Don't set connection error immediately, give it more time
+          // The app might just be slow to initialize
+        }
+      }, 5000);
+
+      // Clean up timeout if auth is sent
+      const checkAuthSent = setInterval(() => {
+        if (authSentRef.current) {
+          clearTimeout(appReadyTimeout);
+          clearInterval(checkAuthSent);
+        }
+      }, 100);
+
+      // Clean up after 10 seconds max
+      setTimeout(() => {
+        clearTimeout(appReadyTimeout);
+        clearInterval(checkAuthSent);
+      }, 10000);
+    } catch {
+      // Ignore errors from cross-origin checks
+    }
+
+    setIsLoading(false);
+    setConnectionError(false);
     // Send auth token after iframe loads
     sendAuthToIframe();
     // Send initial column view preference after iframe loads
@@ -209,9 +279,20 @@ export default function InboxPage() {
       sendColumnViewToIframe(columnView);
       columnViewSentRef.current = true;
     }
-  }, [sendAuthToIframe, sendColumnViewToIframe, columnView]);
+  }, [sendAuthToIframe, sendColumnViewToIframe, columnView, authToken]);
 
-  // Listen for auth request and column view request from iframe
+  // Handle iframe error event
+  const handleIframeError = useCallback(() => {
+    console.error("[Inbox] Iframe failed to load");
+    iframeLoadedRef.current = true; // Prevent timeout from also triggering
+    setConnectionError(true);
+    setIsLoading(false);
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+    }
+  }, []);
+
+  // Listen for auth request, column view request, and error reports from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!baseTerragonUrl) return;
@@ -228,6 +309,20 @@ export default function InboxPage() {
         if (event.data?.type === "GATEWAYZ_COLUMN_VIEW_REQUEST") {
           console.log("[Inbox] Received column view request from iframe");
           sendColumnViewToIframe(columnView);
+        }
+
+        // Handle error reports from Terragon
+        if (event.data?.type === "TERRAGON_ERROR") {
+          console.error("[Inbox] Received error from Terragon:", event.data.error);
+          setError(event.data.error || "An error occurred in the Coding Inbox");
+          setIsLoading(false);
+        }
+
+        // Handle S3/CloudFront error detection (if Terragon wraps and reports it)
+        if (event.data?.type === "TERRAGON_LOAD_ERROR") {
+          console.error("[Inbox] Terragon failed to load:", event.data.message);
+          setConnectionError(true);
+          setIsLoading(false);
         }
       } catch {
         // Ignore invalid URLs
@@ -432,6 +527,7 @@ export default function InboxPage() {
             className="w-full h-full border-0"
             title="Coding Inbox"
             onLoad={handleIframeLoad}
+            onError={handleIframeError}
             allow="clipboard-read; clipboard-write"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
           />
