@@ -109,6 +109,7 @@ export default function InboxPage() {
     if (status === "authenticated" && apiKey && userData) {
       setIsLoading(true);
       authSentRef.current = false;
+
       fetchAuthToken()
         .then((token) => {
           if (token) {
@@ -197,11 +198,12 @@ export default function InboxPage() {
   // Handle iframe load event
   const handleIframeLoad = useCallback(() => {
     iframeLoadedRef.current = true;
-    setIsLoading(false);
-    setConnectionError(false);
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current);
     }
+
+    setIsLoading(false);
+    setConnectionError(false);
     // Send auth token after iframe loads
     sendAuthToIframe();
     // Send initial column view preference after iframe loads
@@ -209,9 +211,32 @@ export default function InboxPage() {
       sendColumnViewToIframe(columnView);
       columnViewSentRef.current = true;
     }
-  }, [sendAuthToIframe, sendColumnViewToIframe, columnView]);
 
-  // Listen for auth request and column view request from iframe
+    // Set a timeout to warn if the Terragon app doesn't communicate back
+    // Note: Due to cross-origin restrictions, we can't directly access iframe content
+    // We rely on the Terragon app to send messages via postMessage
+    if (authToken && !authSentRef.current) {
+      // Auth wasn't sent (likely due to missing contentWindow), warn after timeout
+      setTimeout(() => {
+        if (!authSentRef.current && authToken) {
+          console.warn("[Inbox] Terragon app did not receive auth - may have failed to load properly");
+        }
+      }, 5000);
+    }
+  }, [sendAuthToIframe, sendColumnViewToIframe, columnView, authToken]);
+
+  // Handle iframe error event
+  const handleIframeError = useCallback(() => {
+    console.error("[Inbox] Iframe failed to load");
+    iframeLoadedRef.current = true; // Prevent timeout from also triggering
+    setConnectionError(true);
+    setIsLoading(false);
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+    }
+  }, []);
+
+  // Listen for auth request, column view request, and error reports from iframe
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (!baseTerragonUrl) return;
@@ -228,6 +253,20 @@ export default function InboxPage() {
         if (event.data?.type === "GATEWAYZ_COLUMN_VIEW_REQUEST") {
           console.log("[Inbox] Received column view request from iframe");
           sendColumnViewToIframe(columnView);
+        }
+
+        // Handle error reports from Terragon
+        if (event.data?.type === "TERRAGON_ERROR") {
+          console.error("[Inbox] Received error from Terragon:", event.data.error);
+          setError(event.data.error || "An error occurred in the Coding Inbox");
+          setIsLoading(false);
+        }
+
+        // Handle S3/CloudFront error detection (if Terragon wraps and reports it)
+        if (event.data?.type === "TERRAGON_LOAD_ERROR") {
+          console.error("[Inbox] Terragon failed to load:", event.data.message);
+          setConnectionError(true);
+          setIsLoading(false);
         }
       } catch {
         // Ignore invalid URLs
@@ -432,6 +471,7 @@ export default function InboxPage() {
             className="w-full h-full border-0"
             title="Coding Inbox"
             onLoad={handleIframeLoad}
+            onError={handleIframeError}
             allow="clipboard-read; clipboard-write"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"
           />
