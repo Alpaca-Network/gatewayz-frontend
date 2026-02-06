@@ -29,6 +29,8 @@ import { getReferralCode, clearReferralCode } from "@/lib/referral";
 import { resetGuestMessageCount } from "@/lib/guest-chat";
 import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
 import { trackSignupConversion } from "@/components/analytics/google-analytics";
+import { useQueryClient } from "@tanstack/react-query";
+import { clearSessionCacheOnLogout } from "@/lib/session-cache";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -186,6 +188,7 @@ export function GatewayzAuthProvider({
     logout: privyLogout,
     getAccessToken,
   } = usePrivy();
+  const queryClient = useQueryClient();
 
   const [status, setStatus] = useState<AuthStatus>(() => {
     if (typeof window === "undefined") {
@@ -1653,10 +1656,15 @@ export function GatewayzAuthProvider({
     await privyLogin();
   }, [privyLogin]);
   const logout = useCallback(async () => {
+    // Clear session cache BEFORE clearing credentials (while user ID is still available)
+    clearSessionCacheOnLogout();
     clearStoredCredentials();
     await privyLogout();
+    // Invalidate React Query cache to prevent stale data showing to next user
+    queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
+    queryClient.invalidateQueries({ queryKey: ['chat-messages'] });
     setAuthStatus("unauthenticated", "logout");
-  }, [clearStoredCredentials, privyLogout, setAuthStatus]);
+  }, [clearStoredCredentials, privyLogout, setAuthStatus, queryClient]);
 
   const contextValue = useMemo<GatewayzAuthContextValue>(
     () => ({
