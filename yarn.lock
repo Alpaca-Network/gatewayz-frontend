@@ -3061,10 +3061,10 @@
   resolved "https://registry.npmjs.org/@safe-global/safe-gateway-typescript-sdk/-/safe-gateway-typescript-sdk-3.23.1.tgz"
   integrity sha512-6ORQfwtEJYpalCeVO21L4XXGSdbEMfyp2hEv6cP82afKXSwvse6d3sdelgaPWUxHIsFRkWvHDdzh8IyyKHZKxw==
 
-"@sampleapp.ai/sdk@^1.0.35":
-  version "1.0.36"
-  resolved "https://registry.npmjs.org/@sampleapp.ai/sdk/-/sdk-1.0.36.tgz"
-  integrity sha512-s5Bou1+/OwGhVkUfz0PROQqE1pcWf+F6I23Djw94aqWQX2B8QpCiytiK1CJ1gDdyVYeWJQ3ILmv/tdl463Gq5w==
+"@sampleapp.ai/sdk@^1.0.47":
+  version "1.0.48"
+  resolved "https://registry.npmjs.org/@sampleapp.ai/sdk/-/sdk-1.0.48.tgz"
+  integrity sha512-5P2v7lo60lkHkqs468ZTiOvSJeYtTRIYhX/VM05pxYx6eQvdrEt/cV3kDuGXeoLkbVVR43z2jN9yc20rNwk3Lw==
   dependencies:
     "@ai-sdk/react" "^2.0.44"
     "@monaco-editor/react" "^4.6.0"
