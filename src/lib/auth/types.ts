@@ -148,24 +148,52 @@ export interface AuthContextValue {
 // =============================================================================
 
 /**
+ * Privy linked account matching backend PrivyLinkedAccount schema
+ */
+export interface PrivyLinkedAccount {
+  type: string;  // email, phone, google_oauth, github, etc.
+  subject?: string | null;
+  email?: string | null;
+  address?: string | null;
+  name?: string | null;
+  phone_number?: string | null;
+  phoneNumber?: string | null;  // Privy sends camelCase
+  verified_at?: number | null;
+  first_verified_at?: number | null;
+  latest_verified_at?: number | null;
+  [key: string]: unknown;  // Allow additional Privy fields
+}
+
+/**
+ * Privy user data matching backend PrivyUserData schema
+ */
+export interface PrivyUserData {
+  id: string;
+  created_at: number;
+  linked_accounts: PrivyLinkedAccount[];
+  mfa_methods?: string[];
+  has_accepted_terms?: boolean;
+  is_guest?: boolean;
+}
+
+/**
  * Request body for /api/auth endpoint
+ * Must match backend PrivyAuthRequest schema
  */
 export interface AuthRequestBody {
-  user: {
-    privy_user_id: string;
-    email?: string | null;
-    wallet_address?: string | null;
-    google_email?: string | null;
-    github_username?: string | null;
-    linked_accounts?: Array<{
-      type: string;
-      [key: string]: unknown;
-    }>;
-  };
-  token: string | null;
-  privy_user_id: string;
-  auth_method: string;
+  user: PrivyUserData;
+  token: string;
+  email?: string | null;
+  privy_access_token?: string | null;
+  refresh_token?: string | null;
+  session_update_action?: string | null;
+  is_new_user?: boolean | null;
   referral_code?: string | null;
+  environment_tag?: string | null;
+  auto_create_api_key?: boolean | null;
+  // Legacy fields for backward compatibility
+  privy_user_id?: string;
+  auth_method?: string;
 }
 
 /**

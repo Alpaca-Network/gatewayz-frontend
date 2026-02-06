@@ -414,24 +414,46 @@ export class AuthService {
       linkedAccounts?: Array<{ type: string; [key: string]: unknown }>;
     },
     authMethod: AuthMethod
-  ): AuthRequestBody {
+  ): Record<string, unknown> {
+    // Normalize account types: Privy uses different naming conventions than our backend
+    const typeNormalization: Record<string, string> = {
+      github_oauth: 'github',
+      sms: 'phone',  // Privy sends 'sms' but backend expects 'phone'
+      twitter_oauth: 'twitter',
+      discord_oauth: 'discord',
+    };
+
+    // Build linked_accounts in the format expected by backend PrivyLinkedAccount schema
+    const linkedAccounts = privyUser.linkedAccounts
+      ?.filter(account => account.type !== 'wallet' && account.type !== 'smart_wallet')
+      ?.map(account => {
+        const { type, ...rest } = account;
+        return {
+          ...rest,
+          type: typeNormalization[type] ?? type,
+        };
+      }) ?? [];
+
+    // Extract email from linked accounts or direct properties
+    const emailAccount = linkedAccounts.find(a => a.type === 'email' || a.type === 'google_oauth');
+    const email = privyUser.email?.address
+      ?? privyUser.google?.email
+      ?? (emailAccount as { email?: string } | undefined)?.email
+      ?? null;
+
     return {
+      // User object must match backend PrivyUserData schema
       user: {
-        privy_user_id: privyUserId,
-        email: privyUser.email?.address ?? null,
-        wallet_address: privyUser.wallet?.address ?? null,
-        google_email: privyUser.google?.email ?? null,
-        github_username: privyUser.github?.username ?? null,
-        linked_accounts: privyUser.linkedAccounts?.map(account => {
-          const { type, ...rest } = account;
-          return {
-            ...rest,
-            type: type === 'github_oauth' ? 'github' : type,
-          };
-        }),
+        id: privyUserId,  // Backend expects 'id', not 'privy_user_id'
+        created_at: Math.floor(Date.now() / 1000),  // Unix timestamp (required by backend)
+        linked_accounts: linkedAccounts,
+        mfa_methods: [],
+        has_accepted_terms: false,
+        is_guest: false,
       },
-      token,
-      privy_user_id: privyUserId,
+      token,  // Optional - backend accepts null
+      email,  // Top-level email field for backend
+      privy_user_id: privyUserId,  // Keep for compatibility
       auth_method: authMethod,
       referral_code: getReferralCode(),
     };
