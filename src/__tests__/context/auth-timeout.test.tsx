@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/nextjs';
 import { GatewayzAuthProvider, useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { usePrivy } from '@privy-io/react-auth';
 import * as api from '@/lib/api';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Mock dependencies
 jest.mock('@privy-io/react-auth');
@@ -39,9 +40,22 @@ describe('GatewayzAuthContext - Authentication Timeout', () => {
   const mockRemoveApiKey = api.removeApiKey as jest.Mock;
   const mockProcessAuthResponse = api.processAuthResponse as jest.Mock;
 
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <GatewayzAuthProvider>{children}</GatewayzAuthProvider>
-  );
+  // Create a new QueryClient for each test to avoid shared state
+  const createTestQueryClient = () => new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  const wrapper = ({ children }: { children: ReactNode }) => {
+    const queryClient = createTestQueryClient();
+    return (
+      <QueryClientProvider client={queryClient}>
+        <GatewayzAuthProvider>{children}</GatewayzAuthProvider>
+      </QueryClientProvider>
+    );
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
