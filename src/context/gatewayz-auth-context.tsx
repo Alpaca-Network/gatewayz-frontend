@@ -143,7 +143,7 @@ const toUnixSeconds = (value: unknown): number | undefined => {
 
 const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
   // Skip wallet accounts as the backend only expects email/oauth accounts in linked_accounts
-  if (account.type === "wallet") {
+  if (account.type === "wallet" || account.type === "smart_wallet") {
     return null;
   }
 
@@ -152,17 +152,21 @@ const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
       ? (account as unknown as Record<string, unknown>)[key]
       : undefined;
 
-  // Normalize account type: Privy returns 'github_oauth' but backend expects 'github'
-  let normalizedType = account.type as string | undefined;
-  if (normalizedType === "github_oauth") {
-    normalizedType = "github";
-  }
+  // Normalize account types: Privy uses different naming conventions than our backend
+  const typeNormalization: Record<string, string> = {
+    github_oauth: "github",
+    sms: "phone",  // Privy sends 'sms' but backend expects 'phone'
+    twitter_oauth: "twitter",
+    discord_oauth: "discord",
+  };
+  const normalizedType = typeNormalization[account.type] ?? account.type;
 
   return stripUndefined({
     type: normalizedType,
     subject: get("subject") as string | undefined,
     email: get("email") as string | undefined,
     name: get("name") as string | undefined,
+    phone_number: get("phoneNumber") as string | undefined,  // Include phone number for SMS auth
     chain_type: get("chainType") as string | undefined,
     wallet_client_type: get("walletClientType") as string | undefined,
     connector_type: get("connectorType") as string | undefined,
