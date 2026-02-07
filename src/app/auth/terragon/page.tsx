@@ -50,6 +50,12 @@ function isAllowedCallbackUrl(url: string): boolean {
 
 type PageStatus = "loading" | "authenticating" | "redirecting" | "error";
 
+/** Maximum number of token-generation attempts (fast path + error fallback) */
+const MAX_TOKEN_RETRIES = 2;
+
+/** Maximum number of auth error → re-login cycles before giving up */
+const MAX_AUTH_RETRIES = 2;
+
 /**
  * Inner component that handles the auth bridge logic.
  * Separated from the page export so useSearchParams is inside a Suspense boundary.
@@ -74,7 +80,16 @@ function TerragonAuthBridge() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const loginTriggeredRef = useRef(false);
   const tokenGenerationStartedRef = useRef(false);
+  const tokenRetryCountRef = useRef(0);
+  const authRetryCountRef = useRef(0);
+  const statusRef = useRef<PageStatus>("loading");
   const mountTimeRef = useRef(Date.now());
+
+  // Keep statusRef in sync so the timeout callback reads the latest value
+  const updateStatus = useCallback((newStatus: PageStatus) => {
+    statusRef.current = newStatus;
+    setStatus(newStatus);
+  }, []);
 
   const isAuthenticated = authStatus === "authenticated";
   const isAuthError = authStatus === "error";
@@ -91,19 +106,21 @@ function TerragonAuthBridge() {
     };
   }, []);
 
-  // Timeout — if we've been waiting too long, show an error
+  // Timeout — if we've been waiting too long, show an error.
+  // Uses statusRef to avoid stale closure over `status`.
   useEffect(() => {
     if (status === "loading" || status === "authenticating") {
       const timer = setTimeout(() => {
-        if (status === "loading" || status === "authenticating") {
+        const currentStatus = statusRef.current;
+        if (currentStatus === "loading" || currentStatus === "authenticating") {
           console.error("[TerragonAuth] Timed out waiting for authentication");
-          setStatus("error");
+          updateStatus("error");
           setErrorMessage("Authentication is taking too long. Please try again.");
         }
       }, AUTH_TIMEOUT_MS);
       return () => clearTimeout(timer);
     }
-  }, [status]);
+  }, [status, updateStatus]);
 
   // Detect auth context error state
   useEffect(() => {
@@ -118,7 +135,7 @@ function TerragonAuthBridge() {
     if (tokenGenerationStartedRef.current) return;
     tokenGenerationStartedRef.current = true;
 
-    setStatus("redirecting");
+    updateStatus("redirecting");
 
     try {
       // Use retry logic since localStorage may not have synced yet after fresh login
@@ -170,23 +187,27 @@ function TerragonAuthBridge() {
       window.location.href = redirectUrl.toString();
     } catch (error) {
       console.error("[TerragonAuth] Error generating token:", error);
-      tokenGenerationStartedRef.current = false;
-      setStatus("error");
+      tokenRetryCountRef.current += 1;
+      // Only allow re-entry if we haven't exhausted retries
+      if (tokenRetryCountRef.current < MAX_TOKEN_RETRIES) {
+        tokenGenerationStartedRef.current = false;
+      }
+      updateStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "Failed to authenticate. Please try again.");
     }
-  }, []);
+  }, [updateStatus]);
 
   // Main auth effect
   useEffect(() => {
     // Validate callback URL
     if (!callback) {
-      setStatus("error");
+      updateStatus("error");
       setErrorMessage("Missing callback URL. Please try logging in from Terragon again.");
       return;
     }
 
     if (!isAllowedCallbackUrl(callback)) {
-      setStatus("error");
+      updateStatus("error");
       setErrorMessage("Invalid callback URL. Please try logging in from Terragon again.");
       return;
     }
@@ -207,7 +228,7 @@ function TerragonAuthBridge() {
 
     // Wait for Privy SDK to initialize
     if (!privyReady) {
-      setStatus("loading");
+      updateStatus("loading");
       return;
     }
 
@@ -228,14 +249,22 @@ function TerragonAuthBridge() {
         return;
       }
 
-      // No cached credentials either — need to trigger fresh login
-      // Reset the login guard so we can try again
+      // No cached credentials either — check if we've exhausted auth retries
+      if (authRetryCountRef.current >= MAX_AUTH_RETRIES) {
+        console.error("[TerragonAuth] Auth retries exhausted, giving up");
+        updateStatus("error");
+        setErrorMessage("Unable to authenticate after multiple attempts. Please try again.");
+        return;
+      }
+
+      // Allow re-login attempt
+      authRetryCountRef.current += 1;
       loginTriggeredRef.current = false;
     }
 
     // Still loading auth state (backend sync in progress)
     if (isLoading && loginTriggeredRef.current) {
-      setStatus("authenticating");
+      updateStatus("authenticating");
       return;
     }
 
@@ -244,7 +273,7 @@ function TerragonAuthBridge() {
       // Check how long we've been waiting
       const elapsed = Date.now() - mountTimeRef.current;
       if (elapsed < AUTH_TIMEOUT_MS) {
-        setStatus("loading");
+        updateStatus("loading");
         return;
       }
     }
@@ -252,7 +281,7 @@ function TerragonAuthBridge() {
     // Not authenticated — trigger Privy login
     if (!loginTriggeredRef.current) {
       loginTriggeredRef.current = true;
-      setStatus("authenticating");
+      updateStatus("authenticating");
 
       // Set the auth bridge flag BEFORE triggering login.
       // The auth context checks this flag and skips the onboarding
@@ -265,7 +294,7 @@ function TerragonAuthBridge() {
 
       login();
     }
-  }, [callback, isAuthenticated, isLoading, isAuthError, login, privyReady, generateTokenAndRedirect]);
+  }, [callback, isAuthenticated, isLoading, isAuthError, login, privyReady, generateTokenAndRedirect, updateStatus]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">

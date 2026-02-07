@@ -256,13 +256,21 @@ describe("TerragonAuthPage", () => {
 
       render(<TerragonAuthPage />);
 
+      // Should call the token API with correct auth header and body
       await waitFor(() => {
         expect(mockFetch).toHaveBeenCalledWith(
           "/api/terragon/auth",
           expect.objectContaining({
             method: "POST",
             headers: expect.objectContaining({
+              "Content-Type": "application/json",
               Authorization: "Bearer context-api-key",
+            }),
+            body: JSON.stringify({
+              userId: 99,
+              email: "authed@example.com",
+              username: "AuthedUser",
+              tier: "free",
             }),
           })
         );
@@ -325,9 +333,8 @@ describe("TerragonAuthPage", () => {
 
       await waitFor(() => {
         expect(screen.getByText(/Auth bridge not configured/i)).toBeInTheDocument();
+        expect(screen.getByText(/Authentication Error/i)).toBeInTheDocument();
       });
-
-      expect(screen.getByText(/Authentication Error/i)).toBeInTheDocument();
     });
 
     it("should show error when no API key is available after retries", async () => {
@@ -357,6 +364,59 @@ describe("TerragonAuthPage", () => {
       await waitFor(() => {
         expect(screen.getByText(/User data not available/i)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("retry limits", () => {
+    it("should show error when auth retries are exhausted", async () => {
+      mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
+      // No cached credentials
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
+      // Start unauthenticated so login is triggered
+      mockAuthContext = { ...mockAuthContext, status: "unauthenticated", privyReady: true };
+
+      const { rerender } = render(<TerragonAuthPage />);
+
+      // Initial login triggered (attempt #1)
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalledTimes(1);
+      });
+
+      // Error cycle #1: counter 0 → 1, re-triggers login (attempt #2)
+      mockAuthContext = { ...mockAuthContext, status: "error", error: "Auth failed" };
+      rerender(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalledTimes(2);
+      });
+
+      // Transition to authenticating so the next error transition triggers dep change
+      mockAuthContext = { ...mockAuthContext, status: "authenticating" };
+      rerender(<TerragonAuthPage />);
+
+      // Error cycle #2: counter 1 → 2, re-triggers login (attempt #3)
+      mockAuthContext = { ...mockAuthContext, status: "error", error: "Auth failed again" };
+      rerender(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalledTimes(3);
+      });
+
+      // Transition to authenticating again
+      mockAuthContext = { ...mockAuthContext, status: "authenticating" };
+      rerender(<TerragonAuthPage />);
+
+      // Error cycle #3: counter 2 >= MAX_AUTH_RETRIES (2) → exhausted, shows error
+      mockAuthContext = { ...mockAuthContext, status: "error", error: "Auth failed third time" };
+      rerender(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Unable to authenticate after multiple attempts/i)).toBeInTheDocument();
+      });
+
+      // Should NOT have triggered a fourth login call
+      expect(mockLogin).toHaveBeenCalledTimes(3);
     });
   });
 
