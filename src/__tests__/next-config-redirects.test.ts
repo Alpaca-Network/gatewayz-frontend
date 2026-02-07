@@ -1,102 +1,116 @@
 /**
  * Tests for Next.js config redirects
- * Verifies that the redirect configuration in next.config.ts is correctly set up
+ * Verifies that the redirect configuration is correctly set up
  */
 
-// Since next.config.ts uses TypeScript features and imports, we test the redirect
-// configuration structure directly
-describe('Next.js config redirects', () => {
-  describe('/inbox redirect', () => {
-    it('should redirect /inbox to Terragon dashboard', () => {
-      // This test verifies the expected redirect configuration
-      // The actual redirect is configured in next.config.ts
-      const expectedRedirect = {
-        source: '/inbox',
-        destination: 'https://terragon-www-production.up.railway.app/dashboard',
-        permanent: false,
-      };
+import { getRedirects, TERRAGON_DASHBOARD_URL } from '@/config/redirects';
+import type { Redirect } from 'next/dist/lib/load-custom-routes';
 
-      // Verify the expected structure
-      expect(expectedRedirect.source).toBe('/inbox');
-      expect(expectedRedirect.destination).toContain('terragon');
-      expect(expectedRedirect.destination).toContain('/dashboard');
-      expect(expectedRedirect.permanent).toBe(false);
+describe('Next.js config redirects', () => {
+  let redirects: Redirect[];
+
+  beforeAll(() => {
+    redirects = getRedirects();
+  });
+
+  describe('/inbox redirect', () => {
+    it('should have a redirect rule for /inbox', () => {
+      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
+      expect(inboxRedirect).toBeDefined();
+    });
+
+    it('should redirect /inbox to Terragon dashboard', () => {
+      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
+      expect(inboxRedirect?.destination).toBe(TERRAGON_DASHBOARD_URL);
+    });
+
+    it('should use temporary redirect (not permanent)', () => {
+      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
+      expect(inboxRedirect?.permanent).toBe(false);
     });
 
     it('should not have host-based restriction (redirects for all hosts)', () => {
+      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
       // The redirect should NOT have a "has" property with host restrictions
-      // This ensures the redirect works on all hosts, not just beta.gatewayz.ai
-      const expectedRedirect = {
-        source: '/inbox',
-        destination: 'https://terragon-www-production.up.railway.app/dashboard',
-        permanent: false,
-      };
-
-      // Verify no host-based restriction
-      expect(expectedRedirect).not.toHaveProperty('has');
+      expect(inboxRedirect).not.toHaveProperty('has');
     });
   });
 
   describe('/code redirect', () => {
-    it('should redirect /code to Terragon dashboard', () => {
-      const expectedRedirect = {
-        source: '/code',
-        destination: 'https://terragon-www-production.up.railway.app/dashboard',
-        permanent: false,
-      };
+    it('should have a redirect rule for /code', () => {
+      const codeRedirect = redirects.find((r) => r.source === '/code');
+      expect(codeRedirect).toBeDefined();
+    });
 
-      expect(expectedRedirect.source).toBe('/code');
-      expect(expectedRedirect.destination).toContain('terragon');
-      expect(expectedRedirect.destination).toContain('/dashboard');
-      expect(expectedRedirect.permanent).toBe(false);
+    it('should redirect /code to Terragon dashboard', () => {
+      const codeRedirect = redirects.find((r) => r.source === '/code');
+      expect(codeRedirect?.destination).toBe(TERRAGON_DASHBOARD_URL);
+    });
+
+    it('should use temporary redirect (not permanent)', () => {
+      const codeRedirect = redirects.find((r) => r.source === '/code');
+      expect(codeRedirect?.permanent).toBe(false);
     });
 
     it('should not have host-based restriction (redirects for all hosts)', () => {
-      const expectedRedirect = {
-        source: '/code',
-        destination: 'https://terragon-www-production.up.railway.app/dashboard',
-        permanent: false,
-      };
-
-      expect(expectedRedirect).not.toHaveProperty('has');
+      const codeRedirect = redirects.find((r) => r.source === '/code');
+      expect(codeRedirect).not.toHaveProperty('has');
     });
   });
 
   describe('/terragon redirect', () => {
-    it('should redirect /terragon to Terragon dashboard only on beta.gatewayz.ai', () => {
-      // The /terragon redirect still has host restriction
-      const expectedRedirect = {
-        source: '/terragon',
-        destination: 'https://terragon-www-production.up.railway.app/dashboard',
-        permanent: false,
-        has: [
-          {
-            type: 'host',
-            value: 'beta.gatewayz.ai',
-          },
-        ],
-      };
+    it('should have a redirect rule for /terragon', () => {
+      const terragonRedirect = redirects.find((r) => r.source === '/terragon');
+      expect(terragonRedirect).toBeDefined();
+    });
 
-      expect(expectedRedirect.source).toBe('/terragon');
-      expect(expectedRedirect.has).toBeDefined();
-      expect(expectedRedirect.has?.[0].type).toBe('host');
-      expect(expectedRedirect.has?.[0].value).toBe('beta.gatewayz.ai');
+    it('should redirect /terragon to Terragon dashboard', () => {
+      const terragonRedirect = redirects.find((r) => r.source === '/terragon');
+      expect(terragonRedirect?.destination).toBe(TERRAGON_DASHBOARD_URL);
+    });
+
+    it('should have host-based restriction for beta.gatewayz.ai only', () => {
+      const terragonRedirect = redirects.find((r) => r.source === '/terragon');
+      expect(terragonRedirect).toHaveProperty('has');
+
+      const hasCondition = (terragonRedirect as any)?.has;
+      expect(hasCondition).toEqual([
+        {
+          type: 'host',
+          value: 'beta.gatewayz.ai',
+        },
+      ]);
     });
   });
 
-  describe('redirect destination', () => {
-    const TERRAGON_DASHBOARD_URL = 'https://terragon-www-production.up.railway.app/dashboard';
-
-    it('should use the correct Terragon production URL', () => {
-      expect(TERRAGON_DASHBOARD_URL).toMatch(/^https:\/\/terragon.*\.railway\.app\/dashboard$/);
-    });
-
-    it('should use HTTPS protocol', () => {
+  describe('redirect destination validation', () => {
+    it('should use HTTPS protocol for Terragon URL', () => {
       expect(TERRAGON_DASHBOARD_URL).toMatch(/^https:\/\//);
     });
 
     it('should point to the dashboard path', () => {
       expect(TERRAGON_DASHBOARD_URL).toContain('/dashboard');
+    });
+
+    it('should use the Railway production URL', () => {
+      expect(TERRAGON_DASHBOARD_URL).toContain('terragon');
+      expect(TERRAGON_DASHBOARD_URL).toContain('.railway.app');
+    });
+  });
+
+  describe('redirect consistency', () => {
+    it('should have /inbox and /code redirect to the same destination', () => {
+      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
+      const codeRedirect = redirects.find((r) => r.source === '/code');
+
+      expect(inboxRedirect?.destination).toBe(codeRedirect?.destination);
+    });
+
+    it('should have /inbox and /code with the same permanent setting', () => {
+      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
+      const codeRedirect = redirects.find((r) => r.source === '/code');
+
+      expect(inboxRedirect?.permanent).toBe(codeRedirect?.permanent);
     });
   });
 });
