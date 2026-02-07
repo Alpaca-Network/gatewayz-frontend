@@ -571,19 +571,23 @@ function CheckoutPageContent() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground line-through">${currentPackage.creditValue}</span>
-                    <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1 rounded-full font-medium">
-                      {currentPackage.discount}
-                    </span>
-                  </div>
+                  {currentPackage.price < currentPackage.creditValue && (
+                    <>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground line-through">${currentPackage.creditValue}</span>
+                        <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1 rounded-full font-medium">
+                          {currentPackage.discount}
+                        </span>
+                      </div>
 
-                  <div className="p-3 bg-muted rounded-lg text-sm">
-                    <p>
-                      <span className="font-semibold">You save: </span>
-                      ${currentPackage.creditValue - currentPackage.price}
-                    </p>
-                  </div>
+                      <div className="p-3 bg-muted rounded-lg text-sm">
+                        <p>
+                          <span className="font-semibold">You save: </span>
+                          ${currentPackage.creditValue - currentPackage.price}
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
