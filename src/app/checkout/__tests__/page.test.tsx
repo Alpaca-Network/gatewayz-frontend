@@ -537,3 +537,36 @@ describe('CheckoutPage - Fast loading (no auth polling)', () => {
     }, { timeout: 500 });
   });
 });
+
+describe('CheckoutPage - Discount visibility', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetUserData.mockReturnValue({
+      user_id: 1,
+      api_key: 'test-api-key',
+      email: 'test@example.com',
+    });
+    mockMakeAuthenticatedRequest.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
+    });
+  });
+
+  it('should display discount for subscription plans with discount info', async () => {
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      // Pro plan has discount: 'Save 50%' and originalPrice in mock
+      expect(screen.getByText('Save 50%')).toBeInTheDocument();
+    });
+  });
+
+  it('should display original price with strikethrough for discounted plans', async () => {
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      // Pro plan has originalPrice: '$20/month' in mock
+      expect(screen.getByText('$20/month')).toBeInTheDocument();
+    });
+  });
+});
