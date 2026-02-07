@@ -197,11 +197,11 @@ const TransactionRow = ({ transaction }: { transaction: Transaction }) => {
           )}
         </div>
         <div className={`font-medium ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-          {transaction.amount >= 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
+          {transaction.amount >= 0 ? '+' : ''}${(Math.abs(transaction.amount) / 100).toFixed(2)}
         </div>
         <div className="font-medium">{formatDate(transaction.created_at)}</div>
         <div className="font-medium text-right">
-          {transaction.balance !== undefined ? `$${transaction.balance.toFixed(2)}` : '-'}
+          {transaction.balance !== undefined ? `$${(transaction.balance / 100).toFixed(2)}` : '-'}
         </div>
         <div className="flex justify-end">
           <Button
@@ -225,13 +225,13 @@ const TransactionRow = ({ transaction }: { transaction: Transaction }) => {
             )}
           </div>
           <div className={`font-semibold flex-shrink-0 ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {transaction.amount >= 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
+            {transaction.amount >= 0 ? '+' : ''}${(Math.abs(transaction.amount) / 100).toFixed(2)}
           </div>
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{formatDate(transaction.created_at)}</span>
           <span>
-            Balance: {transaction.balance !== undefined ? `$${transaction.balance.toFixed(2)}` : '-'}
+            Balance: {transaction.balance !== undefined ? `$${(transaction.balance / 100).toFixed(2)}` : '-'}
           </span>
         </div>
       </div>
