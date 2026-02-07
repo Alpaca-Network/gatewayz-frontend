@@ -538,7 +538,7 @@ describe('CheckoutPage - Fast loading (no auth polling)', () => {
   });
 });
 
-describe('CheckoutPage - Discount visibility', () => {
+describe('CheckoutPage - Subscription discount visibility', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetUserData.mockReturnValue({
