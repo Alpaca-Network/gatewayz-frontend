@@ -74,7 +74,7 @@ function TerragonAuthBridge() {
 
   // Use the auth context directly (not the useAuth wrapper) so we can
   // read status/error and detect failures the wrapper hides.
-  const { status: authStatus, login, privyReady, error: authError } = useGatewayzAuth();
+  const { status: authStatus, login, privyReady } = useGatewayzAuth();
 
   const [status, setStatus] = useState<PageStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -84,6 +84,7 @@ function TerragonAuthBridge() {
   const authRetryCountRef = useRef(0);
   const statusRef = useRef<PageStatus>("loading");
   const mountTimeRef = useRef(Date.now());
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Keep statusRef in sync so the timeout callback reads the latest value
   const updateStatus = useCallback((newStatus: PageStatus) => {
@@ -95,9 +96,10 @@ function TerragonAuthBridge() {
   const isAuthError = authStatus === "error";
   const isLoading = authStatus === "idle" || authStatus === "authenticating";
 
-  // Clean up the auth bridge flag when the component unmounts
+  // Clean up auth bridge flag and abort in-flight requests on unmount
   useEffect(() => {
     return () => {
+      abortControllerRef.current?.abort();
       try {
         sessionStorage.removeItem(AUTH_BRIDGE_FLAG_KEY);
       } catch {
@@ -106,34 +108,31 @@ function TerragonAuthBridge() {
     };
   }, []);
 
-  // Timeout — if we've been waiting too long, show an error.
-  // Uses statusRef to avoid stale closure over `status`.
+  // Wall-clock timeout: fires once based on mount time, not restarted on status changes.
+  // Uses statusRef to avoid stale closure.
   useEffect(() => {
-    if (status === "loading" || status === "authenticating") {
-      const timer = setTimeout(() => {
-        const currentStatus = statusRef.current;
-        if (currentStatus === "loading" || currentStatus === "authenticating") {
-          console.error("[TerragonAuth] Timed out waiting for authentication");
-          updateStatus("error");
-          setErrorMessage("Authentication is taking too long. Please try again.");
-        }
-      }, AUTH_TIMEOUT_MS);
-      return () => clearTimeout(timer);
-    }
-  }, [status, updateStatus]);
+    const remaining = AUTH_TIMEOUT_MS - (Date.now() - mountTimeRef.current);
+    if (remaining <= 0) return;
 
-  // Detect auth context error state
-  useEffect(() => {
-    if (isAuthError && status !== "redirecting" && status !== "error") {
-      console.error("[TerragonAuth] Auth context error:", authError);
-      // Don't immediately show error — try the fast path first
-      // The main effect will handle the fallback
-    }
-  }, [isAuthError, authError, status]);
+    const timer = setTimeout(() => {
+      const currentStatus = statusRef.current;
+      if (currentStatus === "loading" || currentStatus === "authenticating") {
+        console.error("[TerragonAuth] Timed out waiting for authentication");
+        updateStatus("error");
+        setErrorMessage("Authentication is taking too long. Please try again.");
+      }
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [updateStatus]);
 
   const generateTokenAndRedirect = useCallback(async (callbackUrl: string) => {
     if (tokenGenerationStartedRef.current) return;
     tokenGenerationStartedRef.current = true;
+
+    // Abort any previous in-flight request
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     updateStatus("redirecting");
 
@@ -163,6 +162,7 @@ function TerragonAuthBridge() {
           username: userData.display_name || userData.email.split("@")[0],
           tier: userData.tier || "free",
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -186,6 +186,9 @@ function TerragonAuthBridge() {
       redirectUrl.searchParams.set("gwauth", token);
       window.location.href = redirectUrl.toString();
     } catch (error) {
+      // Don't update state if the request was aborted (component unmounted)
+      if (controller.signal.aborted) return;
+
       console.error("[TerragonAuth] Error generating token:", error);
       tokenRetryCountRef.current += 1;
       // Only allow re-entry if we haven't exhausted retries
@@ -268,14 +271,18 @@ function TerragonAuthBridge() {
       return;
     }
 
+    // Check wall-clock timeout before triggering login
+    const elapsed = Date.now() - mountTimeRef.current;
+    if (elapsed >= AUTH_TIMEOUT_MS) {
+      updateStatus("error");
+      setErrorMessage("Authentication is taking too long. Please try again.");
+      return;
+    }
+
     if (isLoading && !loginTriggeredRef.current) {
       // Auth context is still initializing (idle/syncing) but we didn't trigger it
-      // Check how long we've been waiting
-      const elapsed = Date.now() - mountTimeRef.current;
-      if (elapsed < AUTH_TIMEOUT_MS) {
-        updateStatus("loading");
-        return;
-      }
+      updateStatus("loading");
+      return;
     }
 
     // Not authenticated — trigger Privy login

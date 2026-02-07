@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import TerragonAuthPage from "../page";
 
 // Mock Next.js hooks
@@ -10,21 +10,25 @@ jest.mock("next/navigation", () => ({
   }),
 }));
 
-// Mock the auth context directly (not the useAuth wrapper)
-// so the page can read status/error from the context
+// Factory for default mock auth context shape
 const mockLogin = jest.fn();
-let mockAuthContext = {
-  status: "unauthenticated" as string,
-  login: mockLogin,
-  privyReady: true,
-  privyAuthenticated: false,
-  error: null as string | null,
-  apiKey: null as string | null,
-  userData: null,
-  authTiming: { startTime: null, elapsedMs: 0, retryCount: 0, maxRetries: 3, isSlowAuth: false, phase: "idle" as const },
-  logout: jest.fn(),
-  refresh: jest.fn(),
-};
+function createMockAuthContext(overrides: Record<string, unknown> = {}) {
+  return {
+    status: "unauthenticated" as string,
+    login: mockLogin,
+    privyReady: true,
+    privyAuthenticated: false,
+    error: null as string | null,
+    apiKey: null as string | null,
+    userData: null,
+    authTiming: { startTime: null, elapsedMs: 0, retryCount: 0, maxRetries: 3, isSlowAuth: false, phase: "idle" as const },
+    logout: jest.fn(),
+    refresh: jest.fn(),
+    ...overrides,
+  };
+}
+
+let mockAuthContext = createMockAuthContext();
 
 jest.mock("@/context/gatewayz-auth-context", () => ({
   useGatewayzAuth: () => mockAuthContext,
@@ -47,29 +51,23 @@ global.fetch = mockFetch;
 
 describe("TerragonAuthPage", () => {
   beforeEach(() => {
+    jest.useFakeTimers();
     mockSearchParams.clear();
     mockLogin.mockClear();
     mockGetApiKey.mockReturnValue(null);
     mockGetUserData.mockReturnValue(null);
     mockGetApiKeyWithRetry.mockResolvedValue(null);
     mockFetch.mockReset();
-    mockAuthContext = {
-      status: "unauthenticated",
-      login: mockLogin,
-      privyReady: true,
-      privyAuthenticated: false,
-      error: null,
-      apiKey: null,
-      userData: null,
-      authTiming: { startTime: null, elapsedMs: 0, retryCount: 0, maxRetries: 3, isSlowAuth: false, phase: "idle" as const },
-      logout: jest.fn(),
-      refresh: jest.fn(),
-    };
+    mockAuthContext = createMockAuthContext();
     try {
       sessionStorage.clear();
     } catch {
       // ignore
     }
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   describe("callback parameter handling", () => {
@@ -238,10 +236,7 @@ describe("TerragonAuthPage", () => {
       // No cached credentials (fast path won't fire)
       mockGetApiKey.mockReturnValue(null);
       // Auth context says authenticated
-      mockAuthContext = {
-        ...mockAuthContext,
-        status: "authenticated",
-      };
+      mockAuthContext = createMockAuthContext({ status: "authenticated" });
       mockGetApiKeyWithRetry.mockResolvedValue("context-api-key");
       mockGetUserData.mockReturnValue({
         user_id: 99,
@@ -341,7 +336,7 @@ describe("TerragonAuthPage", () => {
       mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
       // No cached credentials, auth context says authenticated
       mockGetApiKey.mockReturnValue(null);
-      mockAuthContext = { ...mockAuthContext, status: "authenticated" };
+      mockAuthContext = createMockAuthContext({ status: "authenticated" });
       mockGetApiKeyWithRetry.mockResolvedValue(null);
       mockGetUserData.mockReturnValue(null);
 
@@ -355,7 +350,7 @@ describe("TerragonAuthPage", () => {
     it("should show error when user data has no email", async () => {
       mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
       mockGetApiKey.mockReturnValue(null);
-      mockAuthContext = { ...mockAuthContext, status: "authenticated" };
+      mockAuthContext = createMockAuthContext({ status: "authenticated" });
       mockGetApiKeyWithRetry.mockResolvedValue("some-key");
       mockGetUserData.mockReturnValue({ user_id: 1 }); // no email
 
@@ -374,7 +369,7 @@ describe("TerragonAuthPage", () => {
       mockGetApiKey.mockReturnValue(null);
       mockGetUserData.mockReturnValue(null);
       // Start unauthenticated so login is triggered
-      mockAuthContext = { ...mockAuthContext, status: "unauthenticated", privyReady: true };
+      mockAuthContext = createMockAuthContext({ status: "unauthenticated", privyReady: true });
 
       const { rerender } = render(<TerragonAuthPage />);
 
@@ -384,7 +379,7 @@ describe("TerragonAuthPage", () => {
       });
 
       // Error cycle #1: counter 0 → 1, re-triggers login (attempt #2)
-      mockAuthContext = { ...mockAuthContext, status: "error", error: "Auth failed" };
+      mockAuthContext = createMockAuthContext({ status: "error", error: "Auth failed" });
       rerender(<TerragonAuthPage />);
 
       await waitFor(() => {
@@ -392,11 +387,11 @@ describe("TerragonAuthPage", () => {
       });
 
       // Transition to authenticating so the next error transition triggers dep change
-      mockAuthContext = { ...mockAuthContext, status: "authenticating" };
+      mockAuthContext = createMockAuthContext({ status: "authenticating" });
       rerender(<TerragonAuthPage />);
 
       // Error cycle #2: counter 1 → 2, re-triggers login (attempt #3)
-      mockAuthContext = { ...mockAuthContext, status: "error", error: "Auth failed again" };
+      mockAuthContext = createMockAuthContext({ status: "error", error: "Auth failed again" });
       rerender(<TerragonAuthPage />);
 
       await waitFor(() => {
@@ -404,11 +399,11 @@ describe("TerragonAuthPage", () => {
       });
 
       // Transition to authenticating again
-      mockAuthContext = { ...mockAuthContext, status: "authenticating" };
+      mockAuthContext = createMockAuthContext({ status: "authenticating" });
       rerender(<TerragonAuthPage />);
 
       // Error cycle #3: counter 2 >= MAX_AUTH_RETRIES (2) → exhausted, shows error
-      mockAuthContext = { ...mockAuthContext, status: "error", error: "Auth failed third time" };
+      mockAuthContext = createMockAuthContext({ status: "error", error: "Auth failed third time" });
       rerender(<TerragonAuthPage />);
 
       await waitFor(() => {
@@ -423,7 +418,7 @@ describe("TerragonAuthPage", () => {
   describe("loading states", () => {
     it("should show loading when Privy is not ready", async () => {
       mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
-      mockAuthContext = { ...mockAuthContext, privyReady: false };
+      mockAuthContext = createMockAuthContext({ privyReady: false });
 
       render(<TerragonAuthPage />);
 
@@ -437,7 +432,7 @@ describe("TerragonAuthPage", () => {
     it("should show authenticating when login has been triggered and auth is loading", async () => {
       mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
       // Start unauthenticated to trigger login
-      mockAuthContext = { ...mockAuthContext, status: "unauthenticated", privyReady: true };
+      mockAuthContext = createMockAuthContext({ status: "unauthenticated", privyReady: true });
 
       const { rerender } = render(<TerragonAuthPage />);
 
@@ -447,12 +442,102 @@ describe("TerragonAuthPage", () => {
       });
 
       // Simulate auth context transitioning to authenticating (backend sync in progress)
-      mockAuthContext = { ...mockAuthContext, status: "authenticating" };
+      mockAuthContext = createMockAuthContext({ status: "authenticating" });
       rerender(<TerragonAuthPage />);
 
       await waitFor(() => {
         expect(screen.getByText(/Sign in to continue/i)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe("wall-clock timeout", () => {
+    it("should show error after AUTH_TIMEOUT_MS elapses while still loading", async () => {
+      mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
+      // Privy never becomes ready — stays in loading forever
+      mockAuthContext = createMockAuthContext({ privyReady: false });
+
+      render(<TerragonAuthPage />);
+
+      // Initially shows loading
+      await waitFor(() => {
+        expect(screen.getByText(/Connecting/i)).toBeInTheDocument();
+      });
+
+      // Advance past the 30s timeout
+      act(() => {
+        jest.advanceTimersByTime(30_001);
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText(/Authentication is taking too long/i)).toBeInTheDocument();
+      });
+    });
+
+    it("should not fire timeout if status has moved to redirecting", async () => {
+      mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
+      // Fast path: cached credentials trigger immediate redirect
+      mockGetApiKey.mockReturnValue("cached-key");
+      mockGetApiKeyWithRetry.mockResolvedValue("cached-key");
+      mockGetUserData.mockReturnValue({
+        user_id: 1,
+        email: "user@example.com",
+        display_name: "User",
+        tier: "free",
+      });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ token: "tok" }),
+      });
+
+      render(<TerragonAuthPage />);
+
+      // Wait for redirecting state
+      await waitFor(() => {
+        expect(screen.getByText(/Redirecting to Terragon/i)).toBeInTheDocument();
+      });
+
+      // Advance past timeout — should NOT show error
+      act(() => {
+        jest.advanceTimersByTime(30_001);
+      });
+
+      // Still shows redirecting, not error
+      expect(screen.getByText(/Redirecting to Terragon/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Authentication is taking too long/i)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("abort on unmount", () => {
+    it("should not update state after unmount during token generation", async () => {
+      mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
+      mockGetApiKey.mockReturnValue("cached-key");
+      mockGetApiKeyWithRetry.mockResolvedValue("cached-key");
+      mockGetUserData.mockReturnValue({
+        user_id: 1,
+        email: "user@example.com",
+        display_name: "User",
+        tier: "free",
+      });
+
+      // Make fetch hang until we resolve it
+      let resolveFetch!: (value: unknown) => void;
+      mockFetch.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve; }));
+
+      const { unmount } = render(<TerragonAuthPage />);
+
+      // Wait for fetch to be called
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalled();
+      });
+
+      // Unmount while fetch is in-flight — should abort without errors
+      unmount();
+
+      // Resolve the fetch after unmount — should not throw
+      resolveFetch({ ok: true, json: () => Promise.resolve({ token: "tok" }) });
+
+      // No errors thrown — abort controller prevented state update
     });
   });
 });
