@@ -82,23 +82,11 @@ const nextConfig: NextConfig = {
           source: '/inbox',
           destination: 'https://terragon-www-production.up.railway.app/dashboard',
           permanent: false,
-          has: [
-            {
-              type: 'host',
-              value: 'beta.gatewayz.ai',
-            },
-          ],
         },
         {
           source: '/code',
           destination: 'https://terragon-www-production.up.railway.app/dashboard',
           permanent: false,
-          has: [
-            {
-              type: 'host',
-              value: 'beta.gatewayz.ai',
-            },
-          ],
         },
         {
           source: '/terragon',
