@@ -1,5 +1,6 @@
 import type {NextConfig} from 'next';
 import {withSentryConfig} from '@sentry/nextjs';
+import {getRedirects} from './src/config/redirects';
 
 // Bundle analyzer for identifying heavy dependencies (optional)
 // Install with: npm install --save-dev @next/bundle-analyzer
@@ -72,46 +73,7 @@ const nextConfig: NextConfig = {
   // Only include them when not building for desktop/static export
   ...(isStaticExport ? {} : {
     async redirects() {
-      return [
-        {
-          source: '/deck',
-          destination: 'https://www.canva.com/design/DAG2Dc4lQvI/P2ws7cdUnYAjdFxXpsKvUw/view?utm_content=DAG2Dc4lQvI&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h20484be5f9',
-          permanent: false,
-        },
-        {
-          source: '/inbox',
-          destination: 'https://terragon-www-production.up.railway.app/dashboard',
-          permanent: false,
-          has: [
-            {
-              type: 'host',
-              value: 'beta.gatewayz.ai',
-            },
-          ],
-        },
-        {
-          source: '/code',
-          destination: 'https://terragon-www-production.up.railway.app/dashboard',
-          permanent: false,
-          has: [
-            {
-              type: 'host',
-              value: 'beta.gatewayz.ai',
-            },
-          ],
-        },
-        {
-          source: '/terragon',
-          destination: 'https://terragon-www-production.up.railway.app/dashboard',
-          permanent: false,
-          has: [
-            {
-              type: 'host',
-              value: 'beta.gatewayz.ai',
-            },
-          ],
-        },
-      ];
+      return getRedirects();
     },
     async headers() {
       // Common security headers (excluding frame-related headers which vary by route)
