@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
-import { getApiKey, getUserData } from "@/lib/api";
+import { getApiKeyWithRetry, getUserData } from "@/lib/api";
+
+/**
+ * Session storage key used to signal that an auth bridge flow is active.
+ * When set, the auth context skips the onboarding redirect so the bridge
+ * page can complete its token generation and redirect back to the caller.
+ */
+const AUTH_BRIDGE_FLAG_KEY = "auth_bridge_active";
 
 /**
  * Allowed callback URL domains for security.
@@ -30,7 +37,6 @@ function isAllowedCallbackUrl(url: string): boolean {
     const parsedUrl = new URL(url);
     const hostname = parsedUrl.hostname.toLowerCase();
 
-    // Check if hostname matches allowed domains or is a subdomain of terragon.ai/gatewayz.ai
     return ALLOWED_CALLBACK_DOMAINS.includes(hostname) ||
            hostname.endsWith(".terragon.ai") ||
            hostname.endsWith(".gatewayz.ai");
@@ -40,113 +46,164 @@ function isAllowedCallbackUrl(url: string): boolean {
 }
 
 /**
- * Auth bridge page for Terragon integration.
+ * Inner component that handles the auth bridge logic.
+ * Separated from the page export so useSearchParams is inside a Suspense boundary.
  *
  * Flow:
- * 1. Terragon redirects user here with callback URL
+ * 1. Terragon redirects user here with a redirect_uri (or callback) URL
  * 2. If user is not logged in, trigger Privy login
- * 3. Once authenticated, generate a Terragon auth token
- * 4. Redirect back to Terragon with the token
+ * 3. Once authenticated, call /api/terragon/auth to generate an encrypted gwauth token
+ * 4. Redirect back to Terragon with the token appended to redirect_uri
  */
-export default function TerragonAuthPage() {
+function TerragonAuthBridge() {
   const searchParams = useSearchParams();
-  // Support both "callback" and "redirect_uri" parameters for flexibility
-  // "callback" is the primary parameter, "redirect_uri" is for OAuth-style flows
+  // Support both "callback" and "redirect_uri" parameters
   const callback = searchParams.get("callback") || searchParams.get("redirect_uri");
   const { isAuthenticated, loading, login, privyReady } = useAuth();
   const [status, setStatus] = useState<"loading" | "authenticating" | "redirecting" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const loginTriggeredRef = useRef(false);
+  const tokenGenerationStartedRef = useRef(false);
+
+  // Clean up the auth bridge flag when the component unmounts
+  // (e.g., if the user navigates away without completing the flow)
+  useEffect(() => {
+    return () => {
+      try {
+        sessionStorage.removeItem(AUTH_BRIDGE_FLAG_KEY);
+      } catch {
+        // sessionStorage may not be available
+      }
+    };
+  }, []);
+
+  // Reset the login guard if the user dismissed the Privy modal
+  // (isAuthenticated is false, loading is false, but loginTriggeredRef is true)
+  useEffect(() => {
+    if (loginTriggeredRef.current && !isAuthenticated && !loading && privyReady) {
+      // The user may have dismissed the modal — allow re-triggering
+      loginTriggeredRef.current = false;
+    }
+  }, [isAuthenticated, loading, privyReady]);
+
+  const generateTokenAndRedirect = useCallback(async (callbackUrl: string) => {
+    if (tokenGenerationStartedRef.current) return;
+    tokenGenerationStartedRef.current = true;
+
+    setStatus("redirecting");
+
+    try {
+      // Use retry logic since localStorage may not have synced yet after fresh login
+      const apiKey = await getApiKeyWithRetry(5);
+      const userData = getUserData();
+
+      if (!apiKey) {
+        throw new Error("No API key available. Please try again.");
+      }
+
+      if (!userData?.email) {
+        throw new Error("User data not available. Please try again.");
+      }
+
+      // Call the Terragon auth API to generate an encrypted gwauth token
+      const response = await fetch("/api/terragon/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          userId: userData.user_id,
+          email: userData.email,
+          username: userData.display_name || userData.email.split("@")[0],
+          tier: userData.tier || "free",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to generate auth token: ${response.status}`);
+      }
+
+      const { token } = await response.json();
+
+      // Clean up the bridge flag before redirecting
+      try {
+        sessionStorage.removeItem(AUTH_BRIDGE_FLAG_KEY);
+      } catch {
+        // ignore
+      }
+
+      // Redirect back to Terragon with the gwauth token.
+      // Using URL.searchParams.set handles ?/& correctly even when
+      // redirect_uri already contains query parameters.
+      const redirectUrl = new URL(callbackUrl);
+      redirectUrl.searchParams.set("gwauth", token);
+      window.location.href = redirectUrl.toString();
+    } catch (error) {
+      console.error("[TerragonAuth] Error generating token:", error);
+      tokenGenerationStartedRef.current = false;
+      setStatus("error");
+      setErrorMessage(error instanceof Error ? error.message : "Failed to authenticate. Please try again.");
+    }
+  }, []);
 
   useEffect(() => {
-    async function handleAuth() {
-      // If no callback URL, show error
-      if (!callback) {
-        setStatus("error");
-        setErrorMessage("Missing callback URL. Please try logging in from Terragon again.");
-        return;
-      }
-
-      // Validate callback URL to prevent open redirect attacks
-      if (!isAllowedCallbackUrl(callback)) {
-        setStatus("error");
-        setErrorMessage("Invalid callback URL. Please try logging in from Terragon again.");
-        return;
-      }
-
-      // Wait for Privy to be ready
-      if (!privyReady) {
-        setStatus("loading");
-        return;
-      }
-
-      // If not authenticated, trigger login (with one-shot guard to prevent repeated calls)
-      if (!isAuthenticated && !loading) {
-        if (!loginTriggeredRef.current) {
-          loginTriggeredRef.current = true;
-          setStatus("authenticating");
-          login();
-        }
-        return;
-      }
-
-      // Still loading auth state
-      if (loading) {
-        setStatus("loading");
-        return;
-      }
-
-      // User is authenticated, generate Terragon token
-      if (isAuthenticated) {
-        setStatus("redirecting");
-
-        try {
-          const apiKey = getApiKey();
-          const userData = getUserData();
-
-          if (!apiKey) {
-            throw new Error("No API key available");
-          }
-
-          // Call the Terragon auth API to generate a token
-          const response = await fetch("/api/terragon/auth", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              userId: userData?.user_id,
-              email: userData?.email,
-              username: userData?.display_name,
-              tier: userData?.tier || "free",
-            }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Failed to generate auth token: ${response.status}`);
-          }
-
-          const { token } = await response.json();
-
-          // Redirect back to Terragon with the token
-          const callbackUrl = new URL(callback);
-          callbackUrl.searchParams.set("gwauth", token);
-
-          window.location.href = callbackUrl.toString();
-        } catch (error) {
-          console.error("[TerragonAuthPage] Error generating token:", error);
-          setStatus("error");
-          setErrorMessage(error instanceof Error ? error.message : "Failed to authenticate. Please try again.");
-        }
-      }
+    // Validate callback URL
+    if (!callback) {
+      setStatus("error");
+      setErrorMessage("Missing callback URL. Please try logging in from Terragon again.");
+      return;
     }
 
-    handleAuth();
-  }, [callback, isAuthenticated, loading, login, privyReady]);
+    if (!isAllowedCallbackUrl(callback)) {
+      setStatus("error");
+      setErrorMessage("Invalid callback URL. Please try logging in from Terragon again.");
+      return;
+    }
 
-  // Render loading/status UI
+    // Wait for Privy SDK to initialize
+    if (!privyReady) {
+      setStatus("loading");
+      return;
+    }
+
+    // User is authenticated — generate token and redirect
+    if (isAuthenticated && !loading) {
+      generateTokenAndRedirect(callback);
+      return;
+    }
+
+    // Still loading auth state (e.g., backend sync in progress)
+    if (loading) {
+      if (loginTriggeredRef.current) {
+        setStatus("authenticating");
+      } else {
+        setStatus("loading");
+      }
+      return;
+    }
+
+    // Not authenticated and not loading — trigger Privy login
+    if (!isAuthenticated && !loading) {
+      if (!loginTriggeredRef.current) {
+        loginTriggeredRef.current = true;
+        setStatus("authenticating");
+
+        // Set the auth bridge flag BEFORE triggering login.
+        // The auth context checks this flag and skips the onboarding
+        // redirect for new users, letting this page handle the redirect.
+        try {
+          sessionStorage.setItem(AUTH_BRIDGE_FLAG_KEY, "terragon");
+        } catch {
+          // sessionStorage may not be available
+        }
+
+        login();
+      }
+    }
+  }, [callback, isAuthenticated, loading, login, privyReady, generateTokenAndRedirect]);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="max-w-md w-full mx-auto p-6 text-center">
@@ -214,5 +271,26 @@ export default function TerragonAuthPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Auth bridge page for Terragon integration.
+ * Wrapped in Suspense because useSearchParams requires it in Next.js 15.
+ */
+export default function TerragonAuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="max-w-md w-full mx-auto p-6 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
+            <p className="text-muted-foreground mt-4">Loading...</p>
+          </div>
+        </div>
+      }
+    >
+      <TerragonAuthBridge />
+    </Suspense>
   );
 }
