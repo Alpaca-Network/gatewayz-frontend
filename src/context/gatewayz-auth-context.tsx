@@ -623,6 +623,21 @@ export function GatewayzAuthProvider({
       if (authData.is_new_user ?? isNewUserExpected) {
         console.log("[Auth] New user detected");
 
+        // If an auth bridge flow is active (e.g., Terragon), skip the onboarding
+        // redirect. The bridge page will handle the redirect back to the caller
+        // after generating its auth token.
+        let authBridgeActive = false;
+        try {
+          authBridgeActive = !!window.sessionStorage?.getItem("auth_bridge_active");
+        } catch {
+          // sessionStorage may not be available
+        }
+
+        if (authBridgeActive) {
+          console.log("[Auth] Auth bridge flow active — skipping onboarding redirect");
+          return;
+        }
+
         // Track Google Ads sign-up conversion for new users
         // Use callback to ensure redirect happens after conversion is sent
         // If gtag isn't loaded, callback executes immediately (graceful degradation)

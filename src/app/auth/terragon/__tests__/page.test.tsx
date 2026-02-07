@@ -12,25 +12,49 @@ jest.mock("next/navigation", () => ({
 
 // Mock the auth hook
 const mockLogin = jest.fn();
+let mockAuthState = {
+  isAuthenticated: false,
+  loading: false,
+  login: mockLogin,
+  privyReady: true,
+};
+
 jest.mock("@/hooks/use-auth", () => ({
-  useAuth: () => ({
-    isAuthenticated: false,
-    loading: false,
-    login: mockLogin,
-    privyReady: true,
-  }),
+  useAuth: () => mockAuthState,
 }));
 
 // Mock the API functions
+const mockGetApiKeyWithRetry = jest.fn().mockResolvedValue(null);
+const mockGetUserData = jest.fn().mockReturnValue(null);
+
 jest.mock("@/lib/api", () => ({
-  getApiKey: () => null,
-  getUserData: () => null,
+  getApiKeyWithRetry: (...args: unknown[]) => mockGetApiKeyWithRetry(...args),
+  getUserData: () => mockGetUserData(),
 }));
+
+// Mock fetch for the token generation API
+const mockFetch = jest.fn();
+global.fetch = mockFetch;
 
 describe("TerragonAuthPage", () => {
   beforeEach(() => {
     mockSearchParams.clear();
     mockLogin.mockClear();
+    mockGetApiKeyWithRetry.mockResolvedValue(null);
+    mockGetUserData.mockReturnValue(null);
+    mockFetch.mockReset();
+    mockAuthState = {
+      isAuthenticated: false,
+      loading: false,
+      login: mockLogin,
+      privyReady: true,
+    };
+    // Clear sessionStorage
+    try {
+      sessionStorage.clear();
+    } catch {
+      // ignore
+    }
   });
 
   describe("callback parameter handling", () => {
@@ -40,12 +64,10 @@ describe("TerragonAuthPage", () => {
 
       render(<TerragonAuthPage />);
 
-      // Should trigger login since user is not authenticated
       await waitFor(() => {
         expect(mockLogin).toHaveBeenCalled();
       });
 
-      // Should show authenticating state, not error
       expect(screen.queryByText(/Missing callback URL/i)).not.toBeInTheDocument();
     });
 
@@ -55,23 +77,19 @@ describe("TerragonAuthPage", () => {
 
       render(<TerragonAuthPage />);
 
-      // Should trigger login since user is not authenticated
       await waitFor(() => {
         expect(mockLogin).toHaveBeenCalled();
       });
 
-      // Should show authenticating state, not error
       expect(screen.queryByText(/Missing callback URL/i)).not.toBeInTheDocument();
     });
 
     it('should prefer "callback" over "redirect_uri" when both are present', async () => {
-      // Use valid allowed domains for both parameters
       mockSearchParams.set("callback", "https://terragon-www-production.up.railway.app/callback");
       mockSearchParams.set("redirect_uri", "https://app.terragon.ai/redirect");
 
       render(<TerragonAuthPage />);
 
-      // Should trigger login - the callback parameter should be used
       await waitFor(() => {
         expect(mockLogin).toHaveBeenCalled();
       });
@@ -147,6 +165,92 @@ describe("TerragonAuthPage", () => {
       });
 
       expect(mockLogin).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("auth bridge flag", () => {
+    it("should set auth_bridge_active in sessionStorage before triggering login", async () => {
+      mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalled();
+      });
+
+      expect(sessionStorage.getItem("auth_bridge_active")).toBe("terragon");
+    });
+
+    it("should clean up auth_bridge_active on unmount", async () => {
+      mockSearchParams.set("redirect_uri", "https://app.terragon.ai/callback");
+
+      const { unmount } = render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalled();
+      });
+
+      expect(sessionStorage.getItem("auth_bridge_active")).toBe("terragon");
+
+      unmount();
+
+      expect(sessionStorage.getItem("auth_bridge_active")).toBeNull();
+    });
+  });
+
+  describe("authenticated user flow", () => {
+    it("should generate token and redirect when user is already authenticated", async () => {
+      mockSearchParams.set("redirect_uri", "https://app.terragon.ai/api/auth/callback?returnUrl=/dashboard");
+      mockAuthState = {
+        isAuthenticated: true,
+        loading: false,
+        login: mockLogin,
+        privyReady: true,
+      };
+      mockGetApiKeyWithRetry.mockResolvedValue("test-api-key-12345");
+      mockGetUserData.mockReturnValue({
+        user_id: 42,
+        email: "test@example.com",
+        display_name: "TestUser",
+        tier: "pro",
+      });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ token: "encrypted-token-value" }),
+      });
+
+      // Mock window.location.href
+      const locationHrefSpy = jest.spyOn(window, "location", "get").mockReturnValue({
+        ...window.location,
+        href: window.location.href,
+      } as Location);
+      delete (window as { location?: Location }).location;
+      window.location = { href: "" } as Location;
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          "/api/terragon/auth",
+          expect.objectContaining({
+            method: "POST",
+            headers: expect.objectContaining({
+              Authorization: "Bearer test-api-key-12345",
+            }),
+          })
+        );
+      });
+
+      // Should redirect with gwauth token
+      await waitFor(() => {
+        expect(window.location.href).toContain("gwauth=encrypted-token-value");
+      });
+
+      // Should not trigger login
+      expect(mockLogin).not.toHaveBeenCalled();
+
+      // Restore
+      locationHrefSpy?.mockRestore();
     });
   });
 });
