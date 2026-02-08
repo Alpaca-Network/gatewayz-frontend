@@ -12,7 +12,7 @@ index 417fe9f..401b7d2 100644
  // Initialize submodules (done automatically on clone)
  await initializeSubmodules({ session });
 diff --git a/packages/sandbox/src/commands/git-submodules.test.ts b/packages/sandbox/src/commands/git-submodules.test.ts
-index dd88180..652e256 100644
+index dd88180..6ba37f9 100644
 --- a/packages/sandbox/src/commands/git-submodules.test.ts
 +++ b/packages/sandbox/src/commands/git-submodules.test.ts
 @@ -67,30 +67,66 @@ describe("git-submodules", () => {
@@ -185,7 +185,7 @@ index dd88180..652e256 100644
    });
  
    describe("commitSubmoduleChanges", () => {
-@@ -299,10 +376,116 @@ describe("git-submodules", () => {
+@@ -299,10 +376,167 @@ describe("git-submodules", () => {
  
        expect(result).toEqual([]);
      });
@@ -295,6 +295,57 @@ index dd88180..652e256 100644
 +
 +      expect(result).toEqual(["lib/foo", "lib/baz"]);
 +    });
++
++    it("should handle individual submodule commit failure gracefully", async () => {
++      const session: ISandboxSession = {
++        sandboxId: "test-sandbox",
++        sandboxProvider: "docker" as const,
++        repoDir: "/repo",
++        homeDir: "/home/user",
++        runCommand: async (cmd: string, options?: { cwd?: string }) => {
++          if (cmd.includes("test -f .gitmodules")) return "yes";
++          if (cmd.includes("git submodule foreach")) return "lib/foo\nlib/bar";
++          if (cmd.includes("git status --porcelain")) {
++            return "M file.txt"; // Both have changes
++          }
++          if (cmd.includes("git commit")) {
++            if (options?.cwd?.includes("lib/foo")) {
++              throw new Error("Commit failed in submodule");
++            }
++            return "";
++          }
++          return "";
++        },
++        runBackgroundCommand: async () => {},
++        writeTextFile: async () => {},
++        writeFile: async () => {},
++        readTextFile: async () => "",
++        hibernate: async () => {},
++        shutdown: async () => {},
++      } as ISandboxSession;
++
++      const result = await commitSubmoduleChanges({
++        session,
++        commitMessage: "Test commit",
++      });
++
++      // lib/foo failed, lib/bar succeeded
++      expect(result).toEqual(["lib/bar"]);
++    });
++
++    it("should return empty array when foreach command fails", async () => {
++      const session = createMockSession({
++        "test -f .gitmodules": "yes",
++        "git submodule foreach": new Error("foreach failed"),
++      });
++
++      const result = await commitSubmoduleChanges({
++        session,
++        commitMessage: "Test commit",
++      });
++
++      expect(result).toEqual([]);
++    });
    });
  
    describe("pushSubmodules", () => {
@@ -303,7 +354,7 @@ index dd88180..652e256 100644
        const pushedSubmodules: string[] = [];
  
        const session: ISandboxSession = {
-@@ -311,7 +494,10 @@ describe("git-submodules", () => {
+@@ -311,7 +545,10 @@ describe("git-submodules", () => {
          repoDir: "/repo",
          homeDir: "/home/user",
          runCommand: async (cmd: string, options?: { cwd?: string }) => {
@@ -315,7 +366,7 @@ index dd88180..652e256 100644
              if (options?.cwd?.includes("lib/foo")) {
                pushedSubmodules.push("lib/foo");
              }
-@@ -349,14 +535,17 @@ describe("git-submodules", () => {
+@@ -349,14 +586,17 @@ describe("git-submodules", () => {
        expect(result).toEqual([]);
      });
  
@@ -335,7 +386,7 @@ index dd88180..652e256 100644
              if (options?.cwd?.includes("lib/foo")) {
                throw new Error("Push failed");
              }
-@@ -371,13 +560,51 @@ describe("git-submodules", () => {
+@@ -371,13 +611,83 @@ describe("git-submodules", () => {
          shutdown: async () => {},
        } as ISandboxSession;
  
@@ -387,6 +438,38 @@ index dd88180..652e256 100644
 +      expect(
 +        pushedCommands.some((c) => c.includes("HEAD:refs/heads/main")),
 +      ).toBe(true);
++    });
++
++    it("should use repoRoot to construct submodule cwd paths", async () => {
++      const capturedCwds: string[] = [];
++
++      const session: ISandboxSession = {
++        sandboxId: "test-sandbox",
++        sandboxProvider: "docker" as const,
++        repoDir: "/repo",
++        homeDir: "/home/user",
++        runCommand: async (cmd: string, options?: { cwd?: string }) => {
++          if (options?.cwd) capturedCwds.push(options.cwd);
++          if (cmd.includes("git symbolic-ref HEAD")) {
++            return "refs/heads/main";
++          }
++          return "";
++        },
++        runBackgroundCommand: async () => {},
++        writeTextFile: async () => {},
++        writeFile: async () => {},
++        readTextFile: async () => "",
++        hibernate: async () => {},
++        shutdown: async () => {},
++      } as ISandboxSession;
++
++      await pushSubmodules({
++        session,
++        submodulePaths: ["lib/foo"],
++        repoRoot: "/workspace/project",
++      });
++
++      expect(capturedCwds).toContain("/workspace/project/lib/foo");
      });
    });
  });
