@@ -161,7 +161,7 @@ describe("TerragonAuthPage", () => {
         "redirect_uri",
         "https://app.terragon.ai/callback"
       );
-      const { apiKey, userData } = setupAuthenticatedUser({
+      const { apiKey } = setupAuthenticatedUser({
         userId: 99,
         email: "alice@example.com",
         displayName: "Alice",
@@ -272,6 +272,23 @@ describe("TerragonAuthPage", () => {
         ).toBeInTheDocument();
       });
       expect(mockLogin).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it("should reject http:// on non-localhost domains", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "http://app.terragon.ai/callback"
+      );
+      setupAuthenticatedUser();
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Invalid callback URL/i)
+        ).toBeInTheDocument();
+      });
       expect(mockNavigate).not.toHaveBeenCalled();
     });
 
@@ -476,12 +493,12 @@ describe("TerragonAuthPage", () => {
       });
     });
 
-    it("should redirect using cached credentials on auth error fallback", async () => {
+    it("should use cached credentials fallback when auth errors", async () => {
       mockSearchParams.set(
         "redirect_uri",
         "https://app.terragon.ai/callback"
       );
-      // No cached creds initially
+      // No cached creds initially → triggers login
       mockAuthContext = createMockAuthContext({
         status: "unauthenticated",
         privyReady: true,
@@ -493,11 +510,30 @@ describe("TerragonAuthPage", () => {
         expect(mockLogin).toHaveBeenCalledTimes(1);
       });
 
-      // Auth errors but now cached creds appear in localStorage
-      setupAuthenticatedUser();
+      // Auth fails but cached credentials now exist (synced from another tab).
+      // The effect checks getApiKey() twice: once at the fast-path
+      // and once at the auth-error fallback. We need the fast-path
+      // call to return null so execution reaches the fallback.
+      const token = "iv.ciphertext.authTag.signature";
+      mockGetApiKey
+        .mockReturnValueOnce(null)           // fast-path check → skip
+        .mockReturnValue("gw_test_key_12345"); // auth-error fallback → found
+      mockGetApiKeyWithRetry.mockResolvedValue("gw_test_key_12345");
+      mockGetUserData
+        .mockReturnValueOnce(null)           // fast-path check → skip
+        .mockReturnValue({
+          user_id: 42,
+          email: "test@example.com",
+          display_name: "TestUser",
+          tier: "pro",
+        });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ token }),
+      });
       mockAuthContext = createMockAuthContext({
         status: "error",
-        error: "auth failed",
+        error: "some auth error",
       });
       rerender(<TerragonAuthPage />);
 
@@ -593,7 +629,7 @@ describe("TerragonAuthPage", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/Auth endpoint returned an empty token/i)
+          screen.getByText(/empty auth token/i)
         ).toBeInTheDocument();
       });
       expect(mockNavigate).not.toHaveBeenCalled();
@@ -621,7 +657,35 @@ describe("TerragonAuthPage", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/Auth endpoint returned an empty token/i)
+          screen.getByText(/empty auth token/i)
+        ).toBeInTheDocument();
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it("should show error when API returns whitespace-only token", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://app.terragon.ai/callback"
+      );
+      mockGetApiKey.mockReturnValue("key");
+      mockGetApiKeyWithRetry.mockResolvedValue("key");
+      mockGetUserData.mockReturnValue({
+        user_id: 1,
+        email: "a@b.com",
+        display_name: "A",
+        tier: "free",
+      });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ token: "   " }),
+      });
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/empty auth token/i)
         ).toBeInTheDocument();
       });
       expect(mockNavigate).not.toHaveBeenCalled();
@@ -823,7 +887,7 @@ describe("TerragonAuthPage", () => {
   // ============================
 
   describe("abort on unmount", () => {
-    it("should abort in-flight fetch and not update state after unmount", async () => {
+    it("should abort in-flight fetch and not crash on unmount", async () => {
       mockSearchParams.set(
         "redirect_uri",
         "https://app.terragon.ai/callback"
@@ -837,7 +901,7 @@ describe("TerragonAuthPage", () => {
         tier: "free",
       });
 
-      // High-fidelity abort mock: reject with DOMException when signal fires
+      // Mock fetch that rejects with AbortError when the signal fires
       mockFetch.mockImplementation(
         (_url: string, init?: RequestInit) =>
           new Promise((_resolve, reject) => {

@@ -39,8 +39,8 @@ const STATIC_ALLOWED_DOMAINS = [
  * Build the full allow-list by merging the static list with any
  * domains provided via NEXT_PUBLIC_TERRAGON_CALLBACK_URLS (comma-separated).
  *
- * NOTE: The env var is inlined at build time by Next.js. Changes to it
- * require a rebuild to take effect — it cannot be reconfigured at runtime.
+ * Kept as a function (not module-level const) so tests can set the
+ * env variable per-test without needing module reloads.
  */
 function getAllowedDomains(): string[] {
   const envUrls = process.env.NEXT_PUBLIC_TERRAGON_CALLBACK_URLS ?? "";
@@ -49,7 +49,6 @@ function getAllowedDomains(): string[] {
     .map((s) => s.trim())
     .filter(Boolean)
     .flatMap((entry) => {
-      // Support both bare hostnames and full URLs
       try {
         return [new URL(entry).hostname.toLowerCase()];
       } catch {
@@ -63,15 +62,22 @@ function getAllowedDomains(): string[] {
 /**
  * Validates that a callback URL is from an allowed domain.
  * Prevents open redirect vulnerabilities.
+ * Requires HTTPS for non-localhost callbacks to prevent token leakage.
  */
 function isAllowedCallbackUrl(url: string): boolean {
   try {
     const parsedUrl = new URL(url);
     const hostname = parsedUrl.hostname.toLowerCase();
-    const allowed = getAllowedDomains();
+    const protocol = parsedUrl.protocol;
+
+    // Require HTTPS for non-localhost callbacks to prevent token leakage
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+    if (!isLocalhost && protocol !== "https:") {
+      return false;
+    }
 
     return (
-      allowed.includes(hostname) ||
+      getAllowedDomains().includes(hostname) ||
       hostname.endsWith(".terragon.ai") ||
       hostname.endsWith(".gatewayz.ai")
     );
@@ -195,9 +201,9 @@ function TerragonAuthBridge() {
 
         const { token } = await response.json();
 
-        if (!token) {
+        if (!token || !token.trim()) {
           throw new Error(
-            "Auth endpoint returned an empty token. Please try again."
+            "Server returned an empty auth token. Please try again."
           );
         }
 
@@ -406,6 +412,10 @@ function TerragonAuthBridge() {
   );
 }
 
+/**
+ * Auth bridge page for Terragon integration.
+ * Wrapped in Suspense because useSearchParams requires it in Next.js 15.
+ */
 export default function TerragonAuthPage() {
   return (
     <Suspense
