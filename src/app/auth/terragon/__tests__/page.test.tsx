@@ -350,6 +350,31 @@ describe("TerragonAuthPage", () => {
       });
     });
 
+    it("should accept bare hostnames (not URLs) in NEXT_PUBLIC_TERRAGON_CALLBACK_URLS", async () => {
+      const originalEnv = process.env.NEXT_PUBLIC_TERRAGON_CALLBACK_URLS;
+      process.env.NEXT_PUBLIC_TERRAGON_CALLBACK_URLS = "bare-hostname.example.com";
+
+      try {
+        mockSearchParams.set(
+          "redirect_uri",
+          "https://bare-hostname.example.com/callback"
+        );
+        setupAuthenticatedUser();
+
+        render(<TerragonAuthPage />);
+
+        await waitFor(() => {
+          expect(mockNavigate).toHaveBeenCalledTimes(1);
+        });
+      } finally {
+        if (originalEnv === undefined) {
+          delete process.env.NEXT_PUBLIC_TERRAGON_CALLBACK_URLS;
+        } else {
+          process.env.NEXT_PUBLIC_TERRAGON_CALLBACK_URLS = originalEnv;
+        }
+      }
+    });
+
     it("should accept domains from NEXT_PUBLIC_TERRAGON_CALLBACK_URLS env", async () => {
       const originalEnv = process.env.NEXT_PUBLIC_TERRAGON_CALLBACK_URLS;
       process.env.NEXT_PUBLIC_TERRAGON_CALLBACK_URLS =
@@ -431,6 +456,54 @@ describe("TerragonAuthPage", () => {
         expect(screen.getByText(/Connecting/i)).toBeInTheDocument();
       });
       expect(mockLogin).not.toHaveBeenCalled();
+    });
+
+    it("should show loading state when auth is idle and login not yet triggered", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://app.terragon.ai/callback"
+      );
+      // Auth context in idle state (isLoading=true), no login triggered yet
+      mockAuthContext = createMockAuthContext({
+        status: "idle",
+        privyReady: true,
+      });
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Connecting/i)).toBeInTheDocument();
+      });
+    });
+
+    it("should redirect using cached credentials on auth error fallback", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://app.terragon.ai/callback"
+      );
+      // No cached creds initially
+      mockAuthContext = createMockAuthContext({
+        status: "unauthenticated",
+        privyReady: true,
+      });
+
+      const { rerender } = render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalledTimes(1);
+      });
+
+      // Auth errors but now cached creds appear in localStorage
+      setupAuthenticatedUser();
+      mockAuthContext = createMockAuthContext({
+        status: "error",
+        error: "auth failed",
+      });
+      rerender(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
+      });
     });
 
     it("should redirect after auth context becomes authenticated", async () => {
@@ -691,6 +764,35 @@ describe("TerragonAuthPage", () => {
           screen.getByText(/Authentication is taking too long/i)
         ).toBeInTheDocument();
       });
+    });
+
+    it("should show timeout error if wall-clock expired before login triggers", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://app.terragon.ai/callback"
+      );
+      // Privy not ready initially
+      mockAuthContext = createMockAuthContext({ privyReady: false });
+
+      render(<TerragonAuthPage />);
+
+      // Advance past the 30s timeout
+      act(() => {
+        jest.advanceTimersByTime(30_001);
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Authentication is taking too long/i)
+        ).toBeInTheDocument();
+      });
+
+      // Now Privy becomes ready — should NOT trigger login because timeout already fired
+      mockAuthContext = createMockAuthContext({
+        status: "unauthenticated",
+        privyReady: true,
+      });
+      expect(mockLogin).not.toHaveBeenCalled();
     });
 
     it("should not timeout if already redirecting", async () => {
