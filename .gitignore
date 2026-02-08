@@ -64,3 +64,6 @@ src-tauri/Cargo.lock
 src-tauri/gen/
 # Desktop build temporary files
 .desktop-build-backup
+
+# Build health reports (generated)
+/reports
