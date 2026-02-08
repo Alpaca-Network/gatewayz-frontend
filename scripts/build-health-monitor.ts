@@ -394,6 +394,11 @@ function checkConfigIssues(): HealthIssue[] {
 
 // ── Report Generation ────────────────────────────────────────────────────────
 
+/** Write progress to stderr so stdout stays clean for JSON mode */
+function progress(msg: string): void {
+  process.stderr.write(msg + '\n');
+}
+
 function generateReport(): HealthReport {
   const pkg = readPkg();
 
@@ -402,27 +407,27 @@ function generateReport(): HealthReport {
   try { nodeVersion = run('node --version').trim(); } catch {}
   try { pnpmVersion = run('pnpm --version').trim(); } catch {}
 
-  console.log(`${C.cyan}${C.bold}Build Health Monitor${C.reset}`);
-  console.log(`${C.dim}Scanning ${pkg.name}@${pkg.version}...${C.reset}\n`);
+  progress(`${C.cyan}${C.bold}Build Health Monitor${C.reset}`);
+  progress(`${C.dim}Scanning ${pkg.name}@${pkg.version}...${C.reset}\n`);
 
   // Run all checks
-  console.log(`${C.dim}  [1/6] TypeScript typecheck...${C.reset}`);
+  progress(`${C.dim}  [1/6] TypeScript typecheck...${C.reset}`);
   const tc = checkTypecheck();
 
-  console.log(`${C.dim}  [2/6] Security audit...${C.reset}`);
+  progress(`${C.dim}  [2/6] Security audit...${C.reset}`);
   const secIssues = checkSecurityAudit();
 
-  console.log(`${C.dim}  [3/6] Deprecated packages...${C.reset}`);
+  progress(`${C.dim}  [3/6] Deprecated packages...${C.reset}`);
   const depIssues = checkDeprecated();
 
-  console.log(`${C.dim}  [4/6] Major version drift...${C.reset}`);
+  progress(`${C.dim}  [4/6] Major version drift...${C.reset}`);
   const driftIssues = checkMajorVersionDrift();
 
-  console.log(`${C.dim}  [5/6] Sentry config...${C.reset}`);
+  progress(`${C.dim}  [5/6] Sentry config...${C.reset}`);
   const sentryIssues = checkSentryDeprecations();
   const nextjsIssues = checkNextjsSecurity();
 
-  console.log(`${C.dim}  [6/6] Build config...${C.reset}`);
+  progress(`${C.dim}  [6/6] Build config...${C.reset}`);
   const configIssues = checkConfigIssues();
 
   const allIssues = [
