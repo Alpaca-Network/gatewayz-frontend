@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { getApiKey, getUserData, getApiKeyWithRetry } from "@/lib/api";
+import { navigateTo } from "./navigate";
 
 /**
  * Session storage key used to signal that an auth bridge flow is active.
@@ -17,10 +18,13 @@ const AUTH_BRIDGE_FLAG_KEY = "auth_bridge_active";
 const AUTH_TIMEOUT_MS = 30_000;
 
 /**
- * Allowed callback URL domains for security.
- * Only these domains can receive auth tokens via redirect.
+ * Static allow-list of callback URL domains.
+ *
+ * Extended at build time via NEXT_PUBLIC_TERRAGON_CALLBACK_URLS.
+ * NOTE: NEXT_PUBLIC_ variables are inlined at build time by Next.js,
+ * so changing the env var requires a rebuild to take effect.
  */
-const ALLOWED_CALLBACK_DOMAINS = [
+const STATIC_ALLOWED_DOMAINS = [
   "terragon.ai",
   "www.terragon.ai",
   "app.terragon.ai",
@@ -32,6 +36,31 @@ const ALLOWED_CALLBACK_DOMAINS = [
 ];
 
 /**
+ * Build the full allow-list by merging the static list with any
+ * domains provided via NEXT_PUBLIC_TERRAGON_CALLBACK_URLS (comma-separated).
+ *
+ * NOTE: The env var is inlined at build time by Next.js. Changes to it
+ * require a rebuild to take effect — it cannot be reconfigured at runtime.
+ */
+function getAllowedDomains(): string[] {
+  const envUrls = process.env.NEXT_PUBLIC_TERRAGON_CALLBACK_URLS ?? "";
+  const envDomains = envUrls
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .flatMap((entry) => {
+      // Support both bare hostnames and full URLs
+      try {
+        return [new URL(entry).hostname.toLowerCase()];
+      } catch {
+        return [entry.toLowerCase()];
+      }
+    });
+
+  return [...STATIC_ALLOWED_DOMAINS, ...envDomains];
+}
+
+/**
  * Validates that a callback URL is from an allowed domain.
  * Prevents open redirect vulnerabilities.
  */
@@ -39,10 +68,13 @@ function isAllowedCallbackUrl(url: string): boolean {
   try {
     const parsedUrl = new URL(url);
     const hostname = parsedUrl.hostname.toLowerCase();
+    const allowed = getAllowedDomains();
 
-    return ALLOWED_CALLBACK_DOMAINS.includes(hostname) ||
-           hostname.endsWith(".terragon.ai") ||
-           hostname.endsWith(".gatewayz.ai");
+    return (
+      allowed.includes(hostname) ||
+      hostname.endsWith(".terragon.ai") ||
+      hostname.endsWith(".gatewayz.ai")
+    );
   } catch {
     return false;
   }
@@ -50,7 +82,7 @@ function isAllowedCallbackUrl(url: string): boolean {
 
 type PageStatus = "loading" | "authenticating" | "redirecting" | "error";
 
-/** Maximum number of token-generation attempts (fast path + error fallback) */
+/** Maximum number of token-generation attempts */
 const MAX_TOKEN_RETRIES = 2;
 
 /** Maximum number of auth error → re-login cycles before giving up */
@@ -59,21 +91,12 @@ const MAX_AUTH_RETRIES = 2;
 /**
  * Inner component that handles the auth bridge logic.
  * Separated from the page export so useSearchParams is inside a Suspense boundary.
- *
- * Flow:
- * 1. Terragon redirects user here with a redirect_uri (or callback) URL
- * 2. FAST PATH: if cached credentials exist in localStorage, skip Privy entirely
- * 3. SLOW PATH: trigger Privy login, wait for backend sync
- * 4. Generate encrypted gwauth token via /api/terragon/auth
- * 5. Redirect back to Terragon with the token appended
  */
 function TerragonAuthBridge() {
   const searchParams = useSearchParams();
-  // Support both "callback" and "redirect_uri" parameters
-  const callback = searchParams.get("callback") || searchParams.get("redirect_uri");
+  const callback =
+    searchParams.get("callback") || searchParams.get("redirect_uri");
 
-  // Use the auth context directly (not the useAuth wrapper) so we can
-  // read status/error and detect failures the wrapper hides.
   const { status: authStatus, login, privyReady } = useGatewayzAuth();
 
   const [status, setStatus] = useState<PageStatus>("loading");
@@ -86,7 +109,6 @@ function TerragonAuthBridge() {
   const mountTimeRef = useRef(Date.now());
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Keep statusRef in sync so the timeout callback reads the latest value
   const updateStatus = useCallback((newStatus: PageStatus) => {
     statusRef.current = newStatus;
     setStatus(newStatus);
@@ -96,7 +118,7 @@ function TerragonAuthBridge() {
   const isAuthError = authStatus === "error";
   const isLoading = authStatus === "idle" || authStatus === "authenticating";
 
-  // Clean up auth bridge flag and abort in-flight requests on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       abortControllerRef.current?.abort();
@@ -108,15 +130,14 @@ function TerragonAuthBridge() {
     };
   }, []);
 
-  // Wall-clock timeout: fires once based on mount time, not restarted on status changes.
-  // Uses statusRef to avoid stale closure.
+  // Wall-clock timeout — fires once, not restarted on status changes
   useEffect(() => {
     const remaining = AUTH_TIMEOUT_MS - (Date.now() - mountTimeRef.current);
     if (remaining <= 0) return;
 
     const timer = setTimeout(() => {
-      const currentStatus = statusRef.current;
-      if (currentStatus === "loading" || currentStatus === "authenticating") {
+      const s = statusRef.current;
+      if (s === "loading" || s === "authenticating") {
         console.error("[TerragonAuth] Timed out waiting for authentication");
         updateStatus("error");
         setErrorMessage("Authentication is taking too long. Please try again.");
@@ -125,177 +146,177 @@ function TerragonAuthBridge() {
     return () => clearTimeout(timer);
   }, [updateStatus]);
 
-  const generateTokenAndRedirect = useCallback(async (callbackUrl: string) => {
-    if (tokenGenerationStartedRef.current) return;
+  // Generate token and redirect back to Terragon
+  const generateTokenAndRedirect = useCallback(
+    async (callbackUrl: string) => {
+      if (tokenGenerationStartedRef.current) return;
+      if (tokenRetryCountRef.current >= MAX_TOKEN_RETRIES) return;
+      tokenGenerationStartedRef.current = true;
 
-    // Bail if retries are exhausted — prevents infinite retry loops
-    if (tokenRetryCountRef.current >= MAX_TOKEN_RETRIES) return;
+      abortControllerRef.current?.abort();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-    tokenGenerationStartedRef.current = true;
+      updateStatus("redirecting");
 
-    // Abort any previous in-flight request
-    abortControllerRef.current?.abort();
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
-
-    updateStatus("redirecting");
-
-    try {
-      // Use retry logic since localStorage may not have synced yet after fresh login
-      const apiKey = await getApiKeyWithRetry(5);
-      const userData = getUserData();
-
-      if (!apiKey) {
-        throw new Error("No API key available. Please try again.");
-      }
-
-      if (!userData?.email) {
-        throw new Error("User data not available. Please try again.");
-      }
-
-      // Call the Terragon auth API to generate an encrypted gwauth token
-      const response = await fetch("/api/terragon/auth", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          userId: userData.user_id,
-          email: userData.email,
-          username: userData.display_name || userData.email.split("@")[0],
-          tier: userData.tier || "free",
-        }),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to generate auth token: ${response.status}`);
-      }
-
-      const { token } = await response.json();
-
-      // Clean up the bridge flag before redirecting
       try {
-        sessionStorage.removeItem(AUTH_BRIDGE_FLAG_KEY);
-      } catch {
-        // ignore
+        const apiKey = await getApiKeyWithRetry(5);
+        const userData = getUserData();
+
+        if (!apiKey) {
+          throw new Error("No API key available. Please try again.");
+        }
+        if (!userData?.email) {
+          throw new Error("User data not available. Please try again.");
+        }
+
+        const response = await fetch("/api/terragon/auth", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            userId: userData.user_id,
+            email: userData.email,
+            username: userData.display_name || userData.email.split("@")[0],
+            tier: userData.tier || "free",
+          }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            errorData.error ||
+              `Failed to generate auth token: ${response.status}`
+          );
+        }
+
+        const { token } = await response.json();
+
+        if (!token) {
+          throw new Error(
+            "Auth endpoint returned an empty token. Please try again."
+          );
+        }
+
+        // Clean up bridge flag before redirecting
+        try {
+          sessionStorage.removeItem(AUTH_BRIDGE_FLAG_KEY);
+        } catch {
+          // ignore
+        }
+
+        // Build redirect URL and navigate
+        const redirectUrl = new URL(callbackUrl);
+        redirectUrl.searchParams.set("gwauth", token);
+        navigateTo(redirectUrl.toString());
+      } catch (error) {
+        if (controller.signal.aborted) return;
+
+        console.error("[TerragonAuth] Error generating token:", error);
+        tokenRetryCountRef.current += 1;
+        tokenGenerationStartedRef.current = false;
+        updateStatus("error");
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to authenticate. Please try again."
+        );
       }
-
-      // Redirect back to Terragon with the gwauth token.
-      // URL.searchParams.set handles ?/& correctly even when
-      // redirect_uri already contains query parameters.
-      const redirectUrl = new URL(callbackUrl);
-      redirectUrl.searchParams.set("gwauth", token);
-      window.location.href = redirectUrl.toString();
-    } catch (error) {
-      // Don't update state if the request was aborted (component unmounted)
-      if (controller.signal.aborted) return;
-
-      console.error("[TerragonAuth] Error generating token:", error);
-      tokenRetryCountRef.current += 1;
-      // Always unlock so the effect can re-trigger if conditions change.
-      // The retry counter guard at the top prevents infinite loops.
-      tokenGenerationStartedRef.current = false;
-      updateStatus("error");
-      setErrorMessage(error instanceof Error ? error.message : "Failed to authenticate. Please try again.");
-    }
-  }, [updateStatus]);
+    },
+    [updateStatus]
+  );
 
   // Main auth effect
   useEffect(() => {
-    // Validate callback URL
     if (!callback) {
       updateStatus("error");
-      setErrorMessage("Missing callback URL. Please try logging in from Terragon again.");
+      setErrorMessage(
+        "Missing callback URL. Please try logging in from Terragon again."
+      );
       return;
     }
 
     if (!isAllowedCallbackUrl(callback)) {
       updateStatus("error");
-      setErrorMessage("Invalid callback URL. Please try logging in from Terragon again.");
+      setErrorMessage(
+        "Invalid callback URL. Please try logging in from Terragon again."
+      );
       return;
     }
 
-    // FAST PATH: If we already have cached credentials in localStorage,
-    // skip waiting for Privy/auth context and generate the token immediately.
-    // This handles the common case where the user has already logged in before
-    // and avoids the Privy "Signing in..." reconnect delay.
+    // FAST PATH: cached credentials in localStorage
     const cachedApiKey = getApiKey();
     const cachedUserData = getUserData();
     if (cachedApiKey && cachedUserData?.email) {
-      console.log("[TerragonAuth] Fast path: found cached credentials, generating token");
+      console.log(
+        "[TerragonAuth] Fast path: found cached credentials, generating token"
+      );
       generateTokenAndRedirect(callback);
       return;
     }
 
-    // SLOW PATH: No cached credentials, need to authenticate via Privy
+    // SLOW PATH: authenticate via Privy
 
-    // Wait for Privy SDK to initialize
     if (!privyReady) {
       updateStatus("loading");
       return;
     }
 
-    // User is authenticated via context — generate token
     if (isAuthenticated) {
       generateTokenAndRedirect(callback);
       return;
     }
 
-    // Auth context errored — if credentials appeared in localStorage during
-    // the failed sync (e.g. from a previous session), try the fast path again
+    // Auth errored — try localStorage fallback
     if (isAuthError) {
       const retryApiKey = getApiKey();
       const retryUserData = getUserData();
       if (retryApiKey && retryUserData?.email) {
-        console.log("[TerragonAuth] Auth error but found cached credentials, generating token");
+        console.log(
+          "[TerragonAuth] Auth error but found cached credentials, generating token"
+        );
         generateTokenAndRedirect(callback);
         return;
       }
 
-      // No cached credentials either — check if we've exhausted auth retries
       if (authRetryCountRef.current >= MAX_AUTH_RETRIES) {
         console.error("[TerragonAuth] Auth retries exhausted, giving up");
         updateStatus("error");
-        setErrorMessage("Unable to authenticate after multiple attempts. Please try again.");
+        setErrorMessage(
+          "Unable to authenticate after multiple attempts. Please try again."
+        );
         return;
       }
 
-      // Allow re-login attempt
       authRetryCountRef.current += 1;
       loginTriggeredRef.current = false;
     }
 
-    // Still loading auth state (backend sync in progress)
     if (isLoading && loginTriggeredRef.current) {
       updateStatus("authenticating");
       return;
     }
 
     // Check wall-clock timeout before triggering login
-    const elapsed = Date.now() - mountTimeRef.current;
-    if (elapsed >= AUTH_TIMEOUT_MS) {
+    if (Date.now() - mountTimeRef.current >= AUTH_TIMEOUT_MS) {
       updateStatus("error");
       setErrorMessage("Authentication is taking too long. Please try again.");
       return;
     }
 
     if (isLoading && !loginTriggeredRef.current) {
-      // Auth context is still initializing (idle/syncing) but we didn't trigger it
       updateStatus("loading");
       return;
     }
 
-    // Not authenticated — trigger Privy login
+    // Trigger Privy login
     if (!loginTriggeredRef.current) {
       loginTriggeredRef.current = true;
       updateStatus("authenticating");
 
-      // Set the auth bridge flag BEFORE triggering login.
-      // The auth context checks this flag and skips the onboarding
-      // redirect for new users, letting this page handle the redirect.
       try {
         sessionStorage.setItem(AUTH_BRIDGE_FLAG_KEY, "terragon");
       } catch {
@@ -304,7 +325,16 @@ function TerragonAuthBridge() {
 
       login();
     }
-  }, [callback, isAuthenticated, isLoading, isAuthError, login, privyReady, generateTokenAndRedirect, updateStatus]);
+  }, [
+    callback,
+    isAuthenticated,
+    isLoading,
+    isAuthError,
+    login,
+    privyReady,
+    generateTokenAndRedirect,
+    updateStatus,
+  ]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -376,10 +406,6 @@ function TerragonAuthBridge() {
   );
 }
 
-/**
- * Auth bridge page for Terragon integration.
- * Wrapped in Suspense because useSearchParams requires it in Next.js 15.
- */
 export default function TerragonAuthPage() {
   return (
     <Suspense
