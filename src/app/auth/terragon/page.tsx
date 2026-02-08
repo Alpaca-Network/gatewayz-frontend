@@ -3,8 +3,8 @@
 import { Suspense, useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "@/hooks/use-auth";
-import { getApiKeyWithRetry, getUserData } from "@/lib/api";
+import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
+import { getApiKey, getUserData, getApiKeyWithRetry } from "@/lib/api";
 
 /**
  * Session storage key used to signal that an auth bridge flow is active.
@@ -12,6 +12,9 @@ import { getApiKeyWithRetry, getUserData } from "@/lib/api";
  * page can complete its token generation and redirect back to the caller.
  */
 const AUTH_BRIDGE_FLAG_KEY = "auth_bridge_active";
+
+/** How long to wait for auth before showing an error (ms) */
+const AUTH_TIMEOUT_MS = 30_000;
 
 /**
  * Allowed callback URL domains for security.
@@ -45,30 +48,58 @@ function isAllowedCallbackUrl(url: string): boolean {
   }
 }
 
+type PageStatus = "loading" | "authenticating" | "redirecting" | "error";
+
+/** Maximum number of token-generation attempts (fast path + error fallback) */
+const MAX_TOKEN_RETRIES = 2;
+
+/** Maximum number of auth error → re-login cycles before giving up */
+const MAX_AUTH_RETRIES = 2;
+
 /**
  * Inner component that handles the auth bridge logic.
  * Separated from the page export so useSearchParams is inside a Suspense boundary.
  *
  * Flow:
  * 1. Terragon redirects user here with a redirect_uri (or callback) URL
- * 2. If user is not logged in, trigger Privy login
- * 3. Once authenticated, call /api/terragon/auth to generate an encrypted gwauth token
- * 4. Redirect back to Terragon with the token appended to redirect_uri
+ * 2. FAST PATH: if cached credentials exist in localStorage, skip Privy entirely
+ * 3. SLOW PATH: trigger Privy login, wait for backend sync
+ * 4. Generate encrypted gwauth token via /api/terragon/auth
+ * 5. Redirect back to Terragon with the token appended
  */
 function TerragonAuthBridge() {
   const searchParams = useSearchParams();
   // Support both "callback" and "redirect_uri" parameters
   const callback = searchParams.get("callback") || searchParams.get("redirect_uri");
-  const { isAuthenticated, loading, login, privyReady } = useAuth();
-  const [status, setStatus] = useState<"loading" | "authenticating" | "redirecting" | "error">("loading");
+
+  // Use the auth context directly (not the useAuth wrapper) so we can
+  // read status/error and detect failures the wrapper hides.
+  const { status: authStatus, login, privyReady } = useGatewayzAuth();
+
+  const [status, setStatus] = useState<PageStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const loginTriggeredRef = useRef(false);
   const tokenGenerationStartedRef = useRef(false);
+  const tokenRetryCountRef = useRef(0);
+  const authRetryCountRef = useRef(0);
+  const statusRef = useRef<PageStatus>("loading");
+  const mountTimeRef = useRef(Date.now());
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Clean up the auth bridge flag when the component unmounts
-  // (e.g., if the user navigates away without completing the flow)
+  // Keep statusRef in sync so the timeout callback reads the latest value
+  const updateStatus = useCallback((newStatus: PageStatus) => {
+    statusRef.current = newStatus;
+    setStatus(newStatus);
+  }, []);
+
+  const isAuthenticated = authStatus === "authenticated";
+  const isAuthError = authStatus === "error";
+  const isLoading = authStatus === "idle" || authStatus === "authenticating";
+
+  // Clean up auth bridge flag and abort in-flight requests on unmount
   useEffect(() => {
     return () => {
+      abortControllerRef.current?.abort();
       try {
         sessionStorage.removeItem(AUTH_BRIDGE_FLAG_KEY);
       } catch {
@@ -77,20 +108,37 @@ function TerragonAuthBridge() {
     };
   }, []);
 
-  // Reset the login guard if the user dismissed the Privy modal
-  // (isAuthenticated is false, loading is false, but loginTriggeredRef is true)
+  // Wall-clock timeout: fires once based on mount time, not restarted on status changes.
+  // Uses statusRef to avoid stale closure.
   useEffect(() => {
-    if (loginTriggeredRef.current && !isAuthenticated && !loading && privyReady) {
-      // The user may have dismissed the modal — allow re-triggering
-      loginTriggeredRef.current = false;
-    }
-  }, [isAuthenticated, loading, privyReady]);
+    const remaining = AUTH_TIMEOUT_MS - (Date.now() - mountTimeRef.current);
+    if (remaining <= 0) return;
+
+    const timer = setTimeout(() => {
+      const currentStatus = statusRef.current;
+      if (currentStatus === "loading" || currentStatus === "authenticating") {
+        console.error("[TerragonAuth] Timed out waiting for authentication");
+        updateStatus("error");
+        setErrorMessage("Authentication is taking too long. Please try again.");
+      }
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [updateStatus]);
 
   const generateTokenAndRedirect = useCallback(async (callbackUrl: string) => {
     if (tokenGenerationStartedRef.current) return;
+
+    // Bail if retries are exhausted — prevents infinite retry loops
+    if (tokenRetryCountRef.current >= MAX_TOKEN_RETRIES) return;
+
     tokenGenerationStartedRef.current = true;
 
-    setStatus("redirecting");
+    // Abort any previous in-flight request
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    updateStatus("redirecting");
 
     try {
       // Use retry logic since localStorage may not have synced yet after fresh login
@@ -118,6 +166,7 @@ function TerragonAuthBridge() {
           username: userData.display_name || userData.email.split("@")[0],
           tier: userData.tier || "free",
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -135,74 +184,127 @@ function TerragonAuthBridge() {
       }
 
       // Redirect back to Terragon with the gwauth token.
-      // Using URL.searchParams.set handles ?/& correctly even when
+      // URL.searchParams.set handles ?/& correctly even when
       // redirect_uri already contains query parameters.
       const redirectUrl = new URL(callbackUrl);
       redirectUrl.searchParams.set("gwauth", token);
       window.location.href = redirectUrl.toString();
     } catch (error) {
+      // Don't update state if the request was aborted (component unmounted)
+      if (controller.signal.aborted) return;
+
       console.error("[TerragonAuth] Error generating token:", error);
+      tokenRetryCountRef.current += 1;
+      // Always unlock so the effect can re-trigger if conditions change.
+      // The retry counter guard at the top prevents infinite loops.
       tokenGenerationStartedRef.current = false;
-      setStatus("error");
+      updateStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "Failed to authenticate. Please try again.");
     }
-  }, []);
+  }, [updateStatus]);
 
+  // Main auth effect
   useEffect(() => {
     // Validate callback URL
     if (!callback) {
-      setStatus("error");
+      updateStatus("error");
       setErrorMessage("Missing callback URL. Please try logging in from Terragon again.");
       return;
     }
 
     if (!isAllowedCallbackUrl(callback)) {
-      setStatus("error");
+      updateStatus("error");
       setErrorMessage("Invalid callback URL. Please try logging in from Terragon again.");
       return;
     }
 
-    // Wait for Privy SDK to initialize
-    if (!privyReady) {
-      setStatus("loading");
-      return;
-    }
-
-    // User is authenticated — generate token and redirect
-    if (isAuthenticated && !loading) {
+    // FAST PATH: If we already have cached credentials in localStorage,
+    // skip waiting for Privy/auth context and generate the token immediately.
+    // This handles the common case where the user has already logged in before
+    // and avoids the Privy "Signing in..." reconnect delay.
+    const cachedApiKey = getApiKey();
+    const cachedUserData = getUserData();
+    if (cachedApiKey && cachedUserData?.email) {
+      console.log("[TerragonAuth] Fast path: found cached credentials, generating token");
       generateTokenAndRedirect(callback);
       return;
     }
 
-    // Still loading auth state (e.g., backend sync in progress)
-    if (loading) {
-      if (loginTriggeredRef.current) {
-        setStatus("authenticating");
-      } else {
-        setStatus("loading");
-      }
+    // SLOW PATH: No cached credentials, need to authenticate via Privy
+
+    // Wait for Privy SDK to initialize
+    if (!privyReady) {
+      updateStatus("loading");
       return;
     }
 
-    // Not authenticated and not loading — trigger Privy login
-    if (!isAuthenticated && !loading) {
-      if (!loginTriggeredRef.current) {
-        loginTriggeredRef.current = true;
-        setStatus("authenticating");
-
-        // Set the auth bridge flag BEFORE triggering login.
-        // The auth context checks this flag and skips the onboarding
-        // redirect for new users, letting this page handle the redirect.
-        try {
-          sessionStorage.setItem(AUTH_BRIDGE_FLAG_KEY, "terragon");
-        } catch {
-          // sessionStorage may not be available
-        }
-
-        login();
-      }
+    // User is authenticated via context — generate token
+    if (isAuthenticated) {
+      generateTokenAndRedirect(callback);
+      return;
     }
-  }, [callback, isAuthenticated, loading, login, privyReady, generateTokenAndRedirect]);
+
+    // Auth context errored — if credentials appeared in localStorage during
+    // the failed sync (e.g. from a previous session), try the fast path again
+    if (isAuthError) {
+      const retryApiKey = getApiKey();
+      const retryUserData = getUserData();
+      if (retryApiKey && retryUserData?.email) {
+        console.log("[TerragonAuth] Auth error but found cached credentials, generating token");
+        generateTokenAndRedirect(callback);
+        return;
+      }
+
+      // No cached credentials either — check if we've exhausted auth retries
+      if (authRetryCountRef.current >= MAX_AUTH_RETRIES) {
+        console.error("[TerragonAuth] Auth retries exhausted, giving up");
+        updateStatus("error");
+        setErrorMessage("Unable to authenticate after multiple attempts. Please try again.");
+        return;
+      }
+
+      // Allow re-login attempt
+      authRetryCountRef.current += 1;
+      loginTriggeredRef.current = false;
+    }
+
+    // Still loading auth state (backend sync in progress)
+    if (isLoading && loginTriggeredRef.current) {
+      updateStatus("authenticating");
+      return;
+    }
+
+    // Check wall-clock timeout before triggering login
+    const elapsed = Date.now() - mountTimeRef.current;
+    if (elapsed >= AUTH_TIMEOUT_MS) {
+      updateStatus("error");
+      setErrorMessage("Authentication is taking too long. Please try again.");
+      return;
+    }
+
+    if (isLoading && !loginTriggeredRef.current) {
+      // Auth context is still initializing (idle/syncing) but we didn't trigger it
+      updateStatus("loading");
+      return;
+    }
+
+    // Not authenticated — trigger Privy login
+    if (!loginTriggeredRef.current) {
+      loginTriggeredRef.current = true;
+      updateStatus("authenticating");
+
+      // Set the auth bridge flag BEFORE triggering login.
+      // The auth context checks this flag and skips the onboarding
+      // redirect for new users, letting this page handle the redirect.
+      try {
+        sessionStorage.setItem(AUTH_BRIDGE_FLAG_KEY, "terragon");
+      } catch {
+        // sessionStorage may not be available
+      }
+
+      login();
+    }
+  }, [callback, isAuthenticated, isLoading, isAuthError, login, privyReady, generateTokenAndRedirect, updateStatus]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -210,7 +312,7 @@ function TerragonAuthBridge() {
         {status === "loading" && (
           <div className="space-y-4">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
-            <p className="text-muted-foreground">Loading...</p>
+            <p className="text-muted-foreground">Connecting...</p>
           </div>
         )}
 
