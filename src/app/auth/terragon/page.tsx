@@ -127,6 +127,10 @@ function TerragonAuthBridge() {
 
   const generateTokenAndRedirect = useCallback(async (callbackUrl: string) => {
     if (tokenGenerationStartedRef.current) return;
+
+    // Bail if retries are exhausted — prevents infinite retry loops
+    if (tokenRetryCountRef.current >= MAX_TOKEN_RETRIES) return;
+
     tokenGenerationStartedRef.current = true;
 
     // Abort any previous in-flight request
@@ -191,10 +195,9 @@ function TerragonAuthBridge() {
 
       console.error("[TerragonAuth] Error generating token:", error);
       tokenRetryCountRef.current += 1;
-      // Only allow re-entry if we haven't exhausted retries
-      if (tokenRetryCountRef.current < MAX_TOKEN_RETRIES) {
-        tokenGenerationStartedRef.current = false;
-      }
+      // Always unlock so the effect can re-trigger if conditions change.
+      // The retry counter guard at the top prevents infinite loops.
+      tokenGenerationStartedRef.current = false;
       updateStatus("error");
       setErrorMessage(error instanceof Error ? error.message : "Failed to authenticate. Please try again.");
     }
