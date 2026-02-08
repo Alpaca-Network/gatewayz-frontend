@@ -19,7 +19,10 @@ const AUTH_TIMEOUT_MS = 30_000;
 
 /**
  * Static allow-list of callback URL domains.
- * Extended at runtime by NEXT_PUBLIC_TERRAGON_CALLBACK_URLS env variable.
+ *
+ * Extended at build time via NEXT_PUBLIC_TERRAGON_CALLBACK_URLS.
+ * NOTE: NEXT_PUBLIC_ variables are inlined at build time by Next.js,
+ * so changing the env var requires a rebuild to take effect.
  */
 const STATIC_ALLOWED_DOMAINS = [
   "terragon.ai",
@@ -35,6 +38,9 @@ const STATIC_ALLOWED_DOMAINS = [
 /**
  * Build the full allow-list by merging the static list with any
  * domains provided via NEXT_PUBLIC_TERRAGON_CALLBACK_URLS (comma-separated).
+ *
+ * NOTE: The env var is inlined at build time by Next.js. Changes to it
+ * require a rebuild to take effect — it cannot be reconfigured at runtime.
  */
 function getAllowedDomains(): string[] {
   const envUrls = process.env.NEXT_PUBLIC_TERRAGON_CALLBACK_URLS ?? "";
@@ -188,6 +194,12 @@ function TerragonAuthBridge() {
         }
 
         const { token } = await response.json();
+
+        if (!token) {
+          throw new Error(
+            "Auth endpoint returned an empty token. Please try again."
+          );
+        }
 
         // Clean up bridge flag before redirecting
         try {

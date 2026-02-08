@@ -190,6 +190,23 @@ describe("TerragonAuthPage", () => {
       });
     });
 
+    it("should accept 'callback' search param as an alias for redirect_uri", async () => {
+      mockSearchParams.set(
+        "callback",
+        "https://app.terragon.ai/callback"
+      );
+      const { token } = setupAuthenticatedUser();
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
+      });
+
+      const redirectUrl = new URL(mockNavigate.mock.calls[0][0]);
+      expect(redirectUrl.searchParams.get("gwauth")).toBe(token);
+    });
+
     it("should use email prefix as username when display_name is missing", async () => {
       mockSearchParams.set(
         "redirect_uri",
@@ -272,6 +289,47 @@ describe("TerragonAuthPage", () => {
         ).toBeInTheDocument();
       });
       expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it("should reject malformed URLs", async () => {
+      mockSearchParams.set("redirect_uri", "not-a-valid-url");
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Invalid callback URL/i)
+        ).toBeInTheDocument();
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it("should accept wildcard *.gatewayz.ai subdomains", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://staging.gatewayz.ai/callback"
+      );
+      setupAuthenticatedUser();
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it("should accept wildcard *.terragon.ai subdomains", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://staging.terragon.ai/callback"
+      );
+      setupAuthenticatedUser();
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledTimes(1);
+      });
     });
 
     const allowedDomains = [
@@ -440,6 +498,109 @@ describe("TerragonAuthPage", () => {
       expect(mockNavigate).not.toHaveBeenCalled();
     });
 
+    it("should show error when API returns empty token", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://app.terragon.ai/callback"
+      );
+      mockGetApiKey.mockReturnValue("key");
+      mockGetApiKeyWithRetry.mockResolvedValue("key");
+      mockGetUserData.mockReturnValue({
+        user_id: 1,
+        email: "a@b.com",
+        display_name: "A",
+        tier: "free",
+      });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ token: "" }),
+      });
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Auth endpoint returned an empty token/i)
+        ).toBeInTheDocument();
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it("should show error when API returns null token", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://app.terragon.ai/callback"
+      );
+      mockGetApiKey.mockReturnValue("key");
+      mockGetApiKeyWithRetry.mockResolvedValue("key");
+      mockGetUserData.mockReturnValue({
+        user_id: 1,
+        email: "a@b.com",
+        display_name: "A",
+        tier: "free",
+      });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Auth endpoint returned an empty token/i)
+        ).toBeInTheDocument();
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it("should show generic error when token API fails without JSON body", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://app.terragon.ai/callback"
+      );
+      mockGetApiKey.mockReturnValue("key");
+      mockGetApiKeyWithRetry.mockResolvedValue("key");
+      mockGetUserData.mockReturnValue({
+        user_id: 1,
+        email: "a@b.com",
+        display_name: "A",
+        tier: "free",
+      });
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 502,
+        json: () => Promise.reject(new Error("not json")),
+      });
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/Failed to generate auth token: 502/i)
+        ).toBeInTheDocument();
+      });
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+
+    it("should show error when user data is missing email", async () => {
+      mockSearchParams.set(
+        "redirect_uri",
+        "https://app.terragon.ai/callback"
+      );
+      mockAuthContext = createMockAuthContext({ status: "authenticated" });
+      mockGetApiKeyWithRetry.mockResolvedValue("key");
+      mockGetUserData.mockReturnValue({ user_id: 1 });
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/User data not available/i)
+        ).toBeInTheDocument();
+      });
+    });
+
     it("should show error when no API key after retries", async () => {
       mockSearchParams.set(
         "redirect_uri",
@@ -560,7 +721,7 @@ describe("TerragonAuthPage", () => {
   // ============================
 
   describe("abort on unmount", () => {
-    it("should not update state after unmount", async () => {
+    it("should abort in-flight fetch and not update state after unmount", async () => {
       mockSearchParams.set(
         "redirect_uri",
         "https://app.terragon.ai/callback"
@@ -574,11 +735,17 @@ describe("TerragonAuthPage", () => {
         tier: "free",
       });
 
-      let resolveFetch!: (v: unknown) => void;
-      mockFetch.mockReturnValue(
-        new Promise((resolve) => {
-          resolveFetch = resolve;
-        })
+      // High-fidelity abort mock: reject with DOMException when signal fires
+      mockFetch.mockImplementation(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            const signal = init?.signal;
+            if (signal) {
+              signal.addEventListener("abort", () => {
+                reject(new DOMException("The operation was aborted.", "AbortError"));
+              });
+            }
+          })
       );
 
       const { unmount } = render(<TerragonAuthPage />);
@@ -588,12 +755,8 @@ describe("TerragonAuthPage", () => {
       });
 
       unmount();
-      resolveFetch({
-        ok: true,
-        json: () => Promise.resolve({ token: "tok" }),
-      });
 
-      // No crash — abort prevented state update
+      // No crash — abort rejected the fetch and the component ignored it
     });
   });
 });
