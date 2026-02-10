@@ -171,6 +171,11 @@ describe('CSP Configuration', () => {
       it('should allow Statsig beyondwickedmapping domain', () => {
         expect(cspHeader).toContain('https://beyondwickedmapping.org');
       });
+
+      it('should allow SampleApp API connections', () => {
+        expect(cspHeader).toContain('https://api.sampleapp.ai');
+        expect(cspHeader).toContain('https://*.sampleapp.ai');
+      });
     });
 
     describe('frame-src directive', () => {
