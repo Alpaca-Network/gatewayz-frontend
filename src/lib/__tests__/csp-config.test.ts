@@ -264,5 +264,10 @@ describe('CSP Configuration', () => {
     it('should allow worker blobs', () => {
       expect(tauriCsp).toContain("worker-src 'self' blob:");
     });
+
+    it('should allow SampleApp API connections', () => {
+      expect(tauriCsp).toContain('https://api.sampleapp.ai');
+      expect(tauriCsp).toContain('https://*.sampleapp.ai');
+    });
   });
 });
