@@ -42,10 +42,21 @@ jest.mock("@/context/gatewayz-auth-context", () => ({
 const mockGetApiKey = jest.fn().mockReturnValue(null);
 const mockGetUserData = jest.fn().mockReturnValue(null);
 const mockGetApiKeyWithRetry = jest.fn().mockResolvedValue(null);
+const mockSaveApiKey = jest.fn().mockImplementation((key: string) => {
+  // Update the mock return value so getApiKey() returns the saved key
+  mockGetApiKey.mockReturnValue(key);
+  mockGetApiKeyWithRetry.mockResolvedValue(key);
+});
+const mockSaveUserData = jest.fn().mockImplementation((data: unknown) => {
+  // Update the mock return value so getUserData() returns the saved data
+  mockGetUserData.mockReturnValue(data);
+});
 jest.mock("@/lib/api", () => ({
   getApiKey: () => mockGetApiKey(),
   getUserData: () => mockGetUserData(),
   getApiKeyWithRetry: (...args: unknown[]) => mockGetApiKeyWithRetry(...args),
+  saveApiKey: (key: string) => mockSaveApiKey(key),
+  saveUserData: (data: unknown) => mockSaveUserData(data),
 }));
 
 // Mock the redirect helper so we can assert the exact URL
@@ -98,6 +109,8 @@ describe("TerragonAuthPage", () => {
     mockNavigate.mockClear();
     mockGetApiKey.mockReturnValue(null);
     mockGetUserData.mockReturnValue(null);
+    mockSaveApiKey.mockClear();
+    mockSaveUserData.mockClear();
     mockGetApiKeyWithRetry.mockResolvedValue(null);
     mockFetch.mockReset();
     mockAuthContext = createMockAuthContext();
@@ -859,6 +872,160 @@ describe("TerragonAuthPage", () => {
       unmount();
 
       // No crash — abort rejected the fetch and the component ignored it
+    });
+  });
+
+  // ============================
+  // SESSION TRANSFER
+  // ============================
+
+  describe("session transfer", () => {
+    it("should handle session transfer with token and userId URL parameters", async () => {
+      const transferToken = "gw_transfer_token_12345";
+      const transferUserId = "123";
+      const callbackUrl = "https://app.terragon.ai/callback";
+
+      mockSearchParams.set("redirect_uri", callbackUrl);
+      mockSearchParams.set("token", transferToken);
+      mockSearchParams.set("userId", transferUserId);
+
+      const userData = {
+        user_id: 123,
+        email: "transfer@example.com",
+        display_name: "Transfer User",
+        api_key: transferToken,
+        credits: 1000,
+      };
+
+      // Mock the /api/user/me call to validate the transferred token
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(userData),
+        })
+        // Mock the /api/terragon/auth call
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ token: "terragon_token_xyz" }),
+        });
+
+      render(<TerragonAuthPage />);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          "/api/user/me",
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: `Bearer ${transferToken}`,
+            }),
+          })
+        );
+      });
+
+      await waitFor(() => {
+        expect(mockSaveApiKey).toHaveBeenCalledWith(transferToken);
+        expect(mockSaveUserData).toHaveBeenCalledWith(userData);
+      });
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalledWith(
+          expect.stringContaining(callbackUrl)
+        );
+        expect(mockNavigate).toHaveBeenCalledWith(
+          expect.stringContaining("gwauth=terragon_token_xyz")
+        );
+      });
+    });
+
+    it("should fall back to normal auth if session transfer fails", async () => {
+      const transferToken = "gw_invalid_token";
+      const transferUserId = "123";
+      const callbackUrl = "https://app.terragon.ai/callback";
+
+      mockSearchParams.set("redirect_uri", callbackUrl);
+      mockSearchParams.set("token", transferToken);
+      mockSearchParams.set("userId", transferUserId);
+
+      // Mock the /api/user/me call to fail
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+      });
+
+      mockAuthContext = createMockAuthContext({
+        status: "unauthenticated",
+        privyReady: true,
+      });
+
+      render(<TerragonAuthPage />);
+
+      // Should try session transfer first
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          "/api/user/me",
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: `Bearer ${transferToken}`,
+            }),
+          })
+        );
+      });
+
+      // After session transfer fails, should fall back to Privy login
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalled();
+      });
+    });
+
+    it("should prioritize session transfer over cached credentials", async () => {
+      const transferToken = "gw_transfer_token_12345";
+      const transferUserId = "123";
+      const cachedApiKey = "gw_cached_key_old";
+      const callbackUrl = "https://app.terragon.ai/callback";
+
+      mockSearchParams.set("redirect_uri", callbackUrl);
+      mockSearchParams.set("token", transferToken);
+      mockSearchParams.set("userId", transferUserId);
+
+      // Set up cached credentials
+      mockGetApiKey.mockReturnValue(cachedApiKey);
+      mockGetUserData.mockReturnValue({
+        user_id: 999,
+        email: "old@example.com",
+        api_key: cachedApiKey,
+      });
+
+      const newUserData = {
+        user_id: 123,
+        email: "transfer@example.com",
+        display_name: "Transfer User",
+        api_key: transferToken,
+        credits: 1000,
+      };
+
+      // Mock the /api/user/me call
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(newUserData),
+        })
+        // Mock the /api/terragon/auth call
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ token: "terragon_token_xyz" }),
+        });
+
+      render(<TerragonAuthPage />);
+
+      // Should use session transfer, not cached credentials
+      await waitFor(() => {
+        expect(mockSaveApiKey).toHaveBeenCalledWith(transferToken);
+        expect(mockSaveUserData).toHaveBeenCalledWith(newUserData);
+      });
+
+      await waitFor(() => {
+        expect(mockNavigate).toHaveBeenCalled();
+      });
     });
   });
 });
