@@ -15,6 +15,59 @@ interface ReleaseWeek {
 
 const releaseNotes: ReleaseWeek[] = [
   {
+    date: "February 11, 2026",
+    features: [
+      "Per-Million Token Pricing Display: All model prices now display as 'per million tokens' with a 100,000x multiplier for clearer pricing comparison across providers",
+      "Updated Provider Interface: Backend API format updated for improved provider data structure and model routing",
+      "Terragon Auth Bridge Improvements: Enhanced redirect flow with support for redirect_uri parameter and multi-layer error handling for Inbox iframe",
+      "Faster Conversation Loading: Sync auth initialization and memory caching significantly speed up conversation load times",
+      "SampleApp SDK 1.0.47: Updated SampleApp SDK with new error UI for missing API key scenarios",
+    ],
+    bugFixes: [
+      {
+        category: "Authentication & Redirects",
+        items: [
+          "Fixed Terragon auth bridge redirect flow for seamless cross-domain authentication",
+          "Added redirect tests for /inbox and /code routes to Terragon",
+          "Fixed request body structure and account type normalization in auth flow",
+          "Removed host restriction from redirect routes for improved flexibility",
+        ],
+      },
+      {
+        category: "Credits & Pricing",
+        items: [
+          "Fixed currency display by properly dividing amounts by 100 for correct dollar values",
+          "Hidden discount section when no discount is available for cleaner checkout UI",
+          "Updated Enterprise pricing to $350/10 users/month",
+        ],
+      },
+      {
+        category: "Error Handling & Monitoring",
+        items: [
+          "Reduced Sentry noise with improved error filters",
+          "Fixed ChatHistoryAPI timeout configuration mismatch",
+          "Improved auth API error handling for non-JSON backend responses",
+          "Integrated Sentry filters into runtime for consistent error tracking",
+        ],
+      },
+      {
+        category: "Testing & CI",
+        items: [
+          "Fixed TerragonAuthPage test failing with Jest 30 + jsdom 26",
+          "Fixed CSP connect-src to allow SampleApp API endpoints",
+        ],
+      },
+    ],
+    infrastructure: [
+      "Backend API format changes for Provider interface alignment",
+      "SampleApp SDK upgrade to version 1.0.47",
+      "Enhanced Terragon iframe integration with improved error handling",
+    ],
+    documentation: [
+      "Added NEXT_PUBLIC_SAMPLEAPP_API_KEY to .env.example",
+    ],
+  },
+  {
     date: "February 1, 2026",
     features: [
       "Many-to-Many Provider Support: Models page now shows all providers offering each model with per-provider pricing via the new /models/unique endpoint integration",
