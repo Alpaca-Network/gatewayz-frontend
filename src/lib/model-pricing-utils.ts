@@ -91,38 +91,14 @@ export interface ModelPricingInfo {
  * NOTE: openai and anthropic direct gateways return per-TOKEN pricing (e.g., 0.0000025)
  * NOT per-million, so they are excluded from this list and handled like openrouter.
  */
-const PER_MILLION_PRICING_GATEWAYS = [
-  'onerouter',
-  'google',
-  'google-vertex',
-  'helicone',
-  'vercel-ai-gateway',
-  'deepinfra',
-  'featherless',
-  'chutes',
-  'together',
-  'near',
-  'fireworks',
-  'groq',
-  'cerebras',
-  'novita',
-  'nebius',
-  'xai',
-  'alibaba',
-  'alibaba-cloud',
-  'clarifai',
-  'simplismart',
-  'akash',
-  'cloudflare-workers-ai',
-  'alpaca-network',
-];
+const PER_MILLION_PRICING_GATEWAYS: string[] = [];
 
 /**
  * Gateways that return pricing in per-billion-tokens format.
  * These prices need to be divided by 1,000 to convert to per-million for display.
  * Example: aihubmix returns 150.0 for GPT-4o mini which should display as $0.15/MTok
  */
-const PER_BILLION_PRICING_GATEWAYS = ['aihubmix'];
+const PER_BILLION_PRICING_GATEWAYS: string[] = [];
 
 /**
  * Check if a gateway returns pricing in per-million format.
