@@ -253,6 +253,13 @@ function TerragonAuthBridge() {
     }
 
     // SESSION TRANSFER PATH: handle cross-domain session transfer
+    // SECURITY NOTE: Tokens are passed via URL parameters which is logged in browser history.
+    // This is acceptable here because:
+    // 1. The token is immediately validated via /api/user/me
+    // 2. The session is single-use (consumed immediately and not reused)
+    // 3. The URL is cleaned by the browser after redirect completes
+    // 4. This approach is consistent with OAuth 2.0 authorization code flow
+    // For additional security, consider implementing short TTL tokens or POST-based exchange
     if (sessionToken && sessionUserId && sessionTransferState === "idle") {
       console.log(
         "[TerragonAuth] Session transfer: found token and userId in URL, attempting to use for auth"
@@ -278,6 +285,13 @@ function TerragonAuthBridge() {
 
           const userData = await userResponse.json();
 
+          // Validate that the userId from the URL matches the token
+          if (sessionUserId && userData.user_id.toString() !== sessionUserId) {
+            throw new Error(
+              "User ID mismatch: token belongs to different user"
+            );
+          }
+
           // Store the transferred token and user data
           saveApiKey(sessionToken);
           saveUserData(userData);
@@ -300,6 +314,8 @@ function TerragonAuthBridge() {
       const userData = getUserData();
       if (apiKey && userData?.email) {
         console.log("[TerragonAuth] Session transfer complete, generating Terragon token");
+        // Reset the ref to allow token generation to proceed
+        tokenGenerationStartedRef.current = false;
         generateTokenAndRedirect(callback);
         return;
       }

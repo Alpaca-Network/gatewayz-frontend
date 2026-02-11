@@ -1027,5 +1027,57 @@ describe("TerragonAuthPage", () => {
         expect(mockNavigate).toHaveBeenCalled();
       });
     });
+
+    it("should reject session transfer when userId does not match token", async () => {
+      const transferToken = "gw_transfer_token_12345";
+      const transferUserId = "123"; // URL says user 123
+      const callbackUrl = "https://app.terragon.ai/callback";
+
+      mockSearchParams.set("redirect_uri", callbackUrl);
+      mockSearchParams.set("token", transferToken);
+      mockSearchParams.set("userId", transferUserId);
+
+      const userData = {
+        user_id: 456, // But token belongs to user 456 - mismatch!
+        email: "different@example.com",
+        display_name: "Different User",
+        api_key: transferToken,
+        credits: 1000,
+      };
+
+      // Mock the /api/user/me call to return mismatched user
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(userData),
+      });
+
+      mockAuthContext = createMockAuthContext({
+        status: "unauthenticated",
+        privyReady: true,
+      });
+
+      render(<TerragonAuthPage />);
+
+      // Should try session transfer first
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith(
+          "/api/user/me",
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: `Bearer ${transferToken}`,
+            }),
+          })
+        );
+      });
+
+      // Should detect mismatch and fall back to Privy login
+      await waitFor(() => {
+        expect(mockLogin).toHaveBeenCalled();
+      });
+
+      // Should NOT save the mismatched credentials
+      expect(mockSaveApiKey).not.toHaveBeenCalledWith(transferToken);
+      expect(mockSaveUserData).not.toHaveBeenCalledWith(userData);
+    });
   });
 });
