@@ -41,10 +41,10 @@ describe('ModelsClient Multi-Provider - Pricing Normalization', () => {
       expect(outputCost).toBe('0.60');
     });
 
-    it('should display correct pricing for OneRouter models (per-million format)', () => {
+    it('should display correct pricing for OneRouter models (per-token format)', () => {
       const model = mockModel({
         id: 'openai/gpt-4o-mini',
-        pricing: { prompt: '0.15', completion: '0.60' },
+        pricing: { prompt: '0.00000015', completion: '0.0000006' }, // Per-token format (unified)
         source_gateway: 'onerouter',
       });
 
@@ -90,7 +90,7 @@ describe('ModelsClient Multi-Provider - Pricing Normalization', () => {
       }),
       mockModel({
         id: 'cheap-onerouter',
-        pricing: { prompt: '0.15', completion: '0.60' }, // $0.15/M + $0.60/M
+        pricing: { prompt: '0.00000015', completion: '0.0000006' }, // $0.15/M + $0.60/M (per-token format)
         source_gateway: 'onerouter',
       }),
       mockModel({
@@ -151,7 +151,7 @@ describe('ModelsClient Multi-Provider - Pricing Normalization', () => {
         }),
         mockModel({
           id: 'cheap-onerouter',
-          pricing: { prompt: '0.15', completion: '0.60' }, // $0.75/M total
+          pricing: { prompt: '0.00000015', completion: '0.0000006' }, // $0.75/M total (per-token format)
           source_gateway: 'onerouter',
         }),
         mockModel({
@@ -186,7 +186,7 @@ describe('ModelsClient Multi-Provider - Pricing Normalization', () => {
         }),
         mockModel({
           id: 'cheap-onerouter',
-          pricing: { prompt: '0.15', completion: '0.60' }, // $0.75/M total
+          pricing: { prompt: '0.00000015', completion: '0.0000006' }, // $0.75/M total (per-token format)
           source_gateway: 'onerouter',
         }),
         mockModel({
@@ -221,7 +221,7 @@ describe('ModelsClient Multi-Provider - Pricing Normalization', () => {
         }),
         mockModel({
           id: 'model-onerouter',
-          pricing: { prompt: '0.15', completion: '0.60' },
+          pricing: { prompt: '0.00000015', completion: '0.0000006' }, // Per-token format
           source_gateway: 'onerouter',
         }),
       ];

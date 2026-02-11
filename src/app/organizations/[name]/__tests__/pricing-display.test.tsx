@@ -48,7 +48,7 @@ describe('Organization Page - Pricing Display', () => {
     it('should format pricing correctly for OneRouter models', () => {
       const model = createModel({
         id: 'openai/gpt-4o-mini',
-        pricing: { prompt: '0.15', completion: '0.60' },
+        pricing: { prompt: '0.00000015', completion: '0.0000006' }, // Per-token format (all gateways now use per-token)
         source_gateway: 'onerouter',
       });
 
@@ -73,7 +73,7 @@ describe('Organization Page - Pricing Display', () => {
         createModel({
           id: 'cheap-onerouter',
           name: 'Cheap Model',
-          pricing: { prompt: '0.15', completion: '0.30' }, // $0.15 + $0.30 = $0.45/M
+          pricing: { prompt: '0.00000015', completion: '0.0000003' }, // $0.15 + $0.30 = $0.45/M (per-token format)
           source_gateway: 'onerouter',
         }),
         createModel({
@@ -118,7 +118,7 @@ describe('Organization Page - Pricing Display', () => {
         }),
         createModel({
           id: 'onerouter-cheap',
-          pricing: { prompt: '0.10', completion: '0.40' }, // $0.10 + $0.40 = $0.50/M
+          pricing: { prompt: '0.0000001', completion: '0.0000004' }, // $0.10 + $0.40 = $0.50/M (per-token format)
           source_gateway: 'onerouter',
         }),
       ];
