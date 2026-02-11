@@ -18,11 +18,21 @@ export interface Provider {
   slug: string;                      // Provider identifier (e.g., "groq", "openrouter")
   name: string;                      // Display name (e.g., "Groq", "OpenRouter")
   pricing: {
-    prompt: string;                  // Prompt price as string (e.g., "0.025")
-    completion: string;              // Completion price as string (e.g., "0.05")
+    prompt: string;                  // Prompt price as string (e.g., "0.025" = $/1M tokens)
+    completion: string;              // Completion price as string (e.g., "0.05" = $/1M tokens)
+    image: string;                   // Image price as string (e.g., "0" if not applicable)
+    request: string;                 // Request price as string (e.g., "0")
   };
-  health_status: 'healthy' | 'degraded' | 'down';  // Provider health status
+  context_length: number;            // Context window size for this provider
+  health_status: 'healthy' | 'degraded' | 'unhealthy';  // Provider health status
   average_response_time_ms: number;  // Average response time in milliseconds
+  modality: string;                  // Modality type (e.g., "text->text", "text+image->text")
+  supports_streaming: boolean;       // Whether provider supports streaming
+  supports_function_calling: boolean; // Whether provider supports function calling
+  supports_vision: boolean;          // Whether provider supports vision/image input
+  model_name: string;                // Original model name from provider
+  description?: string;              // Optional model description from provider
+  architecture?: any;                // Optional architecture metadata
 }
 
 /**
@@ -178,13 +188,29 @@ export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
   const gatewayPricing = model.gateway_pricing || {};
 
   // Convert gateway pricing to Provider array
-  const providers: Provider[] = gateways.map(gateway => ({
-    slug: gateway,
-    name: gateway.charAt(0).toUpperCase() + gateway.slice(1),
-    pricing: gatewayPricing[gateway] || model.pricing || { prompt: '0', completion: '0' },
-    health_status: 'healthy' as const, // Default to healthy
-    average_response_time_ms: 1000,    // Default to 1000ms
-  }));
+  const providers: Provider[] = gateways.map(gateway => {
+    const pricing = gatewayPricing[gateway] || model.pricing || { prompt: '0', completion: '0' };
+    return {
+      slug: gateway,
+      name: gateway.charAt(0).toUpperCase() + gateway.slice(1),
+      pricing: {
+        prompt: pricing.prompt,
+        completion: pricing.completion,
+        image: '0',
+        request: '0'
+      },
+      context_length: model.context_length,
+      health_status: 'healthy' as const, // Default to healthy
+      average_response_time_ms: 1000,    // Default to 1000ms
+      modality: 'text->text',           // Default modality
+      supports_streaming: true,         // Default to true
+      supports_function_calling: false, // Default to false
+      supports_vision: false,           // Default to false
+      model_name: model.name,
+      description: model.description || undefined,
+      architecture: model.architecture || undefined,
+    };
+  });
 
   // Find cheapest provider
   let cheapestProvider = providers[0]?.slug || '';
