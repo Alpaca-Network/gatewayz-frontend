@@ -707,14 +707,14 @@ describe('ModelsClient - Filtering Logic', () => {
       expect(formattedExpensive).toBe('15.00');
     });
 
-    it('should format pricing correctly for OneRouter (per-million format)', () => {
-      // OneRouter returns per-million prices like $0.15/M
-      const promptPrice = '0.15'; // Already $0.15 per million tokens
+    it('should format pricing correctly for OneRouter (per-token format)', () => {
+      // OneRouter now uses per-token pricing (unified with all gateways)
+      const promptPrice = '0.00000015'; // $0.15 per million tokens (per-token format)
       const formatted = formatPricingForDisplay(promptPrice, 'onerouter');
       expect(formatted).toBe('0.15');
 
       // More expensive model
-      const expensivePrice = '15.00'; // $15 per million tokens
+      const expensivePrice = '0.000015'; // $15 per million tokens (per-token format)
       const formattedExpensive = formatPricingForDisplay(expensivePrice, 'onerouter');
       expect(formattedExpensive).toBe('15.00');
     });
@@ -723,8 +723,8 @@ describe('ModelsClient - Filtering Logic', () => {
       // GPT-4o-mini priced at $0.15/M input
       // OpenRouter: 0.00000015 (per-token)
       const openrouterFormatted = formatPricingForDisplay('0.00000015', 'openrouter');
-      // OneRouter: 0.15 (per-million)
-      const onerouterFormatted = formatPricingForDisplay('0.15', 'onerouter');
+      // OneRouter: 0.00000015 (per-token - all gateways now unified)
+      const onerouterFormatted = formatPricingForDisplay('0.00000015', 'onerouter');
 
       expect(openrouterFormatted).toBe('0.15');
       expect(onerouterFormatted).toBe('0.15');
@@ -733,7 +733,7 @@ describe('ModelsClient - Filtering Logic', () => {
     it('should normalize prices to per-token for consistent filtering', () => {
       // Both should return the same per-token price for $0.15/M
       const openrouterPerToken = getNormalizedPerTokenPrice('0.00000015', 'openrouter');
-      const onerouterPerToken = getNormalizedPerTokenPrice('0.15', 'onerouter');
+      const onerouterPerToken = getNormalizedPerTokenPrice('0.00000015', 'onerouter');
 
       expect(openrouterPerToken).toBeCloseTo(0.00000015);
       expect(onerouterPerToken).toBeCloseTo(0.00000015);
@@ -750,7 +750,7 @@ describe('ModelsClient - Filtering Logic', () => {
         mockModel({
           id: 'gpt-4o-mini-onerouter',
           name: 'GPT-4o-mini',
-          pricing: { prompt: '0.15', completion: '0.60' },
+          pricing: { prompt: '0.00000015', completion: '0.0000006' }, // Per-token format
           source_gateway: 'onerouter',
         }),
         mockModel({
@@ -787,7 +787,7 @@ describe('ModelsClient - Filtering Logic', () => {
         }),
         mockModel({
           id: 'cheap-onerouter',
-          pricing: { prompt: '0.15', completion: '0.60' }, // $0.15/M + $0.60/M
+          pricing: { prompt: '0.00000015', completion: '0.0000006' }, // $0.15/M + $0.60/M (per-token format)
           source_gateway: 'onerouter',
         }),
         mockModel({
