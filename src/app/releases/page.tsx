@@ -17,7 +17,7 @@ const releaseNotes: ReleaseWeek[] = [
   {
     date: "February 11, 2026",
     features: [
-      "Per-Million Token Pricing Display: All model prices now display as 'per million tokens' with a 100,000x multiplier for clearer pricing comparison across providers",
+      "Per-Million Token Pricing Display: All model prices now display as 'per million tokens' with a 1,000,000x multiplier for clearer pricing comparison across providers",
       "Updated Provider Interface: Backend API format updated for improved provider data structure and model routing",
       "Terragon Auth Bridge Improvements: Enhanced redirect flow with support for redirect_uri parameter and multi-layer error handling for Inbox iframe",
       "Faster Conversation Loading: Sync auth initialization and memory caching significantly speed up conversation load times",
