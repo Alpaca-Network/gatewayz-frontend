@@ -343,8 +343,11 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
       // Normalize prices to per-token format for consistent filtering across all gateways
       const normalizedPromptPrice = getNormalizedPerTokenPrice(model.pricing?.prompt, modelSourceGateway);
       const normalizedCompletionPrice = getNormalizedPerTokenPrice(model.pricing?.completion, modelSourceGateway);
-      const avgPrice = (normalizedPromptPrice + normalizedCompletionPrice) / 2;
-      const priceMatch = (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
+      // Models without valid pricing pass through price filter (can't filter by unknown price)
+      const hasValidPricing = normalizedPromptPrice !== null && normalizedCompletionPrice !== null;
+      const avgPrice = hasValidPricing ? ((normalizedPromptPrice ?? 0) + (normalizedCompletionPrice ?? 0)) / 2 : 0;
+      const priceMatch = !hasValidPricing || // No pricing data - pass through
+        (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
         isFree ||
         (avgPrice >= promptPricingRange[0] / 1000000 && avgPrice <= promptPricingRange[1] / 1000000);
       const parameterMatch = selectedParameters.length === 0 || selectedParameters.every(p => (model.supported_parameters || []).includes(p));
@@ -387,16 +390,36 @@ export default function ModelsClient({ initialModels }: { initialModels: Model[]
                 // Normalize pricing for consistent sorting across gateways
                 const aGateway = getSourceGateway(a);
                 const bGateway = getSourceGateway(b);
-                const aTotalPrice = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway) + getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
-                const bTotalPrice = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway) + getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                const aPrompt = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway);
+                const aCompletion = getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
+                const bPrompt = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway);
+                const bCompletion = getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                const aHasValidPricing = aPrompt !== null && aCompletion !== null;
+                const bHasValidPricing = bPrompt !== null && bCompletion !== null;
+                // Models without valid pricing go to the end
+                if (!aHasValidPricing && !bHasValidPricing) return 0;
+                if (!aHasValidPricing) return 1;
+                if (!bHasValidPricing) return -1;
+                const aTotalPrice = (aPrompt ?? 0) + (aCompletion ?? 0);
+                const bTotalPrice = (bPrompt ?? 0) + (bCompletion ?? 0);
                 return bTotalPrice - aTotalPrice;
             }
             case 'price-asc': {
                 // Normalize pricing for consistent sorting across gateways
                 const aGateway = getSourceGateway(a);
                 const bGateway = getSourceGateway(b);
-                const aTotalPrice = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway) + getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
-                const bTotalPrice = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway) + getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                const aPrompt = getNormalizedPerTokenPrice(a.pricing?.prompt, aGateway);
+                const aCompletion = getNormalizedPerTokenPrice(a.pricing?.completion, aGateway);
+                const bPrompt = getNormalizedPerTokenPrice(b.pricing?.prompt, bGateway);
+                const bCompletion = getNormalizedPerTokenPrice(b.pricing?.completion, bGateway);
+                const aHasValidPricing = aPrompt !== null && aCompletion !== null;
+                const bHasValidPricing = bPrompt !== null && bCompletion !== null;
+                // Models without valid pricing go to the end
+                if (!aHasValidPricing && !bHasValidPricing) return 0;
+                if (!aHasValidPricing) return 1;
+                if (!bHasValidPricing) return -1;
+                const aTotalPrice = (aPrompt ?? 0) + (aCompletion ?? 0);
+                const bTotalPrice = (bPrompt ?? 0) + (bCompletion ?? 0);
                 return aTotalPrice - bTotalPrice;
             }
             default:

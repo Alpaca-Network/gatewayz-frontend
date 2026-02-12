@@ -560,8 +560,9 @@ describe('model-detail-utils', () => {
       expect(displayCompletion).toBe('0.60');
     });
 
-    it('should keep pricing as per-million format for per-million gateways like onerouter', () => {
-      // This test verifies that per-million gateways receive pricing in the correct format
+    it('should convert pricing to per-token format for all gateways (unified format)', () => {
+      // All gateways now receive unified per-token pricing from backend
+      // Static model pricing is in per-million format and gets converted to per-token
       const { formatPricingForDisplay } = require('@/lib/model-pricing-utils');
 
       const staticModel: StaticModelDefinition = {
@@ -579,19 +580,19 @@ describe('model-detail-utils', () => {
         supportedParameters: [],
       };
 
-      // Transform with onerouter gateway (per-million pricing gateway)
+      // Transform with onerouter gateway - now all gateways use unified per-token format
       const result = transformStaticModel(staticModel, 'onerouter');
 
-      // Verify pricing is kept as per-million format (not converted)
+      // Verify pricing is converted to per-token format (per-million / 1,000,000)
       const promptPrice = parseFloat(result.pricing?.prompt || '0');
       const completionPrice = parseFloat(result.pricing?.completion || '0');
 
-      // Should be the original per-million values
-      expect(promptPrice).toBe(0.15);
-      expect(completionPrice).toBe(0.60);
+      // Should be converted to per-token values
+      expect(promptPrice).toBeCloseTo(0.15 / 1000000, 10); // 1.5e-7
+      expect(completionPrice).toBeCloseTo(0.60 / 1000000, 10); // 6e-7
 
-      // Verify formatPricingForDisplay correctly displays for per-million gateway
-      // It skips the multiplication since onerouter is a per-million gateway
+      // Verify formatPricingForDisplay correctly displays as per-million
+      // It multiplies per-token by 1,000,000 for display
       const displayPrompt = formatPricingForDisplay(result.pricing?.prompt, 'onerouter');
       const displayCompletion = formatPricingForDisplay(result.pricing?.completion, 'onerouter');
 

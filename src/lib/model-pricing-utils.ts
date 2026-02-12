@@ -246,14 +246,17 @@ export function formatPricingForDisplay(price: string | undefined, sourceGateway
  * consistent behavior between display and filtering. A model showing $X/MTok
  * will be filtered/sorted using the same $X/MTok value.
  *
+ * Returns null for missing or invalid pricing data, allowing consumers to
+ * distinguish between "free" (0) and "unknown/missing" (null) pricing.
+ *
  * @param price - Price string from the API
  * @param sourceGateway - Gateway the model comes from
- * @returns Normalized per-token price as number (capped per-million / 1,000,000)
+ * @returns Normalized per-token price as number (capped per-million / 1,000,000), or null if missing/invalid
  */
-export function getNormalizedPerTokenPrice(price: string | undefined, sourceGateway: string): number {
-  if (!price) return 0;
+export function getNormalizedPerTokenPrice(price: string | undefined, sourceGateway: string): number | null {
+  if (!price) return null;
   const numPrice = parseFloat(price);
-  if (isNaN(numPrice)) return 0;
+  if (isNaN(numPrice)) return null;
 
   // Use the shared normalization logic (includes mismatch detection and capping)
   const perMillionPrice = normalizeToPerMillion(numPrice, sourceGateway);

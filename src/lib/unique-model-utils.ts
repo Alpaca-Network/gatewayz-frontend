@@ -26,12 +26,15 @@ export const isFreeUniqueModel = (model: UniqueModel): boolean => (
 export const getNormalizedPricingForFilter = (model: UniqueModel) => {
   const provider = getPrimaryProvider(model);
   if (!provider) {
-    return { prompt: 0, completion: 0, slug: '' };
+    return { prompt: null, completion: null, slug: '', hasValidPricing: false };
   }
   const normalizedSlug = normalizeProviderSlug(provider.slug);
+  const prompt = getNormalizedPerTokenPrice(provider.pricing?.prompt, normalizedSlug);
+  const completion = getNormalizedPerTokenPrice(provider.pricing?.completion, normalizedSlug);
   return {
-    prompt: getNormalizedPerTokenPrice(provider.pricing?.prompt, normalizedSlug),
-    completion: getNormalizedPerTokenPrice(provider.pricing?.completion, normalizedSlug),
+    prompt,
+    completion,
     slug: normalizedSlug,
+    hasValidPricing: prompt !== null && completion !== null,
   };
 };

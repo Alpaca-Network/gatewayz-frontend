@@ -1094,8 +1094,13 @@ export default function ModelsClient({
         (model.context_length >= contextLengthRange[0] * 1000 && model.context_length <= contextLengthRange[1] * 1000);
       const isFree = isFreeUniqueModel(model);
       const normalizedPricing = getNormalizedPricingForFilter(model);
-      const avgPrice = (normalizedPricing.prompt + normalizedPricing.completion) / 2;
-      const priceMatch = (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
+      // Models without valid pricing pass through price filter (can't filter by unknown price)
+      // Calculate avgPrice only if we have valid pricing data
+      const avgPrice = normalizedPricing.hasValidPricing
+        ? ((normalizedPricing.prompt ?? 0) + (normalizedPricing.completion ?? 0)) / 2
+        : 0;
+      const priceMatch = !normalizedPricing.hasValidPricing || // No pricing data - pass through
+        (promptPricingRange[0] === 0 && promptPricingRange[1] === 10) || // No filter applied
         isFree ||
         (avgPrice >= promptPricingRange[0] / 1000000 && avgPrice <= promptPricingRange[1] / 1000000);
       const parameterMatch = selectedParameters.length === 0 || selectedParameters.every(p => (model.supported_parameters || []).includes(p));
@@ -1149,15 +1154,23 @@ export default function ModelsClient({
             case 'price-desc': {
                 const aPricing = getNormalizedPricingForFilter(a);
                 const bPricing = getNormalizedPricingForFilter(b);
-                const aTotalPrice = aPricing.prompt + aPricing.completion;
-                const bTotalPrice = bPricing.prompt + bPricing.completion;
+                // Models without valid pricing go to the end
+                if (!aPricing.hasValidPricing && !bPricing.hasValidPricing) return 0;
+                if (!aPricing.hasValidPricing) return 1;  // a goes after b
+                if (!bPricing.hasValidPricing) return -1; // b goes after a
+                const aTotalPrice = (aPricing.prompt ?? 0) + (aPricing.completion ?? 0);
+                const bTotalPrice = (bPricing.prompt ?? 0) + (bPricing.completion ?? 0);
                 return bTotalPrice - aTotalPrice;
             }
             case 'price-asc': {
                 const aPricing = getNormalizedPricingForFilter(a);
                 const bPricing = getNormalizedPricingForFilter(b);
-                const aTotalPrice = aPricing.prompt + aPricing.completion;
-                const bTotalPrice = bPricing.prompt + bPricing.completion;
+                // Models without valid pricing go to the end
+                if (!aPricing.hasValidPricing && !bPricing.hasValidPricing) return 0;
+                if (!aPricing.hasValidPricing) return 1;  // a goes after b
+                if (!bPricing.hasValidPricing) return -1; // b goes after a
+                const aTotalPrice = (aPricing.prompt ?? 0) + (aPricing.completion ?? 0);
+                const bTotalPrice = (bPricing.prompt ?? 0) + (bPricing.completion ?? 0);
                 return aTotalPrice - bTotalPrice;
             }
             default:
