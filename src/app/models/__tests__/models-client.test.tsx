@@ -822,8 +822,9 @@ describe('ModelsClient - Filtering Logic', () => {
       expect(formatPricingForDisplay('', 'openrouter')).toBeNull();
       expect(formatPricingForDisplay('N/A', 'openrouter')).toBeNull();
 
-      expect(getNormalizedPerTokenPrice(undefined, 'openrouter')).toBe(0);
-      expect(getNormalizedPerTokenPrice('', 'onerouter')).toBe(0);
+      // Missing/invalid pricing now returns null to distinguish from free ($0) models
+      expect(getNormalizedPerTokenPrice(undefined, 'openrouter')).toBeNull();
+      expect(getNormalizedPerTokenPrice('', 'onerouter')).toBeNull();
     });
 
     it('should handle zero pricing correctly', () => {

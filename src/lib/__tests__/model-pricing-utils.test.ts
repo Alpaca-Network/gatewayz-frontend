@@ -354,13 +354,13 @@ describe('model-pricing-utils', () => {
       expect(getNormalizedPerTokenPrice('0.000015', 'onerouter')).toBe(0.000015);
     });
 
-    it('should return 0 for undefined or empty price', () => {
-      expect(getNormalizedPerTokenPrice(undefined, 'openrouter')).toBe(0);
-      expect(getNormalizedPerTokenPrice('', 'openrouter')).toBe(0);
+    it('should return null for undefined or empty price', () => {
+      expect(getNormalizedPerTokenPrice(undefined, 'openrouter')).toBeNull();
+      expect(getNormalizedPerTokenPrice('', 'openrouter')).toBeNull();
     });
 
-    it('should return 0 for non-numeric price', () => {
-      expect(getNormalizedPerTokenPrice('N/A', 'openrouter')).toBe(0);
+    it('should return null for non-numeric price', () => {
+      expect(getNormalizedPerTokenPrice('N/A', 'openrouter')).toBeNull();
     });
 
     it('should apply price cap at MAX_PRICE_PER_MILLION', () => {
