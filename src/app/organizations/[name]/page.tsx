@@ -85,7 +85,7 @@ const ApiModelCard = ({ model }: { model: ApiModel }) => {
         </p>
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-3 border-t">
           <span className="whitespace-nowrap">{contextK > 0 ? `${contextK}K context` : 'Pending sync'}</span>
-          {hasPricing ? (
+          {hasPricing && inputCost !== null && outputCost !== null ? (
             <>
               <span className="whitespace-nowrap">${inputCost}/M in</span>
               <span className="whitespace-nowrap">${outputCost}/M out</span>

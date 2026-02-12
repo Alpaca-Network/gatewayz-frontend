@@ -224,12 +224,12 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
 
       {/* Input Price */}
       <div className="text-right text-sm tabular-nums text-muted-foreground">
-        ${inputCost}
+        {inputCost !== null ? `$${inputCost}` : '-'}
       </div>
 
       {/* Output Price */}
       <div className="text-right text-sm tabular-nums text-muted-foreground">
-        ${outputCost}
+        {outputCost !== null ? `$${outputCost}` : '-'}
       </div>
 
       {/* Response Time */}
@@ -289,8 +289,8 @@ const MobileProviderSubRow = React.memo(function MobileProviderSubRow({
         )}
       </div>
       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-        <span>${inputCost} in</span>
-        <span>${outputCost} out</span>
+        <span>{inputCost !== null ? `$${inputCost} in` : '- in'}</span>
+        <span>{outputCost !== null ? `$${outputCost} out` : '- out'}</span>
         <span>{provider.average_response_time_ms}ms</span>
       </div>
     </div>
@@ -637,7 +637,7 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
           </span>
           <span className="font-medium">{contextK > 0 ? `${contextK}M Tokens` : '0M Tokens'}</span>
           <span className="font-medium">{contextK > 0 ? `${contextK}K Context` : '0K Context'}</span>
-          {hasPricing ? (
+          {hasPricing && inputCost !== null && outputCost !== null ? (
             <>
               <span className="font-medium">${inputCost}/M Input</span>
               <span className="font-medium">${outputCost}/M Output</span>
