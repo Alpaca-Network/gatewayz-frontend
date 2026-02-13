@@ -130,7 +130,7 @@ describe("inboxMetadata", () => {
   it("should have inbox OG image configured", () => {
     const images = inboxMetadata.openGraph?.images as Array<{ url: string }>;
     expect(images).toBeDefined();
-    expect(images[0]?.url).toBe("/inbox-og-image.png");
+    expect(images[0]?.url).toBe("https://beta.gatewayz.ai/inbox-og-image.png");
   });
 
   it("should have correct OG image dimensions", () => {
@@ -152,7 +152,7 @@ describe("inboxMetadata", () => {
 
   it("should have twitter image pointing to inbox OG image", () => {
     const images = inboxMetadata.twitter?.images as string[];
-    expect(images).toContain("/inbox-og-image.png");
+    expect(images).toContain("https://beta.gatewayz.ai/inbox-og-image.png");
   });
 
   it("should have twitter creator handle", () => {

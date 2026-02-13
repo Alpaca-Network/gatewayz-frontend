@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     description: 'Use Claude Code with GatewayZ for smart AI routing, cost optimization, and access to 10+ models.',
     images: [
       {
-        url: '/og-inbox.jpg',
+        url: 'https://beta.gatewayz.ai/og-inbox.jpg',
         width: 1200,
         height: 630,
         alt: 'Gatewayz x Terragon - Claude Code + GatewayZ',
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Claude Code + GatewayZ | Gatewayz x Terragon',
     description: 'Use Claude Code with GatewayZ for smart AI routing, cost optimization, and access to 10+ models.',
-    images: ['/og-inbox.jpg'],
+    images: ['https://beta.gatewayz.ai/og-inbox.jpg'],
     creator: '@gatewayz_ai',
   },
 };
