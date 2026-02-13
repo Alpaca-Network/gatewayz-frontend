@@ -12,7 +12,7 @@ export const inboxMetadata: Metadata = {
     description: 'AI-powered coding agent inbox. Review PRs, manage code changes, and collaborate with AI agents to streamline your development workflow.',
     images: [
       {
-        url: '/inbox-og-image.png',
+        url: 'https://beta.gatewayz.ai/inbox-og-image.png',
         width: 1200,
         height: 630,
         alt: 'AI Agent Inbox - Gatewayz x Terragon',
@@ -24,7 +24,7 @@ export const inboxMetadata: Metadata = {
     card: 'summary_large_image',
     title: 'AI Agent Inbox - Gatewayz x Terragon',
     description: 'AI-powered coding agent inbox. Review PRs, manage code changes, and collaborate with AI agents to streamline your development workflow.',
-    images: ['/inbox-og-image.png'],
+    images: ['https://beta.gatewayz.ai/inbox-og-image.png'],
     creator: '@gatewayz_ai',
   },
 };
