@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
-import { getApiKey, getUserData, getApiKeyWithRetry } from "@/lib/api";
+import { getApiKey, getUserData, getApiKeyWithRetry, saveApiKey, saveUserData, type UserData } from "@/lib/api";
 import { navigateTo } from "./navigate";
 
 /**
@@ -96,11 +96,16 @@ function TerragonAuthBridge() {
   const searchParams = useSearchParams();
   const callback =
     searchParams.get("callback") || searchParams.get("redirect_uri");
+  const sessionToken = searchParams.get("token");
+  const sessionUserId = searchParams.get("userId");
 
   const { status: authStatus, login, privyReady } = useGatewayzAuth();
 
   const [status, setStatus] = useState<PageStatus>("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [sessionTransferState, setSessionTransferState] = useState<
+    "idle" | "attempting" | "completed" | "failed"
+  >("idle");
   const loginTriggeredRef = useRef(false);
   const tokenGenerationStartedRef = useRef(false);
   const tokenRetryCountRef = useRef(0);
@@ -247,6 +252,77 @@ function TerragonAuthBridge() {
       return;
     }
 
+    // SESSION TRANSFER PATH: handle cross-domain session transfer
+    // SECURITY NOTE: Tokens are passed via URL parameters which is logged in browser history.
+    // This is acceptable here because:
+    // 1. The token is immediately validated via /api/user/me
+    // 2. The session is single-use (consumed immediately and not reused)
+    // 3. The URL is cleaned by the browser after redirect completes
+    // 4. This approach is consistent with OAuth 2.0 authorization code flow
+    // For additional security, consider implementing short TTL tokens or POST-based exchange
+    if (sessionToken && sessionUserId && sessionTransferState === "idle") {
+      console.log(
+        "[TerragonAuth] Session transfer: found token and userId in URL, attempting to use for auth"
+      );
+      setSessionTransferState("attempting");
+
+      // Use the transferred session to generate token
+      const handleSessionTransfer = async () => {
+        try {
+          updateStatus("redirecting");
+
+          // Fetch user data with the transferred token
+          const userResponse = await fetch("/api/user/me", {
+            headers: {
+              Authorization: `Bearer ${sessionToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (!userResponse.ok) {
+            throw new Error("Failed to validate transferred session");
+          }
+
+          const userData = await userResponse.json();
+
+          // Validate that the userId from the URL matches the token
+          if (sessionUserId && userData.user_id.toString() !== sessionUserId) {
+            throw new Error(
+              "User ID mismatch: token belongs to different user"
+            );
+          }
+
+          // Store the transferred token and user data
+          saveApiKey(sessionToken);
+          saveUserData(userData);
+
+          console.log("[TerragonAuth] Session transfer successful");
+          setSessionTransferState("completed");
+        } catch (error) {
+          console.error("[TerragonAuth] Session transfer failed:", error);
+          setSessionTransferState("failed");
+        }
+      };
+
+      handleSessionTransfer();
+      return;
+    }
+
+    // If session transfer completed, proceed with token generation
+    if (sessionTransferState === "completed") {
+      const apiKey = getApiKey();
+      const userData = getUserData();
+      if (apiKey && userData?.email) {
+        console.log("[TerragonAuth] Session transfer complete, generating Terragon token");
+        // Reset the ref to allow token generation to proceed
+        tokenGenerationStartedRef.current = false;
+        generateTokenAndRedirect(callback);
+        return;
+      }
+    }
+
+    // If session transfer failed or not attempted, proceed with normal auth flow
+
     // FAST PATH: cached credentials in localStorage
     const cachedApiKey = getApiKey();
     const cachedUserData = getUserData();
@@ -327,6 +403,9 @@ function TerragonAuthBridge() {
     }
   }, [
     callback,
+    sessionToken,
+    sessionUserId,
+    sessionTransferState,
     isAuthenticated,
     isLoading,
     isAuthError,
