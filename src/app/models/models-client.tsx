@@ -42,7 +42,8 @@ import {
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 
-import type { UniqueModel, Provider } from '@/types/models';
+import type { UniqueModel, Provider, Model as LegacyModel } from '@/types/models';
+import { adaptLegacyToUniqueModel } from '@/types/models';
 
 // Re-export for backwards compatibility
 type Model = UniqueModel;
@@ -809,7 +810,7 @@ export default function ModelsClient({
           const response = await fetch('/api/models?gateway=all&limit=50000', {
             signal: controller.signal
           });
-          const payload = await safeParseJson<{ data?: Model[] }>(
+          const payload = await safeParseJson<{ data?: LegacyModel[] }>(
             response,
             '[Models] client bootstrap'
           );
@@ -817,7 +818,11 @@ export default function ModelsClient({
             if (process.env.NODE_ENV === 'development') {
               console.log(`[Models] Fetched ${payload.data.length} models from client`);
             }
-            setModels(payload.data);
+            // Transform legacy Model format to UniqueModel format
+            // The API returns legacy format (pricing, source_gateway fields)
+            // but the UI expects UniqueModel format (providers array)
+            const transformedModels = payload.data.map(m => adaptLegacyToUniqueModel(m));
+            setModels(transformedModels);
           }
         } catch (err) {
           if (!controller.signal.aborted) {
