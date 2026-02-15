@@ -123,10 +123,13 @@ function transformModel(model: any, gateway: string) {
 export async function getModelsForGateway(gateway: string, limit?: number, search?: string) {
   // Use Redis cache with stale-while-revalidate pattern for instant page loads
   // Skip caching for search queries to ensure fresh results
+  // For gateway=all, use a unified cache key regardless of limit so that
+  // SSR (no limit) and client-side (/api/models?limit=50000) share the same cache.
+  // This ensures the client-side fetch warms the cache for subsequent SSR renders.
   const cacheKeyStr = search ? null : cacheKey(
     CACHE_PREFIX.MODELS,
     gateway,
-    limit ? `limit:${limit}` : 'all'
+    gateway === 'all' ? 'all' : (limit ? `limit:${limit}` : 'all')
   );
 
   // If there's a search query, skip cache and fetch directly
