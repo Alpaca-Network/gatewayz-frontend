@@ -317,13 +317,10 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
           signal: AbortSignal.timeout(timeoutMs)
         };
 
-        // Add Next.js specific caching options only on server-side
-        if (!isClientSide) {
-          (fetchOptions as any).next = {
-            revalidate: 300,
-            tags: [`models:gateway:${gateway}`, 'models:all']
-          };
-        }
+        // Disable Next.js fetch cache - Redis cacheStaleWhileRevalidate handles caching.
+        // Using next.revalidate here caused background revalidation that silently
+        // replaced good cached data with stale responses (pricing zeroed out).
+        fetchOptions.cache = 'no-store';
 
         // Try endpoints in parallel (server-side) or single endpoint (client-side)
         const response = await Promise.race(
@@ -685,13 +682,10 @@ async function fetchUniqueModelsLogic(
         signal: AbortSignal.timeout(timeoutMs)
       };
 
-      // Add Next.js specific caching options only on server-side
-      if (!isClientSide) {
-        (fetchOptions as any).next = {
-          revalidate: 300,
-          tags: ['models:unique', 'models:all']
-        };
-      }
+      // Disable Next.js fetch cache - Redis cacheStaleWhileRevalidate handles caching.
+      // Using next.revalidate here caused background revalidation that silently
+      // replaced good cached data with stale responses (pricing zeroed out).
+      fetchOptions.cache = 'no-store';
 
       console.log(`[UniqueModels] Fetching from ${isClientSide ? 'API route' : 'backend'}: ${url}`);
       const startTime = Date.now();

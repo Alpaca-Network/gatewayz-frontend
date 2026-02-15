@@ -25,7 +25,7 @@ type Model = LegacyModel;
  * Note: We cannot use `dynamic = 'force-dynamic'` as it's incompatible with
  * static export. Instead, we rely on revalidation and client-side fetching.
  */
-export const revalidate = 60; // Revalidate every 60 seconds in server mode
+export const revalidate = 300; // Revalidate every 5 minutes
 
 // Models are now fetched using gateway='all' which:
 // 1. Makes a single API call to the backend (more efficient)
