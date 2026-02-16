@@ -286,7 +286,9 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
     // Only include offset for server-side requests (client requests don't paginate)
     const offsetParam = (!isClientSide && offset > 0) ? `&offset=${offset}` : '';
     const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-    const limitParam = `limit=${requestLimit}${offsetParam}${searchParam}`;
+    // Add unique=true parameter when fetching all gateways for backend deduplication
+    const uniqueParam = gateway === 'all' ? '&unique=true' : '';
+    const limitParam = `limit=${requestLimit}${offsetParam}${searchParam}${uniqueParam}`;
 
     // Build URLs based on environment
     // Client-side: use Next.js API route (/api/models) to avoid CORS - single request, no pagination
