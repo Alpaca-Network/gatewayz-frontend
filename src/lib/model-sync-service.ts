@@ -46,222 +46,168 @@ interface ModelRecord {
 
 class ModelSyncService {
   private snapshots: Map<string, ModelSnapshot> = new Map();
-  private syncIntervals: Map<string, NodeJS.Timeout> = new Map();
-  private readonly SYNC_INTERVALS = {
-    high_frequency: ['openrouter', 'groq', 'together', 'fireworks'], // 15 minutes
-    medium_frequency: ['google', 'cerebras', 'nebius', 'xai'], // 1 hour
-    low_frequency: ['huggingface', 'aimo', 'near', 'fal', 'vercel-ai-gateway'], // 4 hours
-  };
+  private globalInterval: NodeJS.Timeout | null = null;
+  private readonly REFRESH_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
   /**
-   * Initialize automated synchronization for all gateways
+   * Initialize automated synchronization using a consolidated approach
    */
   async initializeSync(): Promise<void> {
-    console.log('[ModelSync] Initializing automated model synchronization...');
-    
-    const allGateways = [
-      'openrouter', 'featherless', 'groq', 'together', 'fireworks',
-      'chutes', 'deepinfra', 'google', 'cerebras', 'nebius',
-      'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal',
-      'vercel-ai-gateway', 'helicone', 'alpaca'
-    ];
+    if (this.globalInterval) {
+      console.log('[ModelSync] Already initialized, skipping...');
+      return;
+    }
 
-    // Start with an initial sync for all gateways
+    console.log('[ModelSync] Initializing consolidated model synchronization...');
+
+    // Initial sync
     await this.performFullSync();
 
-    // Set up recurring sync intervals
-    for (const gateway of allGateways) {
-      this.setupGatewaySync(gateway);
-    }
-
-    // Set up daily full sync at 2 AM UTC
-    this.setupDailyFullSync();
-  }
-
-  /**
-   * Set up sync interval for a specific gateway based on its frequency tier
-   */
-  private setupGatewaySync(gateway: string): void {
-    let intervalMs: number;
-
-    if (this.SYNC_INTERVALS.high_frequency.includes(gateway)) {
-      intervalMs = 15 * 60 * 1000; // 15 minutes
-    } else if (this.SYNC_INTERVALS.medium_frequency.includes(gateway)) {
-      intervalMs = 60 * 60 * 1000; // 1 hour
-    } else {
-      intervalMs = 4 * 60 * 60 * 1000; // 4 hours
-    }
-
-    const interval = setInterval(async () => {
+    // Set up a single recurring interval for all models
+    this.globalInterval = setInterval(async () => {
       try {
-        await this.syncGateway(gateway);
+        await this.performFullSync();
       } catch (error) {
-        console.error(`[ModelSync] Failed to sync gateway ${gateway}:`, error);
+        console.error('[ModelSync] Consolidated sync failed:', error);
         Sentry.captureException(error, {
-          tags: { gateway, sync_type: 'gateway_interval' },
-          extra: { gateway, sync_type: 'gateway_interval' }
+          tags: { sync_type: 'consolidated_interval' }
         });
       }
-    }, intervalMs);
+    }, this.REFRESH_INTERVAL_MS);
 
-    this.syncIntervals.set(gateway, interval);
-    console.log(`[ModelSync] Set up ${intervalMs / 60000}min sync interval for ${gateway}`);
+    console.log(`[ModelSync] Set up ${this.REFRESH_INTERVAL_MS / 60000}min consolidated sync interval`);
   }
 
   /**
-   * Set up daily full sync at 2 AM UTC
+   * Sync all gateways in a single efficient request
    */
-  private setupDailyFullSync(): void {
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setUTCHours(2, 0, 0, 0);
-
-    const msUntil2AM = tomorrow.getTime() - now.getTime();
-
-    setTimeout(() => {
-      // Perform daily sync
-      this.performFullSync();
-
-      // Set up recurring daily sync
-      setInterval(() => {
-        this.performFullSync();
-      }, 24 * 60 * 60 * 1000);
-    }, msUntil2AM);
-
-    console.log(`[ModelSync] Scheduled daily full sync at 2 AM UTC (in ${Math.round(msUntil2AM / (60 * 60 * 1000))} hours)`);
-  }
-
-  /**
-   * Sync a specific gateway and track changes
-   */
-  async syncGateway(gateway: string): Promise<ModelSyncResult> {
+  async performFullSync(): Promise<ModelSyncResult[]> {
     const startTime = Date.now();
-    const previousSnapshot = this.snapshots.get(gateway);
+    console.log('[ModelSync] Starting consolidated full sync...');
 
     try {
-      // Fetch current models
-      const result = await getModelsForGateway(gateway);
-      const currentModels: ModelRecord[] = result.data;
+      // Fetch all models in one go
+      const result = await getModelsForGateway('all');
+      const allModels: ModelRecord[] = result.data || [];
 
-      // Create snapshot
-      const snapshot: ModelSnapshot = {
-        timestamp: startTime,
-        models: currentModels,
-        checksum: this.calculateChecksum(currentModels)
-      };
+      // Group models by gateway to update per-gateway snapshots
+      const gatewayBuckets: Record<string, ModelRecord[]> = {};
 
-      // Calculate changes if we have previous data
-      let newModels = 0;
-      let updatedModels = 0;
-      let removedModels = 0;
-
-      if (previousSnapshot) {
-        const changes = this.compareSnapshots(previousSnapshot, snapshot);
-        newModels = changes.newModels;
-        updatedModels = changes.updatedModels;
-        removedModels = changes.removedModels;
-
-        // Log significant changes
-        if (newModels > 0 || updatedModels > 0 || removedModels > 0) {
-          console.log(`[ModelSync] ${gateway}: +${newModels} ~${updatedModels} -${removedModels} models`);
-          
-          // Trigger cache invalidation if there are changes
-          if (newModels > 0 || updatedModels > 0) {
-            await this.invalidateCache(gateway);
-          }
+      for (const model of allModels) {
+        const gateways = model.source_gateways || (model.provider_slug ? [model.provider_slug] : []);
+        for (const gateway of gateways) {
+          if (!gatewayBuckets[gateway]) gatewayBuckets[gateway] = [];
+          gatewayBuckets[gateway].push(model);
         }
       }
 
-      // Store snapshot
-      this.snapshots.set(gateway, snapshot);
+      const gatewaysToSync = Object.keys(gatewayBuckets);
+      const syncResults: ModelSyncResult[] = [];
+      let totalChanges = 0;
 
-      const syncResult: ModelSyncResult = {
-        gateway,
-        totalModels: currentModels.length,
-        newModels,
-        updatedModels,
-        removedModels,
-        lastSyncTimestamp: startTime
-      };
+      for (const gateway of gatewaysToSync) {
+        const currentModels = gatewayBuckets[gateway];
+        const previousSnapshot = this.snapshots.get(gateway);
 
-      // Only log successful syncs in development mode or when there are changes
-      if (process.env.NODE_ENV === 'development' || newModels > 0 || updatedModels > 0 || removedModels > 0) {
-        await this.logSyncResult(syncResult);
+        // Create snapshot
+        const snapshot: ModelSnapshot = {
+          timestamp: startTime,
+          models: currentModels,
+          checksum: this.calculateChecksum(currentModels)
+        };
+
+        // Calculate changes
+        let newModels = 0;
+        let updatedModels = 0;
+        let removedModels = 0;
+
+        if (previousSnapshot) {
+          const changes = this.compareSnapshots(previousSnapshot, snapshot);
+          newModels = changes.newModels;
+          updatedModels = changes.updatedModels;
+          removedModels = changes.removedModels;
+
+          if (newModels > 0 || updatedModels > 0 || removedModels > 0) {
+            console.log(`[ModelSync] ${gateway}: +${newModels} ~${updatedModels} -${removedModels} models`);
+            totalChanges += (newModels + updatedModels + removedModels);
+          }
+        }
+
+        this.snapshots.set(gateway, snapshot);
+
+        const syncResult: ModelSyncResult = {
+          gateway,
+          totalModels: currentModels.length,
+          newModels,
+          updatedModels,
+          removedModels,
+          lastSyncTimestamp: startTime
+        };
+
+        syncResults.push(syncResult);
       }
 
-      return syncResult;
+      // If any models changed, invalidate the backend cache once for all
+      if (totalChanges > 0) {
+        await this.invalidateCache();
+      }
+
+      console.log(`[ModelSync] Full sync complete: ${allModels.length} models across ${gatewaysToSync.length} gateways`);
+      return syncResults;
 
     } catch (error) {
-      const message = getErrorMessage(error);
-      const isTransient = isAbortOrNetworkError(error);
+      console.error('[ModelSync] Full sync failed:', error);
+      Sentry.captureException(error, {
+        tags: { sync_type: 'full_sync_error' }
+      });
+      return [];
+    }
+  }
 
-      if (isTransient) {
-        console.warn(`[ModelSync] ${gateway}: sync aborted or timed out (transient): ${message}`);
-      } else {
-        console.error(`[ModelSync] Error syncing ${gateway}:`, error);
-      }
+  /**
+   * Invalidate cache on the backend
+   */
+  private async invalidateCache(): Promise<void> {
+    try {
+      await fetch(`${API_BASE_URL}/api/cache/invalidate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+        // No gateway param = invalidate all
+      });
+      console.log('[ModelSync] Invalidated all caches on backend');
+    } catch (error) {
+      console.error('[ModelSync] Failed to invalidate cache:', error);
+    }
+  }
 
-      const result: ModelSyncResult = {
-        gateway,
+  /**
+   * Wrapper for backward compatibility, now uses performFullSync
+   */
+  async syncGateway(gateway: string): Promise<ModelSyncResult> {
+    if (gateway === 'all') {
+      const results = await this.performFullSync();
+      return results[0] || {
+        gateway: 'all',
         totalModels: 0,
         newModels: 0,
         updatedModels: 0,
         removedModels: 0,
-        lastSyncTimestamp: startTime,
-        errors: [message || 'Unknown error']
+        lastSyncTimestamp: Date.now()
       };
-
-      if (!isTransient) {
-        Sentry.captureException(error, {
-          tags: { gateway, sync_type: 'gateway_sync' },
-          extra: {
-            gateway: result.gateway,
-            totalModels: result.totalModels,
-            errors: result.errors
-          }
-        });
-      }
-
-      return result;
-    }
-  }
-
-  /**
-   * Perform full sync of all gateways
-   */
-  async performFullSync(): Promise<ModelSyncResult[]> {
-    console.log('[ModelSync] Starting full sync of all gateways...');
-    
-    const allGateways = [
-      'openrouter', 'featherless', 'groq', 'together', 'fireworks',
-      'chutes', 'deepinfra', 'google', 'cerebras', 'nebius',
-      'xai', 'novita', 'huggingface', 'aimo', 'near', 'fal',
-      'vercel-ai-gateway', 'helicone', 'alpaca'
-    ];
-
-    const results = await Promise.allSettled(
-      allGateways.map(gateway => this.syncGateway(gateway))
-    );
-
-    const successfulResults = results
-      .filter((result): result is PromiseFulfilledResult<ModelSyncResult> => result.status === 'fulfilled')
-      .map(result => result.value);
-
-    const failedGateways = results
-      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result, index) => ({ gateway: allGateways[index], error: result.reason }));
-
-    if (failedGateways.length > 0) {
-      console.error(`[ModelSync] ${failedGateways.length} gateways failed to sync:`, failedGateways);
     }
 
-    const totalModels = successfulResults.reduce((sum, result) => sum + result.totalModels, 0);
-    const totalNewModels = successfulResults.reduce((sum, result) => sum + result.newModels, 0);
-    
-    console.log(`[ModelSync] Full sync complete: ${totalModels} total models, ${totalNewModels} new models`);
-
-    return successfulResults;
+    // Individual sync is discouraged but kept as fallback
+    // We'll just trigger a full sync to keep things consistent
+    const results = await this.performFullSync();
+    return results.find(r => r.gateway === gateway) || {
+      gateway,
+      totalModels: 0,
+      newModels: 0,
+      updatedModels: 0,
+      removedModels: 0,
+      lastSyncTimestamp: Date.now(),
+      errors: ['Gateway not found in full sync']
+    };
   }
 
   /**
@@ -278,7 +224,6 @@ class ModelSyncService {
     const newModels = current.models.filter(m => !previousIds.has(m.id)).length;
     const removedModels = previous.models.filter(m => !currentIds.has(m.id)).length;
 
-    // Check for updated models (same ID but different content)
     let updatedModels = 0;
     for (const currentModel of current.models) {
       const previousModel = previous.models.find(m => m.id === currentModel.id);
@@ -291,81 +236,33 @@ class ModelSyncService {
   }
 
   /**
-   * Check if two models are equal (for change detection)
+   * Check if two models are equal
    */
   private modelsEqual(a: ModelRecord, b: ModelRecord): boolean {
-    const pricingPromptA = a.pricing?.prompt ?? null;
-    const pricingPromptB = b.pricing?.prompt ?? null;
-    const pricingCompletionA = a.pricing?.completion ?? null;
-    const pricingCompletionB = b.pricing?.completion ?? null;
-
     return (
       a.name === b.name &&
       a.context_length === b.context_length &&
-      pricingPromptA === pricingPromptB &&
-      pricingCompletionA === pricingCompletionB &&
-      JSON.stringify(a.architecture) === JSON.stringify(b.architecture) &&
-      JSON.stringify(a.supported_parameters) === JSON.stringify(b.supported_parameters)
+      JSON.stringify(a.pricing) === JSON.stringify(b.pricing) &&
+      JSON.stringify(a.architecture) === JSON.stringify(b.architecture)
     );
   }
 
   /**
-   * Calculate checksum for model data (for integrity checking)
+   * Calculate checksum for model data
    */
   private calculateChecksum(models: ModelRecord[]): string {
     const modelData = models
       .map(m => `${m.id}:${m.name}:${JSON.stringify(m.pricing)}`)
       .sort()
       .join('|');
-    
-    // Simple hash function (in production, use crypto)
+
     let hash = 0;
     for (let i = 0; i < modelData.length; i++) {
       const char = modelData.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
+      hash = hash & hash;
     }
     return Math.abs(hash).toString(36);
-  }
-
-  /**
-   * Invalidate cache for a specific gateway
-   */
-  private async invalidateCache(gateway: string): Promise<void> {
-    try {
-      // Call the cache invalidation endpoint
-      await fetch(`${API_BASE_URL}/api/cache/invalidate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gateway })
-      });
-      console.log(`[ModelSync] Invalidated cache for ${gateway}`);
-    } catch (error) {
-      console.error(`[ModelSync] Failed to invalidate cache for ${gateway}:`, error);
-    }
-  }
-
-  /**
-   * Log sync results to analytics
-   */
-  private async logSyncResult(result: ModelSyncResult): Promise<void> {
-    try {
-      // Only log in development or when there are meaningful changes
-      const hasChanges = result.newModels > 0 || result.updatedModels > 0 || result.removedModels > 0;
-
-      if (hasChanges) {
-        console.log(`[ModelSync] ${result.gateway}: ${result.totalModels} models (+${result.newModels} ~${result.updatedModels} -${result.removedModels})`);
-      } else if (process.env.NODE_ENV === 'development') {
-        console.log(`[ModelSync] ${result.gateway}: ${result.totalModels} models (no changes)`);
-      }
-
-      // Log to analytics service only for significant changes
-      if (hasChanges) {
-        // Analytics logging can go here (Statsig, PostHog, etc.)
-      }
-    } catch (error) {
-      console.error('[ModelSync] Failed to log sync result:', error);
-    }
   }
 
   /**
@@ -380,14 +277,14 @@ class ModelSyncService {
   }
 
   /**
-   * Stop all sync intervals
+   * Stop recurring sync
    */
   stopSync(): void {
-    for (const interval of this.syncIntervals.values()) {
-      clearInterval(interval);
+    if (this.globalInterval) {
+      clearInterval(this.globalInterval);
+      this.globalInterval = null;
     }
-    this.syncIntervals.clear();
-    console.log('[ModelSync] Stopped all synchronization intervals');
+    console.log('[ModelSync] Stopped consolidated synchronization');
   }
 }
 
