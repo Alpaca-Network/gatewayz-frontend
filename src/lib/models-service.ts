@@ -155,36 +155,48 @@ export async function getModelsForGateway(gateway: string, limit?: number, searc
 
 // Extracted fetch logic for reuse
 async function fetchModelsLogic(gateway: string, limit?: number, search?: string) {
+  console.log('[Models Service] 🔍 fetchModelsLogic called:', { gateway, limit, search });
+
   // Check in-memory cache as fallback (only if no search query)
   if (modelsCache && gateway === 'all' && !search) {
     const now = Date.now();
-    if (now - modelsCache.timestamp < CACHE_DURATION) {
-      console.log(`[Models] Returning in-memory cached models (${modelsCache.data.length} models)`);
+    const age = now - modelsCache.timestamp;
+    console.log(`[Models Service] 🔍 Checking in-memory cache: age=${age}ms, max=${CACHE_DURATION}ms`);
+    if (age < CACHE_DURATION) {
+      console.log(`[Models Service] ✅ Returning in-memory cached models (${modelsCache.data.length} models)`);
       return { data: modelsCache.data };
+    } else {
+      console.log(`[Models Service] ⏰ Cache expired (${age}ms > ${CACHE_DURATION}ms)`);
     }
   }
 
   // Validate gateway using centralized registry
+  console.log(`[Models Service] 🔍 Validating gateway: ${gateway}`);
   if (!isValidGateway(gateway)) {
+    console.error(`[Models Service] ❌ Invalid gateway: ${gateway}`);
     throw new Error('Invalid gateway');
   }
+  console.log(`[Models Service] ✅ Gateway validated: ${gateway}`);
 
   // FIX: Use single backend call with gateway=all instead of N+1 individual gateway calls
   // The backend already handles aggregation and deduplication across all gateways efficiently
   // This eliminates ~20+ individual API calls and improves root load performance significantly
   if (gateway === 'all') {
-    console.log('[Models] Fetching all models from backend with gateway=all (single request)');
+    console.log('[Models Service] 📡 Fetching all models from backend with gateway=all (single request)');
     try {
       // Make a single API call to the backend with gateway=all
       // The backend handles fetching from all gateways and deduplication internally
+      console.log('[Models Service] 🔄 Calling fetchModelsFromGateway("all")...');
       const models = await fetchModelsFromGateway('all', limit, search);
+      console.log(`[Models Service] 📦 fetchModelsFromGateway returned ${models.length} models`);
 
       if (models.length > 0) {
         // Auto-register any new gateways discovered from the API response
         // This allows new gateways to appear in the UI without code changes
+        console.log('[Models Service] 🔄 Auto-registering gateways from response...');
         autoRegisterGatewaysFromModels(models);
 
-        console.log(`[Models] Fetched ${models.length} models from backend with gateway=all`);
+        console.log(`[Models Service] ✅ Successfully fetched ${models.length} models from backend with gateway=all`);
 
         // Cache the result for 'all' gateway (only if not searching)
         if (!search) {
@@ -192,24 +204,34 @@ async function fetchModelsLogic(gateway: string, limit?: number, search?: string
             data: models,
             timestamp: Date.now()
           };
+          console.log(`[Models Service] 💾 Cached ${models.length} models in memory`);
         }
 
         return { data: models };
+      } else {
+        console.warn('[Models Service] ⚠️ fetchModelsFromGateway returned 0 models - falling through to static fallback');
       }
       // If no models returned, fall through to static fallback
     } catch (error) {
-      console.error('[Models] Error fetching from backend with gateway=all:', error);
+      console.error('[Models Service] ❌ Exception in fetchModelsFromGateway:', error);
+      console.error('[Models Service] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       // Fall through to static fallback
     }
   }
 
   // For specific gateways, use the existing fetch logic
+  console.log(`[Models Service] 📡 Fetching models for specific gateway: ${gateway}`);
   const models = await fetchModelsFromGateway(gateway, limit, search);
+  console.log(`[Models Service] 📦 Specific gateway returned ${models.length} models`);
   if (models.length > 0) {
     return { data: models };
   }
 
   // Fallback to static data (only used if API fails)
+  console.log('[Models Service] ⚠️ No models from API - will use static fallback');
   return { data: getStaticFallbackModels(gateway) };
 }
 
@@ -256,6 +278,8 @@ function getApiBaseUrl(): string {
 
 // Helper function to fetch models from a specific gateway
 async function fetchModelsFromGateway(gateway: string, limit?: number, search?: string): Promise<any[]> {
+  console.log('[fetchModelsFromGateway] 🚀 Started:', { gateway, limit, search });
+
   const allModels: any[] = [];
   // Updated to use reasonable page size: 500 models per page (was 50000)
   // Backend now properly supports pagination with has_more and next_offset
@@ -274,15 +298,26 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
   const baseUrl = getApiBaseUrl();
   const isClientSide = typeof window !== 'undefined';
 
+  console.log('[fetchModelsFromGateway] 🔍 Environment:', {
+    isClientSide,
+    baseUrl: baseUrl || '(empty - Next.js API route)',
+    requestLimit,
+    timeoutMs,
+    gateway
+  });
+
   // On client-side, pagination is handled by the server (via /api/models route)
   // so we only make a single request without offset. The server-side getModelsForGateway
   // handles all pagination internally before returning results.
   // For 'all' gateway on server-side, fetch all pages (no limit) to get complete model list
   // For specific gateways, limit to 10 pages to avoid excessive fetching
   const maxPages = isClientSide ? 1 : (gateway === 'all' ? 100 : 10);
+  console.log(`[fetchModelsFromGateway] 📄 Max pages to fetch: ${maxPages}`);
 
   while (hasMore && pageCount < maxPages) {
     pageCount++;
+    console.log(`[fetchModelsFromGateway] 📄 Fetching page ${pageCount}/${maxPages}...`);
+
     // Only include offset for server-side requests (client requests don't paginate)
     const offsetParam = (!isClientSide && offset > 0) ? `&offset=${offset}` : '';
     const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
@@ -300,6 +335,8 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
           `${baseUrl}/models?gateway=${gateway}&${limitParam}`
         ];
 
+    console.log(`[fetchModelsFromGateway] 🌐 URLs to try:`, urls);
+
     const maxRetries = 3;
     let retryCount = 0;
     let lastError: { status: number; retryAfter: string | null } | null = null;
@@ -309,11 +346,12 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
         // Add delay for retries
         if (retryCount > 0 && lastError) {
           const waitTime = calculateRetryDelay(retryCount - 1, lastError.retryAfter);
-          console.log(`[Models] Rate limited on ${gateway}, retry ${retryCount}/${maxRetries} after ${waitTime}ms`);
+          console.log(`[fetchModelsFromGateway] ⏰ Rate limited on ${gateway}, retry ${retryCount}/${maxRetries} after ${waitTime}ms`);
           await sleep(waitTime);
         }
 
         const headers = buildHeaders(gateway);
+        console.log(`[fetchModelsFromGateway] 📋 Request headers:`, headers);
 
         // Build fetch options - include Next.js caching only on server-side
         const fetchOptions: RequestInit = {
@@ -327,14 +365,26 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
         // replaced good cached data with stale responses (pricing zeroed out).
         fetchOptions.cache = 'no-store';
 
+        console.log(`[fetchModelsFromGateway] 🔄 Making fetch request with timeout ${timeoutMs}ms...`);
+        const fetchStartTime = Date.now();
+
         // Try endpoints in parallel (server-side) or single endpoint (client-side)
         const response = await Promise.race(
           urls.map((url) => fetch(url, fetchOptions))
         );
 
+        const fetchDuration = Date.now() - fetchStartTime;
+        console.log(`[fetchModelsFromGateway] 📡 Response received in ${fetchDuration}ms:`, {
+          status: response.status,
+          statusText: response.statusText,
+          ok: response.ok,
+          url: response.url
+        });
+
         // Handle rate limit errors with retry
         if (response.status === 429) {
           const retryAfter = response.headers.get('retry-after');
+          console.warn(`[fetchModelsFromGateway] ⚠️ Rate limited (429) - retry after: ${retryAfter}`);
 
           if (retryCount < maxRetries) {
             lastError = { status: 429, retryAfter };
@@ -342,52 +392,79 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
             continue; // Retry
           } else {
             // Max retries exceeded, log and skip this page
-            console.error(`[Models] Rate limit exceeded for ${gateway} after ${maxRetries} retries, skipping page`);
+            console.error(`[fetchModelsFromGateway] ❌ Rate limit exceeded for ${gateway} after ${maxRetries} retries, skipping page`);
             hasMore = false;
             break;
           }
         }
 
         if (response.ok) {
+          console.log(`[fetchModelsFromGateway] ✅ Response OK - parsing JSON...`);
           const data: PaginatedResponse = await response.json();
+          console.log(`[fetchModelsFromGateway] 📦 Parsed response:`, {
+            hasData: !!data.data,
+            dataLength: data.data?.length || 0,
+            total: data.total,
+            returned: data.returned,
+            has_more: data.has_more,
+            next_offset: data.next_offset
+          });
 
           if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+            console.log(`[fetchModelsFromGateway] 🔄 Normalizing ${data.data.length} models...`);
             // Normalize each model to ensure provider_slugs and source_gateways are arrays
             const normalizedModels = data.data.map((model: any) => normalizeModel(model, gateway));
             allModels.push(...normalizedModels);
 
             // Log pagination info with total count if available
             const totalInfo = data.total ? ` (${allModels.length}/${data.total} total)` : '';
-            console.log(`[Models] Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})${totalInfo}`);
+            console.log(`[fetchModelsFromGateway] ✅ Page ${pageCount}: Fetched ${data.data.length} models for gateway: ${gateway} (offset: ${offset})${totalInfo}`);
 
             // Use backend pagination metadata instead of guessing
             // Backend now provides has_more and next_offset fields for reliable pagination
             if (data.has_more !== undefined) {
               // Backend explicitly tells us if there are more pages
+              console.log(`[fetchModelsFromGateway] 📄 Backend says has_more: ${data.has_more}`);
               hasMore = data.has_more;
 
               // Use backend-provided next_offset if available
               if (data.next_offset !== undefined) {
+                console.log(`[fetchModelsFromGateway] ➡️ Next offset: ${data.next_offset}`);
                 offset = data.next_offset;
               } else {
                 offset += requestLimit;
+                console.log(`[fetchModelsFromGateway] ➡️ Calculated next offset: ${offset}`);
               }
             } else {
               // Fallback to old logic if backend doesn't provide has_more
               const hasReachedLimit = limit && allModels.length >= limit;
               const gotFewerThanRequested = data.data.length < requestLimit;
+              console.log(`[fetchModelsFromGateway] 🔍 No has_more from backend - using fallback logic:`, {
+                hasReachedLimit,
+                gotFewerThanRequested,
+                currentTotal: allModels.length,
+                limit
+              });
 
               if (gotFewerThanRequested || hasReachedLimit) {
+                console.log(`[fetchModelsFromGateway] 🛑 Stopping pagination (hasReachedLimit=${hasReachedLimit}, gotFewerThanRequested=${gotFewerThanRequested})`);
                 hasMore = false;
               } else {
                 offset += requestLimit;
+                console.log(`[fetchModelsFromGateway] ➡️ Continuing to next page, offset: ${offset}`);
               }
             }
           } else {
+            console.log(`[fetchModelsFromGateway] ⚠️ No data in response or empty array - stopping pagination`);
             hasMore = false;
           }
           break; // Success, exit retry loop
         } else {
+          console.error(`[fetchModelsFromGateway] ❌ Non-OK response:`, {
+            status: response.status,
+            statusText: response.statusText,
+            url: response.url
+          });
           // Track non-OK responses from backend API
           await trackBadBackendResponse(response, {
             endpoint: urls[0], // Use first URL for logging
@@ -400,6 +477,12 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
         }
       } catch (error: any) {
         const message = getErrorMessage(error);
+        console.error(`[fetchModelsFromGateway] ❌ Exception during fetch:`, {
+          message,
+          name: error?.name,
+          isAbort: isAbortOrNetworkError(error),
+          error
+        });
         if (isAbortOrNetworkError(error)) {
           // Track network/timeout errors to backend API
           trackBackendNetworkError(error, {
@@ -428,9 +511,18 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
   }
 
   // Only log fetch results in development or when models were actually fetched
-  if (process.env.NODE_ENV === 'development' || allModels.length > 0) {
-    console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
+  console.log(`[fetchModelsFromGateway] 🏁 Finished! Total fetched for gateway ${gateway}: ${allModels.length} models`);
+  console.log(`[fetchModelsFromGateway] 📊 Summary:`, {
+    gateway,
+    totalModels: allModels.length,
+    pagesFetched: pageCount,
+    maxPagesAllowed: maxPages
+  });
+
+  if (allModels.length === 0) {
+    console.warn(`[fetchModelsFromGateway] ⚠️⚠️⚠️ RETURNING ZERO MODELS - This will trigger static fallback!`);
   }
+
   return allModels;
 }
 

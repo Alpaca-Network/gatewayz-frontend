@@ -109,12 +109,21 @@ function deduplicateModels(models: Model[]): Model[] {
 }
 
 async function getAllModels(): Promise<UniqueModel[]> {
+  console.log('[Models Page] 🔍 getAllModels() started');
+  console.log('[Models Page] Environment check:', {
+    NEXT_STATIC_EXPORT: process.env.NEXT_STATIC_EXPORT,
+    CI: process.env.CI,
+    VERCEL: process.env.VERCEL,
+    NODE_ENV: process.env.NODE_ENV,
+    USE_UNIQUE_MODELS_ENDPOINT
+  });
+
   try {
     // During static export (desktop builds), use static models only
     // API routes are not available during static export
     const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true';
     if (isStaticExport) {
-      console.log('[Models Page] Static export mode - using static models');
+      console.log('[Models Page] ⚠️ FALLBACK REASON: Static export mode - using static models');
       // Transform static models to UniqueModel format
       const legacyModels = staticModels.map((model) => transformStaticModel(model) as unknown as Model);
       return transformLegacyToUniqueModels(legacyModels);
@@ -126,7 +135,7 @@ async function getAllModels(): Promise<UniqueModel[]> {
     // Vercel builds have access to the backend, so they can fetch real models
     const isCI = process.env.CI === 'true' && !process.env.VERCEL;
     if (isCI) {
-      console.log('[Models Page] CI build detected - using static models to avoid timeout');
+      console.log('[Models Page] ⚠️ FALLBACK REASON: CI build detected - using static models to avoid timeout');
       const legacyModels = staticModels.map((model) => transformStaticModel(model) as unknown as Model);
       return transformLegacyToUniqueModels(legacyModels);
     }
@@ -144,29 +153,61 @@ async function getAllModels(): Promise<UniqueModel[]> {
 
       const duration = Date.now() - startTime;
       console.log(`[Models Page] ✅ Unique models fetched: ${result.data.length} models in ${duration}ms`);
+
+      if (result.data.length === 0) {
+        console.warn('[Models Page] ⚠️ Unique models endpoint returned 0 models - may fallback to static');
+      }
+
       return result.data;
     } else {
       // Legacy path: Fetch from /models endpoint and deduplicate on frontend
-      console.log('[Models Page] Fetching all models with gateway=all (legacy endpoint)');
+      console.log('[Models Page] 📡 Fetching all models with gateway=all (legacy endpoint)');
       const startTime = Date.now();
 
+      console.log('[Models Page] 🔄 Calling getModelsForGateway("all")...');
       const result = await getModelsForGateway('all');
+      console.log('[Models Page] 📦 getModelsForGateway returned:', {
+        hasData: !!result.data,
+        dataLength: result.data?.length || 0,
+        dataType: typeof result.data,
+        isArray: Array.isArray(result.data)
+      });
+
       const allModels = result.data || [];
+      console.log(`[Models Page] 📊 Raw models count: ${allModels.length}`);
+
+      if (allModels.length === 0) {
+        console.error('[Models Page] ❌ No models returned from getModelsForGateway - will use static fallback');
+      }
 
       // Deduplicate intelligently using shared function
+      console.log('[Models Page] 🔄 Deduplicating models...');
       const uniqueModels = deduplicateModels(allModels);
+      console.log(`[Models Page] ✅ After deduplication: ${uniqueModels.length} unique models`);
 
       const duration = Date.now() - startTime;
-      console.log(`[Models Page] All models fetched (legacy): ${uniqueModels.length} models in ${duration}ms`);
+      console.log(`[Models Page] ⏱️ Total fetch time: ${duration}ms`);
 
       // Convert legacy Model format to UniqueModel format for consistent rendering
-      return transformLegacyToUniqueModels(uniqueModels);
+      console.log('[Models Page] 🔄 Transforming to UniqueModel format...');
+      const transformed = transformLegacyToUniqueModels(uniqueModels);
+      console.log(`[Models Page] ✅ Transformation complete: ${transformed.length} models ready`);
+
+      return transformed;
     }
   } catch (error) {
-    console.error('[Models Page] Failed to fetch models:', error);
+    console.error('[Models Page] ❌❌❌ EXCEPTION CAUGHT - FALLING BACK TO STATIC MODELS');
+    console.error('[Models Page] Error details:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      error
+    });
     // Fallback to static models on error
+    console.log('[Models Page] ⚠️ FALLBACK REASON: Exception thrown during fetch');
     const legacyModels = staticModels.map((model) => transformStaticModel(model) as unknown as Model);
-    return transformLegacyToUniqueModels(legacyModels);
+    const fallbackModels = transformLegacyToUniqueModels(legacyModels);
+    console.log(`[Models Page] 📦 Returning ${fallbackModels.length} static fallback models`);
+    return fallbackModels;
   }
 }
 
