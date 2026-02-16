@@ -43,7 +43,7 @@ import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 
 import type { UniqueModel, Provider, Model as LegacyModel } from '@/types/models';
-import { adaptLegacyToUniqueModel } from '@/types/models';
+import { adaptLegacyToUniqueModel, mergeLegacyModelsToUnique } from '@/types/models';
 
 // Re-export for backwards compatibility
 type Model = UniqueModel;
@@ -192,7 +192,7 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
 
   // Health status badge color
   const healthColor = provider.health_status === 'healthy' ? 'bg-green-600' :
-                      provider.health_status === 'degraded' ? 'bg-yellow-600' : 'bg-red-600';
+    provider.health_status === 'degraded' ? 'bg-yellow-600' : 'bg-red-600';
 
   return (
     <div className={`grid grid-cols-[minmax(200px,2fr)_minmax(100px,1fr)_100px_100px_100px] gap-4 py-2 px-4 pl-12 bg-muted/10 items-center ${!isLast ? 'border-b border-border/30' : ''}`}>
@@ -263,7 +263,7 @@ const MobileProviderSubRow = React.memo(function MobileProviderSubRow({
 
   // Health status badge color
   const healthColor = provider.health_status === 'healthy' ? 'bg-green-600' :
-                      provider.health_status === 'degraded' ? 'bg-yellow-600' : 'bg-red-600';
+    provider.health_status === 'degraded' ? 'bg-yellow-600' : 'bg-red-600';
 
   return (
     <div className={`flex items-center justify-between py-2 px-4 pl-8 bg-muted/10 ${!isLast ? 'border-b border-border/30' : ''}`}>
@@ -541,9 +541,9 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
 
   // Determine if model is multi-lingual (simple heuristic - can be improved)
   const isMultiLingual = model.architecture?.input_modalities?.includes('text') &&
-                         (model.name.toLowerCase().includes('multilingual') ||
-                          model.description?.toLowerCase().includes('multilingual') ||
-                          model.description?.toLowerCase().includes('multi-lingual'));
+    (model.name.toLowerCase().includes('multilingual') ||
+      model.description?.toLowerCase().includes('multilingual') ||
+      model.description?.toLowerCase().includes('multi-lingual'));
 
   // Deduplicate providers for display
   const sourcesByName = new Map<string, string>();
@@ -818,10 +818,10 @@ export default function ModelsClient({
             if (process.env.NODE_ENV === 'development') {
               console.log(`[Models] Fetched ${payload.data.length} models from client`);
             }
-            // Transform legacy Model format to UniqueModel format
+            // Transform and merge legacy Model format to UniqueModel format
             // The API returns legacy format (pricing, source_gateway fields)
             // but the UI expects UniqueModel format (providers array)
-            const transformedModels = payload.data.map(m => adaptLegacyToUniqueModel(m));
+            const transformedModels = mergeLegacyModelsToUnique(payload.data);
             setModels(transformedModels);
           }
         } catch (err) {
@@ -1145,42 +1145,42 @@ export default function ModelsClient({
     // Then sort the filtered results
     const sorted = [...filtered];
     sorted.sort((a, b) => {
-        switch (sortBy) {
-            case 'popular':
-                // Sort by number of providers (more providers = more popular)
-                return (b.provider_count || 0) - (a.provider_count || 0);
-            case 'newest':
-                // Sort by creation date (newest first)
-                return (b.created || 0) - (a.created || 0);
-            case 'tokens-desc':
-                return b.context_length - a.context_length;
-            case 'tokens-asc':
-                return a.context_length - b.context_length;
-            case 'price-desc': {
-                const aPricing = getNormalizedPricingForFilter(a);
-                const bPricing = getNormalizedPricingForFilter(b);
-                // Models without valid pricing go to the end
-                if (!aPricing.hasValidPricing && !bPricing.hasValidPricing) return 0;
-                if (!aPricing.hasValidPricing) return 1;  // a goes after b
-                if (!bPricing.hasValidPricing) return -1; // b goes after a
-                const aTotalPrice = (aPricing.prompt ?? 0) + (aPricing.completion ?? 0);
-                const bTotalPrice = (bPricing.prompt ?? 0) + (bPricing.completion ?? 0);
-                return bTotalPrice - aTotalPrice;
-            }
-            case 'price-asc': {
-                const aPricing = getNormalizedPricingForFilter(a);
-                const bPricing = getNormalizedPricingForFilter(b);
-                // Models without valid pricing go to the end
-                if (!aPricing.hasValidPricing && !bPricing.hasValidPricing) return 0;
-                if (!aPricing.hasValidPricing) return 1;  // a goes after b
-                if (!bPricing.hasValidPricing) return -1; // b goes after a
-                const aTotalPrice = (aPricing.prompt ?? 0) + (aPricing.completion ?? 0);
-                const bTotalPrice = (bPricing.prompt ?? 0) + (bPricing.completion ?? 0);
-                return aTotalPrice - bTotalPrice;
-            }
-            default:
-                return 0;
+      switch (sortBy) {
+        case 'popular':
+          // Sort by number of providers (more providers = more popular)
+          return (b.provider_count || 0) - (a.provider_count || 0);
+        case 'newest':
+          // Sort by creation date (newest first)
+          return (b.created || 0) - (a.created || 0);
+        case 'tokens-desc':
+          return b.context_length - a.context_length;
+        case 'tokens-asc':
+          return a.context_length - b.context_length;
+        case 'price-desc': {
+          const aPricing = getNormalizedPricingForFilter(a);
+          const bPricing = getNormalizedPricingForFilter(b);
+          // Models without valid pricing go to the end
+          if (!aPricing.hasValidPricing && !bPricing.hasValidPricing) return 0;
+          if (!aPricing.hasValidPricing) return 1;  // a goes after b
+          if (!bPricing.hasValidPricing) return -1; // b goes after a
+          const aTotalPrice = (aPricing.prompt ?? 0) + (aPricing.completion ?? 0);
+          const bTotalPrice = (bPricing.prompt ?? 0) + (bPricing.completion ?? 0);
+          return bTotalPrice - aTotalPrice;
         }
+        case 'price-asc': {
+          const aPricing = getNormalizedPricingForFilter(a);
+          const bPricing = getNormalizedPricingForFilter(b);
+          // Models without valid pricing go to the end
+          if (!aPricing.hasValidPricing && !bPricing.hasValidPricing) return 0;
+          if (!aPricing.hasValidPricing) return 1;  // a goes after b
+          if (!bPricing.hasValidPricing) return -1; // b goes after a
+          const aTotalPrice = (aPricing.prompt ?? 0) + (aPricing.completion ?? 0);
+          const bTotalPrice = (bPricing.prompt ?? 0) + (bPricing.completion ?? 0);
+          return aTotalPrice - bTotalPrice;
+        }
+        default:
+          return 0;
+      }
     });
 
     return sorted;
@@ -1370,12 +1370,12 @@ export default function ModelsClient({
               <SidebarGroupLabel>Input Formats</SidebarGroupLabel>
               <div className="flex flex-col gap-2">
                 {allInputFormatsWithCounts.map((item) => {
-                  const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
-                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
+                  const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4" /> :
+                    item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4" /> :
+                      item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4" /> :
+                        item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4" /> :
+                          item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4" /> :
+                            item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4" /> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -1399,12 +1399,12 @@ export default function ModelsClient({
               <SidebarGroupLabel>Output Formats</SidebarGroupLabel>
               <div className="flex flex-col gap-2">
                 {allOutputFormatsWithCounts.map((item) => {
-                  const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4"/> :
-                               item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4"/> :
-                               item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4"/> : null;
+                  const icon = item.value.toLowerCase() === 'text' ? <BookText className="w-4 h-4" /> :
+                    item.value.toLowerCase() === 'image' ? <ImageIcon className="w-4 h-4" /> :
+                      item.value.toLowerCase() === 'file' ? <FileText className="w-4 h-4" /> :
+                        item.value.toLowerCase() === 'audio' ? <Music className="w-4 h-4" /> :
+                          item.value.toLowerCase() === 'video' ? <Video className="w-4 h-4" /> :
+                            item.value.toLowerCase() === '3d' ? <Box className="w-4 h-4" /> : null;
                   return (
                     <div key={item.value} className="flex items-center justify-between space-x-2">
                       <div className="flex items-center space-x-2 flex-1 min-w-0">
@@ -1476,307 +1476,307 @@ export default function ModelsClient({
               items={allParametersWithCounts}
               selectedItems={selectedParameters}
               onSelectionChange={handleCheckboxChange(setSelectedParameters)}
-              icon={<SlidersIcon className="w-4 h-4"/>}
+              icon={<SlidersIcon className="w-4 h-4" />}
             />
             <FilterDropdown
               label="Model Series"
               items={allModelSeriesWithCounts}
               selectedItems={selectedModelSeries}
               onSelectionChange={handleCheckboxChange(setSelectedModelSeries)}
-              icon={<Bot className="w-4 h-4"/>}
+              icon={<Bot className="w-4 h-4" />}
             />
             <FilterDropdown
               label="Researcher"
               items={allDevelopersWithCounts}
               selectedItems={selectedDevelopers}
               onSelectionChange={handleCheckboxChange(setSelectedDevelopers)}
-              icon={<Bot className="w-4 h-4"/>}
+              icon={<Bot className="w-4 h-4" />}
             />
             <FilterDropdown
               label="Gateway"
               items={allGatewaysWithCounts}
               selectedItems={selectedGateways}
               onSelectionChange={handleCheckboxChange(setSelectedGateways)}
-              icon={<Bot className="w-4 h-4"/>}
+              icon={<Bot className="w-4 h-4" />}
             />
           </SidebarContent>
         </Sidebar>
 
         <SidebarInset className="flex-1 overflow-x-hidden flex flex-col">
           <div data-models-container className="w-full pb-24 overflow-x-hidden -mt-[115px] has-onboarding-banner:-mt-[115px]">
-          <div data-models-header className="sticky z-25 bg-background border-b flex flex-col gap-3 w-full px-4 sm:px-6 lg:px-8 pt-3 pb-3 top-[65px] has-onboarding-banner:top-[125px]" style={{ transition: 'top 0.3s ease' }}>
-            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 w-full">
-              <div className="flex items-center gap-3 flex-1 min-w-0 w-full lg:w-auto">
-                <SidebarTrigger className="lg:hidden" />
-                <h1 className="text-2xl font-bold whitespace-nowrap">Models</h1>
-                {isLoadingMore && (
-                  <Badge variant="secondary" className="text-xs animate-pulse">
-                    Loading more...
+            <div data-models-header className="sticky z-25 bg-background border-b flex flex-col gap-3 w-full px-4 sm:px-6 lg:px-8 pt-3 pb-3 top-[65px] has-onboarding-banner:top-[125px]" style={{ transition: 'top 0.3s ease' }}>
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 w-full">
+                <div className="flex items-center gap-3 flex-1 min-w-0 w-full lg:w-auto">
+                  <SidebarTrigger className="lg:hidden" />
+                  <h1 className="text-2xl font-bold whitespace-nowrap">Models</h1>
+                  {isLoadingMore && (
+                    <Badge variant="secondary" className="text-xs animate-pulse">
+                      Loading more...
+                    </Badge>
+                  )}
+                  <div className="relative flex-1 max-w-md ml-auto lg:ml-4">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Filter models"
+                      className="pl-9 bg-input"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0 w-full lg:w-auto justify-between lg:justify-end">
+                  <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
+                    {isLoadingModels || isLoadingMore
+                      ? `${deduplicatedModels.length} models available, loading...`
+                      : `${filteredModels.length} / ${deduplicatedModels.length} models`
+                    }
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {hasActiveFilters && (
+                      <Button variant="ghost" size="sm" onClick={resetFilters} className="whitespace-nowrap">Clear All Filters</Button>
+                    )}
+                    <Select value={sortBy} onValueChange={setSortBy}>
+                      <SelectTrigger className="w-[180px] h-9">
+                        <SelectValue placeholder="Sort" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="popular">Popular</SelectItem>
+                        <SelectItem value="newest">Newest</SelectItem>
+                        <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
+                        <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
+                        <SelectItem value="price-desc">Price (High to Low)</SelectItem>
+                        <SelectItem value="price-asc">Price (Low to High)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <div className="hidden lg:flex items-center gap-1 bg-muted p-1 rounded-md">
+                      <Button
+                        variant={layout === 'table' ? 'secondary' : 'ghost'}
+                        size="icon"
+                        onClick={() => setLayout('table')}
+                        className="h-8 w-8"
+                        title="Table view"
+                      >
+                        <Table2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant={layout === 'grid' ? 'secondary' : 'ghost'}
+                        size="icon"
+                        onClick={() => setLayout('grid')}
+                        className="h-8 w-8"
+                        title="Grid view"
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    {layout === 'table' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={toggleAllRows}
+                        className="flex items-center gap-1.5 h-9"
+                        title={allRowsExpanded ? "Collapse all rows" : "Expand all rows"}
+                      >
+                        {allRowsExpanded ? (
+                          <>
+                            <ChevronsDownUp className="w-4 h-4" />
+                            <span className="text-sm hidden sm:inline">Collapse All</span>
+                          </>
+                        ) : (
+                          <>
+                            <ChevronsUpDown className="w-4 h-4" />
+                            <span className="text-sm hidden sm:inline">Expand All</span>
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Filters */}
+              <div className="flex flex-wrap gap-2">
+                {selectedInputFormats.map(format => (
+                  <Badge key={`input-${format}`} variant="secondary" className="gap-1">
+                    Input: {format}
+                    <button onClick={() => setSelectedInputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedOutputFormats.map(format => (
+                  <Badge key={`output-${format}`} variant="secondary" className="gap-1">
+                    Output: {format}
+                    <button onClick={() => setSelectedOutputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {pricingFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-1">
+                    {pricingFilter === 'free' ? 'Free only' : 'Paid only'}
+                    <button onClick={() => setPricingFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
                   </Badge>
                 )}
-                <div className="relative flex-1 max-w-md ml-auto lg:ml-4">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Filter models"
-                    className="pl-9 bg-input"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-3 flex-shrink-0 w-full lg:w-auto justify-between lg:justify-end">
-                <span className={`text-sm whitespace-nowrap ${isLoadingModels || isLoadingMore ? 'shimmer-text' : 'text-muted-foreground'}`}>
-                  {isLoadingModels || isLoadingMore
-                    ? `${deduplicatedModels.length} models available, loading...`
-                    : `${filteredModels.length} / ${deduplicatedModels.length} models`
-                  }
-                </span>
-                <div className="flex items-center gap-2">
-                  {hasActiveFilters && (
-                    <Button variant="ghost" size="sm" onClick={resetFilters} className="whitespace-nowrap">Clear All Filters</Button>
-                  )}
-                  <Select value={sortBy} onValueChange={setSortBy}>
-                    <SelectTrigger className="w-[180px] h-9">
-                      <SelectValue placeholder="Sort" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="popular">Popular</SelectItem>
-                      <SelectItem value="newest">Newest</SelectItem>
-                      <SelectItem value="tokens-desc">Tokens (High to Low)</SelectItem>
-                      <SelectItem value="tokens-asc">Tokens (Low to High)</SelectItem>
-                      <SelectItem value="price-desc">Price (High to Low)</SelectItem>
-                      <SelectItem value="price-asc">Price (Low to High)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <div className="hidden lg:flex items-center gap-1 bg-muted p-1 rounded-md">
-                    <Button
-                      variant={layout === 'table' ? 'secondary' : 'ghost'}
-                      size="icon"
-                      onClick={() => setLayout('table')}
-                      className="h-8 w-8"
-                      title="Table view"
-                    >
-                      <Table2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant={layout === 'grid' ? 'secondary' : 'ghost'}
-                      size="icon"
-                      onClick={() => setLayout('grid')}
-                      className="h-8 w-8"
-                      title="Grid view"
-                    >
-                      <LayoutGrid className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  {layout === 'table' && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={toggleAllRows}
-                      className="flex items-center gap-1.5 h-9"
-                      title={allRowsExpanded ? "Collapse all rows" : "Expand all rows"}
-                    >
-                      {allRowsExpanded ? (
-                        <>
-                          <ChevronsDownUp className="w-4 h-4" />
-                          <span className="text-sm hidden sm:inline">Collapse All</span>
-                        </>
-                      ) : (
-                        <>
-                          <ChevronsUpDown className="w-4 h-4" />
-                          <span className="text-sm hidden sm:inline">Expand All</span>
-                        </>
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Active Filters */}
-            <div className="flex flex-wrap gap-2">
-              {selectedInputFormats.map(format => (
-                <Badge key={`input-${format}`} variant="secondary" className="gap-1">
-                  Input: {format}
-                  <button onClick={() => setSelectedInputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {selectedOutputFormats.map(format => (
-                <Badge key={`output-${format}`} variant="secondary" className="gap-1">
-                  Output: {format}
-                  <button onClick={() => setSelectedOutputFormats(prev => prev.filter(f => f !== format))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {pricingFilter !== 'all' && (
-                <Badge variant="secondary" className="gap-1">
-                  {pricingFilter === 'free' ? 'Free only' : 'Paid only'}
-                  <button onClick={() => setPricingFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {privacyFilter !== 'all' && (
-                <Badge variant="secondary" className="gap-1">
-                  {privacyFilter === 'private' ? 'Private only' : 'Public only'}
-                  <button onClick={() => setPrivacyFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {releaseDateFilter !== 'all' && (
-                <Badge variant="secondary" className="gap-1">
-                  {releaseDateFilter === 'last-30-days' && 'Last 30 days'}
-                  {releaseDateFilter === 'last-90-days' && 'Last 90 days'}
-                  {releaseDateFilter === 'last-6-months' && 'Last 6 months'}
-                  {releaseDateFilter === 'last-year' && 'Last year'}
-                  <button onClick={() => setReleaseDateFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {(contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024) && (
-                <Badge variant="secondary" className="gap-1">
-                  Context: {contextLengthRange[0]}K-{contextLengthRange[1]}K tokens
-                  <button onClick={() => setContextLengthRange([0, 1024])} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {(promptPricingRange[0] !== 0 || promptPricingRange[1] !== 10) && (
-                <Badge variant="secondary" className="gap-1">
-                  Price: ${promptPricingRange[0]}-${promptPricingRange[1]}/M tokens
-                  <button onClick={() => setPromptPricingRange([0, 10])} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {selectedParameters.map(param => (
-                <Badge key={param} variant="secondary" className="gap-1">
-                  {param}
-                  <button onClick={() => setSelectedParameters(prev => prev.filter(p => p !== param))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {selectedModelSeries.map(series => (
-                <Badge key={series} variant="secondary" className="gap-1">
-                  {series}
-                  <button onClick={() => setSelectedModelSeries(prev => prev.filter(s => s !== series))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {selectedDevelopers.map(developer => (
-                <Badge key={developer} variant="secondary" className="gap-1">
-                  Researcher: {developer}
-                  <button onClick={() => setSelectedDevelopers(prev => prev.filter(d => d !== developer))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-              {selectedGateways.map(gateway => (
-                <Badge key={gateway} variant="secondary" className="gap-1">
-                  Gateway: {gateway}
-                  <button onClick={() => setSelectedGateways(prev => prev.filter(g => g !== gateway))} className="ml-1 hover:bg-muted rounded-sm">
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          </div>
-
-          <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20 has-onboarding-banner:mt-40" style={{ transition: 'margin-top 0.3s ease' }}>
-          {layout === 'table' ? (
-            /* Table View - Responsive with mobile and desktop layouts */
-            <div className="rounded-lg border border-border" key={`models-table-${filteredModels.length}-${debouncedSearchTerm}`}>
-              {/* Desktop table header - hidden on mobile */}
-              <div className="hidden md:block">
-                <ModelTableHeader />
-              </div>
-              {/* Mobile header */}
-              <div className="md:hidden px-4 py-3 border-b border-border text-sm font-medium text-muted-foreground bg-muted/30">
-                Models
-              </div>
-              <div className="divide-y divide-border/50">
-                {visibleModels.map((model, index) => (
-                  <div key={model.id} className={index % 2 === 1 ? 'bg-muted/20' : ''}>
-                    {/* Desktop row */}
-                    <div className="hidden md:block">
-                      <GroupedModelTableRow
-                        model={model}
-                        isExpanded={isRowExpanded(model.id)}
-                        onToggle={() => toggleRowExpansion(model.id)}
-                      />
-                    </div>
-                    {/* Mobile row */}
-                    <div className="md:hidden">
-                      <MobileModelRow
-                        model={model}
-                        isExpanded={isRowExpanded(model.id)}
-                        onToggle={() => toggleRowExpansion(model.id)}
-                      />
-                    </div>
-                  </div>
+                {privacyFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-1">
+                    {privacyFilter === 'private' ? 'Private only' : 'Public only'}
+                    <button onClick={() => setPrivacyFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {releaseDateFilter !== 'all' && (
+                  <Badge variant="secondary" className="gap-1">
+                    {releaseDateFilter === 'last-30-days' && 'Last 30 days'}
+                    {releaseDateFilter === 'last-90-days' && 'Last 90 days'}
+                    {releaseDateFilter === 'last-6-months' && 'Last 6 months'}
+                    {releaseDateFilter === 'last-year' && 'Last year'}
+                    <button onClick={() => setReleaseDateFilter('all')} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(contextLengthRange[0] !== 0 || contextLengthRange[1] !== 1024) && (
+                  <Badge variant="secondary" className="gap-1">
+                    Context: {contextLengthRange[0]}K-{contextLengthRange[1]}K tokens
+                    <button onClick={() => setContextLengthRange([0, 1024])} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {(promptPricingRange[0] !== 0 || promptPricingRange[1] !== 10) && (
+                  <Badge variant="secondary" className="gap-1">
+                    Price: ${promptPricingRange[0]}-${promptPricingRange[1]}/M tokens
+                    <button onClick={() => setPromptPricingRange([0, 10])} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+                {selectedParameters.map(param => (
+                  <Badge key={param} variant="secondary" className="gap-1">
+                    {param}
+                    <button onClick={() => setSelectedParameters(prev => prev.filter(p => p !== param))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedModelSeries.map(series => (
+                  <Badge key={series} variant="secondary" className="gap-1">
+                    {series}
+                    <button onClick={() => setSelectedModelSeries(prev => prev.filter(s => s !== series))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedDevelopers.map(developer => (
+                  <Badge key={developer} variant="secondary" className="gap-1">
+                    Researcher: {developer}
+                    <button onClick={() => setSelectedDevelopers(prev => prev.filter(d => d !== developer))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {selectedGateways.map(gateway => (
+                  <Badge key={gateway} variant="secondary" className="gap-1">
+                    Gateway: {gateway}
+                    <button onClick={() => setSelectedGateways(prev => prev.filter(g => g !== gateway))} className="ml-1 hover:bg-muted rounded-sm">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
                 ))}
               </div>
             </div>
-          ) : (
-            /* Grid View - Card style */
-            <div
-              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden"
-              key={`models-grid-${filteredModels.length}-${debouncedSearchTerm}`}
-            >
-              {visibleModels.map((model) => (
-                <ModelCard key={model.id} model={model} />
-              ))}
-            </div>
-          )}
 
-          {/* No results message */}
-          {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (
-            <div className="flex flex-col items-center justify-center py-16 px-4">
-              <div className="text-center max-w-md">
-                <h3 className="text-lg font-semibold mb-2">No models found</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {selectedGateways.includes('cerebras') ? (
-                    <>
-                      The Cerebras gateway is experiencing data issues. Please try selecting a different gateway or <button onClick={resetFilters} className="text-primary hover:underline">clear all filters</button>.
-                    </>
-                  ) : (
-                    <>
-                      Try adjusting your filters or <button onClick={resetFilters} className="text-primary hover:underline">clearing all filters</button> to see more models.
-                    </>
-                  )}
-                </p>
-              </div>
-            </div>
-          )}
+            <div data-models-list className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20 has-onboarding-banner:mt-40" style={{ transition: 'margin-top 0.3s ease' }}>
+              {layout === 'table' ? (
+                /* Table View - Responsive with mobile and desktop layouts */
+                <div className="rounded-lg border border-border" key={`models-table-${filteredModels.length}-${debouncedSearchTerm}`}>
+                  {/* Desktop table header - hidden on mobile */}
+                  <div className="hidden md:block">
+                    <ModelTableHeader />
+                  </div>
+                  {/* Mobile header */}
+                  <div className="md:hidden px-4 py-3 border-b border-border text-sm font-medium text-muted-foreground bg-muted/30">
+                    Models
+                  </div>
+                  <div className="divide-y divide-border/50">
+                    {visibleModels.map((model, index) => (
+                      <div key={model.id} className={index % 2 === 1 ? 'bg-muted/20' : ''}>
+                        {/* Desktop row */}
+                        <div className="hidden md:block">
+                          <GroupedModelTableRow
+                            model={model}
+                            isExpanded={isRowExpanded(model.id)}
+                            onToggle={() => toggleRowExpansion(model.id)}
+                          />
+                        </div>
+                        {/* Mobile row */}
+                        <div className="md:hidden">
+                          <MobileModelRow
+                            model={model}
+                            isExpanded={isRowExpanded(model.id)}
+                            onToggle={() => toggleRowExpansion(model.id)}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                /* Grid View - Card style */
+                <div
+                  className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-6 overflow-x-hidden"
+                  key={`models-grid-${filteredModels.length}-${debouncedSearchTerm}`}
+                >
+                  {visibleModels.map((model) => (
+                    <ModelCard key={model.id} model={model} />
+                  ))}
+                </div>
+              )}
 
-          {/* Infinite Scroll Trigger */}
-          {hasMore && (
-            <div ref={loadMoreRef} className="flex items-center justify-center py-8">
-              <div className="text-sm text-muted-foreground">
-                Loading more models... ({visibleCount} of {filteredModels.length})
-              </div>
-            </div>
-          )}
+              {/* No results message */}
+              {filteredModels.length === 0 && !isLoadingModels && !isLoadingMore && (
+                <div className="flex flex-col items-center justify-center py-16 px-4">
+                  <div className="text-center max-w-md">
+                    <h3 className="text-lg font-semibold mb-2">No models found</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {selectedGateways.includes('cerebras') ? (
+                        <>
+                          The Cerebras gateway is experiencing data issues. Please try selecting a different gateway or <button onClick={resetFilters} className="text-primary hover:underline">clear all filters</button>.
+                        </>
+                      ) : (
+                        <>
+                          Try adjusting your filters or <button onClick={resetFilters} className="text-primary hover:underline">clearing all filters</button> to see more models.
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              )}
 
-          {/* End of results */}
-          {!hasMore && filteredModels.length > 0 && (
-            <div className="flex flex-col items-center justify-center py-8 gap-2">
-              <div className="text-sm text-muted-foreground">
-                Showing all {filteredModels.length} models
-              </div>
-              <Link href="/releases" className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
-                What's new
-              </Link>
+              {/* Infinite Scroll Trigger */}
+              {hasMore && (
+                <div ref={loadMoreRef} className="flex items-center justify-center py-8">
+                  <div className="text-sm text-muted-foreground">
+                    Loading more models... ({visibleCount} of {filteredModels.length})
+                  </div>
+                </div>
+              )}
+
+              {/* End of results */}
+              {!hasMore && filteredModels.length > 0 && (
+                <div className="flex flex-col items-center justify-center py-8 gap-2">
+                  <div className="text-sm text-muted-foreground">
+                    Showing all {filteredModels.length} models
+                  </div>
+                  <Link href="/releases" className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                    What's new
+                  </Link>
+                </div>
+              )}
             </div>
-          )}
-          </div>
           </div>
         </SidebarInset>
       </div>
@@ -1785,31 +1785,31 @@ export default function ModelsClient({
 }
 
 const FilterSlider = ({ label, value, onValueChange, min, max, step, unit }: { label: string, value: number, onValueChange: (value: number) => void, min: number, max: number, step: number, unit: string }) => {
-    return (
-        <SidebarGroup>
-            <SidebarGroupLabel>{label}</SidebarGroupLabel>
-            <Slider value={[value]} min={min} max={max} step={step} onValueChange={(v) => onValueChange(v[0])} />
-            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>{min}{unit}</span>
-                <span>{value}{unit}</span>
-                <span>{max}{unit}+</span>
-            </div>
-        </SidebarGroup>
-    );
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      <Slider value={[value]} min={min} max={max} step={step} onValueChange={(v) => onValueChange(v[0])} />
+      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+        <span>{min}{unit}</span>
+        <span>{value}{unit}</span>
+        <span>{max}{unit}+</span>
+      </div>
+    </SidebarGroup>
+  );
 };
 
 const FilterRangeSlider = React.memo(function FilterRangeSlider({ label, value, onValueChange, min, max, step, unit }: { label: string, value: [number, number], onValueChange: (value: [number, number]) => void, min: number, max: number, step: number, unit: string }) {
-    return (
-        <SidebarGroup>
-            <SidebarGroupLabel>{label}</SidebarGroupLabel>
-            <Slider value={value} min={min} max={max} step={step} onValueChange={onValueChange} />
-            <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>{value[0]}{unit}</span>
-                <span>to</span>
-                <span>{value[1]}{unit}{value[1] === max ? '+' : ''}</span>
-            </div>
-        </SidebarGroup>
-    );
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      <Slider value={value} min={min} max={max} step={step} onValueChange={onValueChange} />
+      <div className="flex justify-between text-xs text-muted-foreground mt-1">
+        <span>{value[0]}{unit}</span>
+        <span>to</span>
+        <span>{value[1]}{unit}{value[1] === max ? '+' : ''}</span>
+      </div>
+    </SidebarGroup>
+  );
 });
 
 const FilterDropdown = ({ label, items, icon, selectedItems, onSelectionChange }: { label: string, items: { value: string, count: number }[], icon: React.ReactNode, selectedItems: string[], onSelectionChange: (value: string, checked: boolean) => void }) => {
@@ -1828,8 +1828,8 @@ const FilterDropdown = ({ label, items, icon, selectedItems, onSelectionChange }
     <SidebarGroup>
       <button onClick={() => setIsOpen(!isOpen)} className="w-full">
         <SidebarGroupLabel className="flex justify-between items-center cursor-pointer">
-            <span className="flex items-center gap-2">{icon} {label}</span>
-            {isOpen ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
+          <span className="flex items-center gap-2">{icon} {label}</span>
+          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </SidebarGroupLabel>
       </button>
       {isOpen && (

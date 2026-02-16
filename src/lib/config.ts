@@ -123,4 +123,4 @@ export type FeaturedModelCategory = keyof typeof FEATURED_MODELS;
  * Set to 'true' to enable, 'false' to use legacy /models endpoint
  * Default: false (backend endpoint not yet deployed - using legacy with client-side deduplication)
  */
-export const USE_UNIQUE_MODELS_ENDPOINT = process.env.NEXT_PUBLIC_USE_UNIQUE_MODELS === 'true';
+export const USE_UNIQUE_MODELS_ENDPOINT = false;
