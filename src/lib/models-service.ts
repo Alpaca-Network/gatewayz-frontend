@@ -286,9 +286,13 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
     // Only include offset for server-side requests (client requests don't paginate)
     const offsetParam = (!isClientSide && offset > 0) ? `&offset=${offset}` : '';
     const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-    // Add unique=true parameter when fetching all gateways for backend deduplication
-    const uniqueParam = gateway === 'all' ? '&unique=true' : '';
-    const limitParam = `limit=${requestLimit}${offsetParam}${searchParam}${uniqueParam}`;
+    // Note: Do NOT add unique_models=true here. The backend returns a different format
+    // (providers array without legacy pricing/source_gateway/provider_slug fields) when
+    // unique_models=true, but the frontend processing pipeline (normalizeModel +
+    // mergeLegacyModelsToUnique) expects legacy flat format. Using unique_models=true
+    // causes all provider info, pricing, and metadata to be lost during transformation.
+    // Use USE_UNIQUE_MODELS_ENDPOINT feature flag + getUniqueModels() for the unique format.
+    const limitParam = `limit=${requestLimit}${offsetParam}${searchParam}`;
 
     // Build URLs based on environment
     // Client-side: use Next.js API route (/api/models) to avoid CORS - single request, no pagination
