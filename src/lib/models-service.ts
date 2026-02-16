@@ -257,9 +257,9 @@ function getApiBaseUrl(): string {
 // Helper function to fetch models from a specific gateway
 async function fetchModelsFromGateway(gateway: string, limit?: number, search?: string): Promise<any[]> {
   const allModels: any[] = [];
-  // Updated to use reasonable page size: 500 models per page (was 50000)
+  // Updated to use reasonable page size: 5000 models per page (was 500)
   // Backend now properly supports pagination with has_more and next_offset
-  const requestLimit = limit || 500;
+  const requestLimit = limit || 5000;
   // Use centralized PRIORITY_GATEWAYS for fast gateway detection
   // Timeouts: 180s for 'all' (aggregated endpoint needs time to fetch from all gateways),
   // 5s for fast gateways, 30s for slow (HuggingFace)
@@ -277,9 +277,9 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
   // On client-side, pagination is handled by the server (via /api/models route)
   // so we only make a single request without offset. The server-side getModelsForGateway
   // handles all pagination internally before returning results.
-  // For 'all' gateway on server-side, fetch all pages (no limit) to get complete model list
-  // For specific gateways, limit to 10 pages to avoid excessive fetching
-  const maxPages = isClientSide ? 1 : (gateway === 'all' ? 100 : 10);
+  // For 'all' gateway on server-side, fetch up to 5 pages (25,000 models)
+  // This stays under the Vercel timeout (10s Hobby / 60s Pro)
+  const maxPages = isClientSide ? 1 : (gateway === 'all' ? 5 : 10);
 
   while (hasMore && pageCount < maxPages) {
     pageCount++;
@@ -296,9 +296,9 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
     const urls = isClientSide
       ? [`/api/models?gateway=${gateway}&${limitParam}`]
       : [
-          `${baseUrl}/v1/models?gateway=${gateway}&${limitParam}`,
-          `${baseUrl}/models?gateway=${gateway}&${limitParam}`
-        ];
+        `${baseUrl}/v1/models?gateway=${gateway}&${limitParam}`,
+        `${baseUrl}/models?gateway=${gateway}&${limitParam}`
+      ];
 
     const maxRetries = 3;
     let retryCount = 0;
