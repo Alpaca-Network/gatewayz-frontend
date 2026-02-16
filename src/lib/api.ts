@@ -331,7 +331,7 @@ export const processAuthResponse = (response: AuthResponse): void => {
     };
 
     saveUserData(userData);
-    console.log('User data saved to localStorage:', userData);
+    console.log('User data saved to localStorage (API key masked in logs)');
 
     console.log('User authenticated successfully:', {
       user_id: response.user_id,
