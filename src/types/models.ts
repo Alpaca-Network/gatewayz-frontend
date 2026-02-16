@@ -178,9 +178,9 @@ export function isLegacyModel(model: Model | UniqueModel): model is Model {
 export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
   const architecture = model.architecture
     ? {
-        input_modalities: model.architecture.input_modalities || [],
-        output_modalities: model.architecture.output_modalities || [],
-      }
+      input_modalities: model.architecture.input_modalities || [],
+      output_modalities: model.architecture.output_modalities || [],
+    }
     : null;
 
   // Extract all gateways
