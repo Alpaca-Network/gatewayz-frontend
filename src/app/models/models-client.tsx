@@ -43,7 +43,7 @@ import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 
 import type { UniqueModel, Provider, Model as LegacyModel } from '@/types/models';
-import { adaptLegacyToUniqueModel } from '@/types/models';
+import { adaptLegacyToUniqueModel, mergeLegacyModelsToUnique } from '@/types/models';
 
 // Re-export for backwards compatibility
 type Model = UniqueModel;

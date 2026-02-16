@@ -284,3 +284,68 @@ export function adaptUniqueToLegacyModel(model: UniqueModel): Model {
     is_free: model.cheapest_prompt_price === 0,
   };
 }
+
+/**
+ * Merge multiple legacy Model objects into a list of UniqueModel objects.
+ * This function groups models by their ID and consolidates all provider information.
+ */
+export function mergeLegacyModelsToUnique(legacyModels: Model[]): UniqueModel[] {
+  const modelMap: Record<string, UniqueModel> = {};
+
+  for (const legacyModel of legacyModels) {
+    if (!legacyModel.id) continue;
+
+    const adapted = adaptLegacyToUniqueModel(legacyModel);
+    const existing = modelMap[legacyModel.id];
+
+    if (!existing) {
+      modelMap[legacyModel.id] = adapted;
+    } else {
+      // Merge providers
+      const newProviders = adapted.providers;
+
+      // Only add providers that aren't already there
+      for (const newP of newProviders) {
+        if (!existing.providers.some(p => p.slug === newP.slug)) {
+          existing.providers.push(newP);
+        }
+      }
+
+      // Update provider count
+      existing.provider_count = existing.providers.length;
+
+      // Update cheapest provider if necessary
+      const cheapestNew = adapted.providers.reduce((min, p) =>
+        (parseFloat(p.pricing.prompt) < parseFloat(min.pricing.prompt) ? p : min), adapted.providers[0]);
+
+      if (parseFloat(cheapestNew.pricing.prompt) < existing.cheapest_prompt_price) {
+        existing.cheapest_provider = cheapestNew.slug;
+        existing.cheapest_prompt_price = parseFloat(cheapestNew.pricing.prompt);
+      }
+
+      // Update fastest provider if necessary
+      const fastestNew = adapted.providers.reduce((min, p) =>
+        (p.average_response_time_ms < min.average_response_time_ms ? p : min), adapted.providers[0]);
+
+      if (fastestNew.average_response_time_ms < existing.fastest_response_time) {
+        existing.fastest_provider = fastestNew.slug;
+        existing.fastest_response_time = fastestNew.average_response_time_ms;
+      }
+
+      // Merge legacy fields for consistency
+      if (!existing.source_gateways) existing.source_gateways = [];
+      if (!existing.gateway_pricing) existing.gateway_pricing = {};
+
+      adapted.providers.forEach(p => {
+        if (!existing.source_gateways?.includes(p.slug)) {
+          existing.source_gateways?.push(p.slug);
+        }
+        if (existing.gateway_pricing) {
+          existing.gateway_pricing[p.slug] = p.pricing;
+        }
+      });
+    }
+  }
+
+  return Object.values(modelMap);
+}
