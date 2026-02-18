@@ -190,6 +190,9 @@ const ProviderSubRow = React.memo(function ProviderSubRow({
   const inputCost = formatPricingForDisplay(provider.pricing.prompt, provider.slug);
   const outputCost = formatPricingForDisplay(provider.pricing.completion, provider.slug);
 
+  // Don't render providers with no valid pricing
+  if (inputCost === null && outputCost === null) return null;
+
   // Health status badge color
   const healthColor = provider.health_status === 'healthy' ? 'bg-green-600' :
     provider.health_status === 'degraded' ? 'bg-yellow-600' : 'bg-red-600';
@@ -261,6 +264,9 @@ const MobileProviderSubRow = React.memo(function MobileProviderSubRow({
   const inputCost = formatPricingForDisplay(provider.pricing.prompt, provider.slug);
   const outputCost = formatPricingForDisplay(provider.pricing.completion, provider.slug);
 
+  // Don't render providers with no valid pricing
+  if (inputCost === null && outputCost === null) return null;
+
   // Health status badge color
   const healthColor = provider.health_status === 'healthy' ? 'bg-green-600' :
     provider.health_status === 'degraded' ? 'bg-yellow-600' : 'bg-red-600';
@@ -309,7 +315,13 @@ const MobileModelRow = React.memo(function MobileModelRow({
   onToggle: () => void;
 }) {
   const providers = model.providers || [];
-  const hasMultipleProviders = model.provider_count > 1;
+  // Only count providers that actually have valid pricing
+  const pricedProviders = providers.filter(p => {
+    const inputCost = formatPricingForDisplay(p.pricing?.prompt, p.slug);
+    const outputCost = formatPricingForDisplay(p.pricing?.completion, p.slug);
+    return inputCost !== null || outputCost !== null;
+  });
+  const hasMultipleProviders = pricedProviders.length > 1;
 
   // Use backend-calculated cheapest provider
   const cheapestProvider = providers.find(p => p.slug === model.cheapest_provider) || providers[0];
@@ -361,7 +373,7 @@ const MobileModelRow = React.memo(function MobileModelRow({
                 )}
                 {hasMultipleProviders && (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
-                    {model.provider_count} providers
+                    {pricedProviders.length} providers
                   </Badge>
                 )}
               </div>
@@ -383,14 +395,14 @@ const MobileModelRow = React.memo(function MobileModelRow({
         </div>
       </div>
 
-      {/* Expanded provider sub-rows */}
+      {/* Expanded provider sub-rows - only show priced providers */}
       {isExpanded && hasMultipleProviders && (
         <div className="border-t border-border/30">
-          {providers.map((provider, index) => (
+          {pricedProviders.map((provider, index) => (
             <MobileProviderSubRow
               key={provider.slug}
               provider={provider}
-              isLast={index === providers.length - 1}
+              isLast={index === pricedProviders.length - 1}
               isCheapest={provider.slug === model.cheapest_provider}
               isFastest={provider.slug === model.fastest_provider}
             />
@@ -412,7 +424,13 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
   onToggle: () => void;
 }) {
   const providers = model.providers || [];
-  const hasMultipleProviders = model.provider_count > 1;
+  // Only count providers that actually have valid pricing for display purposes
+  const pricedProviders = providers.filter(p => {
+    const inputCost = formatPricingForDisplay(p.pricing?.prompt, p.slug);
+    const outputCost = formatPricingForDisplay(p.pricing?.completion, p.slug);
+    return inputCost !== null || outputCost !== null;
+  });
+  const hasMultipleProviders = pricedProviders.length > 1;
   const modelUrl = getModelUrl(model.id, providers[0]?.slug || 'unknown');
 
   // Use backend-calculated cheapest provider
@@ -471,7 +489,7 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
             )}
             {hasMultipleProviders && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 flex-shrink-0">
-                {model.provider_count} providers
+                {pricedProviders.length} providers
               </Badge>
             )}
           </div>
@@ -510,14 +528,14 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
         </div>
       </div>
 
-      {/* Expanded provider sub-rows */}
+      {/* Expanded provider sub-rows - only show priced providers */}
       {isExpanded && hasMultipleProviders && (
         <div className="border-t border-border/30">
-          {providers.map((provider, index) => (
+          {pricedProviders.map((provider, index) => (
             <ProviderSubRow
               key={provider.slug}
               provider={provider}
-              isLast={index === providers.length - 1}
+              isLast={index === pricedProviders.length - 1}
               isCheapest={provider.slug === model.cheapest_provider}
               isFastest={provider.slug === model.fastest_provider}
             />
@@ -636,7 +654,6 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
           <span className="flex items-center gap-1">
             By <span className="font-medium text-foreground">{providerDisplay}</span>
           </span>
-          <span className="font-medium">{contextK > 0 ? `${contextK}M Tokens` : '0M Tokens'}</span>
           <span className="font-medium">{contextK > 0 ? `${contextK}K Context` : '0K Context'}</span>
           {hasPricing && inputCost !== null && outputCost !== null ? (
             <>
@@ -780,18 +797,10 @@ export default function ModelsClient({
     }
   }, [initialModels, models.length]);
 
-  // Debug logging: Check what data we're receiving
+  // Debug logging: only in development
   useEffect(() => {
-    if (initialModels.length > 0) {
+    if (process.env.NODE_ENV === 'development' && initialModels.length > 0) {
       console.log('[ModelsClient] Received', initialModels.length, 'models');
-      console.log('[ModelsClient] Sample model:', {
-        id: initialModels[0].id,
-        name: initialModels[0].name,
-        provider_count: initialModels[0].provider_count,
-        providers: initialModels[0].providers,
-        cheapest_provider: initialModels[0].cheapest_provider,
-        cheapest_prompt_price: initialModels[0].cheapest_prompt_price,
-      });
     }
   }, [initialModels]);
 
@@ -844,7 +853,7 @@ export default function ModelsClient({
     }
   }, [initialModels.length]);
 
-  // Additional deduplication as a safety measure
+  // Additional deduplication as a safety measure, plus filter to models with at least one priced provider
   const deduplicatedModels = useMemo(() => {
     const seen = new Set<string>();
     const deduplicated = models.filter(model => {
@@ -868,7 +877,20 @@ export default function ModelsClient({
         return false;
       }
       seen.add(model.id);
-      return true;
+
+      // Only include models that have at least one provider with valid pricing
+      const providers = model.providers || [];
+      const hasPricedProvider = providers.some(p => {
+        const prompt = p.pricing?.prompt;
+        const completion = p.pricing?.completion;
+        const promptNum = parseFloat(prompt ?? '');
+        const completionNum = parseFloat(completion ?? '');
+        return !isNaN(promptNum) && !isNaN(completionNum) && (promptNum > 0 || completionNum > 0);
+      });
+      // Also allow free models (prompt price explicitly 0) — they have valid pricing
+      const isFreeModel = model.cheapest_prompt_price === 0 && providers.length > 0;
+
+      return hasPricedProvider || isFreeModel;
     });
     return deduplicated;
   }, [models]);
