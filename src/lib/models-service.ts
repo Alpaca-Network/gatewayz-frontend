@@ -420,9 +420,14 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
         }
       } catch (error: any) {
         const message = getErrorMessage(error);
-        if (isAbortOrNetworkError(error)) {
+        // AggregateError is thrown by Promise.any() when ALL endpoints fail.
+        // Treat it as a network error so it's tracked correctly and can be retried.
+        const isAggregateError = error instanceof AggregateError ||
+          (error && error.name === 'AggregateError');
+
+        if (isAbortOrNetworkError(error) || isAggregateError) {
           // Track network/timeout errors to backend API
-          trackBackendNetworkError(error, {
+          trackBackendNetworkError(isAggregateError ? (error.errors?.[0] ?? error) : error, {
             endpoint: urls[0],
             method: 'GET',
             gateway,
@@ -430,7 +435,11 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
           });
           // Only log timeouts in development mode to reduce console noise
           if (process.env.NODE_ENV === 'development') {
-            console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
+            if (isAggregateError) {
+              console.warn(`[Models] All endpoints failed for ${gateway}: ${error.errors?.map((e: any) => e.message).join(', ')}`);
+            } else {
+              console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
+            }
           }
         } else {
           // Track non-network errors (e.g., JSON parsing, validation, etc.)
