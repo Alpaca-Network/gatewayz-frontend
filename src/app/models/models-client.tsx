@@ -878,19 +878,19 @@ export default function ModelsClient({
       }
       seen.add(model.id);
 
-      // Only include models that have at least one provider with valid pricing
+      // Only include models where at least one provider has valid (non-null) pricing.
+      // We use formatPricingForDisplay here — the same function used to render prices —
+      // so a provider passes iff it would actually show a price in the UI (including $0.00).
+      // This avoids the false-free-model bug: cheapest_prompt_price defaults to 0 when no
+      // valid prices exist, so checking it alone would pass through un-priced models.
       const providers = model.providers || [];
       const hasPricedProvider = providers.some(p => {
-        const prompt = p.pricing?.prompt;
-        const completion = p.pricing?.completion;
-        const promptNum = parseFloat(prompt ?? '');
-        const completionNum = parseFloat(completion ?? '');
-        return !isNaN(promptNum) && !isNaN(completionNum) && (promptNum > 0 || completionNum > 0);
+        const inputCost = formatPricingForDisplay(p.pricing?.prompt, p.slug);
+        const outputCost = formatPricingForDisplay(p.pricing?.completion, p.slug);
+        return inputCost !== null || outputCost !== null;
       });
-      // Also allow free models (prompt price explicitly 0) — they have valid pricing
-      const isFreeModel = model.cheapest_prompt_price === 0 && providers.length > 0;
 
-      return hasPricedProvider || isFreeModel;
+      return hasPricedProvider;
     });
     return deduplicated;
   }, [models]);
