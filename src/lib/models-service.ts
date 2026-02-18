@@ -341,7 +341,7 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
           response = await fetch(urls[0], fetchOptions);
         } else {
           // Each URL needs its own AbortSignal so cancelling one doesn't abort the other
-          const responses = await Promise.any(
+          response = await Promise.any(
             urls.map((url) => fetch(url, { ...fetchOptions, signal: AbortSignal.timeout(timeoutMs) })
               .then((res) => {
                 // Treat non-OK responses as failures so Promise.any falls through to the next URL
@@ -350,7 +350,6 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
               })
             )
           );
-          response = responses;
         }
 
         // Handle rate limit errors with retry

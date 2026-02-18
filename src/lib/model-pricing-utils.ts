@@ -7,8 +7,10 @@
  *
  * Pricing Unit Normalization:
  * Different gateways return pricing in different units:
- * - Most gateways (OpenRouter, Groq, etc.): per-token (e.g., 0.00000015 = $0.00000015/token)
- * - OneRouter: per-million-tokens (e.g., 0.15 = $0.15/MTok)
+ * - OpenRouter, DeepInfra: per-token (e.g., 0.00000015 = $0.00000015/token)
+ * - Together, Fireworks, xAI, etc.: per-million-tokens (e.g., 0.15 = $0.15/MTok)
+ * - Groq, Cerebras: per-kilo-tokens (e.g., 0.00059 = $0.59/MTok)
+ * - AiHubMix: per-billion-tokens (e.g., 150.0 = $0.15/MTok)
  *
  * The formatPricingForDisplay function normalizes all pricing to per-million-tokens for display.
  *
@@ -70,14 +72,11 @@ export interface ModelPricingInfo {
  * - google/google-vertex: Returns prices like 0.075 for $0.075/MTok
  * - helicone: Returns prices like 0.15 for $0.15/MTok
  * - vercel-ai-gateway: Returns prices like 0.15 for $0.15/MTok
- * - deepinfra: Returns prices like 0.35 for $0.35/MTok
  * - featherless: Returns prices like 0.35 for $0.35/MTok
  * - chutes: Returns prices like 0.02 for $0.02/MTok
  * - together: Returns prices like 0.20 for $0.20/MTok
  * - near: Returns prices like 1.00 for $1.00/MTok
  * - fireworks: Returns prices like 0.20 for $0.20/MTok
- * - groq: Returns prices like 0.05 for $0.05/MTok
- * - cerebras: Returns prices like 0.10 for $0.10/MTok
  * - novita: Returns prices like 0.12 for $0.12/MTok
  * - nebius: Returns prices like 0.20 for $0.20/MTok
  * - xai: Returns prices like 2.00 for $2.00/MTok
@@ -97,17 +96,14 @@ const PER_MILLION_PRICING_GATEWAYS: string[] = [
   'google-vertex',
   'helicone',
   'vercel-ai-gateway',
-  'deepinfra',
   'featherless',
   'chutes',
-  'together',
+  'together',       // verified: 0.1 = $0.10/MTok
   'near',
-  'fireworks',
-  'groq',
-  'cerebras',
+  'fireworks',      // verified: 0.4 = $0.40/MTok
   'novita',
   'nebius',
-  'xai',
+  'xai',            // verified: 5 = $5.00/MTok
   'alibaba',
   'alibaba-cloud',
   'clarifai',
@@ -115,7 +111,24 @@ const PER_MILLION_PRICING_GATEWAYS: string[] = [
   'akash',
   'cloudflare-workers-ai',
   'alpaca-network',
-  'alpaca',
+  'alpaca',         // alias for alpaca-network
+  // NOTE: deepinfra is per-TOKEN (verified: 2E-13), NOT per-million
+  // NOTE: openrouter is per-TOKEN (verified: 2.6E-7), NOT per-million
+];
+
+/**
+ * Gateways that return pricing in per-kilo-tokens format.
+ * These prices need to be multiplied by 1,000 to convert to per-million for display.
+ *
+ * Why per-kilo? The backend's normalize_groq_model() converts Groq's
+ * `cents_per_input_token` by dividing by 100, but Groq's API actually means
+ * "cents per 1000 tokens", resulting in per-kilo-token values:
+ * - groq: 0.00059 × 1000 = $0.59/MTok (Llama 3.3 70B actual price)
+ * - cerebras: 0.00018 × 1000 = $0.18/MTok
+ */
+const PER_KILO_PRICING_GATEWAYS: string[] = [
+  'groq',           // verified: 0.00059 × 1000 = $0.59/MTok
+  'cerebras',       // verified: 0.00018 × 1000 = $0.18/MTok
 ];
 
 /**
@@ -132,6 +145,13 @@ const PER_BILLION_PRICING_GATEWAYS: string[] = [
  */
 export function isPerMillionPricingGateway(gateway: string): boolean {
   return PER_MILLION_PRICING_GATEWAYS.includes(gateway.toLowerCase());
+}
+
+/**
+ * Check if a gateway returns pricing in per-kilo format.
+ */
+export function isPerKiloPricingGateway(gateway: string): boolean {
+  return PER_KILO_PRICING_GATEWAYS.includes(gateway.toLowerCase());
 }
 
 /**
@@ -206,6 +226,9 @@ function normalizeToPerMillion(numPrice: number, sourceGateway: string): number 
   if (isPerMillionPricingGateway(sourceGateway)) {
     // Already in per-million format, display as-is
     perMillionPrice = numPrice;
+  } else if (isPerKiloPricingGateway(sourceGateway)) {
+    // Per-kilo format: multiply by 1,000 to get per-million
+    perMillionPrice = numPrice * 1000;
   } else if (isPerBillionPricingGateway(sourceGateway)) {
     // Per-billion format: divide by 1,000 to get per-million
     perMillionPrice = numPrice / 1000;
