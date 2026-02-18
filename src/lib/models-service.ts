@@ -331,10 +331,26 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
         // replaced good cached data with stale responses (pricing zeroed out).
         fetchOptions.cache = 'no-store';
 
-        // Try endpoints in parallel (server-side) or single endpoint (client-side)
-        const response = await Promise.race(
-          urls.map((url) => fetch(url, fetchOptions))
-        );
+        // Try endpoints: single request on client-side, first-success fallback on server-side.
+        // Promise.any() is used instead of Promise.race() so that a fast error response
+        // (e.g. v1/models returning 500 immediately) does not win over a slower successful
+        // response from the fallback URL. Promise.any() resolves with the first fulfilled
+        // (non-rejected) promise, ignoring rejections unless all fail.
+        let response: Response;
+        if (urls.length === 1) {
+          response = await fetch(urls[0], fetchOptions);
+        } else {
+          // Each URL needs its own AbortSignal so cancelling one doesn't abort the other
+          response = await Promise.any(
+            urls.map((url) => fetch(url, { ...fetchOptions, signal: AbortSignal.timeout(timeoutMs) })
+              .then((res) => {
+                // Treat non-OK responses as failures so Promise.any falls through to the next URL
+                if (!res.ok && res.status !== 429) throw new Error(`HTTP ${res.status}`);
+                return res;
+              })
+            )
+          );
+        }
 
         // Handle rate limit errors with retry
         if (response.status === 429) {
@@ -404,9 +420,14 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
         }
       } catch (error: any) {
         const message = getErrorMessage(error);
-        if (isAbortOrNetworkError(error)) {
+        // AggregateError is thrown by Promise.any() when ALL endpoints fail.
+        // Treat it as a network error so it's tracked correctly and can be retried.
+        const isAggregateError = error instanceof AggregateError ||
+          (error && error.name === 'AggregateError');
+
+        if (isAbortOrNetworkError(error) || isAggregateError) {
           // Track network/timeout errors to backend API
-          trackBackendNetworkError(error, {
+          trackBackendNetworkError(isAggregateError ? (error.errors?.[0] ?? error) : error, {
             endpoint: urls[0],
             method: 'GET',
             gateway,
@@ -414,7 +435,11 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
           });
           // Only log timeouts in development mode to reduce console noise
           if (process.env.NODE_ENV === 'development') {
-            console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
+            if (isAggregateError) {
+              console.warn(`[Models] All endpoints failed for ${gateway}: ${error.errors?.map((e: any) => e.message).join(', ')}`);
+            } else {
+              console.warn(`[Models] ${gateway} request timed out after ${timeoutMs}ms (will use cache/fallback)`);
+            }
           }
         } else {
           // Track non-network errors (e.g., JSON parsing, validation, etc.)

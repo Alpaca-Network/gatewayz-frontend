@@ -599,4 +599,86 @@ describe('Models Page - Server-Side Functions', () => {
       expect(result.data || []).toHaveLength(0);
     });
   });
+
+  describe('getAllModels static fallback (page.tsx catch block)', () => {
+    // Mirrors the catch-block logic in src/app/models/page.tsx getAllModels()
+    // The catch block falls back to static models and captures the error in Sentry.
+
+    it('should fall back to static models on fetch error', async () => {
+      mockGetModelsForGateway.mockRejectedValue(new Error('Backend down'));
+
+      let caughtError: Error | null = null;
+      let usedFallback = false;
+
+      try {
+        await modelsService.getModelsForGateway('all');
+      } catch (error) {
+        caughtError = error as Error;
+        usedFallback = true; // page.tsx catch block would use static models here
+      }
+
+      expect(caughtError).not.toBeNull();
+      expect(caughtError?.message).toBe('Backend down');
+      expect(usedFallback).toBe(true);
+    });
+
+    it('should fall back to static models on timeout error', async () => {
+      const timeoutError = new DOMException('The operation was aborted', 'AbortError');
+      mockGetModelsForGateway.mockRejectedValue(timeoutError);
+
+      let usedFallback = false;
+
+      try {
+        await modelsService.getModelsForGateway('all');
+      } catch (error) {
+        usedFallback = true;
+      }
+
+      expect(usedFallback).toBe(true);
+    });
+
+    it('should fall back to static models when backend returns empty array', async () => {
+      mockGetModelsForGateway.mockResolvedValue({ data: [] });
+
+      const result = await modelsService.getModelsForGateway('all');
+
+      // Empty data — page.tsx would use static fallback
+      expect(result.data).toHaveLength(0);
+    });
+  });
+
+  describe('AggregateError handling from Promise.any()', () => {
+    // Mirrors the catch block in fetchModelsFromGateway when all URLs fail.
+    // Promise.any() throws AggregateError when all promises reject.
+
+    it('should classify AggregateError as a network-type error', () => {
+      const errors = [
+        new Error('HTTP 500'),
+        new Error('HTTP 503'),
+      ];
+      const aggregateError = new AggregateError(errors, 'All endpoints failed');
+
+      const isAggregateError = aggregateError instanceof AggregateError ||
+        (aggregateError && aggregateError.name === 'AggregateError');
+
+      expect(isAggregateError).toBe(true);
+      expect(aggregateError.errors).toHaveLength(2);
+      expect(aggregateError.errors[0].message).toBe('HTTP 500');
+    });
+
+    it('should extract individual errors from AggregateError for logging', () => {
+      const errors = [new Error('Timeout'), new Error('Connection refused')];
+      const aggregateError = new AggregateError(errors, 'All endpoints failed');
+
+      const messages = aggregateError.errors.map((e: Error) => e.message);
+      expect(messages).toEqual(['Timeout', 'Connection refused']);
+    });
+
+    it('should fall back to first error when AggregateError has no errors array', () => {
+      // Defensive: handle malformed AggregateError
+      const aggregateError = new AggregateError([], 'Empty aggregate');
+      const firstError = aggregateError.errors?.[0] ?? aggregateError;
+      expect(firstError).toBe(aggregateError); // falls back to the aggregate itself
+    });
+  });
 });

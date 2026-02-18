@@ -1407,4 +1407,71 @@ describe('ModelsClient - Filtering Logic', () => {
       expect(showButtonText(768)).toBe(true);  // md
     });
   });
+
+  describe('Pricing filter — models with no valid provider pricing', () => {
+    // Mirrors the hasPricedProvider logic in deduplicatedModels useMemo
+    const hasPricedProvider = (providers: Array<{ pricing?: { prompt?: string; completion?: string } | null; slug: string }>) => {
+      return providers.some(p => {
+        const inputCost = formatPricingForDisplay(p.pricing?.prompt, p.slug);
+        const outputCost = formatPricingForDisplay(p.pricing?.completion, p.slug);
+        return inputCost !== null || outputCost !== null;
+      });
+    };
+
+    it('should include a model whose provider has valid non-zero pricing', () => {
+      const providers = [{ slug: 'openrouter', pricing: { prompt: '0.00000015', completion: '0.0000006' } }];
+      expect(hasPricedProvider(providers)).toBe(true);
+    });
+
+    it('should include a free model whose provider has zero pricing', () => {
+      // $0 is a valid parseable price — formatPricingForDisplay returns '0.00' not null
+      const providers = [{ slug: 'openrouter', pricing: { prompt: '0', completion: '0' } }];
+      expect(hasPricedProvider(providers)).toBe(true);
+    });
+
+    it('should exclude a model where all providers have null pricing fields', () => {
+      const providers = [{ slug: 'openrouter', pricing: { prompt: undefined, completion: undefined } }];
+      expect(hasPricedProvider(providers)).toBe(false);
+    });
+
+    it('should exclude a model where all providers have no pricing object', () => {
+      const providers = [{ slug: 'openrouter', pricing: null as any }];
+      expect(hasPricedProvider(providers)).toBe(false);
+    });
+
+    it('should exclude a model with no providers at all', () => {
+      expect(hasPricedProvider([])).toBe(false);
+    });
+
+    it('should include a model if at least one of multiple providers has valid pricing', () => {
+      const providers = [
+        { slug: 'openrouter', pricing: { prompt: undefined, completion: undefined } },
+        { slug: 'groq', pricing: { prompt: '0.00000005', completion: '0.0000001' } },
+      ];
+      expect(hasPricedProvider(providers)).toBe(true);
+    });
+
+    it('should not treat cheapest_prompt_price=0 with null provider pricing as free (Sentry bug)', () => {
+      // Models with cheapest_prompt_price===0 but no parseable provider prices must be excluded.
+      // This was the bug: cheapest_prompt_price defaults to 0 when no prices exist.
+      const providers = [{ slug: 'unknown', pricing: { prompt: undefined, completion: undefined } }];
+      // hasPricedProvider returns false — model is correctly excluded
+      expect(hasPricedProvider(providers)).toBe(false);
+    });
+
+    it('should count only priced providers for the expand-button threshold', () => {
+      const providers = [
+        { slug: 'openrouter', pricing: { prompt: '0.00000015', completion: '0.0000006' } },
+        { slug: 'groq', pricing: { prompt: undefined, completion: undefined } }, // no price — excluded
+        { slug: 'together', pricing: { prompt: '0.0000001', completion: '0.0000003' } },
+      ];
+      const pricedProviders = providers.filter(p => {
+        const inputCost = formatPricingForDisplay(p.pricing?.prompt, p.slug);
+        const outputCost = formatPricingForDisplay(p.pricing?.completion, p.slug);
+        return inputCost !== null || outputCost !== null;
+      });
+      expect(pricedProviders).toHaveLength(2); // groq excluded, not 3
+      expect(pricedProviders.map(p => p.slug)).toEqual(['openrouter', 'together']);
+    });
+  });
 });

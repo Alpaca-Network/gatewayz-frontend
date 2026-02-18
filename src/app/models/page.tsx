@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import ModelsClient from './models-client';
 import { getModelsForGateway, getUniqueModels } from '@/lib/models-service';
 import { models as staticModels } from '@/lib/models-data';
@@ -77,7 +78,16 @@ async function getAllModels(): Promise<UniqueModel[]> {
     return uniqueModels;
 
   } catch (error) {
-    console.error('[Models Page] Failed to fetch models:', error);
+    console.error('[Models Page] Failed to fetch models, falling back to static:', error);
+    Sentry.captureException(error, {
+      tags: { component: 'models-page', fallback: 'static' },
+      extra: {
+        USE_UNIQUE_MODELS_ENDPOINT,
+        NEXT_STATIC_EXPORT: process.env.NEXT_STATIC_EXPORT,
+        CI: process.env.CI,
+        VERCEL: process.env.VERCEL,
+      },
+    });
     // Fallback to static models on error
     const legacyModels = staticModels.map((model) => transformStaticModel(model) as unknown as Model);
     return mergeLegacyModelsToUnique(legacyModels);

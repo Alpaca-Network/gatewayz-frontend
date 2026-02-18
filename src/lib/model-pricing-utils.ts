@@ -90,54 +90,17 @@ export interface ModelPricingInfo {
  * NOTE: openai and anthropic direct gateways return per-TOKEN pricing (e.g., 0.0000025)
  * NOT per-million, so they are excluded from this list and handled like openrouter.
  */
-const PER_MILLION_PRICING_GATEWAYS: string[] = [
-  'onerouter',
-  'google',
-  'google-vertex',
-  'helicone',
-  'vercel-ai-gateway',
-  'featherless',
-  'chutes',
-  'together',       // verified: 0.1 = $0.10/MTok
-  'near',
-  'fireworks',      // verified: 0.4 = $0.40/MTok
-  'novita',
-  'nebius',
-  'xai',            // verified: 5 = $5.00/MTok
-  'alibaba',
-  'alibaba-cloud',
-  'clarifai',
-  'simplismart',
-  'akash',
-  'cloudflare-workers-ai',
-  'alpaca-network',
-  // NOTE: deepinfra is per-TOKEN (verified: 2E-13), NOT per-million
-  // NOTE: openrouter is per-TOKEN (verified: 2.6E-7), NOT per-million
-];
+// Backend normalizes ALL gateway pricing to per-token format before returning to the frontend.
+// No gateways need special per-million handling — this list must remain empty.
+const PER_MILLION_PRICING_GATEWAYS: string[] = [];
 
-/**
- * Gateways that return pricing in per-kilo-tokens format.
- * These prices need to be multiplied by 1,000 to convert to per-million for display.
- *
- * Why per-kilo? The backend's normalize_groq_model() converts Groq's
- * `cents_per_input_token` by dividing by 100, but Groq's API actually means
- * "cents per 1000 tokens", resulting in per-kilo-token values:
- * - groq: 0.00059 × 1000 = $0.59/MTok (Llama 3.3 70B actual price)
- * - cerebras: 0.00018 × 1000 = $0.18/MTok
- */
-const PER_KILO_PRICING_GATEWAYS: string[] = [
-  'groq',           // verified: 0.00059 × 1000 = $0.59/MTok
-  'cerebras',       // verified: 0.00018 × 1000 = $0.18/MTok
-];
+// Backend normalizes ALL gateway pricing to per-token format before returning to the frontend.
+// No gateways need special per-kilo handling — this list must remain empty.
+const PER_KILO_PRICING_GATEWAYS: string[] = [];
 
-/**
- * Gateways that return pricing in per-billion-tokens format.
- * These prices need to be divided by 1,000 to convert to per-million for display.
- * Example: aihubmix returns 150.0 for GPT-4o mini which should display as $0.15/MTok
- */
-const PER_BILLION_PRICING_GATEWAYS: string[] = [
-  'aihubmix',
-];
+// Backend normalizes ALL gateway pricing to per-token format before returning to the frontend.
+// No gateways need special per-billion handling — this list must remain empty.
+const PER_BILLION_PRICING_GATEWAYS: string[] = [];
 
 /**
  * Check if a gateway returns pricing in per-million format.
