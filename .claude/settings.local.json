@@ -135,7 +135,17 @@
       "Bash(lsof:*)",
       "Bash(.vercel-deploy)",
       "Bash(git stash:*)",
-      "Bash(node debug-api.js:*)"
+      "Bash(node debug-api.js:*)",
+      "Bash(env:*)",
+      "Bash(node -e:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm jest:*)",
+      "Bash(python3:*)",
+      "Bash(pnpm dev)",
+      "Bash(grep:*)",
+      "Bash(xargs kill -9:*)"
     ],
     "deny": [],
     "ask": [],

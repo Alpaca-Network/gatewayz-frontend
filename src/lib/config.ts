@@ -107,20 +107,3 @@ export const FEATURED_MODELS = {
 // Type for featured model categories
 export type FeaturedModelCategory = keyof typeof FEATURED_MODELS;
 
-// ============================================================================
-// Feature Flags
-// ============================================================================
-
-/**
- * Feature flag: Use new /models/unique endpoint
- *
- * When enabled, the models page will fetch from /models/unique endpoint which provides:
- * - Deduplicated models with many-to-many provider relationships
- * - Health status and performance metrics per provider
- * - Auto-calculated cheapest and fastest providers
- * - Eliminates need for client-side deduplication
- *
- * Set to 'true' to enable, 'false' to use legacy /models endpoint
- * Default: false (backend endpoint not yet deployed - using legacy with client-side deduplication)
- */
-export const USE_UNIQUE_MODELS_ENDPOINT = false;

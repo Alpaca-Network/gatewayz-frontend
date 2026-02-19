@@ -87,12 +87,51 @@ export interface ModelPricingInfo {
  * - cloudflare-workers-ai: Returns prices like 0.66 for $0.66/MTok
  * - alpaca-network: Returns prices like 0.27 for $0.27/MTok
  *
- * NOTE: openai and anthropic direct gateways return per-TOKEN pricing (e.g., 0.0000025)
- * NOT per-million, so they are excluded from this list and handled like openrouter.
+ * NOTE: The backend normalizes ALL gateway pricing to per-million in merged model responses.
+ * openai, anthropic, openrouter, etc. all return per-million in the API response.
  */
-// Backend normalizes ALL gateway pricing to per-token format before returning to the frontend.
-// No gateways need special per-million handling — this list must remain empty.
-const PER_MILLION_PRICING_GATEWAYS: string[] = [];
+const PER_MILLION_PRICING_GATEWAYS: string[] = [
+  'onerouter',
+  'google',
+  'google-vertex',
+  'helicone',
+  'vercel-ai-gateway',
+  'deepinfra',
+  'featherless',
+  'chutes',
+  'together',
+  'near',
+  'fireworks',
+  'groq',
+  'cerebras',
+  'novita',
+  'nebius',
+  'xai',
+  'alibaba',
+  'alibaba-cloud',
+  'clarifai',
+  'simplismart',
+  'akash',
+  'cloudflare-workers-ai',
+  'alpaca-network',
+  'alpaca',
+  'aimo',
+  'fal',
+  'canopywave',
+  'sybil',
+  'anannas',
+  'morpheus',
+  'nosana',
+  // Backend normalizes these to per-million in merged model responses
+  'openai',
+  'anthropic',
+  'openrouter',
+  'aihubmix',
+  'modelz',
+  'huggingface',
+  'cohere',
+  'zai',
+];
 
 // Backend normalizes ALL gateway pricing to per-token format before returning to the frontend.
 // No gateways need special per-kilo handling — this list must remain empty.

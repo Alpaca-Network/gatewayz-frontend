@@ -43,7 +43,7 @@ import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 
 import type { UniqueModel, Provider, Model as LegacyModel } from '@/types/models';
-import { adaptLegacyToUniqueModel, mergeLegacyModelsToUnique } from '@/types/models';
+import { mergeLegacyModelsToUnique } from '@/types/models';
 
 // Re-export for backwards compatibility
 type Model = UniqueModel;
@@ -816,7 +816,7 @@ export default function ModelsClient({
       const fetchAllModels = async () => {
         setIsLoadingModels(true);
         try {
-          const response = await fetch('/api/models?gateway=all&limit=50000', {
+          const response = await fetch('/api/models?gateway=all&limit=1000', {
             signal: controller.signal
           });
           const payload = await safeParseJson<{ data?: LegacyModel[] }>(
@@ -827,9 +827,7 @@ export default function ModelsClient({
             if (process.env.NODE_ENV === 'development') {
               console.log(`[Models] Fetched ${payload.data.length} models from client`);
             }
-            // Transform and merge legacy Model format to UniqueModel format
-            // The API returns legacy format (pricing, source_gateway fields)
-            // but the UI expects UniqueModel format (providers array)
+            // Merge legacy format into UniqueModel format with provider arrays
             const transformedModels = mergeLegacyModelsToUnique(payload.data);
             setModels(transformedModels);
           }

@@ -173,12 +173,6 @@ export function SessionInitializer() {
       // Check for URL params from session transfer
       const { token, userId, returnUrl } = getSessionTransferParams();
 
-      console.log("[SessionInit] Session initialization started", {
-        hasToken: !!token,
-        tokenPreview: token ? token.substring(0, 20) + "..." : "none",
-        hasUserId: !!userId,
-      });
-
       if (token && userId) {
         console.log("[SessionInit] Session transfer params detected", {
           hasReturnUrl: !!returnUrl,

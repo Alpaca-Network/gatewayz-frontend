@@ -1,9 +1,8 @@
 import * as Sentry from '@sentry/nextjs';
 import ModelsClient from './models-client';
-import { getModelsForGateway, getUniqueModels } from '@/lib/models-service';
+import { getModelsForGateway } from '@/lib/models-service';
 import { models as staticModels } from '@/lib/models-data';
 import { transformStaticModel } from '@/lib/model-detail-utils';
-import { USE_UNIQUE_MODELS_ENDPOINT } from '@/lib/config';
 import { mergeLegacyModelsToUnique } from '@/types/models';
 import type { Model as LegacyModel, UniqueModel } from '@/types/models';
 
@@ -20,20 +19,13 @@ type Model = LegacyModel;
  *
  * For server mode (web):
  * - Uses ISR with revalidation to keep models fresh
- * - Server fetches latest models from all gateways
+ * - Server fetches all models from backend, then merges duplicates into UniqueModel format
  * - Client-side fetches additional models if server returns < 50
  *
  * Note: We cannot use `dynamic = 'force-dynamic'` as it's incompatible with
  * static export. Instead, we rely on revalidation and client-side fetching.
  */
 export const revalidate = 300; // Revalidate every 5 minutes
-
-// Models are now fetched using gateway='all' which:
-// 1. Makes a single API call to the backend (more efficient)
-// 2. Auto-discovers new gateways from the response
-// 3. Automatically includes models from newly added providers
-
-// Redundant deduplication logic removed in favor of mergeLegacyModelsToUnique
 
 async function getAllModels(): Promise<UniqueModel[]> {
   try {
@@ -46,34 +38,20 @@ async function getAllModels(): Promise<UniqueModel[]> {
       return mergeLegacyModelsToUnique(legacyModels);
     }
 
-    // Feature flag: Use new /models/unique endpoint or legacy /models endpoint
-    if (USE_UNIQUE_MODELS_ENDPOINT) {
-      console.log('[Models Page] 🆕 Fetching from /models/unique endpoint (feature flag enabled)');
-      const startTime = Date.now();
-
-      const result = await getUniqueModels({
-        sort_by: 'provider_count',
-        order: 'desc',
-        limit: 1000
-      });
-
-      const duration = Date.now() - startTime;
-      console.log(`[Models Page] ✅ Unique models fetched: ${result.data.length} models in ${duration}ms`);
-      return result.data;
-    }
-
-    // Option B: Fetch from /models endpoint and merge on frontend
-    console.log('[Models Page] Fetching all models with gateway=all (Option B)');
+    // Fetch all models from backend
+    // Backend returns legacy format; mergeLegacyModelsToUnique groups by model ID
+    // and builds provider arrays for the UI
+    console.log('[Models Page] Fetching all models with gateway=all');
     const startTime = Date.now();
 
     const result = await getModelsForGateway('all');
     const allModels = result.data || [];
 
-    // Merge multiple providers for the same model
+    // Merge duplicate models from different providers into UniqueModel format
     const uniqueModels = mergeLegacyModelsToUnique(allModels);
 
     const duration = Date.now() - startTime;
-    console.log(`[Models Page] All models fetched and merged: ${uniqueModels.length} models in ${duration}ms`);
+    console.log(`[Models Page] Fetched ${allModels.length} models, merged to ${uniqueModels.length} unique in ${duration}ms`);
 
     return uniqueModels;
 
@@ -93,8 +71,6 @@ async function getAllModels(): Promise<UniqueModel[]> {
     return mergeLegacyModelsToUnique(legacyModels);
   }
 }
-
-// Redundant transformLegacyToUniqueModels removed
 
 export default async function ModelsPage() {
   // Fetch all models from all gateways in a single request

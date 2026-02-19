@@ -586,18 +586,26 @@ export function isDynamicGateway(gatewayId: string): boolean {
  * Process model data and auto-register any unknown gateways found
  * Call this when processing models from the API
  */
-export function autoRegisterGatewaysFromModels(models: Array<{ source_gateway?: string; source_gateways?: string[] }>): void {
+export function autoRegisterGatewaysFromModels(models: Array<{ source_gateway?: string; source_gateways?: string[]; providers?: Array<{ slug: string }> }>): void {
   const seenGateways = new Set<string>();
 
   for (const model of models) {
-    // Check source_gateway
+    // Check source_gateway (legacy format)
     if (model.source_gateway) {
       seenGateways.add(model.source_gateway);
     }
-    // Check source_gateways array
+    // Check source_gateways array (legacy format)
     if (model.source_gateways) {
       for (const gw of model.source_gateways) {
         seenGateways.add(gw);
+      }
+    }
+    // Check providers array (UniqueModel format from unique_models=true)
+    if (model.providers) {
+      for (const provider of model.providers) {
+        if (provider.slug) {
+          seenGateways.add(provider.slug);
+        }
       }
     }
   }

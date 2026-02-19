@@ -12,10 +12,6 @@ jest.mock('../react-scan-provider', () => ({
   ReactScanProvider: () => <div data-testid="react-scan-provider" />,
 }));
 
-jest.mock('../../model-sync-initializer', () => ({
-  ModelSyncInitializer: () => <div data-testid="model-sync-initializer" />,
-}));
-
 jest.mock('../posthog-provider', () => ({
   PostHogProvider: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="posthog-provider">{children}</div>
@@ -103,17 +99,6 @@ describe('AnalyticsProvidersWrapper', () => {
 
     const reactScanProvider = await screen.findByTestId('react-scan-provider');
     expect(reactScanProvider).toBeInTheDocument();
-  });
-
-  it('should include ModelSyncInitializer', async () => {
-    render(
-      <AnalyticsProvidersWrapper>
-        <div>Test</div>
-      </AnalyticsProvidersWrapper>
-    );
-
-    const modelSyncInitializer = await screen.findByTestId('model-sync-initializer');
-    expect(modelSyncInitializer).toBeInTheDocument();
   });
 
   it('should nest providers in correct order (Statsig -> PostHog -> children)', async () => {

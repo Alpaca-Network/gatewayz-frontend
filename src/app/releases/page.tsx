@@ -70,7 +70,7 @@ const releaseNotes: ReleaseWeek[] = [
   {
     date: "February 1, 2026",
     features: [
-      "Many-to-Many Provider Support: Models page now shows all providers offering each model with per-provider pricing via the new /models/unique endpoint integration",
+      "Many-to-Many Provider Support: Models page now shows all providers offering each model with per-provider pricing",
       "Kanban Column Toggle: Inbox now supports customizable Kanban column visibility with persistent state and iframe synchronization",
       "Terragon Inbox Integration: New /inbox and /code routes with custom OG images, auth bridge, and seamless iframe embedding",
       "Rybbit Analytics: Added Rybbit analytics tracking script for beta.gatewayz.ai",

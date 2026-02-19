@@ -1,6 +1,5 @@
 import { models } from '@/lib/models-data';
 import { getErrorMessage, isAbortOrNetworkError } from '@/lib/network-error';
-import { cacheAside, cacheStaleWhileRevalidate, cacheKey, CACHE_PREFIX, TTL, cacheInvalidate } from '@/lib/cache-strategies';
 import {
   VALID_GATEWAYS,
   PRIORITY_GATEWAYS,
@@ -12,7 +11,6 @@ import {
 } from '@/lib/gateway-registry';
 import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
 import { isPerMillionPricingGateway, isPerBillionPricingGateway } from '@/lib/model-pricing-utils';
-import type { UniqueModel, UniqueModelsResponse, UniqueModelsQueryOptions } from '@/types/models';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -27,7 +25,8 @@ interface PaginatedResponse {
   next_offset?: number;  // Next offset to use for pagination
 }
 
-// In-memory cache for models to reduce API calls (fallback if Redis unavailable)
+// In-memory cache for models to reduce backend API calls
+// ISR (revalidate=300) handles page-level caching; this handles repeated calls within a single server lifecycle
 let modelsCache: { data: any[], timestamp: number } | null = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
@@ -121,41 +120,20 @@ function transformModel(model: any, gateway: string) {
 }
 
 export async function getModelsForGateway(gateway: string, limit?: number, search?: string) {
-  // Use Redis cache with stale-while-revalidate pattern for instant page loads
-  // Skip caching for search queries to ensure fresh results
-  // For gateway=all, use a unified cache key regardless of limit so that
-  // SSR (no limit) and client-side (/api/models?limit=50000) share the same cache.
-  // This ensures the client-side fetch warms the cache for subsequent SSR renders.
-  const cacheKeyStr = search ? null : cacheKey(
-    CACHE_PREFIX.MODELS,
-    gateway,
-    gateway === 'all' ? 'all' : (limit ? `limit:${limit}` : 'all')
-  );
-
-  // If there's a search query, skip cache and fetch directly
+  // Search queries bypass cache for fresh results
   if (search) {
     return await fetchModelsLogic(gateway, limit, search);
   }
 
-  // Stale-while-revalidate:
-  // - Fresh for 4 hours (TTL.MODELS_ALL)
-  // - Serve stale for up to 12 additional hours (3x TTL)
-  // - Revalidate in background when stale
-  return await cacheStaleWhileRevalidate(
-    cacheKeyStr!,
-    async () => {
-      // Fetch logic (extracted below)
-      return await fetchModelsLogic(gateway, limit);
-    },
-    TTL.MODELS_ALL, // Fresh TTL: 4 hours
-    TTL.MODELS_ALL * 3, // Stale TTL: 12 hours (total cache lifetime: 16 hours)
-    'models' // Metrics category
-  );
+  // Use in-memory cache for non-search requests
+  // ISR (revalidate=300) handles page-level caching
+  // This in-memory cache handles repeated calls within a single server lifecycle
+  return await fetchModelsLogic(gateway, limit);
 }
 
 // Extracted fetch logic for reuse
 async function fetchModelsLogic(gateway: string, limit?: number, search?: string) {
-  // Check in-memory cache as fallback (only if no search query)
+  // Check in-memory cache (only for gateway=all without search)
   if (modelsCache && gateway === 'all' && !search) {
     const now = Date.now();
     if (now - modelsCache.timestamp < CACHE_DURATION) {
@@ -169,24 +147,20 @@ async function fetchModelsLogic(gateway: string, limit?: number, search?: string
     throw new Error('Invalid gateway');
   }
 
-  // FIX: Use single backend call with gateway=all instead of N+1 individual gateway calls
-  // The backend already handles aggregation and deduplication across all gateways efficiently
-  // This eliminates ~20+ individual API calls and improves root load performance significantly
+  // Use single backend call with gateway=all
+  // The backend handles aggregation across all gateways
   if (gateway === 'all') {
-    console.log('[Models] Fetching all models from backend with gateway=all (single request)');
+    console.log('[Models] Fetching all models from backend with gateway=all');
     try {
-      // Make a single API call to the backend with gateway=all
-      // The backend handles fetching from all gateways and deduplication internally
       const models = await fetchModelsFromGateway('all', limit, search);
 
       if (models.length > 0) {
         // Auto-register any new gateways discovered from the API response
-        // This allows new gateways to appear in the UI without code changes
         autoRegisterGatewaysFromModels(models);
 
         console.log(`[Models] Fetched ${models.length} models from backend with gateway=all`);
 
-        // Cache the result for 'all' gateway (only if not searching)
+        // Cache in memory (only if not searching)
         if (!search) {
           modelsCache = {
             data: models,
@@ -220,7 +194,13 @@ function buildHeaders(gateway: string): Record<string, string> {
 
 // Helper function to normalize model fields for consistent tag display
 function normalizeModel(model: any, gateway: string): any {
-  // Normalize gateway values using centralized registry
+  // If model already has providers array (from unique_models=true), it's already
+  // in UniqueModel format — pass through without adding legacy fields
+  if (Array.isArray(model.providers)) {
+    return model;
+  }
+
+  // Legacy format normalization: ensure source_gateways and provider_slugs are arrays
   const normalizeGatewayValue = (gw: string) => normalizeGatewayId(gw);
 
   // Get normalized gateway from source_gateway or use the provided gateway parameter
@@ -257,9 +237,9 @@ function getApiBaseUrl(): string {
 // Helper function to fetch models from a specific gateway
 async function fetchModelsFromGateway(gateway: string, limit?: number, search?: string): Promise<any[]> {
   const allModels: any[] = [];
-  // Updated to use reasonable page size: 5000 models per page (was 500)
-  // Backend now properly supports pagination with has_more and next_offset
-  const requestLimit = limit || 5000;
+  // Backend enforces max limit of 1000 per page (returns 422 for higher values)
+  // Use 1000 as default page size for optimal throughput with pagination
+  const requestLimit = limit ? Math.min(limit, 1000) : 1000;
   // Use centralized PRIORITY_GATEWAYS for fast gateway detection
   // Timeouts: 180s for 'all' (aggregated endpoint needs time to fetch from all gateways),
   // 5s for fast gateways, 30s for slow (HuggingFace)
@@ -277,21 +257,15 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
   // On client-side, pagination is handled by the server (via /api/models route)
   // so we only make a single request without offset. The server-side getModelsForGateway
   // handles all pagination internally before returning results.
-  // For 'all' gateway on server-side, fetch up to 5 pages (25,000 models)
-  // This stays under the Vercel timeout (10s Hobby / 60s Pro)
-  const maxPages = isClientSide ? 1 : (gateway === 'all' ? 5 : 10);
+  // For 'all' gateway on server-side, fetch up to 100 pages to handle 6000+ models
+  // Backend caps at 1000 models per page; 100 pages = 100,000 models capacity
+  const maxPages = isClientSide ? 1 : (gateway === 'all' ? 100 : 10);
 
   while (hasMore && pageCount < maxPages) {
     pageCount++;
     // Only include offset for server-side requests (client requests don't paginate)
     const offsetParam = (!isClientSide && offset > 0) ? `&offset=${offset}` : '';
     const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-    // Note: Do NOT add unique_models=true here. The backend returns a different format
-    // (providers array without legacy pricing/source_gateway/provider_slug fields) when
-    // unique_models=true, but the frontend processing pipeline (normalizeModel +
-    // mergeLegacyModelsToUnique) expects legacy flat format. Using unique_models=true
-    // causes all provider info, pricing, and metadata to be lost during transformation.
-    // Use USE_UNIQUE_MODELS_ENDPOINT feature flag + getUniqueModels() for the unique format.
     const limitParam = `limit=${requestLimit}${offsetParam}${searchParam}`;
 
     // Build URLs based on environment
@@ -319,16 +293,13 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
 
         const headers = buildHeaders(gateway);
 
-        // Build fetch options - include Next.js caching only on server-side
         const fetchOptions: RequestInit = {
           method: 'GET',
           headers,
           signal: AbortSignal.timeout(timeoutMs)
         };
 
-        // Disable Next.js fetch cache - Redis cacheStaleWhileRevalidate handles caching.
-        // Using next.revalidate here caused background revalidation that silently
-        // replaced good cached data with stale responses (pricing zeroed out).
+        // Disable Next.js fetch cache — ISR + in-memory cache handle caching
         fetchOptions.cache = 'no-store';
 
         // Try endpoints: single request on client-side, first-success fallback on server-side.
@@ -536,291 +507,13 @@ function getStaticFallbackModels(gateway: string): any[] {
 }
 
 /**
- * Invalidate models cache for a specific gateway or all gateways
+ * Invalidate models cache (clears in-memory cache)
  *
- * @param gateway - Gateway to invalidate, or 'all' for all caches
- * @returns Number of cache keys invalidated
+ * @param gateway - Gateway to invalidate (ignored — clears all models cache)
+ * @returns 0 (no Redis entries to delete)
  */
 export async function invalidateModelsCache(gateway?: string): Promise<number> {
-  try {
-    if (gateway) {
-      // Invalidate specific gateway cache
-      const pattern = cacheKey(CACHE_PREFIX.MODELS, gateway, '*');
-      const deleted = await cacheInvalidate(pattern);
-      console.log(`[Models] Invalidated ${deleted} cache entries for gateway: ${gateway}`);
-      return deleted;
-    } else {
-      // Invalidate all models caches
-      const pattern = cacheKey(CACHE_PREFIX.MODELS, '*');
-      const deleted = await cacheInvalidate(pattern);
-      console.log(`[Models] Invalidated ${deleted} cache entries for all gateways`);
-
-      // Also clear in-memory cache
-      modelsCache = null;
-
-      return deleted;
-    }
-  } catch (error) {
-    console.error('[Models] Error invalidating cache:', error);
-    // Clear in-memory cache as fallback
-    modelsCache = null;
-    return 0;
-  }
-}
-
-// ============================================================================
-// New /models/unique endpoint functions
-// ============================================================================
-
-// In-memory cache for unique models
-let uniqueModelsCache: { data: UniqueModel[], timestamp: number } | null = null;
-
-/**
- * Fetch unique models with provider arrays from /models/unique endpoint
- *
- * This endpoint provides deduplicated models with many-to-many provider relationships.
- * It eliminates the need for client-side deduplication and provides additional insights:
- * - Provider arrays with pricing, health status, and performance metrics
- * - Auto-calculated cheapest and fastest providers
- * - Provider count for each model
- *
- * @param options Query options for filtering, sorting, and pagination
- * @returns Promise with unique models array and pagination metadata
- *
- * @example
- * // Get models with 3+ providers, sorted by provider count
- * const result = await getUniqueModels({
- *   min_providers: 3,
- *   sort_by: 'provider_count',
- *   order: 'desc',
- *   limit: 100
- * });
- *
- * @example
- * // Search for GPT models
- * const result = await getUniqueModels({
- *   search: 'gpt',
- *   sort_by: 'cheapest_price',
- *   order: 'asc'
- * });
- */
-export async function getUniqueModels(
-  options: UniqueModelsQueryOptions = {}
-): Promise<UniqueModelsResponse> {
-  const {
-    min_providers,
-    sort_by = 'provider_count',
-    order = 'desc',
-    limit = 500,
-    offset = 0,
-    search
-  } = options;
-
-  // Build cache key (skip caching for search queries)
-  const cacheKeyStr = search ? null : cacheKey(
-    CACHE_PREFIX.MODELS,
-    'unique',
-    `${sort_by}:${order}:${limit}:${offset}:${min_providers || 'all'}`
-  );
-
-  // If there's a search query, skip cache and fetch directly
-  if (search) {
-    return await fetchUniqueModelsLogic(options);
-  }
-
-  // Use stale-while-revalidate caching strategy
-  // - Fresh for 4 hours (TTL.MODELS_ALL)
-  // - Serve stale for up to 12 additional hours (3x TTL)
-  // - Revalidate in background when stale
-  return await cacheStaleWhileRevalidate(
-    cacheKeyStr!,
-    async () => fetchUniqueModelsLogic(options),
-    TTL.MODELS_ALL,        // Fresh TTL: 4 hours
-    TTL.MODELS_ALL * 3,    // Stale TTL: 12 hours
-    'unique-models'        // Metrics category
-  );
-}
-
-/**
- * Internal function to fetch unique models from backend
- * Handles retries, timeouts, and error tracking
- */
-async function fetchUniqueModelsLogic(
-  options: UniqueModelsQueryOptions
-): Promise<UniqueModelsResponse> {
-  const {
-    min_providers,
-    sort_by = 'provider_count',
-    order = 'desc',
-    limit = 500,
-    offset = 0,
-    search
-  } = options;
-
-  // Check in-memory cache as fallback (only if no search query)
-  if (uniqueModelsCache && !search) {
-    const now = Date.now();
-    if (now - uniqueModelsCache.timestamp < CACHE_DURATION) {
-      console.log(`[UniqueModels] Returning in-memory cached models (${uniqueModelsCache.data.length} models)`);
-      return { data: uniqueModelsCache.data };
-    }
-  }
-
-  // Determine base URL based on runtime environment
-  const baseUrl = getApiBaseUrl();
-  const isClientSide = typeof window !== 'undefined';
-
-  // Build query parameters
-  const params = new URLSearchParams({
-    sort_by,
-    order,
-    limit: limit.toString(),
-    offset: offset.toString(),
-  });
-
-  if (min_providers !== undefined) {
-    params.append('min_providers', min_providers.toString());
-  }
-
-  if (search) {
-    params.append('search', search);
-  }
-
-  // Build URL - use Next.js API route on client, direct backend on server
-  const url = isClientSide
-    ? `/api/models/unique?${params.toString()}`
-    : `${baseUrl}/models/unique?${params.toString()}`;
-
-  // Timeout: 180s for initial load (large dataset), 10s for subsequent requests
-  const timeoutMs = offset === 0 ? 180000 : 10000;
-
-  const maxRetries = 3;
-  let retryCount = 0;
-  let lastError: { status: number; retryAfter: string | null } | null = null;
-
-  while (retryCount <= maxRetries) {
-    try {
-      // Add delay for retries
-      if (retryCount > 0 && lastError) {
-        const waitTime = calculateRetryDelay(retryCount - 1, lastError.retryAfter);
-        console.log(`[UniqueModels] Rate limited, retry ${retryCount}/${maxRetries} after ${waitTime}ms`);
-        await sleep(waitTime);
-      }
-
-      // Build fetch options
-      const fetchOptions: RequestInit = {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        signal: AbortSignal.timeout(timeoutMs)
-      };
-
-      // Disable Next.js fetch cache - Redis cacheStaleWhileRevalidate handles caching.
-      // Using next.revalidate here caused background revalidation that silently
-      // replaced good cached data with stale responses (pricing zeroed out).
-      fetchOptions.cache = 'no-store';
-
-      console.log(`[UniqueModels] Fetching from ${isClientSide ? 'API route' : 'backend'}: ${url}`);
-      const startTime = Date.now();
-
-      const response = await fetch(url, fetchOptions);
-
-      // Handle rate limit errors with retry
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('retry-after');
-
-        if (retryCount < maxRetries) {
-          lastError = { status: 429, retryAfter };
-          retryCount++;
-          continue; // Retry
-        } else {
-          console.error(`[UniqueModels] Rate limit exceeded after ${maxRetries} retries`);
-          throw new Error('Rate limit exceeded');
-        }
-      }
-
-      if (!response.ok) {
-        // Track non-OK responses
-        await trackBadBackendResponse(response, {
-          endpoint: url,
-          method: 'GET',
-          retryCount,
-        });
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data: UniqueModelsResponse = await response.json();
-      const duration = Date.now() - startTime;
-
-      console.log(`[UniqueModels] Fetched ${data.data?.length || 0} unique models in ${duration}ms`);
-
-      // Cache successful response (only if not searching)
-      if (!search && data.data && data.data.length > 0) {
-        uniqueModelsCache = {
-          data: data.data,
-          timestamp: Date.now()
-        };
-      }
-
-      return data;
-
-    } catch (error: any) {
-      const message = getErrorMessage(error);
-
-      if (isAbortOrNetworkError(error)) {
-        // Track network/timeout errors
-        trackBackendNetworkError(error, {
-          endpoint: url,
-          method: 'GET',
-          timeoutMs,
-        });
-
-        if (process.env.NODE_ENV === 'development') {
-          console.warn(`[UniqueModels] Request timed out after ${timeoutMs}ms`);
-        }
-      } else {
-        // Track processing errors
-        trackBackendProcessingError(error, {
-          endpoint: url,
-          method: 'GET',
-        });
-        console.error(`[UniqueModels] Failed to fetch:`, message);
-      }
-
-      // On final retry failure, return empty response
-      if (retryCount >= maxRetries) {
-        console.error(`[UniqueModels] All retries exhausted, returning empty response`);
-        return { data: [] };
-      }
-
-      retryCount++;
-    }
-  }
-
-  // Fallback return (should never reach here)
-  return { data: [] };
-}
-
-/**
- * Invalidate unique models cache
- *
- * @returns Number of cache keys invalidated
- */
-export async function invalidateUniqueModelsCache(): Promise<number> {
-  try {
-    const pattern = cacheKey(CACHE_PREFIX.MODELS, 'unique', '*');
-    const deleted = await cacheInvalidate(pattern);
-    console.log(`[UniqueModels] Invalidated ${deleted} cache entries`);
-
-    // Also clear in-memory cache
-    uniqueModelsCache = null;
-
-    return deleted;
-  } catch (error) {
-    console.error('[UniqueModels] Error invalidating cache:', error);
-    // Clear in-memory cache as fallback
-    uniqueModelsCache = null;
-    return 0;
-  }
+  modelsCache = null;
+  console.log(`[Models] In-memory cache cleared${gateway ? ` (requested for gateway: ${gateway})` : ''}`);
+  return 0;
 }
