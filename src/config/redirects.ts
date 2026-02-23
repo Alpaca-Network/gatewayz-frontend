@@ -26,18 +26,9 @@ export function getRedirects(): Redirect[] {
       destination: 'https://www.canva.com/design/DAG2Dc4lQvI/P2ws7cdUnYAjdFxXpsKvUw/view?utm_content=DAG2Dc4lQvI&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h20484be5f9',
       permanent: false,
     },
-    // Inbox redirect - redirects to Terragon for all hosts
-    {
-      source: '/inbox',
-      destination: TERRAGON_DASHBOARD_URL,
-      permanent: false,
-    },
-    // Code redirect - redirects to Terragon for all hosts
-    {
-      source: '/code',
-      destination: TERRAGON_DASHBOARD_URL,
-      permanent: false,
-    },
+    // NOTE: /inbox and /code routes are handled by their page components
+    // which embed Terragon via iframe with postMessage authentication.
+    // Do NOT add redirects for these routes - they will bypass the embedding.
     // Terragon redirect - only for beta.gatewayz.ai host
     {
       source: '/terragon',

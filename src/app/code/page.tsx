@@ -1,8 +1,8 @@
 /**
- * Code route - serves the same content as /claude-code
+ * Code route - embeds the Terragon coding inbox
  *
- * This route exists to provide a clean URL (/code) with custom
- * Open Graph metadata for the Claude Code + GatewayZ page.
+ * This route provides the same Terragon embedding as /inbox,
+ * with custom Open Graph metadata for the /code URL.
  * Metadata is defined in layout.tsx.
  */
-export { default } from '../claude-code/page';
+export { default } from '../inbox/page';
