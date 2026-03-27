@@ -57,8 +57,8 @@ export function AppHeader() {
   const slowAuthToastShownRef = useRef(false);
   const isDesktop = useIsTauri();
 
-  // Show toast when authentication starts and completes
-  // Skip showing toast on chat page to avoid clutter
+  // Show toast only when user completes an active login flow
+  // (status transitions from "authenticating" → "authenticated")
   useEffect(() => {
     // Don't show auth toasts on the chat page
     if (pathname === "/chat") {
@@ -71,7 +71,8 @@ export function AppHeader() {
         title: "Signing in...",
         description: "Connecting to your account",
       });
-    } else if (status === "authenticated") {
+    } else if (status === "authenticated" && authToastShownRef.current) {
+      // Only show success toast if we were actively authenticating (ref was set)
       authToastShownRef.current = false;
       slowAuthToastShownRef.current = false;
       toast({
@@ -87,8 +88,6 @@ export function AppHeader() {
         variant: "destructive",
       });
     } else if (status === "unauthenticated") {
-      // Reset refs when user cancels login or Privy state becomes invalid
-      // This ensures subsequent sign-in attempts will show toasts correctly
       authToastShownRef.current = false;
       slowAuthToastShownRef.current = false;
     }

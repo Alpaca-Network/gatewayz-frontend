@@ -6,73 +6,73 @@ import { trackTwitterSignupClick } from "@/components/analytics/twitter-pixel";
 const tiers = [
   {
     name: "Starter",
-    price: "$0",
+    price: "$35",
     period: "/month",
-    subtitle: "Perfect for experimenting",
-    description: "Get started with free credits",
-    features: ["$3 free credits monthly", "Access to 5+ models", "Community support", "Basic analytics"],
-    cta: "Join Beta",
+    subtitle: "Perfect for getting started",
+    description: "Essential features for small teams",
+    features: [
+      "Access to 10,000+ models",
+      "Smart cost optimization",
+      "Community support",
+      "Basic analytics",
+    ],
+    cta: "Get Started",
     highlighted: false,
   },
   {
     name: "Pro",
-    price: "$8",
+    price: "$120",
     period: "/month",
     subtitle: "Scale with confidence",
-    description: "Only pay for what you use",
-    originalPrice: "$10",
-    discount: "Save 20%",
+    description: "Advanced features for growing teams",
     features: [
-      "50% discount on first $3 credits",
+      "Everything in Starter",
       "Access to 10,000+ models",
       "Smart cost optimization",
-      "Advanced analytics",
+      "Terragon: Task inbox for AI coding agents",
       "Priority support",
       "99.9% uptime SLA",
     ],
-    cta: "Join Beta",
+    cta: "Get Started",
     highlighted: false,
   },
   {
     name: "Max",
-    price: "$75",
+    price: "$350",
     period: "/month",
     subtitle: "Higher limits, priority access",
     description: "Everything in Pro, plus enhanced limits",
-    originalPrice: "$150",
-    discount: "50% discount on\n$150 credits",
     features: [
-      "50% discount on $150 credits",
+      "Everything in Pro",
       "10x more usage than Pro",
       "Higher output limits for all tasks",
       "Early access to advanced features",
     ],
-    cta: "Join Beta",
+    cta: "Get Started",
     highlighted: true,
   },
   {
-    name: "Enterprise",
-    price: "$350",
-    period: "/ 10 users / month",
-    subtitle: "Tailored for scale",
-    description: "Solutions for large organizations",
+    name: "Custom",
+    price: "Custom",
+    period: "",
+    subtitle: "Tailored to your business",
+    description: "Custom solutions for your organization",
     features: [
-      "$350 / 10 users / month minimum",
       "Dedicated infrastructure",
       "Custom model training",
       "White-label options",
       "24/7 dedicated support",
       "99.99% uptime SLA",
     ],
-    cta: "Contact Sales",
+    cta: "Book your audit",
     highlighted: false,
   },
 ];
 
 export function PricingSection() {
   const handleClick = (tierName: string) => {
-    if (tierName === "Enterprise") {
-      // Enterprise tier goes to enterprise page - don't track as signup conversion
+    if (tierName === "Custom") {
+      // Custom tier goes to enterprise page - don't track as signup conversion
       window.location.href = "https://gatewayz.ai/enterprise";
     } else {
       // Track Twitter conversion for ad attribution (signup tiers only)
@@ -119,16 +119,6 @@ export function PricingSection() {
                   <span className={`font-bold text-gray-900 ${tier.price.length > 10 ? "text-2xl" : "text-3xl"}`}>{tier.price}</span>
                   {tier.period && <span className="text-gray-500 text-sm">{tier.period}</span>}
                 </div>
-                {tier.originalPrice && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-sm text-gray-400 line-through">{tier.originalPrice}/month</span>
-                    {tier.discount && (
-                      <span className="inline-block px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                        Save 50%
-                      </span>
-                    )}
-                  </div>
-                )}
               </div>
 
               <p className="text-sm text-gray-600 mb-4">{tier.description}</p>

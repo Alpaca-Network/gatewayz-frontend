@@ -38,27 +38,27 @@ export const _resetLoggedWarnings = () => {
  */
 export const TIER_CONFIG = {
   basic: {
-    name: 'Basic',
-    description: 'Pay-per-use credits',
-    monthlyPrice: null, // Pay per use
+    name: 'Starter',
+    description: '$35/month subscription',
+    monthlyPrice: 3500, // $35.00 in cents
     creditAllocation: 0, // No monthly allocation (legacy field)
     monthlyAllowance: 0, // No subscription allowance
-    isSubscription: false,
+    isSubscription: true,
   },
   pro: {
     name: 'Pro',
-    description: '$8/month subscription',
-    monthlyPrice: 800, // $8.00 in cents
+    description: '$120/month subscription',
+    monthlyPrice: 12000, // $120.00 in cents
     creditAllocation: 1000, // Legacy - keep for backward compatibility
-    monthlyAllowance: 1500, // $15.00 in cents - NEW: actual monthly allowance
+    monthlyAllowance: 1500, // Allowance in cents - update when backend confirms
     isSubscription: true,
   },
   max: {
     name: 'Max',
-    description: '$75/month subscription',
-    monthlyPrice: 7500, // $75.00 in cents
+    description: '$350/month subscription',
+    monthlyPrice: 35000, // $350.00 in cents
     creditAllocation: 15000, // Legacy - keep for backward compatibility
-    monthlyAllowance: 15000, // $150.00 in cents - monthly allowance
+    monthlyAllowance: 15000, // Allowance in cents - update when backend confirms
     isSubscription: true,
   },
 } as const;

@@ -56,9 +56,9 @@ Privy (Email/Google/GitHub/Wallet) → backend validates → API key returned �
 Cross-domain: users auth on gatewayz.ai, redirected to beta.gatewayz.ai with token. See `src/components/SessionInitializer.tsx`.
 
 ### Tiers
-- **Basic:** Pay-per-use, no subscription
-- **Pro:** $15/month (1500 cents)
-- **Max:** $75/month (7500 cents), 15000 credit allocation
+- **Starter:** $35/month (3500 cents)
+- **Pro:** $120/month (12000 cents)
+- **Max:** $350/month (35000 cents)
 
 ## Conventions
 

@@ -26,65 +26,61 @@ const pricingTiers: PricingTier[] = [
   {
     id: 'starter',
     name: 'Starter',
-    description: 'Perfect for experimenting',
-    price: '$0',
+    description: 'Perfect for getting started',
+    price: '$35',
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      '$3 free credits monthly',
-      'Access to 5+ models',
+      'Access to 10,000+ models',
+      'Smart cost optimization',
       'Community support',
       'Basic analytics',
     ],
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID,
   },
   {
     id: 'pro',
     name: 'Pro',
     description: 'Scale with confidence',
-    price: '$8',
-    originalPrice: '$10/month',
-    discount: 'Save 20%',
+    price: '$120',
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      '$15 monthly credit allowance',
+      'Everything in Starter',
       'Access to 10,000+ models',
       'Smart cost optimization',
-      'Advanced analytics',
+      'Terragon: Task inbox for AI coding agents',
       'Priority support',
       '99.9% uptime SLA',
     ],
     stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID,
-    stripeProductId: 'prod_TKOqQPhVRxNp4Q', // Pro product ID for database
+    stripeProductId: 'prod_TKOqQPhVRxNp4Q',
   },
   {
     id: 'max',
     name: 'Max',
     description: 'Higher limits, priority access',
-    price: '$75',
-    originalPrice: '$150/month',
-    discount: 'Save 50%',
+    price: '$350',
     ctaText: 'Get Started',
     ctaVariant: 'secondary',
     popular: true,
     features: [
-      '50% discount on $150 credits',
+      'Everything in Pro',
       '10x more usage than Pro',
       'Higher output limits for all tasks',
       'Early access to advanced features',
     ],
     stripePriceId: process.env.NEXT_PUBLIC_STRIPE_MAX_PRICE_ID,
-    stripeProductId: 'prod_TMHUXL8p0onwwO', // Max product ID for database
+    stripeProductId: 'prod_TMHUXL8p0onwwO',
   },
   {
     id: 'enterprise',
-    name: 'Enterprise',
-    description: 'Tailored for scale',
-    price: '$350',
-    ctaText: 'Contact Sales',
+    name: 'Custom',
+    description: 'Tailored to your business',
+    price: 'Custom',
+    ctaText: 'Book your audit',
     ctaVariant: 'default',
     features: [
-      '$350 / 10 users / month minimum',
       'Dedicated infrastructure',
       'Custom model training',
       'White-label options',
@@ -277,34 +273,21 @@ export function PricingSection() {
                 <div className="mb-2">
                   <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-bold">{tier.price}</span>
-                    {tier.price !== 'Custom' && tier.price !== '$0' && tier.id !== 'enterprise' && (
+                    {tier.price !== 'Custom' && (
                       <span className="text-muted-foreground">/month</span>
                     )}
                   </div>
-                  {tier.id === 'enterprise' && (
-                    <p className="text-sm text-muted-foreground mt-1">10 users / month</p>
-                  )}
-                  {tier.price === '$0' && (
-                    <p className="text-sm text-muted-foreground mt-1">Get started with free credits</p>
-                  )}
-                  {tier.originalPrice && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm text-muted-foreground line-through">{tier.originalPrice}</span>
-                      {tier.discount && (
-                        <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full font-medium">
-                          {tier.discount}
-                        </span>
-                      )}
-                    </div>
+                  {tier.id === 'starter' && (
+                    <p className="text-sm text-muted-foreground mt-2">Essential features for small teams</p>
                   )}
                   {tier.id === 'pro' && (
-                    <p className="text-sm text-muted-foreground mt-2">Only pay for what you use</p>
+                    <p className="text-sm text-muted-foreground mt-2">Advanced features for growing teams</p>
                   )}
                   {tier.id === 'max' && (
                     <p className="text-sm text-muted-foreground mt-2">Everything in Pro, plus enhanced limits</p>
                   )}
                   {tier.id === 'enterprise' && (
-                    <p className="text-sm text-muted-foreground mt-2">Minimum package for large teams</p>
+                    <p className="text-sm text-muted-foreground mt-2">Custom solutions for your organization</p>
                   )}
                 </div>
 
