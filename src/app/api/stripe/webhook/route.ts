@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       console.log('Checkout session completed:', {
         sessionId: session.id,
         customerId: session.customer,
+        mode: session.mode,
         metadata: session.metadata,
       });
 
@@ -80,7 +81,26 @@ export async function POST(req: NextRequest) {
         customer_email: userEmail,
         tier,
         checkout_type: checkoutType,
+        mode: session.mode,
       });
+
+      // For subscription checkouts, the backend webhook handles tier upgrades
+      // Frontend webhook should only process one-time credit purchases
+      if (session.mode === 'subscription') {
+        console.log('Subscription checkout detected - backend will handle tier upgrade via webhook');
+        console.log('Subscription details:', {
+          mode: session.mode,
+          tier,
+          userId,
+          userEmail,
+          subscriptionId: session.subscription,
+        });
+        // Return 200 - backend webhook will handle the tier upgrade
+        return NextResponse.json(
+          { received: true, message: 'Subscription handled by backend webhook' },
+          { status: 200 }
+        );
+      }
 
       if (!credits) {
         console.warn('No credits found in session metadata for checkout session', session.id);
