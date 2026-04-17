@@ -105,8 +105,10 @@ export const useSessionMessages = (sessionId: number | null) => {
     },
     // Enable for both authenticated and guest sessions when sessionId exists
     enabled: !!sessionId && !isLoading,
-    // OPTIMIZATION: Increase staleTime from 60s to 5 minutes to reduce unnecessary refetches
     staleTime: 5 * 60 * 1000,
+    // Message arrays are large — evict from cache 1 minute after unmount
+    // to prevent RAM accumulation when switching between many sessions
+    gcTime: 60 * 1000, // 1 minute
     // Keep previous data while fetching to prevent UI flicker
     placeholderData: (previousData) => previousData,
   });

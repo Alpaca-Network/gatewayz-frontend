@@ -37,28 +37,36 @@ export const _resetLoggedWarnings = () => {
  * Tier configuration and metadata
  */
 export const TIER_CONFIG = {
+  free: {
+    name: 'Free',
+    description: 'Free tier — purchase a plan to unlock more credits',
+    monthlyPrice: 0,
+    creditAllocation: 0,
+    monthlyAllowance: 0,
+    isSubscription: false,
+  },
   basic: {
     name: 'Starter',
-    description: '$35/month subscription',
+    description: '$35/month - $35 in credits (20% savings vs pay-as-you-go)',
     monthlyPrice: 3500, // $35.00 in cents
-    creditAllocation: 0, // No monthly allocation (legacy field)
-    monthlyAllowance: 0, // No subscription allowance
+    creditAllocation: 3500, // $35 in credits
+    monthlyAllowance: 3500, // $35.00 in cents
     isSubscription: true,
   },
   pro: {
     name: 'Pro',
-    description: '$120/month subscription',
+    description: '$120/month - $130 in credits (27% savings vs pay-as-you-go)',
     monthlyPrice: 12000, // $120.00 in cents
-    creditAllocation: 1000, // Legacy - keep for backward compatibility
-    monthlyAllowance: 1500, // Allowance in cents - update when backend confirms
+    creditAllocation: 13000, // $130 in credits
+    monthlyAllowance: 13000, // $130.00 in cents
     isSubscription: true,
   },
   max: {
     name: 'Max',
-    description: '$350/month subscription',
+    description: '$350/month - $400 in credits (30% savings vs pay-as-you-go)',
     monthlyPrice: 35000, // $350.00 in cents
-    creditAllocation: 15000, // Legacy - keep for backward compatibility
-    monthlyAllowance: 15000, // Allowance in cents - update when backend confirms
+    creditAllocation: 40000, // $400 in credits
+    monthlyAllowance: 40000, // $400.00 in cents
     isSubscription: true,
   },
 } as const;
@@ -74,74 +82,45 @@ const inferTierFromDisplayName = (tierDisplayName: string | undefined): UserTier
   if (normalized === 'max') return 'max';
   if (normalized === 'pro') return 'pro';
   if (normalized === 'basic') return 'basic';
+  if (normalized === 'free') return 'free';
   return null;
 };
 
 /**
- * Determines the user's current tier based on subscription status and credits
+ * Determines the user's current tier based on subscription status and tier field.
+ *
+ * Primary gate: subscription_status === 'active' → trust the tier field.
+ * Secondary gate: hasPurchasedCredits → trust the tier field even with stale
+ *   subscription_status (e.g. after a webhook delay or one-time credit purchase).
+ * Everyone else: return 'free' — they have not paid, regardless of what the
+ *   DB tier column says (it defaults to 'basic' for all new users).
+ *
  * @param userData - User data from auth response
- * @returns The current tier (basic, pro, or max)
+ * @returns The current tier ('free', 'basic', 'pro', or 'max')
  */
 export const getUserTier = (userData: UserData | null): UserTier => {
   if (!userData) {
+    return 'free';
+  }
+
+  const tier = (userData.tier as string | undefined)?.toLowerCase();
+  const isPaidTier = tier === 'basic' || tier === 'pro' || tier === 'max';
+
+  // Active subscription — trust the tier field
+  if (userData.subscription_status === 'active') {
+    if (isPaidTier) return tier as UserTier;
+    // Active subscription but unrecognized tier — return 'basic' as safe minimum
     return 'basic';
   }
 
-  // If user has explicit tier from backend, use it
-  if (userData.tier) {
-    const normalizedTier = (userData.tier as string).toLowerCase() as UserTier;
-    // Validate the tier is a recognized value
-    if (normalizedTier === 'basic' || normalizedTier === 'pro' || normalizedTier === 'max') {
-      // IMPORTANT: If user has an active subscription, they cannot be on basic tier
-      // This handles cases where tier wasn't properly updated after subscription purchase
-      if (normalizedTier === 'basic' && userData.subscription_status === 'active') {
-        // Try to determine actual tier from tier_display_name if available
-        const inferredTier = inferTierFromDisplayName(userData.tier_display_name);
-        if (inferredTier && inferredTier !== 'basic') {
-          warnOnce(
-            `tier-mismatch-${userData.user_id}-${inferredTier}`,
-            `getUserTier: User has active subscription but tier is "basic". Correcting to "${inferredTier}" based on tier_display_name.`,
-            { tier: normalizedTier, tier_display_name: userData.tier_display_name, subscription_status: userData.subscription_status }
-          );
-          return inferredTier;
-        }
-        // If tier_display_name doesn't help, default to 'pro' (safer than assuming 'max')
-        warnOnce(
-          `tier-mismatch-${userData.user_id}-pro`,
-          'getUserTier: User has active subscription but tier is "basic". Correcting to "pro".',
-          { tier: normalizedTier, subscription_status: userData.subscription_status }
-        );
-        return 'pro';
-      }
-      return normalizedTier;
-    }
+  // Stale subscription_status but user has clearly purchased credits (> $5 trial amount)
+  // This handles webhook delays and one-time credit purchases with stale status
+  if (isPaidTier && hasPurchasedCredits(userData)) {
+    return tier as UserTier;
   }
 
-  // Fallback to determining tier from subscription status
-  // Note: When tier is missing from backend response, we cannot safely determine if user is 'pro' or 'max'
-  // The backend should always return explicit tier for subscribed users
-  if (userData.subscription_status === 'active') {
-    // Try to determine tier from tier_display_name if available
-    const inferredTier = inferTierFromDisplayName(userData.tier_display_name);
-    if (inferredTier && inferredTier !== 'basic') {
-      warnOnce(
-        `tier-missing-${userData.user_id}-${inferredTier}`,
-        `getUserTier: User has active subscription but no tier field. Using "${inferredTier}" from tier_display_name.`,
-        { tier_display_name: userData.tier_display_name, subscription_status: userData.subscription_status }
-      );
-      return inferredTier;
-    }
-    // Cannot safely determine tier without explicit backend data
-    // Default to 'pro' for backward compatibility, but log this edge case
-    warnOnce(
-      `tier-missing-${userData.user_id}-pro`,
-      'getUserTier: User has active subscription but no tier field. Defaulting to pro. User ID may need manual verification.',
-      { subscription_status: userData.subscription_status }
-    );
-    return 'pro';
-  }
-
-  return 'basic';
+  // No active subscription and no purchased credits — free tier
+  return 'free';
 };
 
 /**
@@ -274,6 +253,7 @@ export const canAccessModel = (modelRequiredTier: UserTier | undefined, userTier
   }
 
   const tierHierarchy: Record<UserTier, number> = {
+    free: -1,
     basic: 0,
     pro: 1,
     max: 2,

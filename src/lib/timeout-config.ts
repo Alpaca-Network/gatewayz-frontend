@@ -17,7 +17,7 @@ export const TIMEOUT_CONFIG = {
     sessionCreate: 30000,    // 30 seconds to create a session (increased from 15s for backend performance under load)
     sessionUpdate: 15000,    // 15 seconds to update a session
     sessionDelete: 30000,    // 30 seconds to delete a session
-    messagesSave: 10000,     // 10 seconds to save a message (was 5s, too aggressive)
+    messagesSave: 30000,     // 30 seconds to save a message (raised from 10s — 3 sequential Supabase queries on cold connections can exceed 10s)
     messagesLoad: 15000,     // 15 seconds to load messages
     sessionsList: 10000,     // 10 seconds to list sessions
   },

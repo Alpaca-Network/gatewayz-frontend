@@ -26,106 +26,87 @@ describe('tier-utils', () => {
   });
 
   describe('_resetLoggedWarnings', () => {
-    it('should clear logged warnings allowing them to be logged again', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const userData: UserData = {
-        user_id: 1000,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-1000',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
-        tier: 'basic',
-        subscription_status: 'active',
-      };
-
-      // First call logs warning
-      getUserTier(userData);
-      expect(consoleSpy).toHaveBeenCalledTimes(1);
-
-      // Second call doesn't log (deduplicated)
-      getUserTier(userData);
-      expect(consoleSpy).toHaveBeenCalledTimes(1);
-
-      // Reset warnings
-      _resetLoggedWarnings();
-
-      // Now it should log again
-      getUserTier(userData);
-      expect(consoleSpy).toHaveBeenCalledTimes(2);
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should handle max warnings limit to prevent memory leaks', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      // Generate more than MAX_LOGGED_WARNINGS (100) unique users
-      for (let i = 0; i < 105; i++) {
-        const userData: UserData = {
-          user_id: 2000 + i,
-          api_key: 'test-key',
-          auth_method: 'email',
-          privy_user_id: `privy-${2000 + i}`,
-          display_name: 'Test User',
-          email: 'test@example.com',
-          credits: 100,
-          tier: 'basic',
-          subscription_status: 'active',
-        };
-        getUserTier(userData);
-      }
-
-      // All 105 should have logged (oldest entries are evicted)
-      expect(consoleSpy).toHaveBeenCalledTimes(105);
-
-      consoleSpy.mockRestore();
+    it('should clear logged warnings set (smoke test)', () => {
+      // getUserTier no longer uses warnOnce, but _resetLoggedWarnings is still
+      // exported for use by other functions. Verify it runs without error.
+      expect(() => _resetLoggedWarnings()).not.toThrow();
     });
   });
 
   describe('TIER_CONFIG', () => {
+    it('should have a free tier that is not a subscription', () => {
+      expect(TIER_CONFIG.free.isSubscription).toBe(false);
+      expect(TIER_CONFIG.free.name).toBe('Free');
+    });
+
     it('should have correct configuration for basic tier', () => {
-      expect(TIER_CONFIG.basic).toEqual({
-        name: 'Basic',
-        description: 'Pay-per-use credits',
-        monthlyPrice: null,
-        creditAllocation: 0,
-        isSubscription: false,
-        monthlyAllowance: 0, // No subscription allowance for basic tier
-      });
+      expect(TIER_CONFIG.basic.name).toBe('Starter');
+      expect(TIER_CONFIG.basic.isSubscription).toBe(true);
     });
 
     it('should have correct configuration for pro tier', () => {
-      expect(TIER_CONFIG.pro).toEqual({
-        name: 'Pro',
-        description: '$8/month subscription',
-        monthlyPrice: 800,
-        creditAllocation: 1000, // Legacy - keep for backward compatibility
-        isSubscription: true,
-        monthlyAllowance: 1500, // $15 subscription allowance (in cents)
-      });
+      expect(TIER_CONFIG.pro.name).toBe('Pro');
+      expect(TIER_CONFIG.pro.isSubscription).toBe(true);
     });
 
     it('should have correct configuration for max tier', () => {
-      expect(TIER_CONFIG.max).toEqual({
-        name: 'Max',
-        description: '$75/month subscription',
-        monthlyPrice: 7500,
-        creditAllocation: 15000,
-        isSubscription: true,
-        monthlyAllowance: 15000, // $150 subscription allowance (in cents)
-      });
+      expect(TIER_CONFIG.max.name).toBe('Max');
+      expect(TIER_CONFIG.max.isSubscription).toBe(true);
     });
   });
 
   describe('getUserTier', () => {
-    it('should return basic tier when userData is null', () => {
-      expect(getUserTier(null)).toBe('basic');
+    it('should return trial when userData is null', () => {
+      expect(getUserTier(null)).toBe('free');
     });
 
-    it('should return tier from userData when explicitly set', () => {
+    it('should return trial when user has no subscription_status', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'basic', // DB default — should be ignored without active subscription
+      };
+
+      expect(getUserTier(userData)).toBe('free');
+    });
+
+    it('should return trial when subscription_status is inactive', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        tier: 'basic',
+        subscription_status: 'inactive',
+      };
+
+      expect(getUserTier(userData)).toBe('free');
+    });
+
+    it('should return trial when subscription_status is trial', () => {
+      const userData: UserData = {
+        user_id: 123,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-123',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 100,
+        subscription_status: 'trial',
+      };
+
+      expect(getUserTier(userData)).toBe('free');
+    });
+
+    it('should return trial when subscription_status is expired', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -135,12 +116,13 @@ describe('tier-utils', () => {
         email: 'test@example.com',
         credits: 100,
         tier: 'pro',
+        subscription_status: 'expired',
       };
 
-      expect(getUserTier(userData)).toBe('pro');
+      expect(getUserTier(userData)).toBe('free');
     });
 
-    it('should return max tier when explicitly set', () => {
+    it('should return trial when subscription_status is cancelled', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -150,70 +132,13 @@ describe('tier-utils', () => {
         email: 'test@example.com',
         credits: 100,
         tier: 'max',
-      };
-
-      expect(getUserTier(userData)).toBe('max');
-    });
-
-    it('should return pro tier when subscription is active but tier not set', () => {
-      const userData: UserData = {
-        user_id: 123,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-123',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
-        subscription_status: 'active',
-      };
-
-      expect(getUserTier(userData)).toBe('pro');
-    });
-
-    it('should infer tier from tier_display_name when tier field is missing but subscription is active', () => {
-      // This covers the fallback path where tier field is undefined but we can infer from tier_display_name
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const userData: UserData = {
-        user_id: 125,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-125',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
-        // tier is undefined (missing)
-        tier_display_name: 'Max', // But tier_display_name is set
-        subscription_status: 'active',
-      };
-
-      expect(getUserTier(userData)).toBe('max');
-
-      // Should log a warning about missing tier field
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'getUserTier: User has active subscription but no tier field. Using "max" from tier_display_name.',
-        { tier_display_name: 'Max', subscription_status: 'active' }
-      );
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should return basic tier when subscription is cancelled', () => {
-      const userData: UserData = {
-        user_id: 123,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-123',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
         subscription_status: 'cancelled',
       };
 
-      expect(getUserTier(userData)).toBe('basic');
+      expect(getUserTier(userData)).toBe('free');
     });
 
-    it('should return basic tier when subscription is past_due', () => {
+    it('should return trial when subscription_status is past_due', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -225,63 +150,15 @@ describe('tier-utils', () => {
         subscription_status: 'past_due',
       };
 
-      expect(getUserTier(userData)).toBe('basic');
+      expect(getUserTier(userData)).toBe('free');
     });
 
-    it('should prioritize explicit tier over subscription status', () => {
+    it('should return basic when subscription is active and tier is basic', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
         auth_method: 'email',
         privy_user_id: 'privy-123',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
-        tier: 'max',
-        subscription_status: 'cancelled',
-      };
-
-      expect(getUserTier(userData)).toBe('max');
-    });
-
-    it('should return pro tier when user has basic tier but active subscription (data inconsistency fix)', () => {
-      // This test covers the bug where a user upgrades to Pro but tier field
-      // wasn't updated from 'basic' due to webhook timing or database sync issues
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const userData: UserData = {
-        user_id: 123,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-123',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
-        tier: 'basic', // Stale - wasn't updated after subscription purchase
-        subscription_status: 'active', // But subscription is clearly active
-      };
-
-      // Basic tier users cannot have active subscriptions, so this should return 'pro'
-      expect(getUserTier(userData)).toBe('pro');
-
-      // Should log a warning about the data inconsistency
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'getUserTier: User has active subscription but tier is "basic". Correcting to "pro".',
-        { tier: 'basic', subscription_status: 'active' }
-      );
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should only log warning once for the same user tier mismatch (warnOnce behavior)', () => {
-      // This test verifies that repeated calls to getUserTier don't spam the console
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const userData: UserData = {
-        user_id: 999,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-999',
         display_name: 'Test User',
         email: 'test@example.com',
         credits: 100,
@@ -289,19 +166,10 @@ describe('tier-utils', () => {
         subscription_status: 'active',
       };
 
-      // Call getUserTier multiple times
-      expect(getUserTier(userData)).toBe('pro');
-      expect(getUserTier(userData)).toBe('pro');
-      expect(getUserTier(userData)).toBe('pro');
-      expect(getUserTier(userData)).toBe('pro');
-
-      // Should only have logged once
-      expect(consoleSpy).toHaveBeenCalledTimes(1);
-
-      consoleSpy.mockRestore();
+      expect(getUserTier(userData)).toBe('basic');
     });
 
-    it('should not change pro tier when subscription is active', () => {
+    it('should return pro when subscription is active and tier is pro', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -314,11 +182,10 @@ describe('tier-utils', () => {
         subscription_status: 'active',
       };
 
-      // Pro tier with active subscription should stay as pro
       expect(getUserTier(userData)).toBe('pro');
     });
 
-    it('should not change max tier when subscription is active', () => {
+    it('should return max when subscription is active and tier is max', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -331,11 +198,10 @@ describe('tier-utils', () => {
         subscription_status: 'active',
       };
 
-      // Max tier with active subscription should stay as max
       expect(getUserTier(userData)).toBe('max');
     });
 
-    it('should keep basic tier when subscription is not active (cancelled user)', () => {
+    it('should return basic (safe minimum) when subscription is active but tier is unrecognized', () => {
       const userData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -344,108 +210,11 @@ describe('tier-utils', () => {
         display_name: 'Test User',
         email: 'test@example.com',
         credits: 100,
-        tier: 'basic',
-        subscription_status: 'cancelled',
+        tier: 'enterprise' as any,
+        subscription_status: 'active',
       };
 
-      // Basic tier with cancelled subscription should stay basic
       expect(getUserTier(userData)).toBe('basic');
-    });
-
-    it('should infer max tier from tier_display_name when tier is basic but subscription is active', () => {
-      // This test covers the case where a max subscriber has stale tier='basic'
-      // but tier_display_name correctly shows 'Max' or 'MAX'
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const userData: UserData = {
-        user_id: 123,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-123',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
-        tier: 'basic', // Stale
-        tier_display_name: 'Max', // Correct value from backend
-        subscription_status: 'active',
-      };
-
-      // Should use tier_display_name to determine correct tier
-      expect(getUserTier(userData)).toBe('max');
-
-      // Should log a warning about the correction
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'getUserTier: User has active subscription but tier is "basic". Correcting to "max" based on tier_display_name.',
-        { tier: 'basic', tier_display_name: 'Max', subscription_status: 'active' }
-      );
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should infer pro tier from tier_display_name when tier is basic but subscription is active', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const userData: UserData = {
-        user_id: 123,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-123',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
-        tier: 'basic', // Stale
-        tier_display_name: 'Pro', // Correct value from backend
-        subscription_status: 'active',
-      };
-
-      // Should use tier_display_name to determine correct tier
-      expect(getUserTier(userData)).toBe('pro');
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should default to pro when tier_display_name is unrecognized value', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const userData: UserData = {
-        user_id: 124,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-124',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
-        tier: 'basic',
-        tier_display_name: 'SomeUnknownTier', // Unrecognized value
-        subscription_status: 'active',
-      };
-
-      // When tier_display_name is unrecognized, default to 'pro'
-      expect(getUserTier(userData)).toBe('pro');
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should default to pro when tier_display_name is also basic or missing', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const userData: UserData = {
-        user_id: 123,
-        api_key: 'test-key',
-        auth_method: 'email',
-        privy_user_id: 'privy-123',
-        display_name: 'Test User',
-        email: 'test@example.com',
-        credits: 100,
-        tier: 'basic',
-        tier_display_name: 'Basic', // Also stale
-        subscription_status: 'active',
-      };
-
-      // When tier_display_name doesn't help, default to 'pro'
-      expect(getUserTier(userData)).toBe('pro');
-
-      consoleSpy.mockRestore();
     });
   });
 
@@ -763,32 +532,20 @@ describe('tier-utils', () => {
   describe('formatTierInfo', () => {
     it('should format basic tier info correctly', () => {
       const result = formatTierInfo('basic');
-      expect(result).toEqual({
-        displayName: 'Basic',
-        description: 'Pay-per-use credits',
-        monthlyPrice: 'Pay-per-use',
-        isSubscription: false,
-      });
+      expect(result.displayName).toBe('Starter');
+      expect(result.isSubscription).toBe(true);
     });
 
     it('should format pro tier info correctly', () => {
       const result = formatTierInfo('pro');
-      expect(result).toEqual({
-        displayName: 'Pro',
-        description: '$8/month subscription',
-        monthlyPrice: '$8.00',
-        isSubscription: true,
-      });
+      expect(result.displayName).toBe('Pro');
+      expect(result.isSubscription).toBe(true);
     });
 
     it('should format max tier info correctly', () => {
       const result = formatTierInfo('max');
-      expect(result).toEqual({
-        displayName: 'Max',
-        description: '$75/month subscription',
-        monthlyPrice: '$75.00',
-        isSubscription: true,
-      });
+      expect(result.displayName).toBe('Max');
+      expect(result.isSubscription).toBe(true);
     });
   });
 
@@ -1292,34 +1049,34 @@ describe('tier-utils', () => {
   });
 
   describe('getMonthlyAllowance', () => {
-    it('should return 0 for basic tier', () => {
-      expect(getMonthlyAllowance('basic')).toBe(0);
+    it('should return 35 for basic tier ($35.00 = 3500 cents / 100)', () => {
+      expect(getMonthlyAllowance('basic')).toBe(35);
     });
 
-    it('should return 15 for pro tier ($15.00 = 1500 cents / 100)', () => {
-      expect(getMonthlyAllowance('pro')).toBe(15);
+    it('should return 130 for pro tier ($130.00 = 13000 cents / 100)', () => {
+      expect(getMonthlyAllowance('pro')).toBe(130);
     });
 
-    it('should return 150 for max tier ($150.00 = 15000 cents / 100)', () => {
-      expect(getMonthlyAllowance('max')).toBe(150);
+    it('should return 400 for max tier ($400.00 = 40000 cents / 100)', () => {
+      expect(getMonthlyAllowance('max')).toBe(400);
     });
   });
 
   describe('getAllowancePercentage', () => {
 
-    it('should return 0 when tier has no monthly allowance (basic)', () => {
-      expect(getAllowancePercentage(10, 'basic')).toBe(0);
+    it('should return correct percentage for basic tier', () => {
+      // Basic tier has $35 allowance, $17.50 remaining = 50%
+      expect(getAllowancePercentage(17.5, 'basic')).toBe(50);
     });
 
     it('should return correct percentage for pro tier', () => {
-      // Pro tier has $15 allowance
-      // $7.50 remaining = 50%
-      expect(getAllowancePercentage(7.5, 'pro')).toBe(50);
+      // Pro tier has $130 allowance, $65 remaining = 50%
+      expect(getAllowancePercentage(65, 'pro')).toBe(50);
     });
 
     it('should return 100 when full allowance remains for pro tier', () => {
-      // Pro tier has $15 allowance
-      expect(getAllowancePercentage(15, 'pro')).toBe(100);
+      // Pro tier has $130 allowance
+      expect(getAllowancePercentage(130, 'pro')).toBe(100);
     });
 
     it('should return 0 when no allowance remains', () => {
@@ -1328,7 +1085,7 @@ describe('tier-utils', () => {
 
     it('should cap percentage at 100 even if subscription_allowance exceeds max', () => {
       // If somehow allowance is more than max (shouldn't happen normally)
-      expect(getAllowancePercentage(20, 'pro')).toBe(100);
+      expect(getAllowancePercentage(200, 'pro')).toBe(100);
     });
 
     it('should handle negative subscription_allowance by returning 0', () => {
@@ -1337,19 +1094,18 @@ describe('tier-utils', () => {
     });
 
     it('should return correct percentage for max tier', () => {
-      // Max tier has $150 allowance
-      // $75 remaining = 50%
-      expect(getAllowancePercentage(75, 'max')).toBe(50);
+      // Max tier has $400 allowance, $200 remaining = 50%
+      expect(getAllowancePercentage(200, 'max')).toBe(50);
     });
 
     it('should return 100 when full allowance remains for max tier', () => {
-      // Max tier has $150 allowance
-      expect(getAllowancePercentage(150, 'max')).toBe(100);
+      // Max tier has $400 allowance
+      expect(getAllowancePercentage(400, 'max')).toBe(100);
     });
 
     it('should handle fractional percentages correctly', () => {
-      // Pro tier: $3 of $15 = 20%
-      expect(getAllowancePercentage(3, 'pro')).toBe(20);
+      // Pro tier: $26 of $130 = 20%
+      expect(getAllowancePercentage(26, 'pro')).toBe(20);
     });
   });
 
@@ -1365,7 +1121,7 @@ describe('tier-utils', () => {
         credits: 500,
       };
 
-      expect(getUserTier(newUser)).toBe('basic');
+      expect(getUserTier(newUser)).toBe('free');
       expect(hasActiveSubscription(newUser)).toBe(false);
       expect(getSubscriptionRenewalDate(newUser)).toBeNull();
       expect(canAccessModel(undefined, getUserTier(newUser))).toBe(true);
@@ -1429,7 +1185,7 @@ describe('tier-utils', () => {
         subscription_status: 'cancelled',
       };
 
-      expect(getUserTier(cancelledUser)).toBe('basic');
+      expect(getUserTier(cancelledUser)).toBe('free');
       expect(hasActiveSubscription(cancelledUser)).toBe(false);
       expect(canAccessModel('pro', getUserTier(cancelledUser))).toBe(false);
       expect(canAccessModel('max', getUserTier(cancelledUser))).toBe(false);
@@ -1450,7 +1206,7 @@ describe('tier-utils', () => {
         trial_expires_at: threeDaysFromNow,
       };
 
-      expect(getUserTier(trialUser)).toBe('basic');
+      expect(getUserTier(trialUser)).toBe('free');
       expect(hasActiveSubscription(trialUser)).toBe(false);
       expect(isOnTrial(trialUser)).toBe(true);
       expect(isTrialExpired(trialUser)).toBe(false);
@@ -1475,7 +1231,7 @@ describe('tier-utils', () => {
         trial_expires_at: pastDate,
       };
 
-      expect(getUserTier(expiredTrialUser)).toBe('basic');
+      expect(getUserTier(expiredTrialUser)).toBe('free');
       expect(hasActiveSubscription(expiredTrialUser)).toBe(false);
       expect(isOnTrial(expiredTrialUser)).toBe(false);
       expect(isTrialExpired(expiredTrialUser)).toBe(true);

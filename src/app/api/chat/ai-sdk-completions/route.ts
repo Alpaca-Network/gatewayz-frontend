@@ -432,10 +432,11 @@ function getProviderAndModel(modelId: string, apiKey: string) {
   else if (normalized.includes('qwen')) providerName = 'qwen';
 
   // Use OpenAI provider for ALL models - Gatewayz handles provider routing
+  // compatibility: 'compatible' forces /v1/chat/completions instead of /v1/responses
   const openai = createOpenAI({
     apiKey: apiKey,
     baseURL: `${gatewayBaseURL}/v1`,
-    // Don't set any provider-specific headers - let Gatewayz handle it
+    compatibility: 'compatible',
   });
 
   return {
@@ -538,7 +539,8 @@ export async function POST(request: NextRequest) {
     if (isExplicitGuestRequest || isMissingApiKey) {
       const guestKey = process.env.GUEST_API_KEY;
 
-      if (!guestKey) {
+      // Check key is configured BEFORE consuming rate limit quota.
+      if (!guestKey || guestKey === 'your-guest-api-key') {
         // Guest mode is not configured - return a helpful error
         console.warn('[AI SDK Route] Guest mode attempted but GUEST_API_KEY not configured');
         return new Response(JSON.stringify({
@@ -552,7 +554,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Check guest rate limit before proceeding
+      // Check guest rate limit only after confirming guest key is valid
       const clientIP = getClientIP(request);
       const rateLimitCheck = checkGuestRateLimit(clientIP);
 

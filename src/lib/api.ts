@@ -34,7 +34,7 @@ export const AUTH_REFRESH_EVENT = 'gatewayz:refresh-auth';
 export const AUTH_REFRESH_COMPLETE_EVENT = 'gatewayz:refresh-complete';
 export const NEW_USER_WELCOME_EVENT = 'gatewayz:new-user-welcome';
 
-export type UserTier = 'basic' | 'pro' | 'max';
+export type UserTier = 'free' | 'basic' | 'pro' | 'max';
 export type SubscriptionStatus = 'active' | 'cancelled' | 'past_due' | 'inactive' | 'trial' | 'expired';
 
 export interface AuthResponse {

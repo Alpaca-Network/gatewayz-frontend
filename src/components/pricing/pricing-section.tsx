@@ -26,52 +26,51 @@ const pricingTiers: PricingTier[] = [
   {
     id: 'starter',
     name: 'Starter',
-    description: 'Perfect for getting started',
+    description: '$35 in monthly credits (20% savings)',
     price: '$35',
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
-      'Access to 10,000+ models',
+      '$35 monthly credit allowance',
+      'Access to all models via OpenRouter',
       'Smart cost optimization',
       'Community support',
-      'Basic analytics',
     ],
     stripePriceId: process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID,
+    stripeProductId: 'prod_UKdXKZYAH2tsfV',
   },
   {
     id: 'pro',
     name: 'Pro',
-    description: 'Scale with confidence',
+    description: '$130 in monthly credits (27% savings)',
     price: '$120',
     ctaText: 'Get Started',
     ctaVariant: 'default',
     features: [
+      '$130 monthly credit allowance',
       'Everything in Starter',
-      'Access to 10,000+ models',
-      'Smart cost optimization',
-      'Terragon: Task inbox for AI coding agents',
       'Priority support',
       '99.9% uptime SLA',
     ],
     stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID,
-    stripeProductId: 'prod_TKOqQPhVRxNp4Q',
+    stripeProductId: 'prod_UKdYdR6ZUQY4oV',
   },
   {
     id: 'max',
     name: 'Max',
-    description: 'Higher limits, priority access',
+    description: '$400 in monthly credits (30% savings)',
     price: '$350',
     ctaText: 'Get Started',
     ctaVariant: 'secondary',
     popular: true,
     features: [
+      '$400 monthly credit allowance',
       'Everything in Pro',
-      '10x more usage than Pro',
-      'Higher output limits for all tasks',
-      'Early access to advanced features',
+      'Higher output limits',
+      'Early access to new features',
     ],
     stripePriceId: process.env.NEXT_PUBLIC_STRIPE_MAX_PRICE_ID,
-    stripeProductId: 'prod_TMHUXL8p0onwwO',
+    stripeProductId: 'prod_UKdYWnMg2Widfb',
   },
   {
     id: 'enterprise',
@@ -92,6 +91,7 @@ const pricingTiers: PricingTier[] = [
 
 // Tier hierarchy for comparison (higher number = higher tier)
 const TIER_HIERARCHY: Record<string, number> = {
+  free: -1, // free tier users are below all paid tiers
   starter: 0,
   basic: 0,  // basic and starter are same level
   pro: 1,
@@ -116,6 +116,11 @@ export function PricingSection() {
       // If user is not authenticated or doesn't have a subscription, show "Get Started"
       const userData = getUserData();
       if (!userData || !userData.api_key) {
+        return 'get_started';
+      }
+
+      // Trial users have no active plan — all paid tiers are "Get Started"
+      if (currentTier === 'free') {
         return 'get_started';
       }
 

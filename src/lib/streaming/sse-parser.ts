@@ -342,6 +342,23 @@ function checkForError(data: Record<string, unknown>): ParsedSSEData | null {
       };
     }
 
+    // Check for "Not Found" / 404 errors — typically means the model doesn't exist
+    if (
+      lowerMessage === 'not found' ||
+      lowerMessage.includes('model not found') ||
+      lowerMessage.includes('no such model') ||
+      errorCode === '404' ||
+      errorObj.status === 404
+    ) {
+      return {
+        error: {
+          message: 'The selected model is not available. Try a different model or check that the model ID is correct.',
+          type: 'model_not_found',
+          code: '404',
+        },
+      };
+    }
+
     return { error: errorInfo };
   }
 

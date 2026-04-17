@@ -38,7 +38,7 @@ export type AuthStateData =
 // USER TYPES
 // =============================================================================
 
-export type UserTier = 'basic' | 'pro' | 'max';
+export type UserTier = 'free' | 'basic' | 'pro' | 'max';
 export type SubscriptionStatus = 'active' | 'cancelled' | 'past_due' | 'inactive' | 'trial' | 'expired';
 export type AuthMethod = 'email' | 'google' | 'github' | 'wallet' | 'session_transfer';
 
