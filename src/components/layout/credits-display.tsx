@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { getUserData } from '@/lib/api';
+import { getUserData, saveUserData, getApiKey } from '@/lib/api';
+import { formatCredits, formatCreditsDollar } from '@/lib/format-credits';
 import type { UserTier } from '@/lib/api';
 import { Coins, Crown, Sparkles, AlertCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
@@ -28,18 +29,12 @@ export function CreditsDisplay() {
 
       // Accept 0 as a valid credit value
       if (userData?.credits !== undefined && userData?.credits !== null) {
-        const creditValue = Math.floor(userData.credits);
+        const creditValue = userData.credits;
         if (process.env.NODE_ENV === 'development') {
           console.log('[CreditsDisplay] Setting credits to:', creditValue);
         }
 
-        // Only update state if the value has actually changed
-        setCredits(prevCredits => {
-          if (prevCredits !== creditValue) {
-            return creditValue;
-          }
-          return prevCredits;
-        });
+        setCredits(creditValue);
 
         // Use getUserTier to properly determine tier from userData
         // This handles cases where tier field is missing but subscription_status is active
@@ -83,14 +78,41 @@ export function CreditsDisplay() {
       }
     };
 
-    // Initial load
-    updateCredits();
+    // Fetch fresh balance from backend and merge into localStorage
+    const refreshFromBackend = async () => {
+      const apiKey = getApiKey();
+      if (!apiKey) return;
+      try {
+        const res = await fetch('/api/user/me?nocache=1', {
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+          cache: 'no-store',
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const stored = getUserData();
+        if (!stored) return;
+        saveUserData({
+          ...stored,
+          credits: data.credits ?? stored.credits,
+          subscription_allowance: data.subscription_allowance ?? stored.subscription_allowance,
+          purchased_credits: data.purchased_credits ?? stored.purchased_credits,
+          total_credits: data.total_credits ?? stored.total_credits,
+        });
+        window.dispatchEvent(new Event('storage'));
+      } catch {
+        // silent — stale display is acceptable
+      }
+    };
 
-    // Listen for storage events (updates from other tabs)
+    // Initial load from localStorage, then immediately fetch fresh from backend
+    updateCredits();
+    refreshFromBackend();
+
+    // Listen for storage events (updates from other tabs or post-chat refresh)
     window.addEventListener('storage', updateCredits);
 
-    // Poll for updates every 10 seconds
-    const interval = setInterval(updateCredits, 10000);
+    // Refresh from backend every 30 seconds
+    const interval = setInterval(refreshFromBackend, 30000);
 
     return () => {
       window.removeEventListener('storage', updateCredits);
@@ -154,17 +176,17 @@ export function CreditsDisplay() {
 
   // Pro/Max users - show credit usage progress bar with plan name
   if (showPlanName) {
-    // monthlyAllowance is stored in cents in TIER_CONFIG
-    const monthlyAllowanceCents = tier ? TIER_CONFIG[tier].monthlyAllowance : 0;
+    // monthlyAllowance is in dollars (1 credit = $1)
+    const monthlyAllowanceDollars = tier ? TIER_CONFIG[tier].monthlyAllowance : 0;
 
-    // Calculate percentage based on subscription_allowance remaining (both in cents)
-    const usagePercentage = monthlyAllowanceCents > 0
-      ? Math.min(100, Math.max(0, (subscriptionAllowance / monthlyAllowanceCents) * 100))
+    // Calculate percentage based on subscription_allowance remaining (both in dollars)
+    const usagePercentage = monthlyAllowanceDollars > 0
+      ? Math.min(100, Math.max(0, (subscriptionAllowance / monthlyAllowanceDollars) * 100))
       : 100;
 
-    // Convert from cents to dollars for display
-    const subscriptionAllowanceDollars = subscriptionAllowance / 100;
-    const purchasedCreditsDollars = purchasedCredits / 100;
+    // 1 credit = $1.00 — display directly with $ prefix
+    const subscriptionAllowanceCredits = subscriptionAllowance;
+    const purchasedCreditsCount = purchasedCredits;
 
     const isLow = usagePercentage <= 20;
     const isMedium = usagePercentage > 20 && usagePercentage <= 50;
@@ -197,13 +219,13 @@ export function CreditsDisplay() {
                   />
                 </div>
                 <span className="text-[10px] text-amber-700 dark:text-amber-300 min-w-[32px]">
-                  ${subscriptionAllowanceDollars.toFixed(0)}
+                  {formatCreditsDollar(subscriptionAllowanceCredits)}
                 </span>
               </div>
               {/* Show purchased credits if any */}
-              {purchasedCreditsDollars > 0 && (
+              {purchasedCreditsCount > 0 && (
                 <span className="hidden sm:inline text-[10px] text-blue-600 dark:text-blue-400 font-medium">
-                  +${purchasedCreditsDollars.toFixed(0)}
+                  +{formatCredits(purchasedCreditsCount)}
                 </span>
               )}
             </div>
@@ -224,8 +246,7 @@ export function CreditsDisplay() {
     );
   }
 
-  // Basic users - show credits (convert from cents to dollars)
-  const creditsDollars = credits / 100;
+  const creditsDisplay = formatCredits(credits);
   return (
     <Link href="/settings/credits">
       <Button
@@ -235,7 +256,7 @@ export function CreditsDisplay() {
       >
         <Coins className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
         <span className="font-semibold text-xs sm:text-sm">
-          ${creditsDollars.toFixed(2)}
+          ${creditsDisplay}
         </span>
       </Button>
     </Link>

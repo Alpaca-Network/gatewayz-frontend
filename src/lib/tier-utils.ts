@@ -48,25 +48,25 @@ export const TIER_CONFIG = {
   basic: {
     name: 'Starter',
     description: '$35/month - $35 in credits (20% savings vs pay-as-you-go)',
-    monthlyPrice: 3500, // $35.00 in cents
-    creditAllocation: 3500, // $35 in credits
-    monthlyAllowance: 3500, // $35.00 in cents
+    monthlyPrice: 35, // $35.00
+    creditAllocation: 35, // $35 in credits
+    monthlyAllowance: 35, // $35.00 — 1 credit = $1
     isSubscription: true,
   },
   pro: {
     name: 'Pro',
     description: '$120/month - $130 in credits (27% savings vs pay-as-you-go)',
-    monthlyPrice: 12000, // $120.00 in cents
-    creditAllocation: 13000, // $130 in credits
-    monthlyAllowance: 13000, // $130.00 in cents
+    monthlyPrice: 120, // $120.00
+    creditAllocation: 130, // $130 in credits
+    monthlyAllowance: 130, // $130.00 — 1 credit = $1
     isSubscription: true,
   },
   max: {
     name: 'Max',
     description: '$350/month - $400 in credits (30% savings vs pay-as-you-go)',
-    monthlyPrice: 35000, // $350.00 in cents
-    creditAllocation: 40000, // $400 in credits
-    monthlyAllowance: 40000, // $400.00 in cents
+    monthlyPrice: 350, // $350.00
+    creditAllocation: 400, // $400 in credits
+    monthlyAllowance: 400, // $400.00 — 1 credit = $1
     isSubscription: true,
   },
 } as const;
@@ -135,9 +135,9 @@ export const hasActiveSubscription = (userData: UserData | null): boolean => {
   return userData.subscription_status === 'active';
 };
 
-// Trial users start with 3 credits - if they have more, they've purchased credits
-// Trial credits threshold in cents ($5 = 500 cents)
-const TRIAL_CREDIT_THRESHOLD = 500;
+// Trial users start with ~$3-5 in credits — if they have more, they've purchased credits
+// Threshold is in dollars (1 credit = $1)
+const TRIAL_CREDIT_THRESHOLD = 5;
 
 /**
  * Checks if a user has purchased credits (more than trial amount)
@@ -235,7 +235,7 @@ export const formatTierInfo = (tier: UserTier) => {
   return {
     displayName: config.name,
     description: config.description,
-    monthlyPrice: config.monthlyPrice ? `$${(config.monthlyPrice / 100).toFixed(2)}` : 'Pay-per-use',
+    monthlyPrice: config.monthlyPrice ? `$${config.monthlyPrice.toFixed(2)}` : 'Pay-per-use',
     isSubscription: config.isSubscription,
   };
 };
@@ -333,7 +333,7 @@ export const formatSubscriptionStatus = (status: SubscriptionStatus | undefined)
  * Get the monthly subscription allowance for a tier in dollars
  */
 export const getMonthlyAllowance = (tier: UserTier): number => {
-  return TIER_CONFIG[tier].monthlyAllowance / 100;
+  return TIER_CONFIG[tier].monthlyAllowance; // already in dollars (1 credit = $1)
 };
 
 /**

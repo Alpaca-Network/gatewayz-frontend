@@ -24,6 +24,7 @@ import { Info, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, M
 import Link from "next/link";
 import { redirectToCheckout } from '@/lib/stripe';
 import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData } from '@/lib/api';
+import { formatCredits, formatCreditsDollar } from '@/lib/format-credits';
 import { API_BASE_URL } from '@/lib/config';
 import { TierInfoCard } from '@/components/tier/tier-info-card';
 import { PricingSection } from '@/components/pricing/pricing-section';
@@ -197,11 +198,11 @@ const TransactionRow = ({ transaction }: { transaction: Transaction }) => {
           )}
         </div>
         <div className={`font-medium ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-          {transaction.amount >= 0 ? '+' : ''}${(Math.abs(transaction.amount) / 100).toFixed(2)}
+          {transaction.amount >= 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
         </div>
         <div className="font-medium">{formatDate(transaction.created_at)}</div>
         <div className="font-medium text-right">
-          {transaction.balance !== undefined ? `$${(transaction.balance / 100).toFixed(2)}` : '-'}
+          {transaction.balance !== undefined ? `$${transaction.balance.toFixed(2)}` : '-'}
         </div>
         <div className="flex justify-end">
           <Button
@@ -225,13 +226,13 @@ const TransactionRow = ({ transaction }: { transaction: Transaction }) => {
             )}
           </div>
           <div className={`font-semibold flex-shrink-0 ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {transaction.amount >= 0 ? '+' : ''}${(Math.abs(transaction.amount) / 100).toFixed(2)}
+            {transaction.amount >= 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
           </div>
         </div>
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{formatDate(transaction.created_at)}</span>
           <span>
-            Balance: {transaction.balance !== undefined ? `$${(transaction.balance / 100).toFixed(2)}` : '-'}
+            Balance: {transaction.balance !== undefined ? `$${transaction.balance.toFixed(2)}` : '-'}
           </span>
         </div>
       </div>
@@ -599,9 +600,9 @@ function CreditsPageContent() {
             {loadingCredits ? (
               <span className="text-xl md:text-2xl font-bold text-muted-foreground">Loading...</span>
             ) : credits !== null ? (
-              <span className="text-xl md:text-2xl font-bold">${(credits / 100).toFixed(2)}</span>
+              <span className="text-xl md:text-2xl font-bold">{formatCreditsDollar(credits)}</span>
             ) : (
-              <span className="text-xl md:text-2xl font-bold text-muted-foreground">$0.00</span>
+              <span className="text-xl md:text-2xl font-bold text-muted-foreground">0.00 credits</span>
             )}
           </div>
         </div>
@@ -651,9 +652,9 @@ function CreditsPageContent() {
 
           if (!isPaidTier || !hasActiveSubscription || !userData) return null;
 
-          const subscriptionAllowance = (userData.subscription_allowance ?? 0) / 100;
-          const purchasedCredits = (userData.purchased_credits ?? 0) / 100;
-          const totalCredits = (userData.total_credits ?? userData.credits ?? 0) / 100;
+          const subscriptionAllowance = userData.subscription_allowance ?? 0;
+          const purchasedCredits = userData.purchased_credits ?? 0;
+          const totalCredits = userData.total_credits ?? userData.credits ?? 0;
 
           return (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -664,7 +665,7 @@ function CreditsPageContent() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="text-2xl font-bold text-green-900 dark:text-green-100">
-                    ${subscriptionAllowance.toFixed(2)}
+                    {formatCreditsDollar(subscriptionAllowance)}
                   </div>
                   <p className="text-xs text-green-600 dark:text-green-400">
                     Resets on billing date
@@ -679,7 +680,7 @@ function CreditsPageContent() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                    ${purchasedCredits.toFixed(2)}
+                    {formatCreditsDollar(purchasedCredits)}
                   </div>
                   <p className="text-xs text-blue-600 dark:text-blue-400">
                     Never expire
@@ -694,7 +695,7 @@ function CreditsPageContent() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                    ${totalCredits.toFixed(2)}
+                    {formatCreditsDollar(totalCredits)}
                   </div>
                   <p className="text-xs text-purple-600 dark:text-purple-400">
                     Combined balance

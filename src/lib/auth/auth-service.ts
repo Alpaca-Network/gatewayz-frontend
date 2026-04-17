@@ -460,9 +460,9 @@ export class AuthService {
   }
 
   private processAuthResponse(data: AuthResponse, authMethod: AuthMethod): AuthenticatedUser {
-    // Normalize credits
+    // Keep credits as float (1 credit = $1)
     const credits = data.credits !== undefined && data.credits !== null && !isNaN(data.credits)
-      ? Math.floor(data.credits)
+      ? data.credits
       : 0;
 
     return {

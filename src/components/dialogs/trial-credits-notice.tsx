@@ -36,9 +36,9 @@ export function TrialCreditsNotice() {
       }
 
       // Show dialog if user has trial credits ($5 or less) and hasn't added payment
-      // Credits are stored in cents, so 500 cents = $5
-      if (userData.credits > 0 && userData.credits <= 500) {
-        setCredits(userData.credits / 100); // Convert cents to dollars for display
+      // Credits are in dollars (1 credit = $1)
+      if (userData.credits > 0 && userData.credits <= 5) {
+        setCredits(userData.credits); // Raw credit value from DB
         setShowDialog(true);
       }
     }, 2000); // Wait 2 seconds after page load for better UX

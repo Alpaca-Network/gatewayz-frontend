@@ -225,6 +225,9 @@ export function GatewayzAuthProvider({
   const syncInFlightRef = useRef(false);
   const syncPromiseRef = useRef<Promise<void> | null>(null);
   const lastSyncedPrivyIdRef = useRef<string | null>(null);
+  // Set to true during explicit logout to prevent the sync effect from
+  // re-authenticating via cached credentials before Privy finishes clearing its session.
+  const isLoggingOutRef = useRef(false);
   const upgradeAttemptedRef = useRef(false);
   const upgradePromiseRef = useRef<Promise<void> | null>(null);
   const betaRedirectAttemptedRef = useRef(false);
@@ -358,17 +361,17 @@ export function GatewayzAuthProvider({
       }
 
       try {
-        // Credits are stored in cents, 1000 cents = $10
-        const creditsCents = Math.floor(authData.credits ?? 0);
-        const MINIMUM_CREDITS_FOR_UPGRADE = 1000; // $10 in cents
+        // Credits are in dollars (1 credit = $1)
+        const creditsValue = authData.credits ?? 0;
+        const MINIMUM_CREDITS_FOR_UPGRADE = 10; // $10 minimum
         console.log("[Auth] Checking upgrade eligibility:", {
-          creditsCents,
+          creditsValue,
           is_new_user: authData.is_new_user,
-          eligible: creditsCents > MINIMUM_CREDITS_FOR_UPGRADE && !authData.is_new_user,
+          eligible: creditsValue > MINIMUM_CREDITS_FOR_UPGRADE && !authData.is_new_user,
         });
 
         // Skip upgrade if insufficient credits or new user
-        if (creditsCents <= MINIMUM_CREDITS_FOR_UPGRADE || authData.is_new_user) {
+        if (creditsValue <= MINIMUM_CREDITS_FOR_UPGRADE || authData.is_new_user) {
           console.log("[Auth] Skipping upgrade - insufficient credits or new user");
           return;
         }
@@ -520,7 +523,7 @@ export function GatewayzAuthProvider({
                 privy_user_id: authData.privy_user_id,
                 display_name: authData.display_name,
                 email: authData.email,
-                credits: Math.floor(authData.credits ?? 0),
+                credits: authData.credits ?? 0,
                 tier: authData.tier,
                 tier_display_name: authData.tier_display_name,
                 subscription_status: authData.subscription_status,
@@ -1518,6 +1521,11 @@ export function GatewayzAuthProvider({
     // keep them - don't clear. The user may have a valid gatewayz session
     // even if their Privy session expired.
     if (!authenticated || !user) {
+      // During explicit logout, never restore from cache — the user intentionally signed out.
+      if (isLoggingOutRef.current) {
+        return;
+      }
+
       const storedKey = getApiKey();
       const storedUser = getUserData();
 
@@ -1675,6 +1683,9 @@ export function GatewayzAuthProvider({
     await privyLogin();
   }, [privyLogin]);
   const logout = useCallback(async () => {
+    // Prevent the sync effect from re-authenticating via cached credentials
+    // while Privy is asynchronously clearing its own session.
+    isLoggingOutRef.current = true;
     // Clear session cache BEFORE clearing credentials (while user ID is still available)
     clearSessionCacheOnLogout();
     clearStoredCredentials();
@@ -1683,6 +1694,8 @@ export function GatewayzAuthProvider({
     queryClient.invalidateQueries({ queryKey: ['chat-sessions'] });
     queryClient.invalidateQueries({ queryKey: ['chat-messages'] });
     setAuthStatus("unauthenticated", "logout");
+    // Reset flag after logout is fully settled
+    isLoggingOutRef.current = false;
   }, [clearStoredCredentials, privyLogout, setAuthStatus, queryClient]);
 
   const contextValue = useMemo<GatewayzAuthContextValue>(

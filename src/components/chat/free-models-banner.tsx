@@ -6,6 +6,7 @@ import { getUserData } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { getUserTier } from '@/lib/tier-utils';
+import { formatCredits } from '@/lib/format-credits';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const BANNER_DISMISSED_KEY = 'gatewayz_free_models_banner_dismissed';
@@ -40,7 +41,7 @@ export function FreeModelsBanner() {
     // Show banner if user has $5 or fewer credits (low/expired trial)
     // Credits are stored in cents, so 500 cents = $5
     if (userData.credits <= 500) {
-      setCredits(userData.credits / 100); // Convert cents to dollars for display
+      setCredits(userData.credits); // Raw credit value from DB
       setShowBanner(true);
     }
   }, []);
@@ -62,7 +63,7 @@ export function FreeModelsBanner() {
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <Sparkles className="h-3.5 w-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
             <span className="text-xs text-green-800 dark:text-green-200 truncate">
-              {credits === 0 ? "Credits used" : `$${credits.toFixed(2)} left`} · <span className="font-medium">FREE models available</span>
+              {credits === 0 ? "Credits used" : `$${formatCredits(credits)} left`} · <span className="font-medium">FREE models available</span>
             </span>
           </div>
           <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -102,7 +103,7 @@ export function FreeModelsBanner() {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <h3 className="text-sm font-semibold text-green-900 dark:text-green-100">
-                  {credits === 0 ? "Trial Credits Used Up" : `Low Credits ($${credits.toFixed(2)} remaining)`}
+                  {credits === 0 ? "Trial Credits Used Up" : `Low Balance ($${formatCredits(credits)} remaining)`}
                 </h3>
                 <p className="text-sm text-green-800 dark:text-green-200 mt-1">
                   You can still use <strong className="font-semibold">FREE models</strong>! Look for the{' '}
