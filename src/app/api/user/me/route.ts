@@ -31,52 +31,63 @@ export async function GET(request: NextRequest) {
         const userCacheId = Buffer.from(apiKey).toString('base64').slice(0, 16);
         const profileCacheKey = cacheKey(CACHE_PREFIX.USER, userCacheId, 'profile');
 
-        console.log("[API /api/user/me] Fetching user info (with Redis cache)");
+        // Bypass cache when caller explicitly requests fresh data (e.g. after a chat message)
+        const bypassCache = request.nextUrl.searchParams.get('nocache') === '1';
 
-        // Use cache-aside pattern with Redis
-        const userData = await cacheAside(
-          profileCacheKey,
-          async () => {
-            // Fetch from backend on cache miss
-            console.log("[Cache MISS] Fetching user profile from backend");
-            const response = await proxyFetch(`${API_BASE_URL}/user/profile`, {
-              method: "GET",
-              headers: {
-                "Authorization": authHeader,
-                "Content-Type": "application/json",
-              },
-            });
+        console.log("[API /api/user/me] Fetching user info", bypassCache ? "(cache bypassed)" : "(with Redis cache)");
 
+        const fetchFromBackend = async () => {
+          const response = await proxyFetch(`${API_BASE_URL}/user/profile`, {
+            method: "GET",
+            headers: {
+              "Authorization": authHeader,
+              "Content-Type": "application/json",
+            },
+          });
+
+          span.setAttribute("backend_status", response.status);
+
+          const responseText = await response.text();
+
+          if (!response.ok) {
+            span.setAttribute("error", true);
+            span.setAttribute("error_type", "backend_error");
             span.setAttribute("backend_status", response.status);
+            console.error("[API /api/user/me] Backend request failed:", response.status, responseText);
 
-            const responseText = await response.text();
-
-            if (!response.ok) {
-              span.setAttribute("error", true);
-              span.setAttribute("error_type", "backend_error");
-              span.setAttribute("backend_status", response.status);
-              console.error("[API /api/user/me] Backend request failed:", response.status, responseText);
-
-              // Parse error details if available
-              let errorData;
-              try {
-                errorData = JSON.parse(responseText);
-              } catch {
-                errorData = { detail: responseText };
-              }
-
-              throw new HttpError(
-                errorData.detail || errorData.error || `Backend error: ${response.status}`,
-                response.status,
-                errorData
-              );
+            let errorData;
+            try {
+              errorData = JSON.parse(responseText);
+            } catch {
+              errorData = { detail: responseText };
             }
 
-            return JSON.parse(responseText);
-          },
-          TTL.USER_CREDITS, // 5 minutes - shorter TTL for credit freshness
-          'user_profile' // Metrics category
-        );
+            throw new HttpError(
+              errorData.detail || errorData.error || `Backend error: ${response.status}`,
+              response.status,
+              errorData
+            );
+          }
+
+          return JSON.parse(responseText);
+        };
+
+        // Use cache-aside pattern with Redis, or bypass for fresh credit reads
+        let userData;
+        if (bypassCache) {
+          console.log("[Cache BYPASS] Fetching user profile from backend directly");
+          userData = await fetchFromBackend();
+        } else {
+          userData = await cacheAside(
+            profileCacheKey,
+            async () => {
+              console.log("[Cache MISS] Fetching user profile from backend");
+              return fetchFromBackend();
+            },
+            TTL.USER_CREDITS, // 5 minutes - shorter TTL for credit freshness
+            'user_profile' // Metrics category
+          );
+        }
 
         console.log("[API /api/user/me] User info fetched successfully");
         span.setStatus('ok' as any);

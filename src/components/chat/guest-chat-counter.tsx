@@ -13,17 +13,13 @@ export function GuestChatCounter({ className }: GuestChatCounterProps) {
   const [remaining, setRemaining] = useState<number>(getGuestMessageLimit());
 
   useEffect(() => {
-    // Update remaining count on mount and when localStorage changes
     const updateCount = () => {
       setRemaining(getRemainingGuestMessages());
     };
 
     updateCount();
 
-    // Listen for storage events (cross-tab sync)
     window.addEventListener("storage", updateCount);
-
-    // Custom event for same-tab updates (dispatched after sending a message)
     window.addEventListener("guest-count-updated", updateCount);
 
     return () => {
@@ -33,27 +29,29 @@ export function GuestChatCounter({ className }: GuestChatCounterProps) {
   }, []);
 
   const limit = getGuestMessageLimit();
-  const percentage = (remaining / limit) * 100;
-
-  // Color changes based on remaining messages
-  const getColorClass = () => {
-    if (remaining <= 2) return "text-red-600 dark:text-red-400";
-    if (remaining <= 5) return "text-yellow-600 dark:text-yellow-400";
-    return "text-muted-foreground";
-  };
+  const isLow = remaining <= 1;
+  const isOut = remaining === 0;
 
   return (
     <div
       className={cn(
-        "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-colors",
-        getColorClass(),
+        "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors",
+        isOut
+          ? "bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400"
+          : isLow
+          ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-600 dark:text-amber-400"
+          : "bg-muted/60 border-border text-muted-foreground",
         className
       )}
-      title={`${remaining} of ${limit} free messages remaining`}
+      title={
+        isOut
+          ? "No free messages left today. Sign in for unlimited access."
+          : `${remaining} of ${limit} free guest messages left today`
+      }
     >
-      <MessageSquare className="h-3.5 w-3.5" />
-      <span className="tabular-nums">
-        {remaining}/{limit}
+      <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+      <span className="tabular-nums whitespace-nowrap">
+        {isOut ? "No messages left" : `${remaining}/${limit} free`}
       </span>
     </div>
   );

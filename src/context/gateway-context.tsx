@@ -1,7 +1,9 @@
 'use client';
 
 import React, { createContext, useContext, useCallback, useState } from 'react';
-import { useGatewayRouter, type GatewayType } from '@/hooks/useGatewayRouter';
+
+// AI SDK removed — all models route through gatewayz backend
+export type GatewayType = 'gatewayz';
 
 interface GatewayContextType {
   currentGateway: GatewayType | null;
@@ -18,52 +20,20 @@ interface GatewayProviderProps {
   children: React.ReactNode;
 }
 
-/**
- * Provider for managing gateway selection and chain-of-thought capabilities
- *
- * Usage:
- * ```tsx
- * <GatewayProvider>
- *   <ChatPage />
- * </GatewayProvider>
- * ```
- */
 export function GatewayProvider({ children }: GatewayProviderProps) {
   const [currentModel, setCurrentModel] = useState<string | null>(null);
-  const gatewayRouter = useGatewayRouter();
-
-  const currentGateway = currentModel
-    ? gatewayRouter.isAISDK(currentModel)
-      ? 'ai-sdk'
-      : 'gatewayz'
-    : null;
-
-  const supportsThinking = currentModel
-    ? gatewayRouter.supportsThinking(currentModel)
-    : false;
 
   const handleSetModel = useCallback((modelId: string) => {
     setCurrentModel(modelId);
   }, []);
 
-  const getGatewayType = useCallback(
-    (modelId: string): GatewayType => {
-      return gatewayRouter.isAISDK(modelId) ? 'ai-sdk' : 'gatewayz';
-    },
-    [gatewayRouter]
-  );
-
-  const canUseThinking = useCallback(
-    (modelId: string): boolean => {
-      return gatewayRouter.supportsThinking(modelId);
-    },
-    [gatewayRouter]
-  );
+  const getGatewayType = useCallback((_modelId: string): GatewayType => 'gatewayz', []);
+  const canUseThinking = useCallback((_modelId: string): boolean => false, []);
 
   const value: GatewayContextType = {
-    currentGateway,
+    currentGateway: currentModel ? 'gatewayz' : null,
     currentModel,
-    supportsThinking,
+    supportsThinking: false,
     setModel: handleSetModel,
     getGatewayType,
     canUseThinking,
@@ -76,14 +46,6 @@ export function GatewayProvider({ children }: GatewayProviderProps) {
   );
 }
 
-/**
- * Hook to use the gateway context
- *
- * Usage:
- * ```tsx
- * const { currentGateway, supportsThinking } = useGateway();
- * ```
- */
 export function useGateway(): GatewayContextType {
   const context = useContext(GatewayContext);
   if (context === undefined) {

@@ -8,7 +8,6 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { PrivyProviderWrapper } from '@/components/providers/privy-provider';
 import { OnboardingBanner } from '@/components/onboarding/onboarding-banner';
 import { WelcomeDialog } from '@/components/dialogs/welcome-dialog';
-import { TrialCreditsNotice } from '@/components/dialogs/trial-credits-notice';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter } from 'next/font/google';
@@ -101,7 +100,6 @@ export default function RootLayout({
                 <Toaster />
                 <AppFooter />
                 <WelcomeDialog />
-                <TrialCreditsNotice />
                 <ReferralBonusDialog />
                 <ReferralToast />
                 <FloatingNewChatButton />

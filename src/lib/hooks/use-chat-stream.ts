@@ -6,7 +6,7 @@ import { streamChatResponse } from '@/lib/streaming/index';
 import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { useSaveMessage } from '@/lib/hooks/use-chat-queries';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { getApiKey } from '@/lib/api';
+import { getApiKey, getUserData, saveUserData } from '@/lib/api';
 import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 import { sentryMetrics } from '@/lib/sentry-metrics';
@@ -293,7 +293,7 @@ export function useChatStream() {
             model: model.value,
             messages: apiMessages,
             stream: true,
-            max_tokens: 8000,
+            max_tokens: 2000,
             gateway: model.sourceGateway,
             apiKey: apiKey,  // Pass API key in request body as well as Authorization header
             // Include tools if provided and model supports them
@@ -568,6 +568,27 @@ export function useChatStream() {
                     }];
                 });
             });
+
+            // Refresh credit balance after a completed message so the header shows the new balance
+            // Fire-and-forget — don't block the UI. Pass no-cache to bypass Redis.
+            if (!wasStopped) {
+                fetch('/api/user/me?nocache=1', { cache: 'no-store' })
+                    .then(r => r.ok ? r.json() : null)
+                    .then(data => {
+                        if (!data) return;
+                        const stored = getUserData();
+                        if (!stored) return;
+                        saveUserData({
+                            ...stored,
+                            credits: data.credits ?? stored.credits,
+                            subscription_allowance: data.subscription_allowance ?? stored.subscription_allowance,
+                            purchased_credits: data.purchased_credits ?? stored.purchased_credits,
+                            total_credits: data.total_credits ?? stored.total_credits,
+                        });
+                        window.dispatchEvent(new Event('storage'));
+                    })
+                    .catch(() => { /* silent — balance updates on next 10s poll */ });
+            }
 
         } catch (e) {
             debugError("Streaming failed", {

@@ -115,16 +115,17 @@ interface ChatUIState {
   setAutoEnableSearch: (enabled: boolean) => void;
 }
 
-// Standard default model
-// NOTE: Model ID must include the gateway prefix (e.g., 'cerebras/') for proper backend routing
-// Using Qwen3 32B as default - a reliable production model on Cerebras
+// Standard default model — used as initial placeholder before the catalog loads.
+// ModelSelect will replace this with the best available model from the live catalog
+// (see the defaultModelSet effect in model-select.tsx).
+// Using a common OpenRouter-routed model that is broadly available.
 const STANDARD_DEFAULT_MODEL: ModelOption = {
-  value: 'cerebras/qwen-3-32b',
-  label: 'Qwen3 32B',
+  value: 'anthropic/claude-sonnet-4.6',
+  label: 'Claude Sonnet 4.6',
   category: 'General',
-  sourceGateway: 'cerebras',
-  developer: 'Qwen',
-  modalities: ['Text']
+  sourceGateway: 'openrouter',
+  developer: 'Anthropic',
+  modalities: ['Text', 'Image']
 };
 
 export const useChatUIStore = create<ChatUIState>((set, get) => ({

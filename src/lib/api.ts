@@ -298,10 +298,9 @@ export const processAuthResponse = (response: AuthResponse): void => {
     saveApiKey(response.api_key);
     console.log('API key saved to localStorage');
 
-    // Convert credits to integer to match backend expectations
-    // Handle undefined/null/NaN cases
+    // Store raw credit value (fractional tokens allowed, e.g. 97.99)
     const creditsAsInteger = response.credits !== undefined && response.credits !== null && !isNaN(response.credits)
-      ? Math.floor(response.credits)
+      ? response.credits
       : 0;
 
     console.log('[processAuthResponse] Credits conversion:', {

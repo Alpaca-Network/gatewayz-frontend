@@ -187,15 +187,18 @@ export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
   const gateways = model.source_gateways || (model.source_gateway ? [model.source_gateway] : []);
   const gatewayPricing = model.gateway_pricing || {};
 
-  // Convert gateway pricing to Provider array
+  // Convert gateway pricing to Provider array.
+  // IMPORTANT: when no pricing source resolves, emit empty strings (not '0'),
+  // so formatPricingForDisplay() returns null and the UI renders "Contact for
+  // pricing" instead of a bogus "$0.00/M" label.
   const providers: Provider[] = gateways.map(gateway => {
-    const pricing = gatewayPricing[gateway] || model.pricing || { prompt: '0', completion: '0' };
+    const pricing = gatewayPricing[gateway] || model.pricing || { prompt: '', completion: '' };
     return {
       slug: gateway,
       name: gateway.charAt(0).toUpperCase() + gateway.slice(1),
       pricing: {
-        prompt: pricing.prompt,
-        completion: pricing.completion,
+        prompt: pricing.prompt ?? '',
+        completion: pricing.completion ?? '',
         image: '0',
         request: '0'
       },
@@ -212,10 +215,14 @@ export function adaptLegacyToUniqueModel(model: Model): UniqueModel {
     };
   });
 
-  // Find cheapest provider
+  // Find cheapest provider. Only consider providers with a real (non-empty)
+  // price string — an empty string means the provider has no resolved pricing,
+  // not "$0". If nothing resolves, leave cheapestPrice as Infinity so the
+  // caller can distinguish "truly free (0)" from "pricing unknown".
   let cheapestProvider = providers[0]?.slug || '';
   let cheapestPrice = Infinity;
   providers.forEach(p => {
+    if (!p.pricing.prompt) return;
     const price = parseFloat(p.pricing.prompt);
     if (!isNaN(price) && price < cheapestPrice) {
       cheapestPrice = price;
@@ -281,7 +288,10 @@ export function adaptUniqueToLegacyModel(model: UniqueModel): Model {
     gateway_pricing,
     created: model.created,
     is_private: model.is_private,
-    is_free: model.cheapest_prompt_price === 0,
+    // cheapest_prompt_price defaults to 0 when no provider has valid pricing,
+    // so checking `=== 0` alone would mis-label unpriced models as free.
+    // Only claim "free" when we actually resolved a priced provider.
+    is_free: !!pricing && model.cheapest_prompt_price === 0,
   };
 }
 

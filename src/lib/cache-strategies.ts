@@ -43,7 +43,7 @@ export const TTL = {
   // User data - semi-static
   USER_PROFILE: 600, // 10 minutes
   USER_TIER: 600, // 10 minutes
-  USER_CREDITS: 300, // 5 minutes (shorter due to usage)
+  USER_CREDITS: 30, // 30 seconds — balance must stay fresh
 
   // Analytics - computed periodically
   ACTIVITY_STATS: 1800, // 30 minutes

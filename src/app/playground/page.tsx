@@ -19,8 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { ReasoningDisplay } from '@/components/chat/reasoning-display';
-import { useGatewayRouter } from '@/hooks/useGatewayRouter';
-import { getAISDKAvailableModels, streamAISDKChat } from '@/lib/ai-sdk-chat-service';
+import { streamChatResponse } from '@/lib/streaming/stream-chat';
 import { usePrivy } from '@privy-io/react-auth';
 import { getApiKey } from '@/lib/api';
 import {
@@ -62,13 +61,16 @@ export default function PlaygroundPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const gatewayRouter = useGatewayRouter();
 
-  // Get available models
-  const aiSdkModels = getAISDKAvailableModels();
+  // Hardcoded model list now that AI SDK is removed
+  const aiSdkModels = [
+    { id: 'openrouter/anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', supportsThinking: false },
+    { id: 'openrouter/openai/gpt-4o', name: 'GPT-4o', supportsThinking: false },
+    { id: 'openrouter/google/gemini-pro-1.5', name: 'Gemini 1.5 Pro', supportsThinking: false },
+    { id: 'openrouter/meta-llama/llama-3.1-70b-instruct', name: 'Llama 3.1 70B', supportsThinking: false },
+  ];
 
-  // Check if model supports thinking
-  const supportsThinking = gatewayRouter.supportsThinking(selectedModel);
+  const supportsThinking = false;
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -118,36 +120,24 @@ export default function PlaygroundPage() {
       let assistantContent = '';
       let assistantReasoning = '';
 
-      for await (const chunk of streamAISDKChat({
+      const requestBody = {
         model: selectedModel,
         messages: [
-          ...messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            reasoning: m.reasoning,
-          })),
-          userMessage,
+          ...messages.map((m) => ({ role: m.role, content: m.content })),
+          { role: userMessage.role, content: userMessage.content },
         ],
-        enableThinking: supportsThinking,
-        apiKey,
         temperature,
-        maxTokens,
-        topP,
-      })) {
+        max_tokens: maxTokens,
+        top_p: topP,
+        stream: true,
+      };
+
+      for await (const chunk of streamChatResponse('/api/chat/completions', apiKey, requestBody)) {
         if (abortRef.current?.signal.aborted) break;
 
         if (chunk.content) {
           assistantContent += chunk.content;
           setCurrentContent(assistantContent);
-        }
-
-        if (chunk.reasoning) {
-          assistantReasoning += chunk.reasoning;
-          setCurrentReasoning(assistantReasoning);
-        }
-
-        if (chunk.done) {
-          // Message complete
         }
       }
 
@@ -187,7 +177,6 @@ export default function PlaygroundPage() {
     temperature,
     maxTokens,
     topP,
-    supportsThinking,
     getAuthApiKey,
     toast,
   ]);

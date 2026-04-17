@@ -40,7 +40,7 @@ interface SpeechRecognition extends EventTarget {
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
-import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera, Globe, Search, Loader2 } from "lucide-react";
+import { Send, Image as ImageIcon, Video as VideoIcon, Mic, Mic as AudioIcon, X, RefreshCw, Plus, FileText, Square, Camera, Globe, Search, Loader2, CreditCard } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,13 +59,6 @@ import { useSearchAugmentation } from "@/lib/hooks/use-search-augmentation";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/auth-store";
-import {
-  incrementGuestMessageCount,
-  hasReachedGuestLimit,
-  getRemainingGuestMessages,
-  getGuestMessageLimit
-} from "@/lib/guest-chat";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { usePrivy } from "@privy-io/react-auth";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
@@ -211,7 +204,7 @@ export function ChatInput() {
   const { data: toolDefinitions } = useToolDefinitions();
   const { augmentWithSearch, isSearching } = useSearchAugmentation();
   const { toast } = useToast();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, userData } = useAuthStore();
   const { login } = usePrivy();
   const { logout } = useGatewayzAuth();
 
@@ -227,8 +220,6 @@ export function ChatInput() {
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<string | null>(null);
   const [selectedDocumentName, setSelectedDocumentName] = useState<string | null>(null);
-  const [guestMessageCount, setGuestMessageCount] = useState(0);
-  const [showGuestLimitWarning, setShowGuestLimitWarning] = useState(false);
   // Whisper transcription - high quality backend-based transcription
   const userLanguage = typeof navigator !== 'undefined' ? navigator.language?.split('-')[0] || 'en' : 'en';
   const {
@@ -386,17 +377,30 @@ export function ChatInput() {
         return;
     }
 
-    // Guest mode: Check daily message limit
+    // Unauthenticated users must sign up before chatting
     if (!isAuthenticated) {
-      if (hasReachedGuestLimit()) {
-        setShowGuestLimitWarning(true);
-        toast({
-          title: "Daily limit reached",
-          description: `You've used all ${getGuestMessageLimit()} messages for today. Sign up to continue chatting!`,
-          variant: "destructive",
-        });
-        return;
-      }
+      login();
+      return;
+    }
+
+    // Block paid model usage when user has no credits at all
+    const freshUserData = useAuthStore.getState().userData;
+    // total_credits is the authoritative sum (subscription allowance + purchased).
+    // Only fall back to credits if total_credits is explicitly null/undefined.
+    // If total_credits is null but subscription_allowance > 0, the user can still send.
+    const subscriptionAllowance = freshUserData?.subscription_allowance ?? 0;
+    const purchasedCredits = freshUserData?.purchased_credits ?? 0;
+    const legacyCredits = freshUserData?.credits ?? 0;
+    const userCredits = freshUserData?.total_credits ?? (subscriptionAllowance + purchasedCredits + legacyCredits);
+    // Only block for paid models — free models (category === 'Free') always pass
+    const isPaidModel = freshSelectedModel.category !== 'Free' && freshSelectedModel.category !== 'Router';
+    if (isPaidModel && userCredits <= 0) {
+      toast({
+        title: "Insufficient credits",
+        description: "Add credits to use paid models, or switch to a free model.",
+        variant: "destructive",
+      });
+      return;
     }
 
     // Auto-enable search if the query needs real-time information
@@ -544,33 +548,6 @@ export function ChatInput() {
             }
         }
 
-        // Guest mode: Increment daily message count after successful send
-        if (!isAuthenticated) {
-          const newCount = incrementGuestMessageCount();
-          setGuestMessageCount(newCount);
-
-          // Dispatch event to update counter display
-          window.dispatchEvent(new Event('guest-count-updated'));
-
-          // Show warning when approaching limit
-          const remaining = getRemainingGuestMessages();
-
-          if (remaining === 0) {
-            // Show banner when limit is reached
-            setShowGuestLimitWarning(true);
-            toast({
-              title: "Daily limit reached!",
-              description: `You've used all ${getGuestMessageLimit()} messages for today. Sign up to continue chatting!`,
-              variant: "destructive",
-            });
-          } else if (remaining <= 3) {
-            // Show warning toast when approaching limit
-            toast({
-              title: `${remaining} ${remaining === 1 ? 'message' : 'messages'} remaining today`,
-              description: "Sign up to chat without daily limits!",
-            });
-          }
-        }
     } catch (e) {
         // Clear the timer on error
         setMessageStartTime(null);
@@ -1021,6 +998,13 @@ export function ChatInput() {
     };
   }, [speechRecognition]);
 
+  const userSubscriptionAllowance = userData?.subscription_allowance ?? 0;
+  const userPurchasedCredits = userData?.purchased_credits ?? 0;
+  const userLegacyCredits = userData?.credits ?? 0;
+  const userCredits = userData?.total_credits ?? (userSubscriptionAllowance + userPurchasedCredits + userLegacyCredits);
+  const selectedModelIsPaid = selectedModel?.category !== 'Free' && selectedModel?.category !== 'Router';
+  const showInsufficientCreditsBanner = isAuthenticated && userCredits <= 0 && selectedModelIsPaid;
+
   return (
     <>
       {/* Recording/Transcribing Overlay - Full screen modal */}
@@ -1109,30 +1093,16 @@ export function ChatInput() {
 
     <div className="w-full p-4 border-t bg-background">
       <div className="max-w-4xl mx-auto">
-        {/* Guest Daily Limit Warning */}
-        {!isAuthenticated && showGuestLimitWarning && (
-          <Alert className="mb-3 border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20">
-            <AlertDescription className="flex items-center justify-between">
-              <span className="text-sm">
-                You've reached your daily limit of {getGuestMessageLimit()} messages.{" "}
-                <button
-                  onClick={login}
-                  className="font-semibold underline hover:no-underline"
-                >
-                  Sign up
-                </button>{" "}
-                to chat without limits!
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowGuestLimitWarning(false)}
-                className="h-6 px-2"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </AlertDescription>
-          </Alert>
+        {/* Guest sign-up nudge — always visible for unauthenticated users */}
+        {!isAuthenticated && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            <span>
+              <span className="font-medium text-foreground">Sign up free</span> to start chatting — takes 10 seconds.
+            </span>
+            <Button size="sm" variant="default" onClick={login} className="shrink-0 h-7 text-xs px-3">
+              Create account
+            </Button>
+          </div>
         )}
 
         {/* Previews */}
@@ -1163,6 +1133,22 @@ export function ChatInput() {
                 </div>
             )}
         </div>
+
+        {/* Insufficient credits banner — shown before the user tries to send */}
+        {showInsufficientCreditsBanner && (
+          <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-sm">
+            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+              <CreditCard className="h-4 w-4 shrink-0" />
+              <span>Not enough credits to use this model.</span>
+            </div>
+            <a
+              href="/settings/credits"
+              className="shrink-0 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+            >
+              Add credits
+            </a>
+          </div>
+        )}
 
         <div className="bg-muted p-3 rounded-2xl border">
             {/* Hidden Inputs */}

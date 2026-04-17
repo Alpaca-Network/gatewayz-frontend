@@ -11,7 +11,6 @@ export function AppFooter() {
   const pathname = usePathname();
   const [isChatPage, setIsChatPage] = useState(false);
   const [isModelsPage, setIsModelsPage] = useState(false);
-  const [isSandboxPage, setIsSandboxPage] = useState(false);
   const [isAgentPage, setIsAgentPage] = useState(false);
   const [isInboxPage, setIsInboxPage] = useState(false);
   const [showFooter, setShowFooter] = useState(false);
@@ -20,7 +19,6 @@ export function AppFooter() {
   useEffect(() => {
     setIsChatPage(pathname?.startsWith('/chat') ?? false);
     setIsModelsPage(pathname?.startsWith('/models') ?? false);
-    setIsSandboxPage(pathname?.startsWith('/sandbox') ?? false);
     setIsAgentPage(pathname?.startsWith('/agent') ?? false);
     setIsInboxPage(pathname?.startsWith('/inbox') ?? false);
   }, [pathname]);
@@ -53,11 +51,6 @@ export function AppFooter() {
 
   // Hide footer on models page (has sidebar layout)
   if (isModelsPage) {
-    return null;
-  }
-
-  // Hide footer on sandbox pages (full-screen embedded apps)
-  if (isSandboxPage) {
     return null;
   }
 

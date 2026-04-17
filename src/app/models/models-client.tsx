@@ -91,7 +91,11 @@ const ModelTableRow = React.memo(function ModelTableRow({ model }: { model: Mode
   const cheapestProvider = providers.find(p => p.slug === model.cheapest_provider) || providers[0];
 
   const hasPricing = cheapestProvider && cheapestProvider.pricing;
-  const isFree = model.cheapest_prompt_price === 0;
+  // Missing pricing ≠ free. cheapest_prompt_price defaults to 0 when no
+  // providers have valid pricing (see adaptLegacyToUnique in types/models.ts),
+  // so checking `=== 0` alone would mis-label unpriced models as free. Gate on
+  // hasPricing so we only claim "Free" when we actually have pricing data.
+  const isFree = !!hasPricing && model.cheapest_prompt_price === 0;
   const inputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.prompt, cheapestProvider.slug) : null;
   const outputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.completion, cheapestProvider.slug) : null;
   const modelUrl = getModelUrl(model.id, cheapestProvider?.slug || 'unknown');
@@ -328,7 +332,11 @@ const MobileModelRow = React.memo(function MobileModelRow({
   const hasPricing = cheapestProvider && cheapestProvider.pricing;
   const inputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.prompt, cheapestProvider.slug) : null;
   const outputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.completion, cheapestProvider.slug) : null;
-  const isFree = model.cheapest_prompt_price === 0;
+  // Missing pricing ≠ free. cheapest_prompt_price defaults to 0 when no
+  // providers have valid pricing (see adaptLegacyToUnique in types/models.ts),
+  // so checking `=== 0` alone would mis-label unpriced models as free. Gate on
+  // hasPricing so we only claim "Free" when we actually have pricing data.
+  const isFree = !!hasPricing && model.cheapest_prompt_price === 0;
   const modelUrl = getModelUrl(model.id, cheapestProvider?.slug || 'unknown');
 
   // Get provider display name
@@ -438,7 +446,11 @@ const GroupedModelTableRow = React.memo(function GroupedModelTableRow({
   const hasPricing = cheapestProvider && cheapestProvider.pricing;
   const inputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.prompt, cheapestProvider.slug) : null;
   const outputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.completion, cheapestProvider.slug) : null;
-  const isFree = model.cheapest_prompt_price === 0;
+  // Missing pricing ≠ free. cheapest_prompt_price defaults to 0 when no
+  // providers have valid pricing (see adaptLegacyToUnique in types/models.ts),
+  // so checking `=== 0` alone would mis-label unpriced models as free. Gate on
+  // hasPricing so we only claim "Free" when we actually have pricing data.
+  const isFree = !!hasPricing && model.cheapest_prompt_price === 0;
 
   // Format context as number with commas
   const formatContext = (length: number | undefined | null) => {
@@ -551,7 +563,11 @@ const ModelCard = React.memo(function ModelCard({ model }: { model: Model }) {
   const cheapestProvider = providers.find(p => p.slug === model.cheapest_provider) || providers[0];
 
   const hasPricing = cheapestProvider && cheapestProvider.pricing;
-  const isFree = model.cheapest_prompt_price === 0;
+  // Missing pricing ≠ free. cheapest_prompt_price defaults to 0 when no
+  // providers have valid pricing (see adaptLegacyToUnique in types/models.ts),
+  // so checking `=== 0` alone would mis-label unpriced models as free. Gate on
+  // hasPricing so we only claim "Free" when we actually have pricing data.
+  const isFree = !!hasPricing && model.cheapest_prompt_price === 0;
   const inputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.prompt, cheapestProvider.slug) : null;
   const outputCost = hasPricing ? formatPricingForDisplay(cheapestProvider.pricing.completion, cheapestProvider.slug) : null;
   const contextK = model.context_length > 0 ? Math.round(model.context_length / 1000) : 0;

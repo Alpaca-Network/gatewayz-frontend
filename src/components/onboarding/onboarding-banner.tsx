@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { safeSessionStorage } from '@/lib/safe-session-storage';
-import { getUserData } from '@/lib/api';
+import { useAuth } from '@/hooks/use-auth';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 interface OnboardingTask {
@@ -21,12 +21,12 @@ export function OnboardingBanner() {
   const [nextTask, setNextTask] = useState<OnboardingTask | null>(null);
   const [visible, setVisible] = useState(false);
   const pathname = usePathname();
+  const { isAuthenticated } = useAuth();
 
   // Function to load and check tasks
   const loadTasks = useCallback(() => {
     // Don't show banner for guest users (not authenticated)
-    const userData = getUserData();
-    if (!userData) {
+    if (!isAuthenticated) {
       setVisible(false);
       return;
     }
@@ -97,7 +97,7 @@ export function OnboardingBanner() {
     // Show banner if there are incomplete tasks
     const shouldShow = !!incomplete;
     setVisible(shouldShow);
-  }, [pathname]);
+  }, [pathname, isAuthenticated]);
 
   useEffect(() => {
     loadTasks();

@@ -284,9 +284,26 @@ export async function POST(request: NextRequest) {
     // For explicit guest requests or missing API key, check rate limit and use the guest API key
     if (isGuestRequest) {
       const guestKey = process.env.GUEST_API_KEY;
+
+      // Check key is configured BEFORE consuming rate limit quota.
+      // If GUEST_API_KEY is missing or is the placeholder, fail immediately without
+      // touching the counter — otherwise misconfigured setups burn the user's daily quota.
+      if (!guestKey || guestKey === 'your-guest-api-key') {
+        console.warn('[API Completions] Guest mode attempted but GUEST_API_KEY not configured');
+        return new Response(JSON.stringify({
+          error: 'Guest mode not available',
+          code: 'GUEST_NOT_CONFIGURED',
+          message: 'Please sign in to use the chat feature. Create a free account to get started!',
+          detail: 'Guest chat is temporarily unavailable. Sign up for a free account to continue.'
+        }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
       const clientIP = getClientIP(request);
 
-      // Check guest rate limit (3 messages per 24 hours per IP)
+      // Check guest rate limit only after confirming guest key is valid
       const rateLimitCheck = checkGuestRateLimit(clientIP);
 
       if (!rateLimitCheck.allowed) {
@@ -311,20 +328,6 @@ export async function POST(request: NextRequest) {
             'X-RateLimit-Reset': String(Math.ceil(rateLimitCheck.resetInMs / 1000)),
             'Retry-After': String(Math.ceil(rateLimitCheck.resetInMs / 1000)),
           },
-        });
-      }
-
-      if (!guestKey) {
-        // Guest mode is not configured - return a helpful error
-        console.warn('[API Completions] Guest mode attempted but GUEST_API_KEY not configured');
-        return new Response(JSON.stringify({
-          error: 'Guest mode not available',
-          code: 'GUEST_NOT_CONFIGURED',
-          message: 'Please sign in to use the chat feature. Create a free account to get started!',
-          detail: 'Guest chat is temporarily unavailable. Sign up for a free account to continue.'
-        }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
         });
       }
 

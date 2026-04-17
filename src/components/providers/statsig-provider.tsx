@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { usePrivy } from '@privy-io/react-auth';
 import { StatsigProvider, useClientAsyncInit } from '@statsig/react-bindings';
 import { StatsigAutoCapturePlugin } from '@statsig/web-analytics';
 import { StatsigSessionReplayPlugin } from '@statsig/session-replay';
@@ -10,24 +11,6 @@ import { isTauriDesktop } from '@/lib/browser-detection';
 // Check if running in Tauri desktop mode at module level
 // This is checked once and cached for the lifetime of the app
 const IS_TAURI_DESKTOP = typeof window !== 'undefined' && isTauriDesktop();
-
-// Custom hook that safely gets Privy user info
-// Returns null values when running in Tauri desktop (where PrivyProvider is not used)
-// IMPORTANT: This hook pattern is intentionally conditional on a module-level constant
-// to avoid calling usePrivy() in desktop mode where PrivyProvider doesn't exist
-function usePrivySafe(): { user: { id?: string } | null; authenticated: boolean } {
-  // In desktop mode, never try to use Privy - just return empty values
-  // The getUserData() fallback in the effect will provide user info from localStorage
-  if (IS_TAURI_DESKTOP) {
-    return { user: null, authenticated: false };
-  }
-
-  // In web mode, use the actual Privy hook
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const privyModule = require('@privy-io/react-auth') as typeof import('@privy-io/react-auth');
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  return privyModule.usePrivy();
-}
 
 // Check if SDK key is valid (exists and is not a placeholder)
 const hasValidSdkKey = (): boolean => {
@@ -208,7 +191,12 @@ function StatsigClientProvider({ children, userId }: { children: React.ReactNode
 }
 
 function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
-  const { user, authenticated } = usePrivySafe();
+  // Always call usePrivy unconditionally to satisfy Rules of Hooks.
+  // In Tauri desktop mode PrivyProvider is absent so usePrivy() throws —
+  // we catch that by wrapping at the StatsigProviderWrapper level with an
+  // error boundary, or by checking IS_TAURI_DESKTOP before rendering this
+  // component (see StatsigProviderWrapper below).
+  const { user, authenticated } = usePrivy();
   const [userId, setUserId] = React.useState<string>('anonymous');
 
   // Get user ID from Privy or backend user data
@@ -244,6 +232,13 @@ function StatsigProviderInternal({ children }: { children: React.ReactNode }) {
 }
 
 export function StatsigProviderWrapper({ children }: { children: React.ReactNode }) {
+  // In Tauri desktop mode, PrivyProvider is not mounted, so we cannot call
+  // usePrivy() inside StatsigProviderInternal. Skip the Statsig init entirely
+  // — analytics is not needed in the desktop shell.
+  if (IS_TAURI_DESKTOP) {
+    return <>{children}</>;
+  }
+
   return (
     <StatsigErrorBoundary>
       <StatsigProviderInternal>

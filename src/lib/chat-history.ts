@@ -1,5 +1,5 @@
 // Chat History API Types and Interfaces
-import { API_BASE_URL } from './config';
+import { API_BASE_URL, getChatApiUrl, isTauriEnvironment } from './config';
 import { TIMEOUT_CONFIG, createTimeoutController, withTimeoutAndRetry } from './timeout-config';
 import { messageBatcher, type BatchedMessage } from './message-batcher';
 import { debounce } from './utils';
@@ -111,7 +111,8 @@ export class ChatHistoryAPI {
 
   constructor(apiKey: string, baseUrl?: string, privyUserId?: string, useBatching: boolean = true) {
     this.apiKey = apiKey;
-    this.baseUrl = baseUrl || `${API_BASE_URL}/v1/chat`;
+    // On web, use /api/chat (Next.js proxy) to avoid CORS. On Tauri (static export), hit backend directly.
+    this.baseUrl = baseUrl || (isTauriEnvironment() ? `${API_BASE_URL}/v1/chat` : '/api/chat');
     this.privyUserId = privyUserId;
     this.useBatching = useBatching;
 
@@ -556,9 +557,11 @@ export class ChatHistoryAPI {
     } catch (error) {
       clearTimeout(timeoutId);
       if (error instanceof Error && error.name === 'AbortError') {
-        console.error('ChatHistoryAPI.saveMessage - Request timed out after', TIMEOUT_CONFIG.chat.messagesSave, 'ms');
-        // Throw the error properly instead of returning fake success
-        throw new Error(`Failed to save message: Request timed out after ${TIMEOUT_CONFIG.chat.messagesSave / 1000} seconds`);
+        console.warn(
+          `ChatHistoryAPI.saveMessage - Request timed out after ${TIMEOUT_CONFIG.chat.messagesSave / 1000}s`,
+          { url, sessionId }
+        );
+        throw new Error(`Failed to save message: Request timed out after ${TIMEOUT_CONFIG.chat.messagesSave / 1000} seconds. Please check your connection.`);
       }
       throw error;
     }

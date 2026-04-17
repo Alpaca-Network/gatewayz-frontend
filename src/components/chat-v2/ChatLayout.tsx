@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Menu, Pencil, Lock, Unlock, Shield, Plus, ImageIcon, BarChart3, Code2, Lightbulb, Sparkles } from "lucide-react";
+import { Menu, Pencil, Lock, Unlock, Shield, Plus, ImageIcon, BarChart3, Code2, Lightbulb, Sparkles, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { ChatSidebar } from "./ChatSidebar";
@@ -13,10 +13,10 @@ import { ModelSelect } from "@/components/chat/model-select";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { usePrivy } from "@privy-io/react-auth";
 import { getApiKey } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { useSessionMessages } from "@/lib/hooks/use-chat-queries";
-import { GuestChatCounter } from "@/components/chat/guest-chat-counter";
 import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateSession } from "@/lib/hooks/use-chat-queries";
@@ -75,7 +75,7 @@ function shuffleArray<T>(array: T[]): T[] {
     return shuffled;
 }
 
-function WelcomeScreen({ onPromptSelect, onPromptChipSelect, onSurpriseMe }: { onPromptSelect: (txt: string) => void; onPromptChipSelect?: (prompt: string, useImageModel?: boolean) => void; onSurpriseMe?: () => void }) {
+function WelcomeScreen({ onPromptSelect, onPromptChipSelect, onSurpriseMe, isAuthenticated, onLogin }: { onPromptSelect: (txt: string) => void; onPromptChipSelect?: (prompt: string, useImageModel?: boolean) => void; onSurpriseMe?: () => void; isAuthenticated: boolean; onLogin: () => void }) {
     // Select 4 random prompts on mount (useMemo ensures consistency during render)
     const [prompts] = useState(() => shuffleArray(ALL_PROMPTS).slice(0, 4));
 
@@ -84,6 +84,22 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect, onSurpriseMe }: { o
     return (
         <div className="flex-1 flex flex-col items-center justify-start sm:justify-center p-4 pt-6 sm:pt-4 overflow-y-auto">
              <h1 className="text-2xl sm:text-4xl font-bold mb-4 sm:mb-6 text-center">What can I help with?</h1>
+
+             {/* Guest sign-up banner */}
+             {!isAuthenticated && (
+               <div className="w-full max-w-2xl mb-5 flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+                 <div className="flex items-center gap-2.5 min-w-0">
+                   <UserPlus className="h-4 w-4 text-primary shrink-0" />
+                   <p className="text-sm text-foreground/80 truncate">
+                     <span className="font-medium text-foreground">Free account required to chat.</span>
+                     {" "}Sign up in seconds — no credit card needed.
+                   </p>
+                 </div>
+                 <Button size="sm" onClick={onLogin} className="shrink-0">
+                   Create free account
+                 </Button>
+               </div>
+             )}
 
              {/* Prompt chips like ChatGPT */}
              <div className="flex flex-wrap justify-center gap-2 mb-6 sm:mb-8 max-w-2xl">
@@ -128,6 +144,7 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect, onSurpriseMe }: { o
 export function ChatLayout() {
    useAuthSync(); // Trigger auth sync
    const { isAuthenticated, isLoading: storeLoading } = useAuthStore();
+   const { login } = usePrivy();
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, setIncognitoMode, toggleIncognitoMode, syncIncognitoState } = useChatUIStore();
    const searchParams = useSearchParams();
    const queryClient = useQueryClient();
@@ -196,9 +213,7 @@ export function ChatLayout() {
                });
            }
 
-           // Set pending prompt immediately to show optimistic UI
-           setPendingPrompt(messageParam);
-           // Set the input value
+           // Set the input value so it's visible in the textarea
            setInputValue(messageParam);
 
            // Clean up URL parameters after reading them
@@ -208,6 +223,16 @@ export function ChatLayout() {
                url.searchParams.delete('model');
                window.history.replaceState({}, '', url.toString());
            }
+
+           // If not authenticated, don't auto-send — just show the message in the input
+           // and open the login modal so they can sign up and then send manually.
+           if (!isAuthenticated) {
+               login();
+               return;
+           }
+
+           // Set pending prompt to show optimistic UI (authenticated users only)
+           setPendingPrompt(messageParam);
 
            // Auto-send the message after a short delay to ensure ChatInput is mounted
            // Use multiple retries with capped exponential backoff to handle slow component mounting
@@ -238,7 +263,7 @@ export function ChatLayout() {
                pendingTimeoutRef.current = null;
            }
        };
-   }, [searchParams, setInputValue, setSelectedModel, setIncognitoMode]);
+   }, [searchParams, setInputValue, setSelectedModel, setIncognitoMode, isAuthenticated, login]);
 
    // Clear pending prompt once we have real messages OR when session changes
    useEffect(() => {
@@ -283,10 +308,16 @@ export function ChatLayout() {
 
    // Handle prompt selection from welcome screen - auto-send the message
    const handlePromptSelect = (text: string) => {
+       setInputValue(text);
+
+       // If not authenticated, just open login modal — don't send
+       if (!isAuthenticated) {
+           login();
+           return;
+       }
+
        // Set pending prompt immediately to hide welcome screen and show chat UI
        setPendingPrompt(text);
-       // Set the input value
-       setInputValue(text);
        // Use requestAnimationFrame to ensure React has finished rendering and
        // the Zustand state update has propagated before triggering send.
        // This prevents race conditions where __chatInputSend might be stale or undefined.
@@ -657,10 +688,6 @@ export function ChatLayout() {
                            {activeSessionId ? "Chat" : "New Chat"}
                        </h1>
 
-                       {/* Guest Chat Counter - only show for non-authenticated users */}
-                       {!isAuthenticated && (
-                           <GuestChatCounter className="hidden sm:flex" />
-                       )}
                    </div>
 
                    <div className="flex items-center gap-2 shrink-0">
@@ -719,7 +746,7 @@ export function ChatLayout() {
               {/* Main Content */}
               <div className="flex-1 overflow-hidden relative z-10 flex flex-col">
                   {showWelcomeScreen ? (
-                      <WelcomeScreen onPromptSelect={handlePromptSelect} onPromptChipSelect={handlePromptChipSelect} onSurpriseMe={handleSurpriseMe} />
+                      <WelcomeScreen onPromptSelect={handlePromptSelect} onPromptChipSelect={handlePromptChipSelect} onSurpriseMe={handleSurpriseMe} isAuthenticated={isAuthenticated} onLogin={login} />
                   ) : (
                       <MessageList
                         sessionId={activeSessionId}

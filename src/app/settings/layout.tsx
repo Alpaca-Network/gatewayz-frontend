@@ -2,8 +2,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { cn } from "@/lib/utils";
+import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { SidebarProvider, Sidebar, SidebarContent, SidebarInset, SidebarTrigger, SidebarGroup } from "@/components/ui/sidebar";
 
 const navItems = [
@@ -28,6 +30,18 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { status } = useGatewayzAuth();
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/');
+    }
+  }, [status, router]);
+
+  if (status !== 'authenticated') {
+    return null;
+  }
 
   return (
     <SidebarProvider>

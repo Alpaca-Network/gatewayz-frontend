@@ -96,7 +96,7 @@ const DEMO_ASSETS: AssetData[] = [
     timeSpent: 87500,
     lastSeen: new Date().toISOString(),
     firstSeen: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-    pageContexts: ['/', '/chat', '/models', '/settings', '/rankings'],
+    pageContexts: ['/', '/chat', '/models', '/settings', '/settings'],
   },
   {
     id: 'font:/fonts/inter-*.woff2',
@@ -136,7 +136,7 @@ const DEMO_ASSETS: AssetData[] = [
     timeSpent: 94500,
     lastSeen: new Date().toISOString(),
     firstSeen: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    pageContexts: ['/rankings', '/settings/activity'],
+    pageContexts: ['/settings', '/settings/activity'],
   },
   {
     id: 'image:/providers/*.png',

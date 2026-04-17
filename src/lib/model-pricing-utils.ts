@@ -33,6 +33,19 @@
 export const MAX_PRICE_PER_MILLION = 100;
 
 /**
+ * Platform markup multiplier applied to all displayed prices.
+ * Matches the backend PRICING_MARKUP env var (default 1.25 = 25% margin).
+ * Configured via NEXT_PUBLIC_PRICING_MARKUP so it stays in sync with the backend.
+ * Users see the price they will actually be charged, not the raw provider cost.
+ */
+export const PRICING_MARKUP: number = (() => {
+  const raw = process.env.NEXT_PUBLIC_PRICING_MARKUP;
+  if (!raw) return 1.25; // matches backend default
+  const parsed = parseFloat(raw);
+  return isNaN(parsed) || parsed <= 0 ? 1.25 : parsed;
+})();
+
+/**
  * Threshold for detecting pricing unit mismatches.
  * If calculated per-million price exceeds this, we assume the gateway
  * returns per-million (not per-token) and auto-correct.
@@ -87,8 +100,9 @@ export interface ModelPricingInfo {
  * - cloudflare-workers-ai: Returns prices like 0.66 for $0.66/MTok
  * - alpaca-network: Returns prices like 0.27 for $0.27/MTok
  *
- * NOTE: The backend normalizes ALL gateway pricing to per-million in merged model responses.
- * openai, anthropic, openrouter, etc. all return per-million in the API response.
+ * NOTE: openrouter, openai, anthropic and similar gateways return pricing in per-TOKEN format
+ * (e.g. 2.5e-06 for $2.50/MTok). Do NOT add them to this list — the default per-token path
+ * (× 1,000,000) handles them correctly.
  */
 const PER_MILLION_PRICING_GATEWAYS: string[] = [
   'onerouter',
@@ -122,15 +136,6 @@ const PER_MILLION_PRICING_GATEWAYS: string[] = [
   'anannas',
   'morpheus',
   'nosana',
-  // Backend normalizes these to per-million in merged model responses
-  'openai',
-  'anthropic',
-  'openrouter',
-  'aihubmix',
-  'modelz',
-  'huggingface',
-  'cohere',
-  'zai',
 ];
 
 // Backend normalizes ALL gateway pricing to per-token format before returning to the frontend.
@@ -236,6 +241,13 @@ function normalizeToPerMillion(numPrice: number, sourceGateway: string): number 
   } else {
     // Assume per-token format: multiply by 1,000,000 to get per-million
     perMillionPrice = numPrice * 1000000;
+  }
+
+  // Apply platform markup so displayed prices match what users are actually charged.
+  // The backend charges: provider_cost × PRICING_MARKUP, so the frontend must show
+  // the same multiplied value. Free models (price === 0) are unaffected.
+  if (perMillionPrice > 0) {
+    perMillionPrice *= PRICING_MARKUP;
   }
 
   // Detect pricing unit mismatch: if price is unrealistically high,

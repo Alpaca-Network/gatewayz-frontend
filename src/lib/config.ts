@@ -60,9 +60,6 @@ export function getChatApiUrl(path: string): string {
   }
   // Web: use Next.js API route (translates /v1/* to /api/chat/*)
   // Map backend paths to Next.js API routes
-  if (path.startsWith('/v1/chat/ai-sdk-completions')) {
-    return '/api/chat/ai-sdk-completions' + path.slice('/v1/chat/ai-sdk-completions'.length);
-  }
   if (path.startsWith('/v1/chat/completions')) {
     return '/api/chat/completions' + path.slice('/v1/chat/completions'.length);
   }
