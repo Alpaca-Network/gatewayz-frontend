@@ -163,6 +163,18 @@ const nextConfig: NextConfig = {
             },
           ],
         },
+        {
+          // Code page: Allow iframe embedding from trusted GatewayZ origins only (same as /inbox)
+          // This embeds the Terragon coding inbox at /code URL
+          source: '/code',
+          headers: [
+            ...commonSecurityHeaders,
+            {
+              key: 'Content-Security-Policy',
+              value: "frame-ancestors 'self' https://beta.gatewayz.ai https://gatewayz.ai https://www.gatewayz.ai https://inbox.gatewayz.ai",
+            },
+          ],
+        },
       ];
     },
   }),
