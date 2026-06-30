@@ -762,7 +762,7 @@ describe('Streaming - Comprehensive Tests', () => {
       ).rejects.toThrow(/Trial credits have been used up.*FREE models/);
     });
 
-    test('should handle 403 forbidden with helpful message', async () => {
+    test('should handle 403 forbidden as an access error, not an expired session', async () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 403,
@@ -770,11 +770,14 @@ describe('Streaming - Comprehensive Tests', () => {
         json: async () => ({ detail: 'Access forbidden' }),
       });
 
+      // 403 = valid key but no access/subscription. It must point the user at
+      // credits/upgrade, NOT tell them their session expired (which would send them
+      // into a pointless re-login loop that can never resolve a billing problem).
       await expect(
         collectChunks(
           streamChatResponse('/api/chat/completions', 'test-key', { model: 'gpt-4', messages: [], stream: true })
         )
-      ).rejects.toThrow(/session has expired.*log out and log back in/i);
+      ).rejects.toThrow(/access|subscription|upgrade|credits/i);
     });
 
     test('should handle 404 model not found', async () => {
