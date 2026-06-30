@@ -47,8 +47,9 @@ export const tierConfigs: Record<string, TierConfig> = {
     ],
     ctaText: 'Get Started',
     ctaVariant: 'default',
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID,
-    stripeProductId: 'prod_UKdXKZYAH2tsfV',
+    // Live Stripe IDs (price IDs are public, not secrets). Env overrides if set.
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID || 'price_1TF2gqLVT8n4vaEn2KV2s8S8',
+    stripeProductId: 'prod_TMVNv05QSJcdXq',
   },
   pro: {
     id: 'pro',
@@ -66,8 +67,8 @@ export const tierConfigs: Record<string, TierConfig> = {
     ],
     ctaText: 'Get Started',
     ctaVariant: 'default',
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID,
-    stripeProductId: 'prod_UKdYdR6ZUQY4oV',
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || 'price_1SPYv5LVT8n4vaEnEAmeTnX4',
+    stripeProductId: 'prod_TMHUqS0Xs7Vz3Z',
   },
   max: {
     id: 'max',
@@ -86,8 +87,8 @@ export const tierConfigs: Record<string, TierConfig> = {
     ctaText: 'Get Started',
     ctaVariant: 'secondary',
     popular: true,
-    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_MAX_PRICE_ID,
-    stripeProductId: 'prod_UKdYWnMg2Widfb',
+    stripePriceId: process.env.NEXT_PUBLIC_STRIPE_MAX_PRICE_ID || 'price_1TF2e4LVT8n4vaEnHnW7P2oE',
+    stripeProductId: 'prod_TMHUXL8p0onwwO',
   },
   enterprise: {
     id: 'enterprise',
