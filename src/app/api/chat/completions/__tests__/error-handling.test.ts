@@ -223,6 +223,35 @@ describe('Chat Completions API - Error Handling', () => {
         })
       );
     });
+
+    it('should treat 403 as an authorization error, NOT an expired session', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse(403, 'Forbidden', { detail: 'Active subscription required' })
+      );
+
+      const request = new NextRequest('http://localhost:3000/api/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'openai/gpt-4',
+          messages: [{ role: 'user', content: 'Test' }],
+          stream: false,
+        }),
+        headers: {
+          'content-type': 'application/json',
+          'authorization': 'Bearer valid-key',
+        },
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      // A 403 means the key is valid but lacks access/subscription — NOT an expired session.
+      // Telling the user to "log out and log back in" sends them into a pointless re-login loop.
+      expect(data.type).toBe('authorization_error');
+      expect(data.message).not.toContain('session has expired');
+      expect(data.message.toLowerCase()).toMatch(/access|subscription|upgrade|credits/);
+    });
   });
 
   describe('5xx Server Errors', () => {

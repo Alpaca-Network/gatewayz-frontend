@@ -524,8 +524,17 @@ export async function POST(request: NextRequest) {
             let errorType = 'api_error';
 
             if (response.status === 401 || response.status === 403) {
-              userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
-              errorType = 'auth_error';
+              if (response.status === 403) {
+                // 403 = the API key is valid but lacks access/subscription for this action.
+                // This is NOT an expired session — telling the user to log out and back in
+                // sends them into a pointless re-login loop that can never resolve a billing
+                // or access problem. Point them at credits/upgrade instead.
+                userMessage = "You don't have access to this model or action. If this is a paid model, add credits or upgrade your plan, then try again.";
+                errorType = 'authorization_error';
+              } else {
+                userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
+                errorType = 'auth_error';
+              }
 
               // Capture auth errors to Sentry
               Sentry.captureException(
@@ -867,8 +876,15 @@ export async function POST(request: NextRequest) {
           }
         );
       } else if (httpError.status === 401 || httpError.status === 403) {
-        userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
-        errorType = 'auth_error';
+        if (httpError.status === 403) {
+          // 403 = valid key, but no access/subscription for this action. Not an expired
+          // session — route the user to credits/upgrade rather than a re-login loop.
+          userMessage = "You don't have access to this model or action. If this is a paid model, add credits or upgrade your plan, then try again.";
+          errorType = 'authorization_error';
+        } else {
+          userMessage = 'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.';
+          errorType = 'auth_error';
+        }
 
         Sentry.captureException(
           new Error(`Chat auth error: ${httpError.status} ${httpError.statusText}`),

@@ -262,7 +262,7 @@ describe('streamChatResponse', () => {
       global.window = originalWindow;
     });
 
-    it('should throw AuthenticationError on 403', async () => {
+    it('should throw an access (not session-expired) error on 403', async () => {
       global.fetch = jest.fn().mockResolvedValueOnce({
         ok: false,
         status: 403,
@@ -276,7 +276,19 @@ describe('streamChatResponse', () => {
         { model: 'gpt-4', messages: [] }
       );
 
-      await expect(collectChunks(generator)).rejects.toThrow(AuthenticationError);
+      // 403 = valid key but no access/subscription. It must NOT surface as an expired
+      // session (that sends the user into a pointless re-login loop). It is a plain
+      // StreamingError pointing at access/billing, not an AuthenticationError.
+      let thrown: unknown;
+      try {
+        await collectChunks(generator);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(StreamingError);
+      expect(thrown).not.toBeInstanceOf(AuthenticationError);
+      expect((thrown as Error).message.toLowerCase()).toMatch(/access|subscription|upgrade|credits/);
+      expect((thrown as Error).message).not.toContain('session has expired');
     });
 
     it('should throw StreamingError on 404 model not found', async () => {

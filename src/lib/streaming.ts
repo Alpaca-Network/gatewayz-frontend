@@ -314,16 +314,16 @@ export async function* streamChatResponse(
       );
     }
 
-    // Handle 403 Forbidden - invalid or expired API key
+    // Handle 403 Forbidden - valid key, but no access/subscription for this action.
+    // NOT an expired session: a re-login loop can never resolve a billing/access problem.
     if (response.status === 403) {
       devError('403 Forbidden details:', errorData);
 
-      // Capture auth error to Sentry
       Sentry.captureException(
-        new Error('Chat 403 Forbidden - session expired'),
+        new Error('Chat 403 Forbidden - access/subscription denied'),
         {
           tags: {
-            error_type: 'chat_auth_error',
+            error_type: 'chat_authorization_error',
             http_status: 403,
             model: String(requestBody.model || 'unknown'),
           },
@@ -336,7 +336,7 @@ export async function* streamChatResponse(
       );
 
       throw new Error(
-        'Your session has expired. Please log out and log back in to continue. If this issue persists, clear your browser cookies and log in again.'
+        "You don't have access to this model or action. If this is a paid model, add credits or upgrade your plan, then try again."
       );
     }
 
