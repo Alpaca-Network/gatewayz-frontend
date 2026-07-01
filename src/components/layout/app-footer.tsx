@@ -13,6 +13,7 @@ export function AppFooter() {
   const [isModelsPage, setIsModelsPage] = useState(false);
   const [isAgentPage, setIsAgentPage] = useState(false);
   const [isInboxPage, setIsInboxPage] = useState(false);
+  const [isSettingsPage, setIsSettingsPage] = useState(false);
   const [showFooter, setShowFooter] = useState(false);
   const [hasScrolledPastFold, setHasScrolledPastFold] = useState(false);
 
@@ -21,6 +22,7 @@ export function AppFooter() {
     setIsModelsPage(pathname?.startsWith('/models') ?? false);
     setIsAgentPage(pathname?.startsWith('/agent') ?? false);
     setIsInboxPage(pathname?.startsWith('/inbox') ?? false);
+    setIsSettingsPage(pathname?.startsWith('/settings') ?? false);
   }, [pathname]);
 
   // Track if user has scrolled past the initial viewport on homepage
@@ -28,8 +30,9 @@ export function AppFooter() {
     const isHomepage = pathname === '/';
 
     if (!isHomepage) {
-      // Show footer immediately on non-homepage routes
+      // Show footer immediately (and fully opaque) on non-homepage routes
       setShowFooter(true);
+      setHasScrolledPastFold(true);
       return;
     }
 
@@ -64,6 +67,11 @@ export function AppFooter() {
     return null;
   }
 
+  // Hide footer on settings pages (fixed sidebar layout would overlap it)
+  if (isSettingsPage) {
+    return null;
+  }
+
   // Don't render footer until conditions are met
   if (!showFooter) {
     return null;
@@ -82,12 +90,12 @@ export function AppFooter() {
             <h3 className="font-semibold mb-4 text-foreground">Product</h3>
             <ul className="space-y-2">
               <li>
-                <a
-                  href="#features"
+                <Link
+                  href="/#features"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Features
-                </a>
+                </Link>
               </li>
               <li>
                 <Link href="/settings/credits" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -115,24 +123,50 @@ export function AppFooter() {
                   Blog
                 </Link>
               </li>
+              <li>
+                <Link href="/releases" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Changelog
+                </Link>
+              </li>
+              <li>
+                <Link href="/developers" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Developers
+                </Link>
+              </li>
             </ul>
           </div>
 
-          {/*<div>
-            <h3 className="font-semibold mb-4 text-gray-900">Company</h3>
+          <div>
+            <h3 className="font-semibold mb-4 text-foreground">Company</h3>
             <ul className="space-y-2">
               <li>
-                <Link href="/about" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
-                  About
-                </Link>
-              </li>
-              <li>
-                <Link href="/contact" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                <Link href="/contact" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Contact
                 </Link>
               </li>
+              <li>
+                <Link href="/support" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Support
+                </Link>
+              </li>
             </ul>
-          </div>*/}
+          </div>
+
+          <div>
+            <h3 className="font-semibold mb-4 text-foreground">Legal</h3>
+            <ul className="space-y-2">
+              <li>
+                <Link href="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Terms of Service
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+            </ul>
+          </div>
 
           <div>
             <h3 className="font-semibold mb-4 text-foreground">Connect</h3>
@@ -176,29 +210,15 @@ export function AppFooter() {
           </div>
 
           <div>
-            <h3 className="font-semibold mb-4 text-foreground">Security</h3>
-            <ul className="space-y-2">
-              <li>
-                <Link
-                  href="/trust"
-                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  Trust Center
-                </Link>
-              </li>
-            </ul>
-            <div className="mt-4">
-              <Link href="/trust" className="inline-block">
-                <Image
-                  src="/caan3-badge.png"
-                  alt="CAAN3 Cybersecurity Certified 2025"
-                  width={64}
-                  height={64}
-                  className="h-16 w-auto"
-                  loading="lazy"
-                />
-              </Link>
-            </div>
+            <h3 className="font-semibold mb-4 text-foreground">Certifications</h3>
+            <Image
+              src="/caan3-badge.png"
+              alt="CAAN3 Cybersecurity Certified 2025"
+              width={64}
+              height={64}
+              className="h-16 w-auto"
+              loading="lazy"
+            />
           </div>
         </div>
 
@@ -211,7 +231,14 @@ export function AppFooter() {
             />
             <span className="font-semibold text-foreground">Gatewayz</span>
           </div>
-          <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} Augmented Intelligence Humans Inc. All rights reserved.</p>
+          <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6">
+            <nav className="flex items-center gap-4 text-sm text-muted-foreground">
+              <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+              <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+              <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
+            </nav>
+            <p className="text-sm text-muted-foreground">© {new Date().getFullYear()} Augmented Intelligence Humans Inc. All rights reserved.</p>
+          </div>
         </div>
       </div>
     </footer>

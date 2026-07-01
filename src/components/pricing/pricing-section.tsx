@@ -183,6 +183,8 @@ export function PricingSection() {
           window.location.href = `/checkout?tier=starter&mode=subscription&action=cancel`;
           return;
         }
+        // Authenticated user subscribing to Starter
+        window.location.href = `/checkout?tier=starter&mode=subscription`;
         return;
       }
 
@@ -193,6 +195,8 @@ export function PricingSection() {
           window.location.href = '/signup';
           return;
         }
+        // Authenticated user starting a subscription for this tier
+        window.location.href = `/checkout?tier=${tier.id}&mode=subscription`;
         return;
       }
 
