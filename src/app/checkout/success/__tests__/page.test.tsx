@@ -152,7 +152,7 @@ describe('CheckoutSuccessPage', () => {
       render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Earn Free Credits!')).toBeInTheDocument();
+        expect(screen.getByText('Invite Friends')).toBeInTheDocument();
       });
     });
 
@@ -258,27 +258,27 @@ describe('CheckoutSuccessPage', () => {
       });
     });
 
-    it('should display bonus credits message', async () => {
+    it('should display the invite friends message', async () => {
       render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText(/bonus credits/)).toBeInTheDocument();
+        expect(screen.getByText(/help them get started with Gatewayz/)).toBeInTheDocument();
       });
     });
 
-    it('should display reward explanation', async () => {
+    it('should display referral tracking explanation', async () => {
       render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Both you and your friend get rewarded')).toBeInTheDocument();
+        expect(screen.getByText('Track who joins through your link')).toBeInTheDocument();
       });
     });
 
-    it('should display how referrals work', async () => {
+    it('should display where to see referrals', async () => {
       render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('When they sign up and make their first purchase')).toBeInTheDocument();
+        expect(screen.getByText('See your referrals in your dashboard')).toBeInTheDocument();
       });
     });
   });

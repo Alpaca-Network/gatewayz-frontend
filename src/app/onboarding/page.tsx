@@ -8,12 +8,11 @@ import { CheckCircle2, Circle, ArrowRight, Code, MessageSquare, CreditCard, Spar
 import Link from "next/link";
 import { getUserData, getApiKey } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
-import { useToast } from '@/hooks/use-toast';
 import { CodeHighlighter } from '@/components/code-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { isTauri, isMacOS, isWindows } from '@/lib/desktop/tauri';
 import { showShortcutInfoDialog, hasShownShortcutInfo, markShortcutInfoShown } from '@/components/dialogs/shortcut-info-dialog';
-import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemove } from '@/lib/safe-storage';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 interface OnboardingTask {
   id: string;
@@ -36,7 +35,6 @@ function getShortcutText(): string {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { toast } = useToast();
   const [apiKey, setApiKey] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -45,7 +43,7 @@ export default function OnboardingPage() {
     {
       id: "welcome",
       title: "Welcome to Gatewayz",
-      description: "You're all set! You have $3 in free credits to get started.",
+      description: "You're all set! Explore 10,000+ AI models and start building.",
       icon: <Sparkles className="h-5 w-5" />,
       completed: true,
     },
@@ -79,7 +77,7 @@ export default function OnboardingPage() {
     {
       id: "credits",
       title: "Add More Credits (Optional)",
-      description: "Add $3 and get a bonus $3 in free credits on your first top up",
+      description: "Add $5 or more and get a one-time $5 bonus on your first top up",
       icon: <CreditCard className="h-5 w-5" />,
       completed: false,
       action: "/settings/credits",
@@ -230,24 +228,6 @@ export default function OnboardingPage() {
     fetchTopModels();
   }, [router]);
 
-  // Check for referral bonus notification
-  useEffect(() => {
-    const showReferralBonus = safeLocalStorageGet('gatewayz_show_referral_bonus');
-    if (showReferralBonus === 'true') {
-      // Remove the flag
-      safeLocalStorageRemove('gatewayz_show_referral_bonus');
-
-      // Show the bonus credits notification
-      setTimeout(() => {
-        toast({
-          title: "$3 Trial Credits Added!",
-          description: "Your free trial credits have been added to your account. Start chatting now!",
-          duration: 8000,
-        });
-      }, 1000); // Delay to allow page to settle
-    }
-  }, [toast]);
-
   const markTaskComplete = (taskId: string) => {
     setTasks(prev => {
       const updated = prev.map(task =>
@@ -387,7 +367,7 @@ console.log(response.choices[0].message.content);`
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:border-l sm:border-white/30 sm:pl-3 lg:ml-4 lg:pl-4">
                 <div className="flex items-center gap-2 flex-1 sm:flex-initial">
                   <CreditCard className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-sm font-semibold">💰 Add $3 and get a bonus $3 in free credits on your first top up</span>
+                  <span className="text-sm font-semibold">💰 Add $5 or more and get a one-time $5 bonus on your first top up</span>
                 </div>
                 <Link href="/settings/credits" className="flex-shrink-0">
                   <Button
@@ -443,7 +423,7 @@ console.log(response.choices[0].message.content);`
                     💰 Limited Time Offer
                   </h3>
                   <p className="text-sm text-green-800 dark:text-green-200">
-                    <strong>Add $3 and get a bonus $3 in free credits</strong> on your first top up!
+                    <strong>Add $5 or more and get a one-time $5 bonus</strong> on your first top up!
                   </p>
                 </div>
                 <Link href="/settings/credits">

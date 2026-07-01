@@ -13,9 +13,9 @@ export function CTASection() {
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 dark:bg-primary/20 mb-1">
               <ArrowRight className="w-5 h-5 text-primary" />
             </div>
-            <h2 className="text-2xl md:text-3xl font-bold text-foreground">Get Started with Free Credits</h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-foreground">Get Started Today</h2>
             <p className="text-base text-foreground max-w-xl mx-auto leading-relaxed">
-              Join our beta program and get <strong className="text-primary">$3 in free credits</strong> to explore 10,000+ AI models. No credit card required.
+              Join our beta program to explore 10,000+ AI models, and get <strong className="text-primary">$5 in bonus credits</strong> on your first top-up of $5 or more.
             </p>
 
             <div className="max-w-md mx-auto pt-1">

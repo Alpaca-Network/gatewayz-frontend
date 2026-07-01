@@ -121,7 +121,7 @@ function CheckoutSuccessContent() {
       try {
         await navigator.share({
           title: 'Join Gatewayz',
-          text: 'Sign up for Gatewayz and get bonus credits! Use my referral link:',
+          text: 'Sign up for Gatewayz using my referral link:',
           url: referralLink,
         });
       } catch (error) {
@@ -213,19 +213,19 @@ function CheckoutSuccessContent() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <Gift className="h-6 w-6 text-primary" />
-              Earn Free Credits!
+              Invite Friends
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-3">
               <p className="text-lg">
-                Share your referral link with colleagues and friends to earn <span className="font-bold text-primary">bonus credits</span> for every sign-up!
+                Share your referral link with colleagues and friends to help them get started with Gatewayz.
               </p>
               <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
                 <Users className="h-8 w-8 text-primary flex-shrink-0" />
                 <div>
-                  <p className="font-semibold">Both you and your friend get rewarded</p>
-                  <p className="text-sm text-muted-foreground">When they sign up and make their first purchase</p>
+                  <p className="font-semibold">Track who joins through your link</p>
+                  <p className="text-sm text-muted-foreground">See your referrals in your dashboard</p>
                 </div>
               </div>
             </div>

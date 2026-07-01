@@ -42,7 +42,7 @@ function SignupCardContent({
           <CardDescription className="text-base">
             {refCode ? (
               <>
-                You've been invited! Sign up now to get <span className="font-semibold text-foreground">bonus credits</span>.
+                You've been invited! Sign up to access AI models and start building with Gatewayz.
               </>
             ) : (
               <>
@@ -84,16 +84,6 @@ function SignupCardContent({
                 <span className="text-green-600">✓</span>
                 Access to 10,000+ AI models
               </li>
-              <li className="flex items-center gap-2">
-                <span className="text-green-600">✓</span>
-                $3 in free trial credits
-              </li>
-              {refCode && (
-                <li className="flex items-center gap-2">
-                  <span className="text-green-600">✓</span>
-                  Bonus credits from referral
-                </li>
-              )}
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
                 Advanced AI routing & analytics
@@ -269,10 +259,6 @@ function SignupCardSkeleton() {
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
                 Access to 10,000+ AI models
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-green-600">✓</span>
-                $3 in free trial credits
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>

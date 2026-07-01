@@ -399,7 +399,7 @@ export function SessionInitializer() {
       // Show toast notification
       toast({
         title: "Welcome! You've been referred!",
-        description: "Bonus credits will be added to your account after signup.",
+        description: "Thanks for joining through a referral. Start exploring 10,000+ AI models.",
         variant: "default",
       });
 

@@ -138,9 +138,9 @@ const SuccessPopup = ({ open, onOpenChange, userEmail }: SuccessPopupProps) => {
           ) : (
             <>
               <div className="p-6 border border-gray-200 bg-indigo-50 rounded-lg">
-                <p className="font-semibold mb-3 text-lg text-center text-gray-900">🎁 Get Free Credits + Priority Access</p>
+                <p className="font-semibold mb-3 text-lg text-center text-gray-900">🎁 Get Priority Access</p>
                 <p className="text-sm text-gray-600 text-center">
-                  Book a 15-minute call with our founder Vaughn to get bonus credits and potentially run a pilot program.
+                  Book a 15-minute call with our founder Vaughn to explore priority access and potentially run a pilot program.
                 </p>
               </div>
               

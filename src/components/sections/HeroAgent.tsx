@@ -43,7 +43,7 @@ export default function HeroAgent() {
                 SECURE BETA ACCESS
               </div>
               <WaitlistForm compact />
-              <p className="mt-4 text-sm text-muted-foreground">Bonus credits + priority onboarding</p>
+              <p className="mt-4 text-sm text-muted-foreground">Early access + priority onboarding</p>
             </div>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">

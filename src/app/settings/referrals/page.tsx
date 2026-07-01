@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Copy, UserPlus, Gift, Users, CheckCircle } from "lucide-react";
+import { Copy, UserPlus, Clock, Users, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
@@ -57,7 +57,7 @@ const ReferralRow = ({ referral }: { referral: ReferralTransaction }) => {
 
   return (
     <div className="px-4 py-3 hover:bg-muted/50">
-      <div className="grid grid-cols-4 gap-4 items-center text-sm">
+      <div className="grid grid-cols-3 gap-4 items-center text-sm">
         <div className="font-medium truncate">{referral.referee_email || 'N/A'}</div>
         <div className="flex items-center gap-2">
           {(referral.status || 'pending') === 'completed' ? (
@@ -71,9 +71,6 @@ const ReferralRow = ({ referral }: { referral: ReferralTransaction }) => {
               <span className="text-muted-foreground">Pending</span>
             </>
           )}
-        </div>
-        <div className="font-medium text-green-600">
-          +${(referral.reward_amount || 0).toFixed(2)}
         </div>
         <div className="text-right text-muted-foreground">
           {formatDate(referral.completed_at || referral.created_at)}
@@ -267,10 +264,10 @@ function ReferralsPageContent() {
           description="Referrals that made a purchase"
         />
         <StatCard
-          title="Total Earned"
-          value={loading ? "..." : `$${(stats.totalEarned || 0).toFixed(2)}`}
-          icon={Gift}
-          description="Credits earned from referrals"
+          title="Pending"
+          value={loading ? "..." : Math.max(stats.totalReferrals - stats.completedReferrals, 0)}
+          icon={Clock}
+          description="Referrals awaiting first purchase"
         />
       </div>
 
@@ -325,9 +322,9 @@ function ReferralsPageContent() {
             <h4 className="font-semibold text-sm">How it works</h4>
             <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
               <li>Share your referral code or link with friends</li>
-              <li>They sign up and make their first purchase</li>
-              <li>You both receive bonus credits</li>
-              <li>Track your referrals and earnings here</li>
+              <li>They sign up using your link</li>
+              <li>We track everyone you've referred</li>
+              <li>See all your referrals in the list below</li>
             </ul>
           </div>
         </CardContent>
@@ -338,10 +335,9 @@ function ReferralsPageContent() {
         <h2 className="text-xl font-semibold">Your Referrals</h2>
         <div className="border border-border overflow-hidden border-x-0">
           <div className="bg-muted/50 px-4 py-3 border-b border-border">
-            <div className="grid grid-cols-4 gap-4 text-sm font-medium">
+            <div className="grid grid-cols-3 gap-4 text-sm font-medium">
               <div>Email</div>
               <div>Status</div>
-              <div>Reward</div>
               <div className="text-right">Date</div>
             </div>
           </div>

@@ -85,7 +85,7 @@ export function PricingSection() {
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900">Simple, Transparent Pricing</h2>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Gatewayz is a universal inference engine providing access to 10,000+ models. One API at the lowest cost. Try now with free credits today.
+            Gatewayz is a universal inference engine providing access to 10,000+ models. One API at the lowest cost. Get started in minutes.
           </p>
         </div>
 

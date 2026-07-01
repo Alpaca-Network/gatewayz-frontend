@@ -126,12 +126,12 @@ export default function WaitlistForm({ compact = false }: WaitlistFormProps) {
 
           {compact ? (
             <Button type="submit" variant="default" size="lg" disabled={isSubmitting} className="w-full text-base font-semibold">
-              {submitted ? "Joined!" : "Get Free Credits"}
+              {submitted ? "Joined!" : "Join the Beta"}
             </Button>
           ) : (
             <div className="flex flex-col sm:flex-row gap-3">
               <Button type="submit" variant="default" disabled={isSubmitting} className="w-full">
-                {submitted ? "Joined!" : "Launch Today With Free Credits"}
+                {submitted ? "Joined!" : "Launch Today With Early Access"}
               </Button>
               <Button type="button" variant="outline" asChild className="w-full sm:w-auto whitespace-nowrap">
                 <a href="https://beta.gatewayz.ai" target="_blank" rel="noopener noreferrer">

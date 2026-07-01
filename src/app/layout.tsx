@@ -18,7 +18,6 @@ import { PreviewHostnameRestorer } from '@/components/auth/preview-hostname-rest
 import { GTMLoader } from '@/components/analytics/gtm-loader';
 import { ErrorSuppressor } from '@/components/error-suppressor';
 import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
-import { ReferralBonusDialog } from '@/components/dialogs/referral-bonus-dialog';
 import { SafeStorageShim } from '@/components/safe-storage-shim';
 import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
@@ -100,7 +99,6 @@ export default function RootLayout({
                 <Toaster />
                 <AppFooter />
                 <WelcomeDialog />
-                <ReferralBonusDialog />
                 <ReferralToast />
                 <FloatingNewChatButton />
                 <Analytics />

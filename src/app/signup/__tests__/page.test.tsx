@@ -353,7 +353,6 @@ describe('SignupPage', () => {
       render(<SignupPage />);
 
       expect(screen.getByText(/You've been invited!/)).toBeInTheDocument();
-      expect(screen.getByText(/bonus credits/)).toBeInTheDocument();
     });
 
     it('should store referral code BEFORE redirecting already-authenticated users (race condition fix)', async () => {
@@ -436,7 +435,6 @@ describe('SignupPage', () => {
       expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
       expect(screen.getByText("What you'll get:")).toBeInTheDocument();
       expect(screen.getByText('Access to 10,000+ AI models')).toBeInTheDocument();
-      expect(screen.getByText('$3 in free trial credits')).toBeInTheDocument();
     });
   });
 
@@ -457,22 +455,7 @@ describe('SignupPage', () => {
       render(<SignupPage />);
 
       expect(screen.getByText('Access to 10,000+ AI models')).toBeInTheDocument();
-      expect(screen.getByText('$3 in free trial credits')).toBeInTheDocument();
       expect(screen.getByText('Advanced AI routing & analytics')).toBeInTheDocument();
-    });
-
-    it('should show bonus credits item when referral code is present', () => {
-      mockSearchParams.set('ref', 'BONUS123');
-
-      render(<SignupPage />);
-
-      expect(screen.getByText('Bonus credits from referral')).toBeInTheDocument();
-    });
-
-    it('should not show bonus credits item when no referral code', () => {
-      render(<SignupPage />);
-
-      expect(screen.queryByText('Bonus credits from referral')).not.toBeInTheDocument();
     });
   });
 

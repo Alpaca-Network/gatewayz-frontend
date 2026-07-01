@@ -33,7 +33,7 @@ export default function FAQ() {
     },
     {
       question: "How much does Gatewayz cost?",
-      answer: "Gatewayz is currently in closed beta with free access and bonus credits for early users. We offer transparent, pay-as-you-go pricing with unified billing across all models. No hidden fees or subscription requirements during beta."
+      answer: "Gatewayz uses transparent, pay-as-you-go pricing with unified billing across all models — you only pay for the inference you use. As a bonus, you get $5 extra on your first top-up of $5 or more. No hidden fees and no subscription requirements."
     },
     {
       question: "Is Gatewayz compatible with OpenAI SDK?",
@@ -45,7 +45,7 @@ export default function FAQ() {
     },
     {
       question: "How do I get started with Gatewayz?",
-      answer: "Join our closed beta by signing up on our website. You'll receive free credits and immediate API access. Integration takes less than 5 minutes with our OpenAI-compatible API and comprehensive documentation."
+      answer: "Join our closed beta by signing up on our website. You'll get immediate API access, and your first top-up of $5 or more earns you $5 in bonus credits. Integration takes less than 5 minutes with our OpenAI-compatible API and comprehensive documentation."
     },
     {
       question: "Is Gatewayz suitable for production use?",

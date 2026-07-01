@@ -107,7 +107,7 @@ export function GetCreditsButton() {
       <div className="relative bg-black hover:bg-gray-900 text-white h-10 px-3 sm:px-6 rounded-lg font-semibold transition-all duration-200 active:translate-y-[2px] active:shadow-none shadow-[0_2px_0_0_rgba(59,130,246,0.5),0_4px_12px_rgba(59,130,246,0.4)] flex items-center justify-center">
         <span className="relative z-10 flex items-center justify-center gap-2">
           <span className="text-white font-semibold tracking-tight sm:tracking-wide uppercase text-xs sm:text-sm whitespace-nowrap">
-            Get Free Credits
+            Get Credits
           </span>
         </span>
       </div>
