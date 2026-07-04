@@ -29,10 +29,13 @@ export async function POST(request: NextRequest) {
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout for backend auth
 
     try {
-      // Wrap fetch in retry logic for 429/502/503/504 errors
-      // - 429: Rate limiting from backend
-      // - 502/503/504: Transient server errors
-      // Increased retry delay to give backend time to recover under load
+      // Wrap fetch in retry logic for transient server errors only (502/503/504).
+      // IMPORTANT: 429 (rate limit) is deliberately NOT retried here. Login is
+      // rate-limited per-identifier on the backend, so retrying a 429 spends
+      // additional attempts against the same limit — turning a short cooldown
+      // into a long lockout and making each request hang for the full backoff.
+      // Instead we let the 429 (with its retry_after) pass straight through to
+      // the client, which surfaces a "please wait" message without re-hammering.
       const response = await retryFetch(
         () =>
           proxyFetch(`${API_BASE_URL}/auth`, {
@@ -48,7 +51,7 @@ export async function POST(request: NextRequest) {
           initialDelayMs: 1000, // Increased from 500ms to give backend more recovery time
           maxDelayMs: 10000, // Increased from 5s to 10s
           backoffMultiplier: 2,
-          retryableStatuses: [429, 502, 503, 504],
+          retryableStatuses: [502, 503, 504],
         }
       );
 

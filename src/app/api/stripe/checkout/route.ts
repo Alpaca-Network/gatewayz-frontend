@@ -39,9 +39,16 @@ export async function POST(req: NextRequest) {
     // Backend will create payment record and properly format metadata
     const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://api.gatewayz.ai';
 
-    // Get the frontend URL - force beta.gatewayz.ai for Stripe redirects
-    // The VERCEL_URL changes with each deployment, so we use a fixed URL
-    const frontendUrl = 'https://beta.gatewayz.ai';
+    // Get the frontend URL for Stripe success/cancel redirects.
+    // Use the origin the request actually came from so local dev stays on
+    // localhost (same backend/DB) instead of bouncing to the deployed site
+    // (which reads a different DB and uses live-mode Stripe). Falls back to a
+    // configured site URL, then the request URL's origin, then beta.
+    const frontendUrl =
+      req.headers.get('origin') ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      req.nextUrl.origin ||
+      'https://beta.gatewayz.ai';
 
     // Description shows the credit value they receive (may differ from payment amount for discounted packages)
     const description = creditsToAdd !== amount

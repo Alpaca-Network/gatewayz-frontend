@@ -351,7 +351,36 @@ describe('POST /api/stripe/checkout', () => {
       )
     })
 
-    it('should use beta.gatewayz.ai for Stripe redirect URLs', async () => {
+    it('should use the request origin for Stripe redirect URLs', async () => {
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          session_id: 'cs_test_123',
+          url: 'https://checkout.stripe.com/pay/cs_test_123',
+        }),
+      })
+
+      // Simulate a request coming from the deployed site via the Origin header.
+      const request = new NextRequest('http://localhost:3000/api/stripe/checkout', {
+        method: 'POST',
+        headers: { origin: 'https://beta.gatewayz.ai' },
+        body: JSON.stringify(validRequestBody),
+      })
+
+      await POST(request)
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
+      const requestBody = JSON.parse(fetchCall[1].body)
+
+      // Redirects must go back to the origin the user is actually on, so local
+      // dev stays on localhost and the deployed site stays on beta.
+      expect(requestBody.success_url).toContain('https://beta.gatewayz.ai')
+      expect(requestBody.cancel_url).toContain('https://beta.gatewayz.ai')
+      expect(requestBody.success_url).toContain('session_id={{CHECKOUT_SESSION_ID}}')
+    })
+
+    it('should keep local dev on localhost when no Origin header is present', async () => {
       ;(global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -371,9 +400,8 @@ describe('POST /api/stripe/checkout', () => {
       const fetchCall = (global.fetch as jest.Mock).mock.calls[0]
       const requestBody = JSON.parse(fetchCall[1].body)
 
-      expect(requestBody.success_url).toContain('https://beta.gatewayz.ai')
-      expect(requestBody.cancel_url).toContain('https://beta.gatewayz.ai')
-      expect(requestBody.success_url).toContain('session_id={{CHECKOUT_SESSION_ID}}')
+      expect(requestBody.success_url).toContain('http://localhost:3000')
+      expect(requestBody.cancel_url).toContain('http://localhost:3000')
     })
   })
 

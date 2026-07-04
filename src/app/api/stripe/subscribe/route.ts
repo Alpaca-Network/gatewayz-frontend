@@ -43,8 +43,15 @@ export async function POST(req: NextRequest) {
     // Call backend to create subscription checkout session
     const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://api.gatewayz.ai';
 
-    // Get the frontend URL - force beta.gatewayz.ai for Stripe redirects
-    const frontendUrl = 'https://beta.gatewayz.ai';
+    // Get the frontend URL for Stripe success/cancel redirects. Use the origin
+    // the request came from so local dev stays on localhost (same backend/DB)
+    // instead of bouncing to the deployed site. Falls back to a configured site
+    // URL, then the request URL's origin, then beta.
+    const frontendUrl =
+      req.headers.get('origin') ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      req.nextUrl.origin ||
+      'https://beta.gatewayz.ai';
 
     // Validate and clamp quantity
     const validQuantity = Math.max(1, Math.min(100, typeof quantity === 'number' ? quantity : 1));
