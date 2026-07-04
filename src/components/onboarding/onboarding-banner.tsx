@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { safeSessionStorage } from '@/lib/safe-session-storage';
 import { useAuth } from '@/hooks/use-auth';
+import { getUserData, USER_DATA_UPDATED_EVENT } from '@/lib/api';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 
 interface OnboardingTask {
@@ -21,7 +22,20 @@ export function OnboardingBanner() {
   const [nextTask, setNextTask] = useState<OnboardingTask | null>(null);
   const [visible, setVisible] = useState(false);
   const pathname = usePathname();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+
+  // The user has completed the "first top-up" step once they have any purchased
+  // credits. purchased_credits only increases from real top-ups/purchases (free
+  // trial credits land in the allowance instead), so this reliably reflects that
+  // the first-top-up offer has already been used — without depending on a
+  // localStorage flag that nothing sets after checkout.
+  //
+  // Read BOTH the auth-context user (React state) and the freshly-persisted
+  // localStorage profile: the credits page refreshes the profile and writes it
+  // to storage, which can be newer than the in-memory auth state.
+  const hasToppedUp =
+    Number((user as { purchased_credits?: number } | null)?.purchased_credits ?? 0) > 0 ||
+    Number(getUserData()?.purchased_credits ?? 0) > 0;
 
   // Function to load and check tasks
   const loadTasks = useCallback(() => {
@@ -55,6 +69,14 @@ export function OnboardingBanner() {
     const savedTasks = safeLocalStorageGet('gatewayz_onboarding_tasks');
     const taskState = savedTasks ? JSON.parse(savedTasks) : {};
 
+    // Once the user has actually topped up, durably persist the credits step as
+    // complete in the SHARED task storage so every onboarding surface (this
+    // banner AND the /onboarding page) stops advertising the first-top-up offer.
+    if (hasToppedUp && !taskState.credits) {
+      taskState.credits = true;
+      safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(taskState));
+    }
+
     const taskList: OnboardingTask[] = [
       {
         id: 'welcome',
@@ -84,7 +106,7 @@ export function OnboardingBanner() {
         id: 'credits',
         title: 'Add $5 or more and get a one-time $5 bonus on your first top up!',
         path: '/settings/credits',
-        completed: taskState.credits || false,
+        completed: taskState.credits || hasToppedUp,
       },
     ];
 
@@ -97,7 +119,7 @@ export function OnboardingBanner() {
     // Show banner if there are incomplete tasks
     const shouldShow = !!incomplete;
     setVisible(shouldShow);
-  }, [pathname, isAuthenticated]);
+  }, [pathname, isAuthenticated, hasToppedUp]);
 
   useEffect(() => {
     loadTasks();
@@ -157,7 +179,11 @@ export function OnboardingBanner() {
   // Listen for localStorage changes (from other components marking tasks complete)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'gatewayz_onboarding_tasks' || e.key === 'gatewayz_onboarding_completed') {
+      if (
+        e.key === 'gatewayz_onboarding_tasks' ||
+        e.key === 'gatewayz_onboarding_completed' ||
+        e.key === 'gatewayz_user_data'
+      ) {
         loadTasks();
       }
     };
@@ -169,10 +195,14 @@ export function OnboardingBanner() {
 
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('onboarding-task-updated', handleCustomEvent);
+    // Re-check when the cached profile is updated in this tab (e.g. after a
+    // top-up refreshes credits), since the `storage` event won't fire same-tab.
+    window.addEventListener(USER_DATA_UPDATED_EVENT, handleCustomEvent);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('onboarding-task-updated', handleCustomEvent);
+      window.removeEventListener(USER_DATA_UPDATED_EVENT, handleCustomEvent);
     };
   }, [loadTasks]);
 

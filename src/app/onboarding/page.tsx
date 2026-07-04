@@ -153,6 +153,20 @@ export default function OnboardingPage() {
       })));
     }
 
+    // If the user has already topped up (has purchased credits), mark the
+    // credits step complete so the first-top-up offer doesn't reappear here.
+    const profileForCredits = getUserData();
+    if (Number((profileForCredits as { purchased_credits?: number } | null)?.purchased_credits ?? 0) > 0) {
+      setTasks(prev => prev.map(task =>
+        task.id === 'credits' ? { ...task, completed: true } : task
+      ));
+      const base = savedTasks ? JSON.parse(savedTasks) : {};
+      if (!base.credits) {
+        base.credits = true;
+        safeLocalStorageSet('gatewayz_onboarding_tasks', JSON.stringify(base));
+      }
+    }
+
     // Auto-mark first task as complete
     const userData = getUserData();
     if (userData && savedTasks) {
@@ -364,6 +378,7 @@ console.log(response.choices[0].message.content);`
                   <ArrowRight className="h-3 w-3 flex-shrink-0" />
                 </Link>
               </div>
+              {!tasks.find((task) => task.id === 'credits')?.completed && (
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:border-l sm:border-white/30 sm:pl-3 lg:ml-4 lg:pl-4">
                 <div className="flex items-center gap-2 flex-1 sm:flex-initial">
                   <CreditCard className="h-4 w-4 flex-shrink-0" />
@@ -379,6 +394,7 @@ console.log(response.choices[0].message.content);`
                   </Button>
                 </Link>
               </div>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -409,7 +425,8 @@ console.log(response.choices[0].message.content);`
             </div>
           </div>
 
-          {/* Promotional Banner */}
+          {/* Promotional Banner - hidden once the user has topped up (credits task complete) */}
+          {!tasks.find((task) => task.id === 'credits')?.completed && (
           <div className="max-w-2xl mx-auto mb-6">
             <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 border-2 border-green-200 dark:border-green-800 rounded-lg p-4">
               <div className="flex items-start gap-3">
@@ -434,6 +451,7 @@ console.log(response.choices[0].message.content);`
               </div>
             </div>
           </div>
+          )}
 
           {/* Copy API Key Button */}
           {apiKey && (

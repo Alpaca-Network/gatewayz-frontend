@@ -2,6 +2,9 @@
 
 const API_KEY_STORAGE_KEY = 'gatewayz_api_key';
 const USER_DATA_STORAGE_KEY = 'gatewayz_user_data';
+// Dispatched on `window` whenever the cached user profile is written, so
+// same-tab listeners can react (the native `storage` event is cross-tab only).
+export const USER_DATA_UPDATED_EVENT = 'gatewayz-user-updated';
 
 let hasLoggedStorageAccessError = false;
 
@@ -204,6 +207,13 @@ export const saveUserData = (userData: UserData): void => {
 
   try {
     storage.setItem(USER_DATA_STORAGE_KEY, JSON.stringify(userData));
+    // Notify same-tab listeners that the cached profile changed. The native
+    // `storage` event only fires in OTHER tabs, so components that key off the
+    // user's credits/tier (e.g. the onboarding banner) would otherwise never
+    // refresh after an in-tab profile update following a top-up.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event(USER_DATA_UPDATED_EVENT));
+    }
   } catch (error) {
     logStorageAccessIssue(error);
   }
