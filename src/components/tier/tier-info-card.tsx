@@ -29,6 +29,7 @@ export function TierInfoCard() {
   }
 
   const tierColors = {
+    free: 'bg-slate-100 text-slate-900',
     basic: 'bg-slate-100 text-slate-900',
     pro: 'bg-blue-100 text-blue-900',
     max: 'bg-purple-100 text-purple-900',

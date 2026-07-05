@@ -26,9 +26,9 @@ export async function POST(request: NextRequest) {
         return new Response(
           JSON.stringify({
             error: 'Rate limit exceeded',
-            message: `Guest rate limit reached. Resets ${formatResetTime(rateLimitResult.resetTime)}.`,
+            message: `Guest rate limit reached. Resets ${formatResetTime(rateLimitResult.resetInMs)}.`,
             remaining: rateLimitResult.remaining,
-            resetTime: rateLimitResult.resetTime,
+            resetTime: rateLimitResult.resetInMs,
           }),
           { status: 429, headers: { 'Content-Type': 'application/json' } }
         );

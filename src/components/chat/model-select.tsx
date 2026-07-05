@@ -870,7 +870,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
             <span className="mr-1 shrink-0">Sort:</span>
             {(
               [
-                { mode: 'gateway' as const, label: 'Gateway' },
+                { mode: 'gateway' as const, label: 'Gateway', icon: null },
                 { mode: 'az' as const, label: 'A–Z', icon: <ArrowDownAZ className="h-3 w-3" /> },
                 { mode: 'free-first' as const, label: 'Free', icon: <Sparkles className="h-3 w-3" /> },
                 { mode: 'speed' as const, label: 'Speed', icon: <Zap className="h-3 w-3" /> },
