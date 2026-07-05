@@ -16,6 +16,41 @@ export const API_BASE_URL = ensureProtocol(process.env.NEXT_PUBLIC_API_BASE_URL,
 export const CHAT_HISTORY_API_URL = ensureProtocol(process.env.NEXT_PUBLIC_CHAT_HISTORY_API_URL, API_BASE_URL);
 export const BACKEND_URL = ensureProtocol(process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL, API_BASE_URL);
 
+// Feature flag mirroring the backend BYOK_ENABLED switch. Controls visibility of
+// the Bring-Your-Own-Key manager. Defaults to true so the (now functional)
+// integrations page stays visible; set NEXT_PUBLIC_BYOK_ENABLED=false to hide it.
+// Note: the backend only USES stored keys for routing when its own BYOK_ENABLED
+// is on — but users can still register keys ahead of that.
+export const BYOK_ENABLED =
+  (process.env.NEXT_PUBLIC_BYOK_ENABLED ?? 'true').toLowerCase() !== 'false';
+
+// Mirrors the backend CREDIT_TOPUP_FEE_RATE. When > 0, a fraction of each credit
+// top-up is withheld as a fee, so the user receives FEWER credits than dollars
+// paid. Default 0 → 1:1 (no visible change). Clamped to [0, 0.5] to match the
+// backend. Keep this in sync with the backend env var so displayed "you'll
+// receive" amounts match what's actually granted.
+export const CREDIT_TOPUP_FEE_RATE = (() => {
+  const raw = Number(process.env.NEXT_PUBLIC_CREDIT_TOPUP_FEE_RATE ?? '0');
+  if (!Number.isFinite(raw)) return 0;
+  return Math.max(0, Math.min(0.5, raw));
+})();
+
+/**
+ * Split a top-up dollar amount into the withheld fee and the credits actually
+ * granted, mirroring the backend `_apply_topup_fee` math (round to 6 dp). With
+ * the default rate of 0, `credits === amountDollars`.
+ */
+export function applyTopupFee(amountDollars: number): {
+  feeRate: number;
+  fee: number;
+  credits: number;
+} {
+  const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
+  const safeAmount = Number.isFinite(amountDollars) && amountDollars > 0 ? amountDollars : 0;
+  const fee = round6(safeAmount * CREDIT_TOPUP_FEE_RATE);
+  return { feeRate: CREDIT_TOPUP_FEE_RATE, fee, credits: round6(safeAmount - fee) };
+}
+
 /**
  * Check if running in Tauri desktop environment
  * This is used to determine whether to use direct backend URLs or Next.js API routes
