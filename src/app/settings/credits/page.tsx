@@ -25,7 +25,7 @@ import Link from "next/link";
 import { redirectToCheckout } from '@/lib/stripe';
 import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData } from '@/lib/api';
 import { formatCredits, formatCreditsDollar } from '@/lib/format-credits';
-import { API_BASE_URL } from '@/lib/config';
+import { API_BASE_URL, CREDIT_TOPUP_FEE_RATE, applyTopupFee } from '@/lib/config';
 import { TierInfoCard } from '@/components/tier/tier-info-card';
 import { PricingSection } from '@/components/pricing/pricing-section';
 
@@ -633,6 +633,19 @@ function CreditsPageContent() {
               />
             </div>
             <p className="text-xs text-muted-foreground">Minimum $5.00</p>
+            {/* Top-up fee breakdown — only shown when a fee is configured (default 0). */}
+            {(() => {
+              if (CREDIT_TOPUP_FEE_RATE <= 0) return null;
+              const amount = parseFloat(customAmount);
+              if (!Number.isFinite(amount) || amount <= 0) return null;
+              const { fee, credits: granted } = applyTopupFee(amount);
+              return (
+                <p className="text-xs text-muted-foreground">
+                  Fee ({(CREDIT_TOPUP_FEE_RATE * 100).toFixed(1)}%): ${fee.toFixed(2)} · You&apos;ll
+                  receive <span className="font-medium text-foreground">${granted.toFixed(2)}</span> in credits
+                </p>
+              );
+            })()}
           </div>
           <Button
             className="bg-black text-white h-12 px-6 sm:px-12 w-full sm:w-auto"
