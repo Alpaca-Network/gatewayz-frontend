@@ -16,6 +16,14 @@ export const API_BASE_URL = ensureProtocol(process.env.NEXT_PUBLIC_API_BASE_URL,
 export const CHAT_HISTORY_API_URL = ensureProtocol(process.env.NEXT_PUBLIC_CHAT_HISTORY_API_URL, API_BASE_URL);
 export const BACKEND_URL = ensureProtocol(process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL, API_BASE_URL);
 
+// Feature flag mirroring the backend BYOK_ENABLED switch. Controls visibility of
+// the Bring-Your-Own-Key manager. Defaults to true so the (now functional)
+// integrations page stays visible; set NEXT_PUBLIC_BYOK_ENABLED=false to hide it.
+// Note: the backend only USES stored keys for routing when its own BYOK_ENABLED
+// is on — but users can still register keys ahead of that.
+export const BYOK_ENABLED =
+  (process.env.NEXT_PUBLIC_BYOK_ENABLED ?? 'true').toLowerCase() !== 'false';
+
 /**
  * Check if running in Tauri desktop environment
  * This is used to determine whether to use direct backend URLs or Next.js API routes
