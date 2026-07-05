@@ -30,7 +30,8 @@ export function ModelTierBadge({ requiredTier, showLocked = true }: ModelTierBad
     return null;
   }
 
-  const tierColors = {
+  const tierColors: Record<UserTier, string> = {
+    free: 'bg-slate-100 text-slate-700 border-slate-200',
     basic: 'bg-slate-100 text-slate-700 border-slate-200',
     pro: 'bg-blue-100 text-blue-700 border-blue-200',
     max: 'bg-purple-100 text-purple-700 border-purple-200',

@@ -60,7 +60,6 @@ async function getAllModels(): Promise<UniqueModel[]> {
     Sentry.captureException(error, {
       tags: { component: 'models-page', fallback: 'static' },
       extra: {
-        USE_UNIQUE_MODELS_ENDPOINT,
         NEXT_STATIC_EXPORT: process.env.NEXT_STATIC_EXPORT,
         CI: process.env.CI,
         VERCEL: process.env.VERCEL,
