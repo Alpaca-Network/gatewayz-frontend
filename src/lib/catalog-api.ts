@@ -184,7 +184,7 @@ export class ModelsAPI {
     if (params?.offset) queryParams.append('offset', params.offset.toString());
     if (params?.is_active_only) queryParams.append('is_active_only', 'true');
 
-    const endpoint = `${API_BASE_URL}/models${queryParams.toString() ? `?${queryParams}` : ''}`;
+    const endpoint = `${API_BASE_URL}/catalog/models-db${queryParams.toString() ? `?${queryParams}` : ''}`;
     const response = await makeAuthenticatedRequest(endpoint);
 
     if (!response.ok) {
@@ -195,7 +195,7 @@ export class ModelsAPI {
   }
 
   static async getModelById(modelId: number): Promise<ModelWithProvider> {
-    const response = await makeAuthenticatedRequest(`${API_BASE_URL}/models/${modelId}`);
+    const response = await makeAuthenticatedRequest(`${API_BASE_URL}/catalog/models-db/${modelId}`);
 
     if (!response.ok) {
       throw await parseErrorResponse(response, 'Loading model');
@@ -205,7 +205,7 @@ export class ModelsAPI {
   }
 
   static async getModelsByProvider(providerSlug: string, isActiveOnly: boolean = true): Promise<ModelWithProvider[]> {
-    const endpoint = `${API_BASE_URL}/models/provider/${providerSlug}${isActiveOnly ? '?is_active_only=true' : ''}`;
+    const endpoint = `${API_BASE_URL}/catalog/models-db/provider/${providerSlug}${isActiveOnly ? '?is_active_only=true' : ''}`;
     const response = await makeAuthenticatedRequest(endpoint);
 
     if (!response.ok) {
@@ -217,8 +217,8 @@ export class ModelsAPI {
 
   static async getModelStats(providerId?: number): Promise<ModelStats> {
     const endpoint = providerId
-      ? `${API_BASE_URL}/models/stats?provider_id=${providerId}`
-      : `${API_BASE_URL}/models/stats`;
+      ? `${API_BASE_URL}/catalog/models-db/stats?provider_id=${providerId}`
+      : `${API_BASE_URL}/catalog/models-db/stats`;
     const response = await makeAuthenticatedRequest(endpoint);
 
     if (!response.ok) {
@@ -230,8 +230,8 @@ export class ModelsAPI {
 
   static async searchModels(query: string, providerId?: number): Promise<ModelWithProvider[]> {
     const endpoint = providerId
-      ? `${API_BASE_URL}/models/search?q=${encodeURIComponent(query)}&provider_id=${providerId}`
-      : `${API_BASE_URL}/models/search?q=${encodeURIComponent(query)}`;
+      ? `${API_BASE_URL}/catalog/models-db/search?q=${encodeURIComponent(query)}&provider_id=${providerId}`
+      : `${API_BASE_URL}/catalog/models-db/search?q=${encodeURIComponent(query)}`;
 
     const response = await makeAuthenticatedRequest(endpoint);
 
@@ -244,7 +244,7 @@ export class ModelsAPI {
 
   static async getModelHealthHistory(modelId: number, limit: number = 100): Promise<ModelHealthHistory[]> {
     const response = await makeAuthenticatedRequest(
-      `${API_BASE_URL}/models/${modelId}/health/history?limit=${limit}`
+      `${API_BASE_URL}/catalog/models-db/${modelId}/health/history?limit=${limit}`
     );
 
     if (!response.ok) {
