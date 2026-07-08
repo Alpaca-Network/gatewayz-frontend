@@ -26,6 +26,7 @@ import {
 } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { usePrivy, type User } from "@privy-io/react-auth";
+import { getUserMessage } from "@/lib/errors";
 
 // Import from new auth module
 import {
@@ -309,7 +310,7 @@ export function GatewayzAuthProvider({
       } catch (err) {
         const error = {
           code: "UNKNOWN" as const,
-          message: err instanceof Error ? err.message : "Unknown error",
+          message: getUserMessage(err),
           timestamp: Date.now(),
         };
         machine.send({ type: "SYNC_ERROR", error });

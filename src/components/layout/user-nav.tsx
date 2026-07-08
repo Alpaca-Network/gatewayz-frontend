@@ -15,6 +15,7 @@ import Link from "next/link";
 import { Copy } from "lucide-react";
 import { useTier } from "@/hooks/use-tier";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
+import { getUserMessage } from "@/lib/errors";
 
 interface UserNavProps {
   user: any; // Privy user object
@@ -32,7 +33,7 @@ export function UserNav({ user }: UserNavProps) {
     } catch (error) {
       toast({
         title: "Error signing out",
-        description: (error as Error).message,
+        description: getUserMessage(error),
         variant: "destructive",
       });
     }

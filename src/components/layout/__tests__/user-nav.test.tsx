@@ -100,6 +100,8 @@ describe('UserNav', () => {
 
     it('should show error toast when sign out fails', async () => {
       const user = userEvent.setup();
+      // Raw error message must never reach the user - the toast should show
+      // the safe, classified message from getUserMessage() instead.
       const errorMessage = 'Logout failed';
       mockLogout.mockRejectedValue(new Error(errorMessage));
 
@@ -116,10 +118,15 @@ describe('UserNav', () => {
       await waitFor(() => {
         expect(mockToast).toHaveBeenCalledWith({
           title: 'Error signing out',
-          description: errorMessage,
+          description: 'An unexpected error occurred.',
           variant: 'destructive',
         });
       });
+
+      // Ensure the raw error text was not leaked to the user
+      expect(mockToast).not.toHaveBeenCalledWith(
+        expect.objectContaining({ description: errorMessage })
+      );
     });
   });
 
