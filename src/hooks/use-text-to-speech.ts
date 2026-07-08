@@ -16,6 +16,7 @@ import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { API_BASE_URL } from "@/lib/config";
+import { getUserMessage } from "@/lib/errors";
 
 export interface TTSOptions {
   /** TTS model to use */
@@ -136,8 +137,7 @@ export function useTextToSpeech(): UseTextToSpeechReturn {
         setLastResult(result);
         return result;
       } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to generate speech";
+        const errorMessage = getUserMessage(err);
         setError(errorMessage);
         toast({
           title: "TTS Error",

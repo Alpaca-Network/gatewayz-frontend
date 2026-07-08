@@ -16,6 +16,7 @@ import {
   ProviderListResponse,
 } from "@/types/model-health";
 import { monitoringService } from "@/lib/monitoring-service";
+import { getUserMessage } from "@/lib/errors";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://api.gatewayz.ai";
 
@@ -42,7 +43,7 @@ export function useModelHealth(provider: string, model: string, apiKey?: string)
       setHealth(data);
     } catch (err) {
       console.error("Failed to fetch model health:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(getUserMessage(err));
       setHealth(null);
     } finally {
       setLoading(false);
@@ -75,7 +76,7 @@ export function useModelHealthStats(apiKey?: string) {
       setStats(data);
     } catch (err) {
       console.error("Failed to fetch model health stats:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(getUserMessage(err));
       setStats(null);
     } finally {
       setLoading(false);
@@ -110,7 +111,7 @@ export function useModelHealthList(limit: number = 50, offset: number = 0, apiKe
       setData(result);
     } catch (err) {
       console.error("Failed to fetch model health list:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(getUserMessage(err));
       setData(null);
     } finally {
       setLoading(false);
@@ -144,7 +145,7 @@ export function useUnhealthyModels(errorThreshold: number = 0.2, apiKey?: string
       setData(result);
     } catch (err) {
       console.error("Failed to fetch unhealthy models:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(getUserMessage(err));
       setData(null);
     } finally {
       setLoading(false);
@@ -180,7 +181,7 @@ export function useProviderSummary(provider: string, apiKey?: string) {
       setSummary(data);
     } catch (err) {
       console.error("Failed to fetch provider summary:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(getUserMessage(err));
       setSummary(null);
     } finally {
       setLoading(false);
@@ -213,7 +214,7 @@ export function useProviderList(apiKey?: string) {
       setProviders(data.providers);
     } catch (err) {
       console.error("Failed to fetch provider list:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
+      setError(getUserMessage(err));
       setProviders([]);
     } finally {
       setLoading(false);

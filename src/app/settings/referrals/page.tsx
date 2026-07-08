@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
 import { normalizeReferralData, calculateStats, ReferralTransaction } from '@/lib/referral-utils';
+import { getUserMessage } from '@/lib/errors';
 
 // Stats card component
 const StatCard = ({
@@ -193,7 +194,7 @@ function ReferralsPageContent() {
         console.error('Error fetching referral data:', error);
         toast({
           title: "Error loading referral data",
-          description: error instanceof Error ? error.message : "Please try again later",
+          description: getUserMessage(error),
           variant: "destructive"
         });
       } finally {

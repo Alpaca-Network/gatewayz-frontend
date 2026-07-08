@@ -170,10 +170,10 @@ describe('useTextToSpeech', () => {
       });
 
       expect(ttsResult).toBeNull();
-      expect(result.current.error).toBe('Invalid request');
+      expect(result.current.error).toBe('An unexpected error occurred.');
       expect(mockToast).toHaveBeenCalledWith({
         title: 'TTS Error',
-        description: 'Invalid request',
+        description: 'An unexpected error occurred.',
         variant: 'destructive',
       });
     });
@@ -195,7 +195,7 @@ describe('useTextToSpeech', () => {
       });
 
       expect(ttsResult).toBeNull();
-      expect(result.current.error).toBe('TTS generation failed');
+      expect(result.current.error).toBe('An unexpected error occurred.');
     });
 
     it('should handle network error', async () => {
@@ -209,7 +209,7 @@ describe('useTextToSpeech', () => {
       });
 
       expect(ttsResult).toBeNull();
-      expect(result.current.error).toBe('Network error');
+      expect(result.current.error).toBe('An unexpected error occurred.');
     });
 
     it('should set isGenerating during API call', async () => {
