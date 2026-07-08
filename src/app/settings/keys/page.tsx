@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect, useCallback } from "react";
 import { getApiKey, makeAuthenticatedRequest } from "@/lib/api";
+import { getUserMessage, parseErrorResponse } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePrivy } from "@privy-io/react-auth";
 
@@ -284,10 +285,10 @@ export default function ApiKeysPage() {
           variant: "default",
         });
       } else {
-        const errorData = await response.json().catch(() => ({}));
+        const appError = await parseErrorResponse(response, "Failed to fetch API keys");
         toast({
           title: "Error",
-          description: errorData.detail || "Failed to fetch API keys",
+          description: getUserMessage(appError),
           variant: "destructive",
         });
       }
@@ -404,10 +405,10 @@ export default function ApiKeysPage() {
         });
         setDialogOpen(false);
       } else {
-        const errorData = await response.json();
+        const appError = await parseErrorResponse(response, "Failed to create API key");
         toast({
           title: "Error",
-          description: errorData.detail || "Failed to create API key",
+          description: getUserMessage(appError),
           variant: "destructive",
         });
       }
@@ -440,10 +441,10 @@ export default function ApiKeysPage() {
         });
         await fetchApiKeys();
       } else {
-        const errorData = await response.json();
+        const appError = await parseErrorResponse(response, "Failed to delete API key");
         toast({
           title: "Error",
-          description: errorData.detail || "Failed to delete API key",
+          description: getUserMessage(appError),
           variant: "destructive",
         });
       }

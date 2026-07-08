@@ -5,6 +5,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData, AUTH_REFRESH_COMPLETE_EVENT, AUTH_REFRESH_EVENT } from '@/lib/api';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
+import { getUserMessage } from '@/lib/errors';
 
 // Helper to strip undefined values (copied from original context)
 const stripUndefined = <T>(value: T): T => {
@@ -187,7 +188,7 @@ export function useAuthSync() {
 
   useEffect(() => {
       if (error) {
-          setError(error instanceof Error ? error.message : "Authentication failed");
+          setError(getUserMessage(error));
           // If auth fails hard, we might want to clear local auth state, but 
           // usually we keep the cached state until explicit logout.
           // clearAuth(); 

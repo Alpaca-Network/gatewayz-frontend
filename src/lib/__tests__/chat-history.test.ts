@@ -725,34 +725,43 @@ describe('ChatHistoryAPI', () => {
 });
 
 describe('handleApiError', () => {
-  it('should handle 401 errors', () => {
+  // handleApiError delegates to the shared error classifier
+  // (getUserMessage(fromUnknown(error))). fromUnknown() deliberately NEVER
+  // echoes a plain Error's raw `.message` into the returned AppError (that's
+  // the exact leak this classifier exists to close) — unclassified errors
+  // fall back to the generic, safe UNKNOWN_ERROR copy. Only real HTTP
+  // Responses routed through parseErrorResponse() get fully classified,
+  // specific messaging (see src/lib/errors/index.ts).
+  const GENERIC_MESSAGE = 'An unexpected error occurred.';
+
+  it('never echoes a raw plain-Error message (401-flavored)', () => {
     const error = new Error('HTTP 401: Unauthorized');
     const result = handleApiError(error);
-    expect(result).toBe('Authentication failed. Please check your API key.');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 
-  it('should handle 404 errors', () => {
+  it('never echoes a raw plain-Error message (404-flavored)', () => {
     const error = new Error('HTTP 404: Not Found');
     const result = handleApiError(error);
-    expect(result).toBe('Session not found.');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 
-  it('should handle 500 errors', () => {
+  it('never echoes a raw plain-Error message (500-flavored)', () => {
     const error = new Error('HTTP 500: Internal Server Error');
     const result = handleApiError(error);
-    expect(result).toBe('Server error. Please try again later.');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 
-  it('should handle generic errors', () => {
+  it('falls back to the generic safe message for unclassified errors', () => {
     const error = new Error('Something went wrong');
     const result = handleApiError(error);
-    expect(result).toBe('Something went wrong');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 
-  it('should handle errors without message', () => {
+  it('falls back to the generic safe message for non-Error values', () => {
     const error = { message: '' };
     const result = handleApiError(error);
-    expect(result).toBe('An unexpected error occurred.');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 });
 

@@ -6,6 +6,7 @@ import { Check, Sparkles } from "lucide-react";
 import { useState, useMemo } from "react";
 import { getUserData } from "@/lib/api";
 import { useTier } from "@/hooks/use-tier";
+import { getUserMessage } from "@/lib/errors";
 
 interface PricingTier {
   id: 'starter' | 'pro' | 'max' | 'enterprise';
@@ -236,7 +237,7 @@ export function PricingSection() {
       window.location.href = `/checkout?tier=${tier.id}&mode=subscription`;
     } catch (error) {
       console.error('Subscription error:', error);
-      alert(error instanceof Error ? error.message : 'Failed to process request. Please try again.');
+      alert(getUserMessage(error));
     } finally {
       setIsLoading(null);
     }

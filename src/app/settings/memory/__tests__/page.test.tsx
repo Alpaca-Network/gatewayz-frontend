@@ -229,7 +229,7 @@ describe('MemoryPage', () => {
       render(<MemoryPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('API Error')).toBeInTheDocument();
+        expect(screen.getByText('An unexpected error occurred.')).toBeInTheDocument();
       });
     });
 

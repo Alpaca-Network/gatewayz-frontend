@@ -759,7 +759,7 @@ describe('ChatInput auth error handling', () => {
     });
   });
 
-  it('should show toast with error message when streamMessage throws an error', async () => {
+  it('should show a safe fallback toast (not the raw error message) when streamMessage throws an error', async () => {
     // Setup: Mock streamMessage to throw an error
     const errorMessage = 'Network connection failed';
     mockStreamMessage.mockRejectedValueOnce(new Error(errorMessage));
@@ -777,15 +777,19 @@ describe('ChatInput auth error handling', () => {
 
     await sendFn();
 
-    // Verify toast was called with the error message
+    // The raw error message must never be shown to the user — only the safe,
+    // classified fallback message (see src/lib/errors).
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: errorMessage,
+          title: 'An unexpected error occurred.',
           variant: 'destructive',
         })
       );
     });
+    expect(mockToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: errorMessage })
+    );
   });
 
   it('should show toast when createSession throws an error', async () => {
@@ -886,7 +890,7 @@ describe('ChatInput error message extraction', () => {
     delete (window as any).__chatInputSend;
   });
 
-  it('should extract error message from Error object', async () => {
+  it('should show the safe fallback message (never the raw Error text) for Error objects', async () => {
     const errorMessage = 'Specific error occurred';
     mockStreamMessage.mockRejectedValueOnce(new Error(errorMessage));
     mockCreateSession.mutateAsync.mockResolvedValue({ id: 1 });
@@ -902,13 +906,16 @@ describe('ChatInput error message extraction', () => {
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: errorMessage,
+          title: 'An unexpected error occurred.',
         })
       );
     });
+    expect(mockToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: errorMessage })
+    );
   });
 
-  it('should use fallback message for non-Error thrown values', async () => {
+  it('should use the same safe fallback message for non-Error thrown values', async () => {
     // Throw a string instead of Error object
     mockStreamMessage.mockRejectedValueOnce('String error');
     mockCreateSession.mutateAsync.mockResolvedValue({ id: 1 });
@@ -924,7 +931,7 @@ describe('ChatInput error message extraction', () => {
     await waitFor(() => {
       expect(mockToast).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Failed to send message',
+          title: 'An unexpected error occurred.',
         })
       );
     });

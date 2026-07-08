@@ -24,6 +24,7 @@ import {
   MEMORY_CATEGORY_LABELS,
   MEMORY_CATEGORY_COLORS,
 } from "@/lib/memory-api";
+import { getUserMessage } from "@/lib/errors";
 
 export default function MemoryPage() {
   const [memories, setMemories] = useState<UserMemory[]>([]);
@@ -62,7 +63,7 @@ export default function MemoryPage() {
         setStats(statsResponse.stats);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load memories");
+      setError(getUserMessage(err));
     } finally {
       setLoading(false);
     }
@@ -91,7 +92,7 @@ export default function MemoryPage() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete memory");
+      setError(getUserMessage(err));
     } finally {
       setDeletingId(null);
     }
@@ -114,7 +115,7 @@ export default function MemoryPage() {
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete memories");
+      setError(getUserMessage(err));
     } finally {
       setDeletingAll(false);
     }

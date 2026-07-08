@@ -1,6 +1,7 @@
 // API service for provider and models catalog management
 
 import { makeAuthenticatedRequest } from './api';
+import { parseErrorResponse } from './errors';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -114,7 +115,7 @@ export class ProviderAPI {
     const response = await makeAuthenticatedRequest(endpoint);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch providers: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Loading providers');
     }
 
     return response.json();
@@ -124,7 +125,7 @@ export class ProviderAPI {
     const response = await makeAuthenticatedRequest(`${API_BASE_URL}/providers/${providerId}`);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch provider: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Loading provider');
     }
 
     return response.json();
@@ -134,7 +135,7 @@ export class ProviderAPI {
     const response = await makeAuthenticatedRequest(`${API_BASE_URL}/providers/slug/${slug}`);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch provider: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Loading provider');
     }
 
     return response.json();
@@ -144,7 +145,7 @@ export class ProviderAPI {
     const response = await makeAuthenticatedRequest(`${API_BASE_URL}/providers/stats`);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch provider stats: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Loading provider stats');
     }
 
     return response.json();
@@ -156,7 +157,7 @@ export class ProviderAPI {
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to search providers: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Searching providers');
     }
 
     return response.json();
@@ -187,7 +188,7 @@ export class ModelsAPI {
     const response = await makeAuthenticatedRequest(endpoint);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch models: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Loading models');
     }
 
     return response.json();
@@ -197,7 +198,7 @@ export class ModelsAPI {
     const response = await makeAuthenticatedRequest(`${API_BASE_URL}/models/${modelId}`);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch model: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Loading model');
     }
 
     return response.json();
@@ -208,7 +209,7 @@ export class ModelsAPI {
     const response = await makeAuthenticatedRequest(endpoint);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch models by provider: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Loading models by provider');
     }
 
     return response.json();
@@ -221,7 +222,7 @@ export class ModelsAPI {
     const response = await makeAuthenticatedRequest(endpoint);
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch model stats: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Loading model stats');
     }
 
     return response.json();
@@ -235,7 +236,7 @@ export class ModelsAPI {
     const response = await makeAuthenticatedRequest(endpoint);
 
     if (!response.ok) {
-      throw new Error(`Failed to search models: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Searching models');
     }
 
     return response.json();
@@ -247,7 +248,7 @@ export class ModelsAPI {
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch model health history: ${response.statusText}`);
+      throw await parseErrorResponse(response, 'Loading model health history');
     }
 
     return response.json();

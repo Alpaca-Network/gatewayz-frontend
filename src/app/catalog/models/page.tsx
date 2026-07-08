@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { ModelsAPI, ProviderAPI, ModelWithProvider, ModelStats, Provider, HealthStatus } from '@/lib/catalog-api';
+import { getUserMessage } from '@/lib/errors';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,7 +64,7 @@ export default function ModelsPage() {
       setProviders(providersData);
       setStats(statsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load models');
+      setError(getUserMessage(err));
       console.error('Error fetching models:', err);
     } finally {
       setLoading(false);
@@ -89,7 +90,7 @@ export default function ModelsPage() {
       );
       setModels(results);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed');
+      setError(getUserMessage(err));
     } finally {
       setLoading(false);
     }

@@ -4,6 +4,7 @@ import { useEffect, Suspense, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import { syncPrivyToGatewayz } from '@/integrations/privy/auth-sync';
+import { getUserMessage } from '@/lib/errors';
 
 /**
  * Build a redirect URL with optional ref code, handling edge cases
@@ -124,9 +125,7 @@ function LoginContent() {
             window.location.href = callbackUrl;
           } catch (error) {
             console.error('[Login] Desktop auth error:', error);
-            setDesktopAuthError(
-              error instanceof Error ? error.message : 'Authentication failed'
-            );
+            setDesktopAuthError(getUserMessage(error));
             setIsProcessingDesktopAuth(false);
           }
         })();

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { ProviderAPI, Provider, ProviderStats, HealthStatus } from '@/lib/catalog-api';
+import { getUserMessage } from '@/lib/errors';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,7 +53,7 @@ export default function ProvidersPage() {
       setProviders(providersData);
       setStats(statsData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load providers');
+      setError(getUserMessage(err));
       console.error('Error fetching providers:', err);
     } finally {
       setLoading(false);
@@ -75,7 +76,7 @@ export default function ProvidersPage() {
       const results = await ProviderAPI.searchProviders(searchQuery);
       setProviders(results);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed');
+      setError(getUserMessage(err));
     } finally {
       setLoading(false);
     }

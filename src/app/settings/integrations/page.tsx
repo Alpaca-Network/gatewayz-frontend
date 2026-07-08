@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Info, ExternalLink, Terminal, Code2, Zap, Copy, Trash2, Loader2 } from "lucide-react";
 import Link from 'next/link';
 import { useToast } from "@/hooks/use-toast";
+import { getUserMessage } from "@/lib/errors";
 import { BYOK_ENABLED } from "@/lib/config";
 import {
   type Gateway,
@@ -41,7 +42,7 @@ function BYOKManager() {
     } catch (e) {
       toast({
         title: "Error",
-        description: e instanceof Error ? e.message : "Failed to load your provider keys",
+        description: getUserMessage(e),
         variant: "destructive",
       });
     } finally {
@@ -78,7 +79,7 @@ function BYOKManager() {
     } catch (e) {
       toast({
         title: "Could not save key",
-        description: e instanceof Error ? e.message : "Unknown error",
+        description: getUserMessage(e),
         variant: "destructive",
       });
     } finally {
@@ -94,7 +95,7 @@ function BYOKManager() {
     } catch (e) {
       toast({
         title: "Could not remove key",
-        description: e instanceof Error ? e.message : "Unknown error",
+        description: getUserMessage(e),
         variant: "destructive",
       });
     }

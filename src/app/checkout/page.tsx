@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Copy, Gift, CheckCircle, Share2, Users, Sparkles, CreditCard, Check, Shield, Zap, Minus, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { getUserMessage } from '@/lib/errors';
 import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
 import { tierConfigs, creditPackages, TierConfig } from '@/lib/pricing-config';
@@ -342,7 +343,7 @@ function CheckoutPageContent() {
       console.error('Checkout error:', error);
       toast({
         title: "Checkout failed",
-        description: error instanceof Error ? error.message : 'Please try again.',
+        description: getUserMessage(error),
         variant: "destructive",
       });
     } finally {

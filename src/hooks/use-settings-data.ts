@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { makeAuthenticatedRequest, getApiKey } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { getUserMessage } from '@/lib/errors';
 
 interface UseSettingsDataOptions {
   onError?: (error: any) => void;
@@ -84,7 +85,7 @@ export function useSettingsData<T = any>(
       onError?.(error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to load data',
+        description: getUserMessage(err),
         variant: 'destructive',
       });
     } finally {
