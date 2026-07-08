@@ -4,6 +4,7 @@ import { TIMEOUT_CONFIG, createTimeoutController, withTimeoutAndRetry } from './
 import { messageBatcher, type BatchedMessage } from './message-batcher';
 import { debounce } from './utils';
 import { getUserData, AUTH_REFRESH_EVENT } from './api';
+import { getUserMessage, fromUnknown } from '@/lib/errors';
 import {
   getCachedSessions,
   setCachedSessions,
@@ -779,15 +780,7 @@ export class ChatHistoryAPI {
 
 // Utility functions for error handling
 export const handleApiError = (error: any): string => {
-  if (error.message.includes('401')) {
-    return 'Authentication failed. Please check your API key.';
-  } else if (error.message.includes('404')) {
-    return 'Session not found.';
-  } else if (error.message.includes('500')) {
-    return 'Server error. Please try again later.';
-  } else {
-    return error.message || 'An unexpected error occurred.';
-  }
+  return getUserMessage(fromUnknown(error));
 };
 
 // Helper function to create API instance

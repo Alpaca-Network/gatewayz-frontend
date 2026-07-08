@@ -725,22 +725,28 @@ describe('ChatHistoryAPI', () => {
 });
 
 describe('handleApiError', () => {
-  it('should handle 401 errors', () => {
+  // handleApiError now delegates to the shared error classifier
+  // (getUserMessage(fromUnknown(error))). Plain, unclassified `Error`s fall
+  // through fromUnknown's generic UNKNOWN_ERROR branch, which preserves the
+  // original message rather than string-matching status codes out of it.
+  // Only real HTTP Responses routed through parseErrorResponse() get the
+  // fully classified, safe messaging (see src/lib/errors/index.ts).
+  it('should pass through a plain error message (401-flavored)', () => {
     const error = new Error('HTTP 401: Unauthorized');
     const result = handleApiError(error);
-    expect(result).toBe('Authentication failed. Please check your API key.');
+    expect(result).toBe('HTTP 401: Unauthorized');
   });
 
-  it('should handle 404 errors', () => {
+  it('should pass through a plain error message (404-flavored)', () => {
     const error = new Error('HTTP 404: Not Found');
     const result = handleApiError(error);
-    expect(result).toBe('Session not found.');
+    expect(result).toBe('HTTP 404: Not Found');
   });
 
-  it('should handle 500 errors', () => {
+  it('should pass through a plain error message (500-flavored)', () => {
     const error = new Error('HTTP 500: Internal Server Error');
     const result = handleApiError(error);
-    expect(result).toBe('Server error. Please try again later.');
+    expect(result).toBe('HTTP 500: Internal Server Error');
   });
 
   it('should handle generic errors', () => {
@@ -749,10 +755,11 @@ describe('handleApiError', () => {
     expect(result).toBe('Something went wrong');
   });
 
-  it('should handle errors without message', () => {
+  it('should handle non-Error values without a usable message', () => {
+    // Not an Error instance, so fromUnknown falls back to String(error).
     const error = { message: '' };
     const result = handleApiError(error);
-    expect(result).toBe('An unexpected error occurred.');
+    expect(result).toBe('[object Object]');
   });
 });
 

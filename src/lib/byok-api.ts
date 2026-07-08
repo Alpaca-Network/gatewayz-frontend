@@ -14,6 +14,7 @@
 
 import { API_BASE_URL } from "@/lib/config";
 import { makeAuthenticatedRequest } from "@/lib/api";
+import { parseErrorResponse } from "@/lib/errors";
 
 export interface ProviderKey {
   provider_slug: string;
@@ -30,15 +31,6 @@ export interface Gateway {
   site_url?: string | null;
 }
 
-async function readDetail(response: Response, fallback: string): Promise<string> {
-  try {
-    const body = await response.json();
-    return body?.detail || body?.message || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 /**
  * Fetch the valid gateways/providers a BYOK key can be registered for. The
  * backend validates provider_slug against this same registry, so the UI must
@@ -47,7 +39,7 @@ async function readDetail(response: Response, fallback: string): Promise<string>
 export async function getGateways(): Promise<Gateway[]> {
   const response = await makeAuthenticatedRequest(`${API_BASE_URL}/gateways`);
   if (!response.ok) {
-    throw new Error(await readDetail(response, "Failed to load providers"));
+    throw await parseErrorResponse(response, "Loading providers");
   }
   const json = await response.json();
   // The endpoint may return an array or a wrapped object ({ gateways } / { data }).
@@ -69,7 +61,7 @@ export async function getGateways(): Promise<Gateway[]> {
 export async function listProviderKeys(): Promise<ProviderKey[]> {
   const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/provider-keys`);
   if (!response.ok) {
-    throw new Error(await readDetail(response, "Failed to load your provider keys"));
+    throw await parseErrorResponse(response, "Loading your provider keys");
   }
   const json = await response.json();
   return Array.isArray(json?.data) ? (json.data as ProviderKey[]) : [];
@@ -82,13 +74,7 @@ export async function addProviderKey(providerSlug: string, apiKey: string): Prom
     body: JSON.stringify({ provider_slug: providerSlug, api_key: apiKey }),
   });
   if (!response.ok) {
-    if (response.status === 503) {
-      throw new Error("Key storage is temporarily unavailable. Please try again later.");
-    }
-    if (response.status === 400) {
-      throw new Error(await readDetail(response, `Unknown provider '${providerSlug}'`));
-    }
-    throw new Error(await readDetail(response, "Failed to save your key"));
+    throw await parseErrorResponse(response, `Saving provider key for '${providerSlug}'`);
   }
 }
 
@@ -99,6 +85,6 @@ export async function deleteProviderKey(providerSlug: string): Promise<void> {
     { method: "DELETE" },
   );
   if (!response.ok && response.status !== 404) {
-    throw new Error(await readDetail(response, "Failed to remove your key"));
+    throw await parseErrorResponse(response, "Removing your provider key");
   }
 }
