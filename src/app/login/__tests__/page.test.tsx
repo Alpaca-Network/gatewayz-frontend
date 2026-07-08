@@ -244,7 +244,9 @@ describe('LoginPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Authentication Failed')).toBeInTheDocument();
-        expect(screen.getByText('Network error')).toBeInTheDocument();
+        // Raw error text must never be shown to the user — expect the safe,
+        // classified fallback message instead (see src/lib/errors/index.ts).
+        expect(screen.getByText('An unexpected error occurred.')).toBeInTheDocument();
       });
     });
 
@@ -263,7 +265,9 @@ describe('LoginPage', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Authentication Failed')).toBeInTheDocument();
-        expect(screen.getByText('No API key received from backend')).toBeInTheDocument();
+        // Raw error text must never be shown to the user — expect the safe,
+        // classified fallback message instead (see src/lib/errors/index.ts).
+        expect(screen.getByText('An unexpected error occurred.')).toBeInTheDocument();
       });
     });
 
