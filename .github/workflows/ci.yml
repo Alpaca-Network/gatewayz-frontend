@@ -205,6 +205,8 @@ jobs:
       - name: Build application
         run: pnpm build
         env:
+          # Increase Node.js memory for large Next.js builds
+          NODE_OPTIONS: '--max-old-space-size=8192'
           # Set minimal required env vars for build
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
@@ -266,6 +268,8 @@ jobs:
       - name: Build application for E2E tests
         run: pnpm build
         env:
+          # Increase Node.js memory for large Next.js builds
+          NODE_OPTIONS: '--max-old-space-size=8192'
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || 'test-privy-app-id' }}
           NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai' }}
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_dummy' }}
