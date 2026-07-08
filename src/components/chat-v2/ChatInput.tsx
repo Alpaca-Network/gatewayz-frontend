@@ -64,6 +64,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { useWhisperTranscription } from "@/lib/hooks/use-whisper-transcription";
 import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/safe-storage";
+import { getUserMessage } from "@/lib/errors";
 
 // Helper for file to base64
 const fileToBase64 = (file: File): Promise<string> => {
@@ -553,6 +554,10 @@ export function ChatInput() {
         setMessageStartTime(null);
 
         const errorMessage = e instanceof Error ? e.message : "Failed to send message";
+        // Safe, user-facing version of the error — never show raw JS/backend
+        // error text (errorMessage above) directly to the user; it's only used
+        // internally below to classify the error type.
+        const safeMessage = getUserMessage(e);
 
         // Check if the error is auth-related (guest mode not available, session expired, or API key issues)
         const lowerErrorMessage = errorMessage.toLowerCase();
@@ -628,10 +633,10 @@ export function ChatInput() {
               .finally(() => login());
           } else {
             // Other auth errors for authenticated users
-            toast({ title: errorMessage, variant: "destructive" });
+            toast({ title: safeMessage, variant: "destructive" });
           }
         } else {
-          toast({ title: errorMessage, variant: "destructive" });
+          toast({ title: safeMessage, variant: "destructive" });
         }
     }
   }, [inputValue, selectedImage, selectedVideo, selectedAudio, selectedDocument, isStreaming, selectedModel, activeSessionId, messages, setInputValue, setActiveSessionId, createSession, streamMessage, toast, isAuthenticated, login, logout, setMessageStartTime]);

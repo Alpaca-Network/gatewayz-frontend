@@ -8,6 +8,7 @@ import {
   type ChatSession as ApiChatSession,
   type ChatMessage as ApiChatMessage,
 } from "@/lib/chat-history";
+import { getUserMessage } from "@/lib/errors";
 // Using modular streaming - the old streaming.ts is deprecated
 import { streamChatResponse } from "@/lib/streaming/index";
 import type { ModelOption } from "@/components/chat/model-select";
@@ -367,11 +368,15 @@ export function useChatController() {
         console.warn("Failed to persist assistant message", err);
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      setError(message);
+      // Safe, user-facing message — never surface the raw error text.
+      const safeMessage = getUserMessage(error);
+      setError(safeMessage);
 
-      // If the backend complains about auth, trigger a refresh
-      if (message.toLowerCase().includes("auth") || message.includes("401")) {
+      // If the backend complains about auth, trigger a refresh. This check is
+      // purely internal classification against the raw error and is never
+      // shown to the user.
+      const rawMessage = error instanceof Error ? error.message : "";
+      if (rawMessage.toLowerCase().includes("auth") || rawMessage.includes("401")) {
         void refresh({ force: true });
       }
 
@@ -383,7 +388,7 @@ export function useChatController() {
           {
             id: makeLocalId("error"),
             role: "assistant",
-            content: `⚠️ ${message}`,
+            content: `⚠️ ${safeMessage}`,
             createdAt: Date.now(),
           },
         ]);
