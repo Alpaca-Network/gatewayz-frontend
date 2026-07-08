@@ -7,6 +7,7 @@ import {
   classifyApiError,
   parseErrorResponse,
   fromStreamingError,
+  fromUnknown,
   getUserMessage,
   AppError,
 } from '../index';
@@ -150,5 +151,20 @@ describe('getUserMessage safety net (regression guard)', () => {
   it('never echoes a raw generic Error message', () => {
     const err = new Error('column "foo" does not exist in relation "bar"');
     expect(getUserMessage(err)).not.toMatch(/column|relation/);
+  });
+
+  it('never echoes raw text through the fromUnknown(err) -> getUserMessage(...) composition', () => {
+    // This is the exact trap: fromUnknown() used to fall back to `error.message`
+    // for unrecognized errors, which getUserMessage() then returned verbatim
+    // since it trusts AppError.message unconditionally.
+    const raw = new Error('duplicate key value violates unique constraint "users_email_key"');
+    const wrapped = fromUnknown(raw);
+    expect(getUserMessage(wrapped)).not.toMatch(/duplicate key|constraint|users_email_key/);
+  });
+
+  it('does surface a caller-supplied context string via fromUnknown (safe, not raw)', () => {
+    const raw = new Error('some internal detail');
+    const wrapped = fromUnknown(raw, 'Failed to load your settings');
+    expect(getUserMessage(wrapped)).toBe('Failed to load your settings');
   });
 });

@@ -725,41 +725,43 @@ describe('ChatHistoryAPI', () => {
 });
 
 describe('handleApiError', () => {
-  // handleApiError now delegates to the shared error classifier
-  // (getUserMessage(fromUnknown(error))). Plain, unclassified `Error`s fall
-  // through fromUnknown's generic UNKNOWN_ERROR branch, which preserves the
-  // original message rather than string-matching status codes out of it.
-  // Only real HTTP Responses routed through parseErrorResponse() get the
-  // fully classified, safe messaging (see src/lib/errors/index.ts).
-  it('should pass through a plain error message (401-flavored)', () => {
+  // handleApiError delegates to the shared error classifier
+  // (getUserMessage(fromUnknown(error))). fromUnknown() deliberately NEVER
+  // echoes a plain Error's raw `.message` into the returned AppError (that's
+  // the exact leak this classifier exists to close) — unclassified errors
+  // fall back to the generic, safe UNKNOWN_ERROR copy. Only real HTTP
+  // Responses routed through parseErrorResponse() get fully classified,
+  // specific messaging (see src/lib/errors/index.ts).
+  const GENERIC_MESSAGE = 'An unexpected error occurred.';
+
+  it('never echoes a raw plain-Error message (401-flavored)', () => {
     const error = new Error('HTTP 401: Unauthorized');
     const result = handleApiError(error);
-    expect(result).toBe('HTTP 401: Unauthorized');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 
-  it('should pass through a plain error message (404-flavored)', () => {
+  it('never echoes a raw plain-Error message (404-flavored)', () => {
     const error = new Error('HTTP 404: Not Found');
     const result = handleApiError(error);
-    expect(result).toBe('HTTP 404: Not Found');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 
-  it('should pass through a plain error message (500-flavored)', () => {
+  it('never echoes a raw plain-Error message (500-flavored)', () => {
     const error = new Error('HTTP 500: Internal Server Error');
     const result = handleApiError(error);
-    expect(result).toBe('HTTP 500: Internal Server Error');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 
-  it('should handle generic errors', () => {
+  it('falls back to the generic safe message for unclassified errors', () => {
     const error = new Error('Something went wrong');
     const result = handleApiError(error);
-    expect(result).toBe('Something went wrong');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 
-  it('should handle non-Error values without a usable message', () => {
-    // Not an Error instance, so fromUnknown falls back to String(error).
+  it('falls back to the generic safe message for non-Error values', () => {
     const error = { message: '' };
     const result = handleApiError(error);
-    expect(result).toBe('[object Object]');
+    expect(result).toBe(GENERIC_MESSAGE);
   });
 });
 

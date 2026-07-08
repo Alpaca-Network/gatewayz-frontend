@@ -268,12 +268,16 @@ export function fromUnknown(error: unknown, context?: string): AppError {
       });
     }
 
-    return new AppError('UNKNOWN_ERROR', context || error.message, {
+    // IMPORTANT: never fall back to `error.message` here — it's raw JS/backend
+    // text (that's the whole bug this module exists to prevent). Only a
+    // caller-supplied `context` string is safe to show; otherwise AppError's
+    // constructor already falls back to ERROR_MESSAGES.UNKNOWN_ERROR.
+    return new AppError('UNKNOWN_ERROR', context, {
       originalError: error,
     });
   }
 
-  return new AppError('UNKNOWN_ERROR', context || String(error));
+  return new AppError('UNKNOWN_ERROR', context);
 }
 
 // =============================================================================
