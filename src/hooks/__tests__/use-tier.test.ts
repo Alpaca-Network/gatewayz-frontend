@@ -693,13 +693,11 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'New User',
         email: 'new@example.com',
-        // FLAGGED (see task report): originally commented "Free trial credits" implying a
-        // trivial ~$5 balance, but no subscription_status is set here, so the assertion
-        // below (`tier === 'basic'`) only holds because credits > $5 triggers the
-        // purchased-credits override in getUserTier(). A genuinely trivial trial balance
-        // (<=$5) would make this resolve to 'free', breaking the assertion. Left at 500
-        // (i.e. $500) unchanged pending a human decision on which behavior is intended.
-        credits: 500,
+        // No subscription_status set: this represents a user who purchased a credit
+        // pack without an active subscription (confirmed by the hasSubscription: false
+        // assertion below). $50 clears the purchased-credits threshold and triggers
+        // getUserTier()'s override, correctly resolving to 'basic'.
+        credits: 50,
         tier: 'basic',
       };
 
