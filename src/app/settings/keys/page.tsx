@@ -430,7 +430,7 @@ export default function ApiKeysPage() {
         `/api/user/api-keys/${keyId}`,
         {
           method: 'DELETE',
-          body: JSON.stringify({ confirmation: "DELETE" }),
+          body: JSON.stringify({ confirmation: "DELETE_KEY" }),
         }
       );
 
