@@ -49,7 +49,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
       };
 
       mockUseGatewayzAuth.mockReturnValue({ userData: mockUserData });
@@ -81,7 +81,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 10,
         tier: 'basic',
       };
 
@@ -103,7 +103,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 10,
         tier: 'basic',
       };
 
@@ -129,7 +129,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
         subscription_end_date: Math.floor(Date.now() / 1000) + 86400 * 30,
@@ -154,7 +154,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
       };
@@ -177,7 +177,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
       };
@@ -203,7 +203,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
         subscription_end_date: renewalTimestamp,
@@ -227,7 +227,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
         subscription_end_date: expiringTimestamp,
@@ -250,7 +250,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 15000,
+        credits: 150,
         tier: 'max',
         subscription_status: 'active',
         subscription_end_date: Math.floor(Date.now() / 1000) + 86400 * 30,
@@ -275,7 +275,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 15000,
+        credits: 150,
         tier: 'max',
         subscription_status: 'active',
       };
@@ -298,7 +298,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 15000,
+        credits: 150,
         tier: 'max',
         subscription_status: 'active',
       };
@@ -325,7 +325,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
       };
@@ -346,7 +346,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'basic',
         subscription_status: 'cancelled',
       };
@@ -368,7 +368,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'pro',
         subscription_status: 'past_due',
       };
@@ -390,7 +390,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'basic',
         subscription_status: 'inactive',
       };
@@ -412,7 +412,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
       };
 
       mockUseGatewayzAuth.mockReturnValue({ userData: mockUserData });
@@ -433,7 +433,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'pro',
       };
 
@@ -462,7 +462,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 10,
         tier: 'basic',
       };
 
@@ -478,7 +478,7 @@ describe('useTier', () => {
         ...mockUserData,
         tier: 'pro',
         subscription_status: 'active',
-        credits: 1000,
+        credits: 10,
       };
 
       mockUseGatewayzAuth.mockReturnValue({ userData: upgradedUserData });
@@ -498,7 +498,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
         subscription_end_date: Math.floor(Date.now() / 1000) + 86400 * 30,
@@ -539,7 +539,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 5,
         tier: 'basic',
       };
 
@@ -547,19 +547,19 @@ describe('useTier', () => {
 
       const { result, rerender } = renderHook(() => useTier());
 
-      expect(result.current.userData?.credits).toBe(100);
+      expect(result.current.userData?.credits).toBe(5);
 
       // Simulate credit purchase
       const updatedUserData: UserData = {
         ...mockUserData,
-        credits: 1000,
+        credits: 50,
       };
 
       mockUseGatewayzAuth.mockReturnValue({ userData: updatedUserData });
 
       rerender();
 
-      expect(result.current.userData?.credits).toBe(1000);
+      expect(result.current.userData?.credits).toBe(50);
     });
   });
 
@@ -572,7 +572,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         // subscription_status is missing
       };
@@ -595,7 +595,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'basic',
         subscription_end_date: expiredTimestamp,
       };
@@ -623,7 +623,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         tier_display_name: 'Pro', // Matches the computed tier
         subscription_status: 'active',
@@ -646,7 +646,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         tier_display_name: 'Basic', // Doesn't match computed tier 'pro'
         subscription_status: 'active',
@@ -668,7 +668,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'max',
         // tier_display_name is undefined
         subscription_status: 'active',
@@ -693,7 +693,13 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'New User',
         email: 'new@example.com',
-        credits: 500, // Free trial credits
+        // FLAGGED (see task report): originally commented "Free trial credits" implying a
+        // trivial ~$5 balance, but no subscription_status is set here, so the assertion
+        // below (`tier === 'basic'`) only holds because credits > $5 triggers the
+        // purchased-credits override in getUserTier(). A genuinely trivial trial balance
+        // (<=$5) would make this resolve to 'free', breaking the assertion. Left at 500
+        // (i.e. $500) unchanged pending a human decision on which behavior is intended.
+        credits: 500,
         tier: 'basic',
       };
 
@@ -711,7 +717,7 @@ describe('useTier', () => {
         tier: 'pro',
         subscription_status: 'active',
         subscription_end_date: Math.floor(Date.now() / 1000) + 86400 * 30,
-        credits: 1000,
+        credits: 10,
       };
 
       mockUseGatewayzAuth.mockReturnValue({ userData: proUser });
@@ -732,7 +738,7 @@ describe('useTier', () => {
         privy_user_id: 'privy-123',
         display_name: 'Premium User',
         email: 'premium@example.com',
-        credits: 15000,
+        credits: 150,
         tier: 'max',
         subscription_status: 'active',
       };
@@ -750,7 +756,7 @@ describe('useTier', () => {
         ...maxUser,
         tier: 'basic',
         subscription_status: 'cancelled',
-        credits: 100,
+        credits: 1,
       };
 
       mockUseGatewayzAuth.mockReturnValue({ userData: basicUser });
