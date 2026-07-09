@@ -303,7 +303,7 @@ describe('SessionInitializer', () => {
         expect(api.saveUserData).toHaveBeenCalledWith(
           expect.objectContaining({
             user_id: 12345,
-            credits: 150, // Should be floored
+            credits: 150.75, // Fractional credits preserved (no flooring)
             tier: 'pro', // Should be lowercased
             subscription_status: 'active',
             subscription_end_date: 1735689600,

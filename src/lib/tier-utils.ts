@@ -87,13 +87,42 @@ const inferTierFromDisplayName = (tierDisplayName: string | undefined): UserTier
 };
 
 /**
+ * Subscription statuses under which a stale-but-paid `tier` field plus
+ * hasPurchasedCredits() is trusted as "the user just paid and the webhook
+ * hasn't caught up yet" — i.e. the user has never had a subscription that
+ * has since ended negatively.
+ *
+ * Deliberately an ALLOWLIST rather than a blocklist of terminal statuses
+ * ('cancelled', 'expired', 'past_due', ...): a subscriber whose plan actually
+ * ended must fall through to 'free' even if they still have leftover
+ * purchased credits (the backend downgrades `tier` to 'basic' on cancellation
+ * without zeroing credits, and independently blocks inference for those
+ * statuses regardless of this frontend value — this override is purely about
+ * not showing a misleading paid-tier badge). An allowlist also avoids having
+ * to enumerate every terminal-status spelling that might appear
+ * (e.g. "canceled" vs "cancelled").
+ */
+const STATUSES_ELIGIBLE_FOR_CREDIT_OVERRIDE = new Set<string>(['inactive', 'trial']);
+
+const isEligibleForPurchasedCreditsOverride = (
+  subscriptionStatus: SubscriptionStatus | undefined
+): boolean => {
+  // No status recorded at all — brand new user, never subscribed.
+  if (!subscriptionStatus) return true;
+  return STATUSES_ELIGIBLE_FOR_CREDIT_OVERRIDE.has(subscriptionStatus);
+};
+
+/**
  * Determines the user's current tier based on subscription status and tier field.
  *
  * Primary gate: subscription_status === 'active' → trust the tier field.
  * Secondary gate: hasPurchasedCredits → trust the tier field even with stale
- *   subscription_status (e.g. after a webhook delay or one-time credit purchase).
+ *   subscription_status (e.g. after a webhook delay or one-time credit purchase),
+ *   but ONLY when subscription_status indicates the user has never had a
+ *   subscription that ended negatively (see isEligibleForPurchasedCreditsOverride).
  * Everyone else: return 'free' — they have not paid, regardless of what the
- *   DB tier column says (it defaults to 'basic' for all new users).
+ *   DB tier column says (it defaults to 'basic' for all new users), and
+ *   regardless of leftover purchased credits for a cancelled/expired subscriber.
  *
  * @param userData - User data from auth response
  * @returns The current tier ('free', 'basic', 'pro', or 'max')
@@ -114,8 +143,14 @@ export const getUserTier = (userData: UserData | null): UserTier => {
   }
 
   // Stale subscription_status but user has clearly purchased credits (> $5 trial amount)
-  // This handles webhook delays and one-time credit purchases with stale status
-  if (isPaidTier && hasPurchasedCredits(userData)) {
+  // This handles webhook delays and one-time credit purchases with stale status —
+  // but never for a subscriber whose subscription has actually ended (cancelled,
+  // expired, past_due, ...); those users must see 'free' regardless of leftover credits.
+  if (
+    isPaidTier &&
+    isEligibleForPurchasedCreditsOverride(userData.subscription_status) &&
+    hasPurchasedCredits(userData)
+  ) {
     return tier as UserTier;
   }
 

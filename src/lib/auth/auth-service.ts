@@ -548,7 +548,8 @@ export class AuthService {
         apiKey: data.api_key,
         email: data.email || userData?.email || '',
         displayName: data.display_name || userData?.display_name || '',
-        credits: Math.floor(data.credits ?? userData?.credits ?? 0),
+        // Keep credits as float (1 credit = $1) — consistent with processAuthResponse
+        credits: data.credits ?? userData?.credits ?? 0,
         tier: (data.tier?.toLowerCase() || userData?.tier || 'free') as UserTier,
         tierDisplayName: data.tier_display_name || userData?.tier_display_name,
         subscriptionStatus: data.subscription_status || userData?.subscription_status,
