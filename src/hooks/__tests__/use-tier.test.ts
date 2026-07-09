@@ -525,7 +525,10 @@ describe('useTier', () => {
 
       expect(result.current.hasSubscription).toBe(false);
       expect(result.current.subscriptionStatus).toBe('cancelled');
-      expect(result.current.tier).toBe('basic');
+      // Cancelled subscribers show 'free' even with a stale paid `tier` column and
+      // leftover purchased credits — the purchased-credits override only applies to
+      // webhook-lag statuses (inactive/trial/undefined), not terminal ones like 'cancelled'.
+      expect(result.current.tier).toBe('free');
     });
 
     it('should update when credits change', () => {
@@ -720,7 +723,7 @@ describe('useTier', () => {
       expect(result.current.tierInfo.monthlyPrice).toBe('$8.00');
     });
 
-    it('should support downgrade from max to basic', () => {
+    it('should support downgrade from max to basic (cancelled subscription shows free)', () => {
       // Start as Max user
       const maxUser: UserData = {
         user_id: 123,
@@ -741,7 +744,8 @@ describe('useTier', () => {
       expect(result.current.tier).toBe('max');
       expect(result.current.canAccessModel('max')).toBe(true);
 
-      // Downgrade to Basic
+      // Cancel subscription — backend downgrades the `tier` DB column to 'basic'
+      // without zeroing leftover credits, but the cosmetic tier badge must show 'free'.
       const basicUser: UserData = {
         ...maxUser,
         tier: 'basic',
@@ -752,10 +756,11 @@ describe('useTier', () => {
       mockUseGatewayzAuth.mockReturnValue({ userData: basicUser });
       rerender();
 
-      expect(result.current.tier).toBe('basic');
+      expect(result.current.tier).toBe('free');
       expect(result.current.hasSubscription).toBe(false);
       expect(result.current.canAccessModel('max')).toBe(false);
       expect(result.current.canAccessModel('pro')).toBe(false);
+      expect(result.current.canAccessModel('basic')).toBe(false);
     });
   });
 });

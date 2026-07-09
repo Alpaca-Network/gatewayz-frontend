@@ -1286,26 +1286,25 @@ describe('tier-utils', () => {
       expect(canAccessModel('max', getUserTier(maxUserWithStaleTrialStatus))).toBe(true);
     });
 
-    it('should correctly handle pro tier user with stale expired subscription_status (bug fix)', () => {
-      // Another bug scenario: user upgraded to pro but subscription_status is stale 'expired'
-      const proUserWithStaleExpiredStatus: UserData = {
+    it('should treat "expired" as terminal, not stale — cancelled/expired subscriber with leftover credits shows free', () => {
+      // 'expired' is a terminal status, not a "webhook hasn't caught up yet" status.
+      // A user whose subscription actually expired should see 'free' even with a
+      // stale paid `tier` column and leftover purchased credits.
+      const proUserWithExpiredStatus: UserData = {
         user_id: 555,
         api_key: 'test-key',
         auth_method: 'email',
         privy_user_id: 'privy-555',
-        display_name: 'Pro User with Stale Expired',
+        display_name: 'Pro User with Expired Subscription',
         email: 'pro@example.com',
         credits: 5000,
         tier: 'pro',
-        subscription_status: 'expired', // Stale - should have been updated to 'active'
+        subscription_status: 'expired',
       };
 
-      // The key assertion: user with pro tier should NOT appear as expired
-      expect(getUserTier(proUserWithStaleExpiredStatus)).toBe('pro');
-      expect(isOnTrial(proUserWithStaleExpiredStatus)).toBe(false);
-      expect(isTrialExpired(proUserWithStaleExpiredStatus)).toBe(false);
-      // Pro tier user should have access to pro features
-      expect(canAccessModel('pro', getUserTier(proUserWithStaleExpiredStatus))).toBe(true);
+      expect(getUserTier(proUserWithExpiredStatus)).toBe('free');
+      expect(isOnTrial(proUserWithExpiredStatus)).toBe(false);
+      expect(canAccessModel('pro', getUserTier(proUserWithExpiredStatus))).toBe(false);
     });
 
     it('should correctly handle basic user who purchased credits with stale trial status (bug fix)', () => {
@@ -1329,8 +1328,11 @@ describe('tier-utils', () => {
       expect(isTrialExpired(basicUserWithPurchasedCredits)).toBe(false);
     });
 
-    it('should correctly handle basic user who purchased credits with stale expired status (bug fix)', () => {
-      // Scenario: basic tier user purchased credits but subscription_status still shows 'expired'
+    it('should return free for a basic-tier user with leftover purchased credits and expired status', () => {
+      // Scenario: basic tier user has leftover purchased credits but subscription_status
+      // is 'expired' — a genuinely ended subscription, not a webhook-lag artifact.
+      // Cosmetic badge must show 'free', not 'basic' (backend independently blocks
+      // inference for this status regardless of this frontend value).
       const basicUserWithPurchasedCreditsExpired: UserData = {
         user_id: 777,
         api_key: 'test-key',
@@ -1340,14 +1342,69 @@ describe('tier-utils', () => {
         email: 'basic-expired@example.com',
         credits: 5000, // More than 500 cents ($5 trial) = purchased (this is $50)
         tier: 'basic',
-        subscription_status: 'expired', // Stale - user has paid for credits
+        subscription_status: 'expired',
       };
 
-      // The key assertion: user who has purchased credits should NOT appear as expired
-      expect(getUserTier(basicUserWithPurchasedCreditsExpired)).toBe('basic');
+      expect(getUserTier(basicUserWithPurchasedCreditsExpired)).toBe('free');
       expect(hasPurchasedCredits(basicUserWithPurchasedCreditsExpired)).toBe(true);
       expect(isOnTrial(basicUserWithPurchasedCreditsExpired)).toBe(false);
-      expect(isTrialExpired(basicUserWithPurchasedCreditsExpired)).toBe(false);
+    });
+
+    it('should return free for a cancelled subscriber with leftover purchased credits (cosmetic badge fix)', () => {
+      // The core bug this fix addresses: backend downgrades `tier` to 'basic' on
+      // cancellation without zeroing leftover purchased credits. Previously,
+      // hasPurchasedCredits() firing here caused the UI to show a "Basic" paid badge
+      // for a subscriber who cancelled weeks ago. Must now show 'free'.
+      const cancelledUserWithLeftoverCredits: UserData = {
+        user_id: 888,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-888',
+        display_name: 'Cancelled User with Leftover Credits',
+        email: 'cancelled-leftover@example.com',
+        credits: 5000, // $50 leftover purchased credits
+        tier: 'basic', // backend downgrades tier column to 'basic' on cancellation
+        subscription_status: 'cancelled',
+      };
+
+      expect(getUserTier(cancelledUserWithLeftoverCredits)).toBe('free');
+      expect(hasActiveSubscription(cancelledUserWithLeftoverCredits)).toBe(false);
+    });
+
+    it('should keep trusting purchased credits for the genuine webhook-lag case (stale inactive status)', () => {
+      // The original bug this override fixes: user just paid, but subscription_status
+      // hasn't been flipped from 'inactive'/null to 'active' yet due to webhook delay.
+      const freshlyPaidUserWithLaggingWebhook: UserData = {
+        user_id: 999,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-999-lag',
+        display_name: 'Freshly Paid User (webhook lag)',
+        email: 'webhook-lag@example.com',
+        credits: 3500, // $35 — just purchased basic tier credits
+        tier: 'basic',
+        subscription_status: 'inactive', // Stale — webhook hasn't updated to 'active' yet
+      };
+
+      expect(getUserTier(freshlyPaidUserWithLaggingWebhook)).toBe('basic');
+    });
+
+    it('should NOT upgrade a never-subscribed free user with leftover credits but non-paid tier', () => {
+      // Sanity check: the override only ever applies when isPaidTier is already true.
+      // A user with tier undefined/unset (or explicitly 'free') and >$5 credits but
+      // no paid tier field must stay 'free'.
+      const freeUserWithCredits: UserData = {
+        user_id: 1000,
+        api_key: 'test-key',
+        auth_method: 'email',
+        privy_user_id: 'privy-1000',
+        display_name: 'Free User with Credits',
+        email: 'free-credits@example.com',
+        credits: 5000, // $50 in credits, but never subscribed to a paid tier
+      };
+
+      expect(hasPurchasedCredits(freeUserWithCredits)).toBe(true);
+      expect(getUserTier(freeUserWithCredits)).toBe('free');
     });
   });
 });
