@@ -68,7 +68,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'basic', // DB default — should be ignored without active subscription
       };
 
@@ -83,7 +83,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'basic',
         subscription_status: 'inactive',
       };
@@ -99,7 +99,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_status: 'trial',
       };
 
@@ -114,7 +114,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'pro',
         subscription_status: 'expired',
       };
@@ -130,7 +130,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'max',
         subscription_status: 'cancelled',
       };
@@ -146,7 +146,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_status: 'past_due',
       };
 
@@ -161,7 +161,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'basic',
         subscription_status: 'active',
       };
@@ -177,7 +177,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'pro',
         subscription_status: 'active',
       };
@@ -193,7 +193,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'max',
         subscription_status: 'active',
       };
@@ -209,7 +209,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'enterprise' as any,
         subscription_status: 'active',
       };
@@ -231,7 +231,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_status: 'active',
       };
 
@@ -246,7 +246,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_status: 'cancelled',
       };
 
@@ -261,7 +261,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_status: 'past_due',
       };
 
@@ -276,7 +276,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_status: 'inactive',
       };
 
@@ -291,7 +291,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
       };
 
       expect(hasActiveSubscription(userData)).toBe(false);
@@ -325,7 +325,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 500, // Exactly at trial threshold (500 cents = $5)
+        credits: 5, // Exactly at trial threshold ($5)
       };
 
       expect(hasPurchasedCredits(userData)).toBe(false);
@@ -339,7 +339,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 501, // Just above trial threshold (500 cents = $5)
+        credits: 5.01, // Just above trial threshold ($5)
       };
 
       expect(hasPurchasedCredits(userData)).toBe(true);
@@ -353,7 +353,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 10000, // 10000 cents = $100
+        credits: 100, // $100 — well above the trial threshold
       };
 
       expect(hasPurchasedCredits(userData)).toBe(true);
@@ -386,7 +386,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
       };
 
       expect(getSubscriptionRenewalDate(userData)).toBeNull();
@@ -401,7 +401,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_end_date: unixTimestamp,
       };
 
@@ -419,7 +419,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_end_date: futureTimestamp,
       };
 
@@ -442,7 +442,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
       };
 
       expect(isSubscriptionExpiringsoon(userData)).toBe(false);
@@ -457,7 +457,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_end_date: sevenDaysFromNow,
       };
 
@@ -473,7 +473,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_end_date: oneDayFromNow,
       };
 
@@ -489,7 +489,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_end_date: eightDaysFromNow,
       };
 
@@ -505,7 +505,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_end_date: yesterday,
       };
 
@@ -521,7 +521,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_end_date: thirtyDaysFromNow,
       };
 
@@ -657,7 +657,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 500, // Trial amount in cents (users start with $5 = 500 cents)
+        credits: 5, // Trial amount ($5) — at threshold, not purchased
         subscription_status: 'trial',
       };
 
@@ -672,7 +672,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         subscription_status: 'active',
       };
 
@@ -687,7 +687,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
       };
 
       expect(isOnTrial(userData)).toBe(false);
@@ -702,7 +702,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'max',
         subscription_status: 'trial',
       };
@@ -719,7 +719,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'pro',
         subscription_status: 'trial',
       };
@@ -735,7 +735,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 400, // Below trial threshold (500 cents = $5)
+        credits: 4, // Below trial threshold ($5)
         tier: 'basic',
         subscription_status: 'trial',
       };
@@ -752,7 +752,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1000, // More than trial threshold (500 cents = $5), indicating they've purchased credits
+        credits: 10, // More than trial threshold ($5), indicating they've purchased credits
         tier: 'basic',
         subscription_status: 'trial',
       };
@@ -769,7 +769,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 501, // Just above trial threshold (500 cents = $5)
+        credits: 5.01, // Just above trial threshold ($5), so they've paid
         subscription_status: 'trial',
       };
 
@@ -805,7 +805,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 200, // 200 cents = $2 trial credits
+        credits: 2, // $2 trial credits
         subscription_status: 'trial',
       };
 
@@ -821,7 +821,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'max',
         subscription_status: 'expired',
       };
@@ -838,7 +838,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'pro',
         subscription_status: 'expired',
       };
@@ -871,7 +871,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1500, // More than trial threshold (500 cents = $5), indicating they've purchased credits
+        credits: 15, // More than trial threshold ($5), indicating they've purchased credits
         tier: 'basic',
         subscription_status: 'expired',
       };
@@ -1118,7 +1118,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-123',
         display_name: 'New User',
         email: 'new@example.com',
-        credits: 500,
+        credits: 5, // New user's initial trial credits
       };
 
       expect(getUserTier(newUser)).toBe('free');
@@ -1136,7 +1136,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-456',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
         subscription_end_date: Math.floor(Date.now() / 1000) + 86400 * 30,
@@ -1158,7 +1158,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-789',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 15000,
+        credits: 150,
         tier: 'max',
         subscription_status: 'active',
         subscription_end_date: Math.floor(Date.now() / 1000) + 86400 * 5,
@@ -1180,7 +1180,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-999',
         display_name: 'Cancelled User',
         email: 'cancelled@example.com',
-        credits: 50,
+        credits: 1,
         tier: 'basic',
         subscription_status: 'cancelled',
       };
@@ -1200,7 +1200,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-111',
         display_name: 'Trial User',
         email: 'trial@example.com',
-        credits: 500, // Trial users start with 500 cents ($5)
+        credits: 5, // Trial users start with $5 in credits
         tier: 'basic',
         subscription_status: 'trial',
         trial_expires_at: threeDaysFromNow,
@@ -1249,7 +1249,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-333',
         display_name: 'Expiring Soon User',
         email: 'expiring@example.com',
-        credits: 200, // 200 cents = $2
+        credits: 2, // $2 in trial credits
         tier: 'basic',
         subscription_status: 'trial',
         trial_expires_at: oneDayFromNow,
@@ -1272,7 +1272,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-444',
         display_name: 'Max User with Stale Trial',
         email: 'vaughn.dimarco@gmail.com',
-        credits: 15000,
+        credits: 150,
         tier: 'max',
         subscription_status: 'trial', // Stale - should have been updated to 'active'
         trial_expires_at: oneDayFromNow, // Stale trial expiration
@@ -1297,7 +1297,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-555',
         display_name: 'Pro User with Expired Subscription',
         email: 'pro@example.com',
-        credits: 5000,
+        credits: 50,
         tier: 'pro',
         subscription_status: 'expired',
       };
@@ -1316,7 +1316,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-666',
         display_name: 'Basic User with Purchased Credits',
         email: 'basic@example.com',
-        credits: 2500, // More than 500 cents ($5 trial) = purchased (this is $25)
+        credits: 25, // More than trial threshold ($5) = purchased (this is $25)
         tier: 'basic',
         subscription_status: 'trial', // Stale - should have been updated after payment
       };
@@ -1340,7 +1340,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-777',
         display_name: 'Basic User with Purchased Credits',
         email: 'basic-expired@example.com',
-        credits: 5000, // More than 500 cents ($5 trial) = purchased (this is $50)
+        credits: 50, // More than trial threshold ($5) = purchased (this is $50)
         tier: 'basic',
         subscription_status: 'expired',
       };
@@ -1362,7 +1362,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-888',
         display_name: 'Cancelled User with Leftover Credits',
         email: 'cancelled-leftover@example.com',
-        credits: 5000, // $50 leftover purchased credits
+        credits: 50, // $50 leftover purchased credits
         tier: 'basic', // backend downgrades tier column to 'basic' on cancellation
         subscription_status: 'cancelled',
       };
@@ -1381,7 +1381,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-999-lag',
         display_name: 'Freshly Paid User (webhook lag)',
         email: 'webhook-lag@example.com',
-        credits: 3500, // $35 — just purchased basic tier credits
+        credits: 35, // $35 — just purchased basic tier credits
         tier: 'basic',
         subscription_status: 'inactive', // Stale — webhook hasn't updated to 'active' yet
       };
@@ -1400,7 +1400,7 @@ describe('tier-utils', () => {
         privy_user_id: 'privy-1000',
         display_name: 'Free User with Credits',
         email: 'free-credits@example.com',
-        credits: 5000, // $50 in credits, but never subscribed to a paid tier
+        credits: 50, // $50 in credits, but never subscribed to a paid tier
       };
 
       expect(hasPurchasedCredits(freeUserWithCredits)).toBe(true);
