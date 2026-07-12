@@ -63,6 +63,29 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Headers the client needs to classify errors correctly: rate-limit scope
+ * (upstream vs gateway 429), retry timing, and the request ID for support
+ * tracing. Forwarded verbatim from the backend response.
+ */
+const FORWARDED_ERROR_HEADERS = [
+  'retry-after',
+  'x-ratelimit-scope',
+  'x-ratelimit-limit',
+  'x-ratelimit-remaining',
+  'x-ratelimit-reset',
+  'x-request-id',
+] as const;
+
+function forwardErrorHeaders(backendResponse: Response): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  for (const name of FORWARDED_ERROR_HEADERS) {
+    const value = backendResponse.headers.get(name);
+    if (value) headers[name] = value;
+  }
+  return headers;
+}
+
+/**
  * Process LLM completion without tracing
  */
 async function processCompletion(
@@ -123,22 +146,33 @@ async function processCompletion(
             }
 
             const retryAfter = response.headers.get('retry-after');
+            const rateLimitScope = response.headers.get('x-ratelimit-scope');
+            const isUpstreamLimit = rateLimitScope?.toLowerCase() === 'upstream';
             const isBurstLimit = errorData.detail?.toLowerCase().includes('burst') || false;
 
             console.warn(`[API Proxy] Rate limit error (429) on attempt ${retryCount + 1}/${maxRetries + 1}`);
             console.warn('[API Proxy] Error detail:', errorData.detail || errorData.message);
             console.warn('[API Proxy] Retry-After header:', retryAfter || 'not present');
+            console.warn('[API Proxy] X-RateLimit-Scope:', rateLimitScope || 'not present');
             console.warn('[API Proxy] Is burst limit:', isBurstLimit);
 
-            if (retryCount < maxRetries) {
+            // Upstream (model provider) limits surface to the client immediately;
+            // only gateway limits get silent server-side retries.
+            if (!isUpstreamLimit && retryCount < maxRetries) {
               lastError = { status: 429, errorData, retryAfter };
               // Use isBurstLimit for logging context
               console.log(`[API Proxy] Will retry (burst limit: ${isBurstLimit})`);
               continue; // Retry
-            } else {
-              // Max retries exceeded
-              throw new Error(`Rate limit exceeded after ${maxRetries + 1} attempts: ${errorData.detail || errorData.message || 'Rate limit exceeded'}`);
             }
+
+            const error: any = new Error(`Backend API Error: 429 Too Many Requests`);
+            error.status = 429;
+            error.statusText = 'Too Many Requests';
+            error.errorData = errorData;
+            error.retryAfter = retryAfter;
+            error.rateLimitScope = rateLimitScope;
+            error.requestId = response.headers.get('x-request-id');
+            throw error;
           }
 
           // Handle error responses (4xx, 5xx) for non-streaming requests
@@ -159,6 +193,9 @@ async function processCompletion(
             error.status = response.status;
             error.statusText = response.statusText;
             error.errorData = errorData;
+            error.retryAfter = response.headers.get('retry-after');
+            error.rateLimitScope = response.headers.get('x-ratelimit-scope');
+            error.requestId = response.headers.get('x-request-id');
             throw error;
           }
 
@@ -471,37 +508,40 @@ export async function POST(request: NextRequest) {
             }
 
             const retryAfter = response.headers.get('retry-after');
+            const rateLimitScope = response.headers.get('x-ratelimit-scope');
+            const isUpstreamLimit = rateLimitScope?.toLowerCase() === 'upstream';
             const isBurstLimit = errorData.detail?.toLowerCase().includes('burst') || false;
 
             console.warn(`[API Proxy] Rate limit error (429) on attempt ${retryCount + 1}/${maxRetries + 1}`);
             console.warn('[API Proxy] Error detail:', errorData.detail || errorData.message);
             console.warn('[API Proxy] Retry-After header:', retryAfter || 'not present');
+            console.warn('[API Proxy] X-RateLimit-Scope:', rateLimitScope || 'not present');
             console.warn('[API Proxy] Is burst limit:', isBurstLimit);
 
-            if (retryCount < maxRetries) {
+            // Upstream (model provider) limits go straight to the client, which
+            // owns the countdown + single auto-retry UX. Only gateway limits
+            // get the silent server-side retry.
+            if (!isUpstreamLimit && retryCount < maxRetries) {
               lastError = { status: 429, errorData, retryAfter };
               continue; // Retry - delay already calculated in next iteration
-            } else {
-              // Max retries exceeded
-              console.error('[API Proxy] Max retries exceeded for rate limit');
-              return new Response(JSON.stringify({
-                error: 'Rate Limit Exceeded',
-                status: 429,
-                statusText: 'Too Many Requests',
-                message: errorData.detail || errorData.message || 'Rate limit exceeded. Please wait before trying again.',
-                model: body.model,
-                gateway: body.gateway,
-                errorData: errorData,
-                retryAfter: retryAfter,
-                retriesExhausted: true,
-              }), {
-                status: 429,
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Retry-After': retryAfter || '60',
-                },
-              });
             }
+
+            console.error(`[API Proxy] Returning 429 to client (scope: ${rateLimitScope || 'gateway'})`);
+            const rateLimitHeaders = forwardErrorHeaders(response);
+            if (!rateLimitHeaders['retry-after']) rateLimitHeaders['retry-after'] = '60';
+            return new Response(JSON.stringify({
+              error: 'Rate Limit Exceeded',
+              status: 429,
+              statusText: 'Too Many Requests',
+              model: body.model,
+              gateway: body.gateway,
+              errorData: errorData,
+              retryAfter: retryAfter,
+              retriesExhausted: !isUpstreamLimit,
+            }), {
+              status: 429,
+              headers: rateLimitHeaders,
+            });
           }
 
           if (!response.ok) {
@@ -643,7 +683,7 @@ export async function POST(request: NextRequest) {
               errorData: errorData
             }), {
               status: response.status,
-              headers: { 'Content-Type': 'application/json' },
+              headers: forwardErrorHeaders(response),
             });
           }
 
@@ -927,6 +967,12 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Forward rate-limit / tracing headers captured when the backend error was thrown
+      const httpErrorHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (httpError.retryAfter) httpErrorHeaders['retry-after'] = String(httpError.retryAfter);
+      if (httpError.rateLimitScope) httpErrorHeaders['x-ratelimit-scope'] = String(httpError.rateLimitScope);
+      if (httpError.requestId) httpErrorHeaders['x-request-id'] = String(httpError.requestId);
+
       return new Response(JSON.stringify({
         error: 'Backend API Error',
         status: httpError.status,
@@ -936,7 +982,7 @@ export async function POST(request: NextRequest) {
         errorData: errorData
       }), {
         status: httpError.status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: httpErrorHeaders,
       });
     }
 

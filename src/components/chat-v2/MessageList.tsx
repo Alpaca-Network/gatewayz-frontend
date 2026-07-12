@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { ChatMessage as ChatMessageBubble } from "@/components/chat/ChatMessage";
+import type { ChatErrorInfo, RetryNotice } from "@/components/chat/ChatMessage";
 import type { ChatMessage as ChatMessageData } from "@/lib/chat-history";
 
 const getTextFromContent = (content: string | any[]): string => {
@@ -17,7 +18,13 @@ const getTextFromContent = (content: string | any[]): string => {
 
 interface MessageListProps {
   sessionId: number | null;
-  messages: (ChatMessageData & { error?: string; hasError?: boolean; wasStopped?: boolean })[];
+  messages: (ChatMessageData & {
+    error?: string;
+    hasError?: boolean;
+    wasStopped?: boolean;
+    errorInfo?: ChatErrorInfo;
+    retryNotice?: RetryNotice;
+  })[];
   isLoading: boolean;
   pendingPrompt?: string | null;  // Optimistic message shown while session is being created
   onRetry?: () => void;  // Callback to retry the last failed message
@@ -189,6 +196,8 @@ export function MessageList({ sessionId, messages, isLoading, pendingPrompt, onR
             model={msg.model}
             error={msg.error}
             hasError={msg.hasError}
+            errorInfo={msg.errorInfo}
+            retryNotice={msg.retryNotice}
             // Search/tool call state
             isSearching={msg.isSearching}
             searchQuery={msg.searchQuery}

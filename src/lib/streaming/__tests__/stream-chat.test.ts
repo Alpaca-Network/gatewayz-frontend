@@ -291,12 +291,12 @@ describe('streamChatResponse', () => {
       expect((thrown as Error).message).not.toContain('session has expired');
     });
 
-    it('should throw StreamingError on 404 model not found', async () => {
+    it('should throw a friendly model-unavailable message on 404 without raw detail', async () => {
       global.fetch = jest.fn().mockResolvedValueOnce({
         ok: false,
         status: 404,
         headers: new Headers(),
-        json: jest.fn().mockResolvedValue({ detail: 'Model not found' }),
+        json: jest.fn().mockResolvedValue({ detail: "Model 'internal-slug-v3' not found in registry" }),
       });
 
       const generator = streamChatResponse(
@@ -305,7 +305,15 @@ describe('streamChatResponse', () => {
         { model: 'nonexistent-model', messages: [] }
       );
 
-      await expect(collectChunks(generator)).rejects.toThrow(/Model not found/);
+      let thrown: unknown;
+      try {
+        await collectChunks(generator);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(StreamingError);
+      expect((thrown as Error).message).toMatch(/model isn't available/i);
+      expect((thrown as Error).message).not.toContain('internal-slug-v3');
     });
 
     it('should throw StreamingError on 413 payload too large', async () => {
@@ -378,6 +386,189 @@ describe('streamChatResponse', () => {
       );
 
       await expect(collectChunks(generator)).rejects.toThrow(RateLimitError);
+    });
+
+    it('gateway 429 (no upstream scope) surfaces "wait N seconds" copy, not model-busy copy', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({ 'Retry-After': '30' }),
+        json: jest.fn().mockResolvedValue({ detail: 'Rate limited' }),
+      });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] },
+        7, // Already at max retries — throws immediately
+        7
+      );
+
+      let thrown: unknown;
+      try {
+        await collectChunks(generator);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(RateLimitError);
+      expect((thrown as RateLimitError).rateLimitScope).toBe('gateway');
+      expect((thrown as Error).message).toMatch(/too quickly/i);
+      expect((thrown as Error).message).toMatch(/30/);
+      expect((thrown as Error).message).not.toMatch(/busy right now/i);
+    });
+
+    it('upstream 429 (X-RateLimit-Scope: upstream) auto-retries once after Retry-After with a countdown chunk', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: new Headers({ 'Retry-After': '1', 'X-RateLimit-Scope': 'upstream' }),
+          json: jest.fn().mockResolvedValue({ detail: 'Provider rate limited' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          body: createSSEResponse([
+            JSON.stringify({ choices: [{ delta: { content: 'Recovered' }, finish_reason: null }] }),
+            JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] }),
+          ]),
+        });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'free-model', messages: [] },
+        0,
+        7
+      );
+
+      const chunks = await collectChunks(generator);
+      const retryChunk = chunks.find((c) => c.status === 'rate_limit_retry');
+      expect(retryChunk).toBeDefined();
+      expect(retryChunk?.rateLimitScope).toBe('upstream');
+      expect(retryChunk?.retryAfterMs).toBeGreaterThanOrEqual(1000);
+      expect(chunks.find((c) => c.content)?.content).toBe('Recovered');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    }, 15000);
+
+    it('upstream 429 retries only ONCE, then throws model-busy copy (never "your limit")', async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({ 'Retry-After': '1', 'X-RateLimit-Scope': 'upstream' }),
+        json: jest.fn().mockResolvedValue({ detail: 'Provider rate limited' }),
+      });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'free-model', messages: [] },
+        0,
+        7
+      );
+
+      let thrown: unknown;
+      try {
+        await collectChunks(generator);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(RateLimitError);
+      expect((thrown as RateLimitError).rateLimitScope).toBe('upstream');
+      expect((thrown as Error).message).toMatch(/busy right now/i);
+      expect((thrown as Error).message).not.toMatch(/too quickly|your.*limit/i);
+      // Exactly one auto-retry: original attempt + one retry
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    }, 15000);
+
+    it('surfaces the request ID on 500 errors for support tracing', async () => {
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue({
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Internal server error (request ID: req_xyz789)',
+            request_id: 'req_xyz789',
+          },
+        }),
+      });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] }
+      );
+
+      let thrown: unknown;
+      try {
+        await collectChunks(generator);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(StreamingError);
+      expect((thrown as StreamingError).requestId).toBe('req_xyz789');
+      // Message is friendly copy; the raw request-ID string is metadata, not copy
+      expect((thrown as Error).message).not.toMatch(/req_xyz789/);
+    });
+
+    it('maps a subscription_* 403 to inactive-subscription copy', async () => {
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue({
+          error: { code: 'subscription_canceled', message: 'Subscription sub_123 was canceled on 2026-06-01' },
+        }),
+      });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] }
+      );
+
+      let thrown: unknown;
+      try {
+        await collectChunks(generator);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(StreamingError);
+      expect((thrown as StreamingError).code).toBe('SUBSCRIPTION_INACTIVE');
+      expect((thrown as Error).message).toMatch(/subscription is inactive/i);
+      expect((thrown as Error).message).not.toContain('sub_123');
+    });
+
+    it('maps 402 to insufficient-credits copy without echoing the backend detail', async () => {
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 402,
+        headers: new Headers(),
+        json: jest.fn().mockResolvedValue({
+          detail: 'Insufficient credits. Required: $2.00, Current: $0.13',
+        }),
+      });
+
+      const generator = streamChatResponse(
+        'https://api.test.com/v1/chat/completions',
+        'test-api-key',
+        { model: 'gpt-4', messages: [] }
+      );
+
+      let thrown: unknown;
+      try {
+        await collectChunks(generator);
+      } catch (e) {
+        thrown = e;
+      }
+      expect(thrown).toBeInstanceOf(StreamingError);
+      expect((thrown as StreamingError).code).toBe('API_PAYMENT_REQUIRED');
+      expect((thrown as Error).message).toMatch(/enough credits/i);
+      expect((thrown as Error).message).not.toContain('$2.00');
     });
 
     it('should throw StreamingError on 500 server error', async () => {

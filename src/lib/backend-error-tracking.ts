@@ -23,6 +23,16 @@ export function trackBackendError(
     gateway?: string;
     retryCount?: number;
     responseBody?: string;
+    /** Model the failed request targeted (chat/image generation). */
+    model?: string;
+    /** Backend request ID (X-Request-ID / body request_id) for correlation. */
+    requestId?: string;
+    /** Backend error code from the response body (e.g. INSUFFICIENT_CREDITS, subscription_canceled). */
+    errorCode?: string;
+    /** Backend error type from the response body or SSE chunk (e.g. rate_limit_error). */
+    errorType?: string;
+    /** X-RateLimit-Scope header value on 429s (upstream vs gateway). */
+    rateLimitScope?: string;
   }
 ): void {
   const errorObj = typeof error === 'string' ? new Error(error) : error;
@@ -41,6 +51,10 @@ export function trackBackendError(
       http_status: context.statusCode?.toString() || 'unknown',
       http_method: context.method || 'GET',
       gateway: context.gateway || 'none',
+      ...(context.model ? { model: context.model } : {}),
+      ...(context.errorCode ? { backend_error_code: context.errorCode } : {}),
+      ...(context.errorType ? { backend_error_type: context.errorType } : {}),
+      ...(context.rateLimitScope ? { rate_limit_scope: context.rateLimitScope } : {}),
     },
     contexts: {
       backend_api: {
@@ -49,7 +63,12 @@ export function trackBackendError(
         method: context.method,
         gateway: context.gateway,
         retry_count: context.retryCount,
-        response_preview: context.responseBody?.slice(0, 500), // First 500 chars
+        model: context.model,
+        request_id: context.requestId,
+        error_code: context.errorCode,
+        error_type: context.errorType,
+        rate_limit_scope: context.rateLimitScope,
+        response_body: context.responseBody?.slice(0, 2000),
       }
     },
     fingerprint: [

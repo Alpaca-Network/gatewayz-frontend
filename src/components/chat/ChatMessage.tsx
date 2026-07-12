@@ -5,10 +5,10 @@
  * Performance improvement: 50% less re-rendering
  */
 
-import React, { memo, useState } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
-import { Bot, User, Copy, RotateCcw, LogIn, Check, FileText, RefreshCw, ThumbsUp, ThumbsDown, Share, MoreHorizontal } from 'lucide-react';
+import { Bot, User, Copy, RotateCcw, LogIn, Check, FileText, RefreshCw, ThumbsUp, ThumbsDown, Share, MoreHorizontal, CreditCard, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import dynamic from 'next/dynamic';
 import { usePrivy } from '@privy-io/react-auth';
@@ -24,6 +24,22 @@ const ReasoningDisplay = dynamic(
 );
 const SearchResults = dynamic(() => import('@/components/chat/SearchResults'), { ssr: true });
 
+/** Structured error metadata attached by use-chat-stream (from the classified AppError). */
+export interface ChatErrorInfo {
+  code?: string;
+  retryable?: boolean;
+  requestId?: string;
+  retryAfterSeconds?: number;
+  rateLimitScope?: 'upstream' | 'gateway';
+}
+
+/** Live rate-limit retry state while the stream layer waits out Retry-After. */
+export interface RetryNotice {
+  scope: 'upstream' | 'gateway';
+  retryAfterMs: number;
+  startedAt: number;
+}
+
 export interface ChatMessageProps {
   role: 'user' | 'assistant';
   content: string | any[];
@@ -38,6 +54,8 @@ export interface ChatMessageProps {
   model?: string;
   error?: string;
   hasError?: boolean;
+  errorInfo?: ChatErrorInfo;
+  retryNotice?: RetryNotice;
   onCopy?: () => void;
   onRegenerate?: () => void;
   onRetry?: () => void;
@@ -69,7 +87,8 @@ const contentEquals = (a: string | any[], b: string | any[]): boolean => {
   return false;
 };
 
-// Check if error is related to authentication/sign-in
+// Fallback classification from the (already-safe) display copy, used only when
+// no structured errorInfo is available (e.g. legacy messages).
 const isAuthError = (error: string): boolean => {
   const lowerError = error.toLowerCase();
   return (
@@ -81,7 +100,6 @@ const isAuthError = (error: string): boolean => {
   );
 };
 
-// Check if error is related to rate limiting
 const isRateLimitError = (error: string): boolean => {
   const lowerError = error.toLowerCase();
   return (
@@ -89,41 +107,133 @@ const isRateLimitError = (error: string): boolean => {
     lowerError.includes('too many requests') ||
     lowerError.includes('temporarily unavailable') ||
     lowerError.includes('high demand') ||
-    lowerError.includes('429')
+    lowerError.includes('busy right now') ||
+    lowerError.includes('too quickly')
   );
 };
 
-// Error display component with sign-in button for auth errors and retry for rate limits
-const ErrorDisplay = ({ error, onRetry }: { error: string; onRetry?: () => void }) => {
+const AUTH_ERROR_CODES = new Set(['AUTH_REQUIRED', 'AUTH_EXPIRED', 'AUTH_INVALID']);
+const RETRYABLE_ERROR_CODES = new Set([
+  'API_RATE_LIMITED',
+  'API_UPSTREAM_RATE_LIMITED',
+  'API_SERVER_ERROR',
+  'NETWORK_ERROR',
+  'NETWORK_TIMEOUT',
+  'CHAT_STREAM_ERROR',
+  'CHAT_MODEL_ERROR',
+]);
+
+// Error display: friendly copy plus an action matched to the error kind —
+// sign in (auth), add credits (402), renew (inactive subscription), or retry.
+// Shows the backend request ID subtly so support can trace the failure.
+const ErrorDisplay = ({
+  error,
+  errorInfo,
+  onRetry,
+}: {
+  error: string;
+  errorInfo?: ChatErrorInfo;
+  onRetry?: () => void;
+}) => {
   const { login } = usePrivy();
-  const showSignIn = isAuthError(error);
-  const showRetry = isRateLimitError(error) && onRetry;
+  const code = errorInfo?.code;
+
+  const showSignIn = code ? AUTH_ERROR_CODES.has(code) : isAuthError(error);
+  const showAddCredits = code === 'API_PAYMENT_REQUIRED';
+  const showRenew = code === 'SUBSCRIPTION_INACTIVE';
+  const showRetry =
+    !!onRetry &&
+    !showSignIn &&
+    !showAddCredits &&
+    !showRenew &&
+    (errorInfo?.retryable || (code ? RETRYABLE_ERROR_CODES.has(code) : isRateLimitError(error)));
 
   return (
     <div className="mt-2 p-3 bg-destructive/10 border border-destructive/20 rounded text-sm text-destructive">
       <p className="mb-0">{error}</p>
-      {showSignIn && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-2 border-destructive/30 hover:bg-destructive/10"
-          onClick={() => login()}
-        >
-          <LogIn className="h-4 w-4 mr-2" />
-          Sign in to continue
-        </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {showSignIn && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 border-destructive/30 hover:bg-destructive/10"
+            onClick={() => login()}
+          >
+            <LogIn className="h-4 w-4 mr-2" />
+            Sign in to continue
+          </Button>
+        )}
+        {showAddCredits && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 border-destructive/30 hover:bg-destructive/10"
+            asChild
+          >
+            <a href="/settings/credits">
+              <CreditCard className="h-4 w-4 mr-2" />
+              Add credits
+            </a>
+          </Button>
+        )}
+        {showRenew && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 border-destructive/30 hover:bg-destructive/10"
+            asChild
+          >
+            <a href="/settings?tab=billing">
+              <CreditCard className="h-4 w-4 mr-2" />
+              Renew subscription
+            </a>
+          </Button>
+        )}
+        {showRetry && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 border-destructive/30 hover:bg-destructive/10"
+            onClick={onRetry}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Try again
+          </Button>
+        )}
+      </div>
+      {errorInfo?.requestId && (
+        <p className="mt-2 mb-0 text-xs text-muted-foreground">Error ID: {errorInfo.requestId}</p>
       )}
-      {showRetry && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-2 border-destructive/30 hover:bg-destructive/10"
-          onClick={onRetry}
-        >
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Try again
-        </Button>
-      )}
+    </div>
+  );
+};
+
+// Live countdown shown while the stream layer waits out a rate limit before
+// automatically retrying (upstream 429s retry once after Retry-After).
+const RetryCountdownNotice = ({ notice }: { notice: RetryNotice }) => {
+  const remainingMs = () => Math.max(0, notice.retryAfterMs - (Date.now() - notice.startedAt));
+  const [secondsLeft, setSecondsLeft] = useState(() => Math.ceil(remainingMs() / 1000));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSecondsLeft(Math.ceil(remainingMs() / 1000));
+    }, 250);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notice.retryAfterMs, notice.startedAt]);
+
+  const copy =
+    notice.scope === 'upstream'
+      ? 'This model is busy right now — retrying'
+      : "You're sending requests too quickly — retrying";
+
+  return (
+    <div className="mt-2 flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded text-sm text-amber-700 dark:text-amber-400">
+      <Clock className="h-4 w-4 shrink-0" />
+      <span>
+        {copy}
+        {secondsLeft > 0 ? ` in ${secondsLeft}s…` : '…'}
+      </span>
     </div>
   );
 };
@@ -180,6 +290,8 @@ export const ChatMessage = memo<ChatMessageProps>(
     model,
     error,
     hasError,
+    errorInfo,
+    retryNotice,
     onCopy,
     onRegenerate,
     onRetry,
@@ -348,7 +460,12 @@ export const ChatMessage = memo<ChatMessageProps>(
 
             {/* Error display */}
             {hasError && error && (
-              <ErrorDisplay error={error} onRetry={onRetry} />
+              <ErrorDisplay error={error} errorInfo={errorInfo} onRetry={onRetry} />
+            )}
+
+            {/* Rate-limit auto-retry countdown (stream layer is waiting to retry) */}
+            {isStreaming && retryNotice && (
+              <RetryCountdownNotice notice={retryNotice} />
             )}
 
             {/* Streaming indicator with timer */}
@@ -486,6 +603,8 @@ export const ChatMessage = memo<ChatMessageProps>(
       prevProps.document === nextProps.document &&
       prevProps.error === nextProps.error &&
       prevProps.hasError === nextProps.hasError &&
+      JSON.stringify(prevProps.errorInfo) === JSON.stringify(nextProps.errorInfo) &&
+      JSON.stringify(prevProps.retryNotice) === JSON.stringify(nextProps.retryNotice) &&
       prevProps.showActions === nextProps.showActions &&
       prevProps.onCopy === nextProps.onCopy &&
       prevProps.onRetry === nextProps.onRetry &&
