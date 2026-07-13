@@ -227,17 +227,25 @@ export async function POST(request: NextRequest) {
           console.error('[API Proxy] Model ID sent to backend:', body.model);
           console.error('[API Proxy] Gateway param sent to backend:', body.gateway);
 
+          // Forward the headers the client needs to classify the failure
+          // (rate-limit scope, retry timing, request ID). The client maps the
+          // errorData body to friendly copy — raw text is never rendered.
+          const errorHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+          for (const name of ['retry-after', 'x-ratelimit-scope', 'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset', 'x-request-id']) {
+            const value = response.headers.get(name);
+            if (value) errorHeaders[name] = value;
+          }
+
           return new Response(JSON.stringify({
             error: 'Backend API Error',
             status: response.status,
             statusText: response.statusText,
-            message: errorData.message || errorData.detail || errorText.substring(0, 500),
             model: body.model,
             gateway: body.gateway,
             errorData: errorData
           }), {
             status: response.status,
-            headers: { 'Content-Type': 'application/json' },
+            headers: errorHeaders,
           });
         }
 

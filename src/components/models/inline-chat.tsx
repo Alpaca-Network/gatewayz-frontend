@@ -8,6 +8,7 @@ import { Send, Loader2 } from 'lucide-react';
 import { getApiKey, getUserData } from '@/lib/api';
 // Using modular streaming - the old streaming.ts is deprecated
 import { streamChatResponse } from '@/lib/streaming/index';
+import { fromUnknown, getUserMessage } from '@/lib/errors';
 import { normalizeModelId } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -249,22 +250,9 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
 
     } catch (err) {
       console.error('[InlineChat] Error sending message:', err);
-      let errorMessage = 'Failed to send message';
-
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-
-      // Add helpful context if no response was received
-      if (accumulatedContent.length === 0) {
-        // If the error message doesn't already explain the issue, add context
-        if (!errorMessage.includes('not properly configured') && !errorMessage.includes('not support')) {
-          errorMessage = errorMessage || 'No response from model. ';
-          errorMessage += ' This could mean: the model is unavailable, your API key is invalid, or the model provider is having issues. Try again or select a different model.';
-        }
-      }
-
-      setError(errorMessage);
+      // Safe, user-facing copy only — raw error text goes to telemetry in the
+      // streaming layer, never to the screen.
+      setError(getUserMessage(fromUnknown(err)));
       // Remove the streaming message on error
       setMessages(prev => prev.slice(0, -1));
     } finally {

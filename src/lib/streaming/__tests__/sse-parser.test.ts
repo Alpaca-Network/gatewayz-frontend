@@ -231,23 +231,23 @@ describe('parseSSEChunk', () => {
       expect(() => parseSSEChunk(json)).toThrow(StreamingError);
     });
 
-    it('should handle response.error event with message at top level (line 240)', () => {
-      // Line 240: use data.message when error.message is not present
+    it('should handle response.error event without leaking the raw top-level message', () => {
       const json = JSON.stringify({
         type: 'response.error',
         message: 'Top level error message',
       });
       expect(() => parseSSEChunk(json)).toThrow(StreamingError);
-      expect(() => parseSSEChunk(json)).toThrow('Top level error message');
+      // Raw provider text must never surface in the user-facing message
+      expect(() => parseSSEChunk(json)).not.toThrow('Top level error message');
+      expect(() => parseSSEChunk(json)).toThrow(/something went wrong/i);
     });
 
-    it('should handle response.error event with default message (line 241)', () => {
-      // Line 241: default message when no specific message found
+    it('should handle response.error event with generic friendly copy', () => {
       const json = JSON.stringify({
         type: 'response.error',
       });
       expect(() => parseSSEChunk(json)).toThrow(StreamingError);
-      expect(() => parseSSEChunk(json)).toThrow('Response stream error');
+      expect(() => parseSSEChunk(json)).toThrow(/something went wrong/i);
     });
 
     it('should return null for unknown event types', () => {
@@ -261,12 +261,13 @@ describe('parseSSEChunk', () => {
   });
 
   describe('Error handling', () => {
-    it('should throw StreamingError for error objects', () => {
+    it('should throw StreamingError with friendly copy, never the raw provider message', () => {
       const json = JSON.stringify({
-        error: { message: 'Model unavailable' },
+        error: { message: 'ProviderXYZ backend exploded at line 42' },
       });
       expect(() => parseSSEChunk(json)).toThrow(StreamingError);
-      expect(() => parseSSEChunk(json)).toThrow('Model unavailable');
+      expect(() => parseSSEChunk(json)).not.toThrow(/ProviderXYZ|line 42/);
+      expect(() => parseSSEChunk(json)).toThrow(/something went wrong/i);
     });
 
     it('should handle trial expired errors', () => {
@@ -276,32 +277,33 @@ describe('parseSSEChunk', () => {
       expect(() => parseSSEChunk(json)).toThrow(/FREE models/);
     });
 
-    it('should handle upstream rejected errors', () => {
+    it('should handle upstream rejected errors as a provider problem (no raw text)', () => {
       const json = JSON.stringify({
         error: { message: 'upstream rejected the request' },
       });
-      expect(() => parseSSEChunk(json)).toThrow(/Backend error/);
+      expect(() => parseSSEChunk(json)).toThrow(/model had a problem responding/i);
+      expect(() => parseSSEChunk(json)).not.toThrow(/upstream rejected/);
     });
 
     it('should handle rate limit errors by code', () => {
       const json = JSON.stringify({
         error: { code: 'rate_limit_exceeded' },
       });
-      expect(() => parseSSEChunk(json)).toThrow(/Rate limit exceeded/);
+      expect(() => parseSSEChunk(json)).toThrow(/busy right now/i);
     });
 
     it('should handle rate limit errors by type', () => {
       const json = JSON.stringify({
         error: { type: 'rate_limit', message: 'Too many requests' },
       });
-      expect(() => parseSSEChunk(json)).toThrow(/Rate limit exceeded/);
+      expect(() => parseSSEChunk(json)).toThrow(/busy right now/i);
     });
 
     it('should handle rate limit errors by status 429', () => {
       const json = JSON.stringify({
         error: { status: 429, message: 'Slow down' },
       });
-      expect(() => parseSSEChunk(json)).toThrow(/Rate limit exceeded/);
+      expect(() => parseSSEChunk(json)).toThrow(/busy right now/i);
     });
 
     it('should return null for unparseable JSON', () => {
@@ -319,27 +321,29 @@ describe('parseSSEChunk', () => {
       expect(result?.content).toBe('Hello');
     });
 
-    it('should handle string error (line 308-309)', () => {
-      // Lines 308-309: handle error as string
+    it('should handle string error without echoing the raw string', () => {
       const json = JSON.stringify({
         error: 'Simple string error message',
       });
-      expect(() => parseSSEChunk(json)).toThrow('Stream error: Simple string error message');
+      expect(() => parseSSEChunk(json)).toThrow(StreamingError);
+      expect(() => parseSSEChunk(json)).not.toThrow(/Simple string error message/);
+      expect(() => parseSSEChunk(json)).toThrow(/something went wrong/i);
     });
 
-    it('should handle unusual error types (lines 312-313)', () => {
-      // Lines 312-313: handle error that is neither object nor string
+    it('should handle unusual error types with generic copy', () => {
       const json = JSON.stringify({
         error: 12345,
       });
-      expect(() => parseSSEChunk(json)).toThrow('Stream error: 12345');
+      expect(() => parseSSEChunk(json)).toThrow(StreamingError);
+      expect(() => parseSSEChunk(json)).toThrow(/something went wrong/i);
     });
 
     it('should handle boolean error value', () => {
       const json = JSON.stringify({
         error: true,
       });
-      expect(() => parseSSEChunk(json)).toThrow('Stream error: true');
+      expect(() => parseSSEChunk(json)).toThrow(StreamingError);
+      expect(() => parseSSEChunk(json)).toThrow(/something went wrong/i);
     });
 
     it('should handle array error value', () => {

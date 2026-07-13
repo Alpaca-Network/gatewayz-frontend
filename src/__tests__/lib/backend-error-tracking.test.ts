@@ -116,7 +116,7 @@ describe('backend-error-tracking', () => {
 
     it('should include response body preview in context', () => {
       const error = new Error('Test error');
-      const longBody = 'x'.repeat(600);
+      const longBody = 'x'.repeat(2600);
 
       trackBackendError(error, {
         endpoint: '/api/test',
@@ -128,7 +128,39 @@ describe('backend-error-tracking', () => {
         expect.objectContaining({
           contexts: expect.objectContaining({
             backend_api: expect.objectContaining({
-              response_preview: longBody.slice(0, 500),
+              response_body: longBody.slice(0, 2000),
+            }),
+          }),
+        })
+      );
+    });
+
+    it('should include model, request ID, error code/type, and rate-limit scope', () => {
+      const error = new Error('Test error');
+
+      trackBackendError(error, {
+        endpoint: '/v1/chat/completions',
+        statusCode: 429,
+        model: 'deepseek/deepseek-r1',
+        requestId: 'req_abc123',
+        errorCode: 'RATE_LIMIT_EXCEEDED',
+        errorType: 'rate_limit_error',
+        rateLimitScope: 'upstream',
+      });
+
+      expect(Sentry.captureException).toHaveBeenCalledWith(
+        error,
+        expect.objectContaining({
+          tags: expect.objectContaining({
+            model: 'deepseek/deepseek-r1',
+            backend_error_code: 'RATE_LIMIT_EXCEEDED',
+            backend_error_type: 'rate_limit_error',
+            rate_limit_scope: 'upstream',
+          }),
+          contexts: expect.objectContaining({
+            backend_api: expect.objectContaining({
+              request_id: 'req_abc123',
+              rate_limit_scope: 'upstream',
             }),
           }),
         })

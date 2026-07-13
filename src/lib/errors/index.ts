@@ -28,6 +28,8 @@ export type ErrorCode =
   | 'API_VALIDATION_ERROR'
   | 'API_PAYMENT_REQUIRED'
   | 'API_RATE_LIMITED'
+  | 'API_UPSTREAM_RATE_LIMITED'
+  | 'SUBSCRIPTION_INACTIVE'
   // Chat errors
   | 'CHAT_SESSION_ERROR'
   | 'CHAT_MESSAGE_ERROR'
@@ -55,8 +57,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   API_NOT_FOUND: 'The requested resource was not found.',
   API_SERVER_ERROR: 'Server error. Please try again later.',
   API_VALIDATION_ERROR: 'Invalid request. Please check your input.',
-  API_PAYMENT_REQUIRED: "You don't have enough credits for this request. Add credits to continue.",
+  API_PAYMENT_REQUIRED: "You don't have enough credits for this request.",
   API_RATE_LIMITED: "You're sending requests too quickly. Please wait a moment and try again.",
+  API_UPSTREAM_RATE_LIMITED: 'This model is busy right now — retrying shortly. You can also try another model.',
+  SUBSCRIPTION_INACTIVE: 'Your subscription is inactive. Renew it to keep using this feature.',
   // Chat
   CHAT_SESSION_ERROR: 'Failed to manage chat session.',
   CHAT_MESSAGE_ERROR: 'Failed to send message.',
@@ -79,12 +83,20 @@ export interface AppErrorDetails {
   originalError?: Error;
 }
 
+/** Which side enforced a 429: the model provider (upstream) or our gateway. */
+export type RateLimitScope = 'upstream' | 'gateway';
+
 export class AppError extends Error {
   readonly code: ErrorCode;
   readonly details?: Record<string, unknown>;
   readonly retryable: boolean;
   readonly timestamp: number;
   readonly originalError?: Error;
+  /** Backend request ID (X-Request-ID / body request_id) for support tracing. Safe to display as "Error ID". */
+  requestId?: string;
+  /** Seconds the client should wait before retrying (Retry-After). */
+  retryAfterSeconds?: number;
+  rateLimitScope?: RateLimitScope;
 
   constructor(
     code: ErrorCode,
@@ -93,6 +105,9 @@ export class AppError extends Error {
       details?: Record<string, unknown>;
       retryable?: boolean;
       originalError?: Error;
+      requestId?: string;
+      retryAfterSeconds?: number;
+      rateLimitScope?: RateLimitScope;
     }
   ) {
     super(message || ERROR_MESSAGES[code]);
@@ -102,6 +117,9 @@ export class AppError extends Error {
     this.retryable = options?.retryable ?? false;
     this.timestamp = Date.now();
     this.originalError = options?.originalError;
+    this.requestId = options?.requestId;
+    this.retryAfterSeconds = options?.retryAfterSeconds;
+    this.rateLimitScope = options?.rateLimitScope;
 
     // Maintain proper stack trace
     if (Error.captureStackTrace) {
@@ -159,25 +177,39 @@ export class NetworkError extends AppError {
   }
 }
 
+type ApiErrorCode = Extract<
+  ErrorCode,
+  | 'API_ERROR'
+  | 'API_NOT_FOUND'
+  | 'API_SERVER_ERROR'
+  | 'API_VALIDATION_ERROR'
+  | 'API_PAYMENT_REQUIRED'
+  | 'API_RATE_LIMITED'
+  | 'API_UPSTREAM_RATE_LIMITED'
+  | 'SUBSCRIPTION_INACTIVE'
+>;
+
 export class ApiError extends AppError {
   readonly statusCode?: number;
 
   constructor(
-    code: Extract<
-      ErrorCode,
-      'API_ERROR' | 'API_NOT_FOUND' | 'API_SERVER_ERROR' | 'API_VALIDATION_ERROR' | 'API_PAYMENT_REQUIRED' | 'API_RATE_LIMITED'
-    >,
+    code: ApiErrorCode,
     message?: string,
     options?: {
       details?: Record<string, unknown>;
       statusCode?: number;
       originalError?: Error;
       retryable?: boolean;
+      requestId?: string;
+      retryAfterSeconds?: number;
+      rateLimitScope?: RateLimitScope;
     }
   ) {
     super(code, message, {
       ...options,
-      retryable: options?.retryable ?? (code === 'API_SERVER_ERROR' || code === 'API_RATE_LIMITED'),
+      retryable:
+        options?.retryable ??
+        (code === 'API_SERVER_ERROR' || code === 'API_RATE_LIMITED' || code === 'API_UPSTREAM_RATE_LIMITED'),
     });
     this.name = 'ApiError';
     this.statusCode = options?.statusCode;
@@ -355,6 +387,20 @@ function formatRetryAfter(seconds?: number): string {
   return ` Try again in ${Math.round(seconds / 60)} min.`;
 }
 
+/** Human-friendly wait duration for rate-limit copy ("20 seconds", "5 minutes", "2 hours"). */
+function formatWaitDuration(seconds: number): string {
+  if (seconds < 60) {
+    const s = Math.max(1, Math.round(seconds));
+    return `${s} second${s === 1 ? '' : 's'}`;
+  }
+  if (seconds < 3600) {
+    const m = Math.round(seconds / 60);
+    return `${m} minute${m === 1 ? '' : 's'}`;
+  }
+  const h = Math.round(seconds / 3600);
+  return `${h} hour${h === 1 ? '' : 's'}`;
+}
+
 function statusToErrorCode(status: number): ErrorCode {
   if (status === 401) return 'AUTH_EXPIRED';
   if (status === 402) return 'API_PAYMENT_REQUIRED';
@@ -376,59 +422,153 @@ function buildFromCode(code: ErrorCode, message: string, statusCode?: number): A
   if (code === 'CHAT_SESSION_ERROR' || code === 'CHAT_MESSAGE_ERROR' || code === 'CHAT_STREAM_ERROR' || code === 'CHAT_MODEL_ERROR') {
     return new ChatError(code, message);
   }
-  return new ApiError(
-    code as Extract<
-      ErrorCode,
-      'API_ERROR' | 'API_NOT_FOUND' | 'API_SERVER_ERROR' | 'API_VALIDATION_ERROR' | 'API_PAYMENT_REQUIRED' | 'API_RATE_LIMITED'
-    >,
-    message,
-    { statusCode }
-  );
+  return new ApiError(code as ApiErrorCode, message, { statusCode });
+}
+
+/**
+ * Unwrap the envelope our Next.js proxy routes put around backend error bodies
+ * ({ error: 'Backend API Error', status, message, errorData: <backend body> })
+ * so classification sees the backend's own `error.code`/`error.type`.
+ */
+function unwrapProxyEnvelope(b: Record<string, unknown>): Record<string, unknown> {
+  const nested = b.errorData;
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    return nested as Record<string, unknown>;
+  }
+  return b;
+}
+
+function readRequestIdFromBody(b: Record<string, unknown>): string | undefined {
+  const direct = b.request_id ?? b.requestId;
+  if (typeof direct === 'string' && direct) return direct;
+  const errorField = b.error;
+  if (errorField && typeof errorField === 'object') {
+    const rid = (errorField as Record<string, unknown>).request_id;
+    if (typeof rid === 'string' && rid) return rid;
+  }
+  return undefined;
 }
 
 /**
  * Classify a parsed (or unparseable) backend error body + HTTP status into an
  * AppError with a specific, safe, user-facing message. Handles every shape
- * documented in the "Error response shape summary" audit finding.
+ * documented in the "Error response shape summary" audit finding, plus the
+ * newer contract: request IDs, X-RateLimit-Scope upstream/gateway 429s, and
+ * subscription_* 403 codes.
  */
 export function classifyApiError(
   status: number,
   body: unknown,
-  opts?: { retryAfter?: number; context?: string }
+  opts?: {
+    retryAfter?: number;
+    context?: string;
+    /** Value of the X-RateLimit-Scope response header, if any. */
+    rateLimitScope?: string | null;
+    /** Value of the X-Request-ID response header, if any. */
+    requestId?: string | null;
+  }
 ): AppError {
-  const b = (body ?? {}) as Record<string, unknown>;
+  const raw = (body ?? {}) as Record<string, unknown>;
+  const b = unwrapProxyEnvelope(raw);
   const errorField = b.error;
-  const retryAfter = opts?.retryAfter ?? readRetryAfterFromBody(b);
+  const retryAfter = opts?.retryAfter ?? readRetryAfterFromBody(b) ?? readRetryAfterFromBody(raw);
+  const requestId = opts?.requestId ?? readRequestIdFromBody(b) ?? readRequestIdFromBody(raw);
+  const rateLimitScope: RateLimitScope | undefined =
+    status === 429 ? (opts?.rateLimitScope?.toLowerCase() === 'upstream' ? 'upstream' : 'gateway') : undefined;
 
-  // Shapes 1 & 2: `error` is an object, possibly with a known `code`.
-  if (errorField && typeof errorField === 'object') {
-    const errorObj = errorField as Record<string, unknown>;
-    const code = typeof errorObj.code === 'string' ? errorObj.code : undefined;
-    if (code && BACKEND_CODE_MESSAGES[code]) {
-      const bucket = BACKEND_CODE_TO_BUCKET[code];
-      const suffix = code === 'RATE_LIMIT_EXCEEDED' || code === 'DAILY_QUOTA_EXCEEDED' || code === 'TOKEN_RATE_LIMIT'
-        ? formatRetryAfter(retryAfter)
-        : '';
-      return buildFromCode(bucket?.code ?? statusToErrorCode(status), BACKEND_CODE_MESSAGES[code] + suffix, status);
+  const errorObj = errorField && typeof errorField === 'object' ? (errorField as Record<string, unknown>) : undefined;
+  const backendCode = errorObj && typeof errorObj.code === 'string' ? errorObj.code : undefined;
+  const backendType = errorObj && typeof errorObj.type === 'string' ? errorObj.type : undefined;
+
+  const finalize = (err: AppError): AppError => {
+    if (requestId) err.requestId = requestId;
+    if (retryAfter !== undefined && retryAfter > 0) err.retryAfterSeconds = retryAfter;
+    if (rateLimitScope) err.rateLimitScope = rateLimitScope;
+    return err;
+  };
+
+  // 429 — who enforced the limit decides the copy: an upstream (model provider)
+  // limit is not the user's fault and gets model-busy copy; a gateway limit
+  // means the user should slow down.
+  if (status === 429) {
+    if (rateLimitScope === 'upstream') {
+      return finalize(
+        new ApiError('API_UPSTREAM_RATE_LIMITED', ERROR_MESSAGES.API_UPSTREAM_RATE_LIMITED, { statusCode: status })
+      );
+    }
+    // Quota-style gateway limits keep their more specific copy. The code can
+    // be nested (error.code) or top-level (guest rate-limit responses).
+    const rateCode = (
+      (errorObj && typeof errorObj.code === 'string' && errorObj.code) ||
+      (typeof b.code === 'string' && b.code) ||
+      ''
+    ).toUpperCase();
+    if (rateCode === 'GUEST_RATE_LIMIT_EXCEEDED') {
+      return finalize(
+        new ApiError(
+          'API_RATE_LIMITED',
+          "You've used all your free messages for today. Sign up for a free account to continue chatting!",
+          { statusCode: status }
+        )
+      );
+    }
+    if ((rateCode === 'DAILY_QUOTA_EXCEEDED' || rateCode === 'TOKEN_RATE_LIMIT' || rateCode === 'PLAN_LIMIT_REACHED') && BACKEND_CODE_MESSAGES[rateCode]) {
+      return finalize(
+        new ApiError('API_RATE_LIMITED', BACKEND_CODE_MESSAGES[rateCode] + formatRetryAfter(retryAfter), { statusCode: status })
+      );
+    }
+    const message =
+      retryAfter && retryAfter > 0
+        ? `You're sending requests too quickly. Please wait ${formatWaitDuration(retryAfter)} and try again.`
+        : ERROR_MESSAGES.API_RATE_LIMITED;
+    return finalize(new ApiError('API_RATE_LIMITED', message, { statusCode: status }));
+  }
+
+  // 402 — insufficient credits. The UI attaches an "Add credits" CTA to this code.
+  if (status === 402) {
+    return finalize(new ApiError('API_PAYMENT_REQUIRED', ERROR_MESSAGES.API_PAYMENT_REQUIRED, { statusCode: status }));
+  }
+
+  // 403 with a subscription_* code — inactive subscription. The UI attaches a "Renew" CTA.
+  const codeOrType = (backendCode ?? backendType ?? '').toLowerCase();
+  if (status === 403 && codeOrType.startsWith('subscription_')) {
+    return finalize(new ApiError('SUBSCRIPTION_INACTIVE', ERROR_MESSAGES.SUBSCRIPTION_INACTIVE, { statusCode: status }));
+  }
+
+  // Shapes 1 & 2: `error` is an object, possibly with a known `code` (the
+  // backend emits both UPPER_SNAKE and lower_snake variants — normalize).
+  if (errorObj) {
+    const normalizedCode = backendCode?.toUpperCase();
+    if (normalizedCode && BACKEND_CODE_MESSAGES[normalizedCode]) {
+      const bucket = BACKEND_CODE_TO_BUCKET[normalizedCode];
+      const suffix =
+        normalizedCode === 'RATE_LIMIT_EXCEEDED' || normalizedCode === 'DAILY_QUOTA_EXCEEDED' || normalizedCode === 'TOKEN_RATE_LIMIT'
+          ? formatRetryAfter(retryAfter)
+          : '';
+      return finalize(
+        buildFromCode(bucket?.code ?? statusToErrorCode(status), BACKEND_CODE_MESSAGES[normalizedCode] + suffix, status)
+      );
     }
     // No recognized code — fall back to status-based classification.
-    return buildFromCode(statusToErrorCode(status), ERROR_MESSAGES[statusToErrorCode(status)] + formatRetryAfter(retryAfter), status);
+    return finalize(
+      buildFromCode(statusToErrorCode(status), ERROR_MESSAGES[statusToErrorCode(status)] + formatRetryAfter(retryAfter), status)
+    );
   }
 
   // Shape 3: `error` is a bare string (api_keys.py / auth.py 429 variant).
   if (typeof errorField === 'string') {
     const code = statusToErrorCode(status);
-    return buildFromCode(code, ERROR_MESSAGES[code] + formatRetryAfter(retryAfter), status);
+    return finalize(buildFromCode(code, ERROR_MESSAGES[code] + formatRetryAfter(retryAfter), status));
   }
 
   // Shape 4: untouched FastAPI 422 default — `detail` is an array of field errors.
   if (Array.isArray(b.detail)) {
-    return buildFromCode('API_VALIDATION_ERROR', ERROR_MESSAGES.API_VALIDATION_ERROR, status);
+    return finalize(buildFromCode('API_VALIDATION_ERROR', ERROR_MESSAGES.API_VALIDATION_ERROR, status));
   }
 
   // Shape 5 / unrecognized body / no body at all — classify by status only.
   const code = statusToErrorCode(status);
-  return buildFromCode(code, ERROR_MESSAGES[code] + formatRetryAfter(retryAfter), status);
+  return finalize(buildFromCode(code, ERROR_MESSAGES[code] + formatRetryAfter(retryAfter), status));
 }
 
 function readRetryAfterFromBody(b: Record<string, unknown>): number | undefined {
@@ -466,8 +606,89 @@ export async function parseErrorResponse(response: Response, context?: string): 
 
   return classifyApiError(response.status, body, {
     retryAfter: Number.isFinite(retryAfter) ? retryAfter : undefined,
+    rateLimitScope: response.headers?.get?.('X-RateLimit-Scope'),
+    requestId: response.headers?.get?.('X-Request-ID'),
     context,
   });
+}
+
+// =============================================================================
+// SSE STREAM ERROR CLASSIFICATION
+// =============================================================================
+
+/**
+ * Friendly copy for the backend's SSE error chunk `error_type` values
+ * (chat_streaming.py). Raw chunk text is never surfaced — only this copy.
+ */
+const SSE_ERROR_TYPE_MAP: Record<string, { code: ErrorCode; message: string; retryable: boolean }> = {
+  rate_limit_error: {
+    code: 'API_UPSTREAM_RATE_LIMITED',
+    message: 'This model is busy right now. Please try again shortly, or switch to another model.',
+    retryable: true,
+  },
+  capacity_error: {
+    code: 'CHAT_MODEL_ERROR',
+    message: 'This model is at capacity right now. Please try again shortly, or switch to another model.',
+    retryable: true,
+  },
+  provider_error: {
+    code: 'CHAT_STREAM_ERROR',
+    message: 'The model had a problem responding. Your credits for this message were not charged — try again.',
+    retryable: true,
+  },
+  timeout_error: {
+    code: 'CHAT_STREAM_ERROR',
+    message: 'The model had a problem responding. Your credits for this message were not charged — try again.',
+    retryable: true,
+  },
+  not_found_error: {
+    code: 'API_NOT_FOUND',
+    message: "That model isn't available. Please choose a different model.",
+    retryable: false,
+  },
+  auth_error: {
+    code: 'AUTH_INVALID',
+    message: ERROR_MESSAGES.AUTH_INVALID,
+    retryable: false,
+  },
+  stream_error: {
+    code: 'CHAT_STREAM_ERROR',
+    message: 'Something went wrong. Please try again.',
+    retryable: true,
+  },
+};
+
+/**
+ * Classify an SSE error chunk into an AppError with safe user-facing copy.
+ * Accepts the backend's `error_type` field as well as legacy `type`/`code`
+ * variants; anything unrecognized gets the generic retryable message.
+ */
+export function classifySseError(chunk: {
+  error_type?: string;
+  type?: string;
+  code?: string;
+  message?: string;
+  request_id?: string;
+}): AppError {
+  const key = (chunk.error_type || chunk.type || chunk.code || '').toLowerCase();
+  const mapped = SSE_ERROR_TYPE_MAP[key];
+
+  const entry = mapped ?? {
+    code: 'CHAT_STREAM_ERROR' as ErrorCode,
+    message: 'Something went wrong. Please try again.',
+    retryable: true,
+  };
+
+  let err: AppError;
+  if (entry.code === 'AUTH_INVALID') {
+    err = new AuthError('AUTH_INVALID', entry.message);
+  } else if (entry.code === 'CHAT_STREAM_ERROR' || entry.code === 'CHAT_MODEL_ERROR') {
+    err = new ChatError(entry.code, entry.message, { retryable: entry.retryable });
+  } else {
+    err = new ApiError(entry.code as ApiErrorCode, entry.message, { retryable: entry.retryable });
+  }
+  if (chunk.request_id) err.requestId = chunk.request_id;
+  return err;
 }
 
 /**
@@ -480,7 +701,15 @@ export function fromStreamingError(error: {
   code?: string;
   retryable?: boolean;
   retryAfterMs?: number;
+  appError?: unknown;
 }): AppError {
+  // The streaming layer attaches the already-classified AppError when it ran
+  // classification at the HTTP/SSE boundary — use it directly so specific
+  // copy and metadata (requestId, retry-after, rate-limit scope) survive.
+  if (error.appError instanceof AppError) {
+    return error.appError;
+  }
+
   switch (error.code) {
     case 'AUTH_ERROR':
       return new AuthError('AUTH_INVALID', ERROR_MESSAGES.AUTH_INVALID);

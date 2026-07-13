@@ -7,6 +7,7 @@
 
 import type { ParsedSSEData } from './types';
 import { StreamingError } from './errors';
+import { classifySseError } from '@/lib/errors';
 
 /**
  * Convert various input types to plain text.
@@ -84,26 +85,31 @@ function extractContent(data: Record<string, unknown>): string {
 }
 
 /**
- * Extract error information from response data.
- * Handles various error formats from different providers.
+ * Extract error information from response data for internal classification and
+ * telemetry. `rawMessage` is NEVER shown to the user — display copy comes from
+ * classifySseError / the mapped messages in checkForError.
  */
-function extractError(errorObj: Record<string, unknown>): { message: string; type?: string; code?: string } {
-  // Try multiple common error message formats
-  const message =
+function extractErrorInfo(errorObj: Record<string, unknown>): {
+  rawMessage: string;
+  type?: string;
+  code?: string;
+  errorType?: string;
+  requestId?: string;
+} {
+  const rawMessage =
     (typeof errorObj.message === 'string' && errorObj.message) ||
     (typeof errorObj.detail === 'string' && errorObj.detail) ||
     (typeof errorObj.error === 'string' && errorObj.error) ||
     (typeof errorObj.text === 'string' && errorObj.text) ||
     (typeof errorObj.reason === 'string' && errorObj.reason) ||
-    (errorObj.code && errorObj.type ? `${errorObj.type}: ${errorObj.code}` : null) ||
-    (typeof errorObj.code === 'string' && `Error code: ${errorObj.code}`) ||
-    (typeof errorObj.type === 'string' && `Error type: ${errorObj.type}`) ||
-    `Stream error: ${JSON.stringify(errorObj)}`;
+    JSON.stringify(errorObj);
 
   return {
-    message,
+    rawMessage,
     type: typeof errorObj.type === 'string' ? errorObj.type : undefined,
     code: typeof errorObj.code === 'string' ? errorObj.code : undefined,
+    errorType: typeof errorObj.error_type === 'string' ? errorObj.error_type : undefined,
+    requestId: typeof errorObj.request_id === 'string' ? errorObj.request_id : undefined,
   };
 }
 
@@ -275,12 +281,21 @@ function parseEventFormat(data: Record<string, unknown>): ParsedSSEData | null {
     // Error events - these should propagate as errors, not regular returns
     case 'response.error': {
       const errorData = data.error as Record<string, unknown> | undefined;
-      const message =
-        (errorData && typeof errorData.message === 'string' && errorData.message) ||
-        (typeof data.message === 'string' && data.message) ||
-        'Response stream error';
-      // Throw immediately for response.error events so they're handled as stream errors
-      throw new StreamingError(message, { type: 'response_error' });
+      const info = errorData ? extractErrorInfo(errorData) : undefined;
+      const appError = classifySseError({
+        error_type: info?.errorType || (typeof data.error_type === 'string' ? data.error_type : 'stream_error'),
+        request_id: info?.requestId,
+      });
+      // Throw immediately for response.error events so they're handled as
+      // stream errors. Message is our friendly copy; raw text goes to telemetry.
+      throw new StreamingError(appError.getUserMessage(), {
+        type: 'response_error',
+        code: info?.code,
+        retryable: appError.retryable,
+        requestId: info?.requestId,
+        rawDetail: info?.rawMessage ?? (typeof data.message === 'string' ? data.message : undefined),
+        appError,
+      });
     }
 
     default:
@@ -289,86 +304,114 @@ function parseEventFormat(data: Record<string, unknown>): ParsedSSEData | null {
 }
 
 /**
+ * The backend streaming path's documented SSE error_type values
+ * (chat_streaming.py). Each maps to dedicated friendly copy in
+ * classifySseError — anything else falls back to generic copy.
+ */
+const KNOWN_SSE_ERROR_TYPES = new Set([
+  'rate_limit_error',
+  'capacity_error',
+  'provider_error',
+  'timeout_error',
+  'not_found_error',
+  'auth_error',
+  'stream_error',
+]);
+
+/** Build the safe error payload for a ParsedSSEData from a classified AppError. */
+function toSafeError(
+  appError: ReturnType<typeof classifySseError>,
+  info: { type?: string; code?: string; requestId?: string; rawMessage?: string }
+): ParsedSSEData {
+  return {
+    error: {
+      message: appError.getUserMessage(),
+      type: info.type,
+      code: info.code,
+      requestId: info.requestId ?? appError.requestId,
+      retryable: appError.retryable,
+      rawDetail: info.rawMessage,
+      appError,
+    },
+  };
+}
+
+/**
  * Check for error objects in the response data.
  * Only checks explicit error fields to avoid false positives with legitimate content fields.
+ *
+ * The returned `error.message` is always our own friendly copy — raw
+ * provider/backend text only travels in `error.rawDetail` for telemetry.
  */
 function checkForError(data: Record<string, unknown>): ParsedSSEData | null {
-  // Only check for explicit error object - don't treat top-level 'message' as error
-  // since some providers use 'message' for legitimate content
-  if (!data.error) return null;
+  const topLevelErrorType = typeof data.error_type === 'string' ? data.error_type : undefined;
 
-  // Handle nested error object
-  if (typeof data.error === 'object') {
-    const errorObj = data.error as Record<string, unknown>;
-    const errorInfo = extractError(errorObj);
+  // Only treat explicit error fields as errors - don't treat top-level 'message'
+  // as an error since some providers use 'message' for legitimate content
+  if (!data.error && !topLevelErrorType) return null;
 
-    // Check for known error patterns
-    const lowerMessage = errorInfo.message.toLowerCase();
-    const errorCode = (errorInfo.code || '').toLowerCase();
-    const errorType = (errorInfo.type || '').toLowerCase();
-
-    // Check for rate limit errors
-    if (
-      errorCode.includes('rate_limit') ||
-      errorType.includes('rate_limit') ||
-      lowerMessage.includes('rate limit') ||
-      lowerMessage.includes('too many requests') ||
-      errorObj.status === 429
-    ) {
-      return {
-        error: {
-          message: 'Rate limit exceeded. The model is temporarily unavailable due to high demand. Please try again in a moment.',
-          type: 'rate_limit',
-          code: errorInfo.code || 'rate_limit_exceeded',
-        },
-      };
-    }
-
-    if (lowerMessage.includes('trial has expired') || lowerMessage.includes('insufficient credits')) {
-      return {
-        error: {
-          message: 'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge, or add credits to use premium models.',
-          type: 'credits_exhausted',
-        },
-      };
-    }
-
-    if (lowerMessage.includes('upstream rejected')) {
-      return {
-        error: {
-          message: `Backend error: ${errorInfo.message}. This may be a temporary issue. Please try again or select a different model.`,
-          type: 'upstream_error',
-        },
-      };
-    }
-
-    // Check for "Not Found" / 404 errors — typically means the model doesn't exist
-    if (
-      lowerMessage === 'not found' ||
-      lowerMessage.includes('model not found') ||
-      lowerMessage.includes('no such model') ||
-      errorCode === '404' ||
-      errorObj.status === 404
-    ) {
-      return {
-        error: {
-          message: 'The selected model is not available. Try a different model or check that the model ID is correct.',
-          type: 'model_not_found',
-          code: '404',
-        },
-      };
-    }
-
-    return { error: errorInfo };
+  // String or otherwise unstructured error field — classify generically.
+  if (data.error && typeof data.error !== 'object') {
+    const appError = classifySseError({ error_type: topLevelErrorType });
+    return toSafeError(appError, {
+      type: topLevelErrorType,
+      rawMessage: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
+    });
   }
 
-  // Handle string error
-  if (typeof data.error === 'string') {
-    return { error: { message: `Stream error: ${data.error}` } };
+  const errorObj = (data.error as Record<string, unknown> | undefined) ?? {};
+  const info = extractErrorInfo(errorObj);
+  const requestId = info.requestId ?? (typeof data.request_id === 'string' ? data.request_id : undefined);
+  const errorType = (info.errorType || topLevelErrorType || info.type || '').toLowerCase();
+
+  // New backend contract: known error_type values get dedicated copy.
+  if (KNOWN_SSE_ERROR_TYPES.has(errorType)) {
+    const appError = classifySseError({ error_type: errorType, request_id: requestId });
+    return toSafeError(appError, { type: errorType, code: info.code, requestId, rawMessage: info.rawMessage });
   }
 
-  // data.error exists but is neither object nor string - unusual case
-  return { error: { message: `Stream error: ${JSON.stringify(data.error)}` } };
+  // Legacy heuristics for older backend/provider chunks. The matched raw text
+  // is used for classification only — never rendered.
+  const lowerMessage = info.rawMessage.toLowerCase();
+  const errorCode = (info.code || '').toLowerCase();
+
+  if (
+    errorCode.includes('rate_limit') ||
+    errorType.includes('rate_limit') ||
+    lowerMessage.includes('rate limit') ||
+    lowerMessage.includes('too many requests') ||
+    errorObj.status === 429
+  ) {
+    const appError = classifySseError({ error_type: 'rate_limit_error', request_id: requestId });
+    return toSafeError(appError, { type: 'rate_limit', code: info.code || 'rate_limit_exceeded', requestId, rawMessage: info.rawMessage });
+  }
+
+  if (lowerMessage.includes('trial has expired') || lowerMessage.includes('insufficient credits')) {
+    return {
+      error: {
+        message: 'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge, or add credits to use premium models.',
+        type: 'credits_exhausted',
+        requestId,
+        rawDetail: info.rawMessage,
+      },
+    };
+  }
+
+  if (
+    lowerMessage === 'not found' ||
+    lowerMessage.includes('model not found') ||
+    lowerMessage.includes('no such model') ||
+    errorCode === '404' ||
+    errorObj.status === 404
+  ) {
+    const appError = classifySseError({ error_type: 'not_found_error', request_id: requestId });
+    return toSafeError(appError, { type: 'model_not_found', code: '404', requestId, rawMessage: info.rawMessage });
+  }
+
+  // Anything unmapped (including "upstream rejected" and unknown provider
+  // errors): treat as a provider-side stream failure with generic copy.
+  const appError = classifySseError({ error_type: lowerMessage.includes('upstream rejected') ? 'provider_error' : 'stream_error', request_id: requestId });
+  return toSafeError(appError, { type: info.type, code: info.code, requestId, rawMessage: info.rawMessage });
 }
 
 /**
@@ -402,6 +445,10 @@ export function parseSSEChunk(jsonStr: string): ParsedSSEData | null {
     throw new StreamingError(errorResult.error.message, {
       type: errorResult.error.type,
       code: errorResult.error.code,
+      retryable: errorResult.error.retryable,
+      requestId: errorResult.error.requestId,
+      rawDetail: errorResult.error.rawDetail,
+      appError: errorResult.error.appError,
     });
   }
 

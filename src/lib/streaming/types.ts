@@ -4,6 +4,8 @@
  * Type definitions for the streaming module.
  */
 
+import type { AppError, RateLimitScope } from '@/lib/errors';
+
 /**
  * Tool call from the model.
  */
@@ -43,6 +45,9 @@ export interface StreamChunk {
   /** Retry delay in ms when rate limited */
   retryAfterMs?: number;
 
+  /** Who enforced the rate limit (rate_limit_retry chunks): the model provider or our gateway */
+  rateLimitScope?: RateLimitScope;
+
   /** Performance timing metadata */
   timingMetadata?: {
     backendTimeMs?: number;
@@ -68,9 +73,17 @@ export interface ParsedSSEData {
   reasoning?: string;
   done?: boolean;
   error?: {
+    /** Safe, user-facing copy — never raw provider/backend text */
     message: string;
     type?: string;
     code?: string;
+    /** Backend request ID for support tracing */
+    requestId?: string;
+    retryable?: boolean;
+    /** Raw provider text — telemetry only, never render */
+    rawDetail?: string;
+    /** Classified AppError carrying the same copy plus metadata */
+    appError?: AppError;
   };
   // Tool calling events
   type?: 'tool_call' | 'tool_result';

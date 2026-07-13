@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { makeAuthenticatedRequest } from "@/lib/api";
 import { API_BASE_URL } from "@/lib/config";
+import { fromUnknown, getUserMessage, parseErrorResponse } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 
@@ -68,15 +69,13 @@ export default function CachePage() {
             : "Prompt caching has been turned off.",
         });
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || errorData.message || "Failed to update cache settings");
+        throw await parseErrorResponse(response, "Failed to update cache settings");
       }
     } catch (error) {
       console.error("Error updating cache settings:", error);
-      const errorMessage = error instanceof Error ? error.message : "Please try again later";
       toast({
         title: "Failed to update setting",
-        description: errorMessage,
+        description: getUserMessage(fromUnknown(error)),
         variant: "destructive",
       });
     } finally {

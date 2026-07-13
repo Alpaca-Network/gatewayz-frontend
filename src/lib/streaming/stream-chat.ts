@@ -9,8 +9,9 @@
  * This file is kept for backwards compatibility during migration.
  */
 
-import * as Sentry from '@sentry/nextjs';
 import { StreamCoordinator } from '@/lib/stream-coordinator';
+import { classifyApiError, getUserMessage, ApiError, type AppError } from '@/lib/errors';
+import { trackBackendError } from '@/lib/backend-error-tracking';
 import type { StreamChunk, StreamConfig } from './types';
 import { parseSSEBuffer } from './sse-parser';
 import {
@@ -58,7 +59,123 @@ const CONFIG: Required<StreamConfig> = {
 };
 
 /**
+ * Read Retry-After from a response as seconds (supports numeric and HTTP-date forms).
+ */
+function readRetryAfterSeconds(response: Response): number | undefined {
+  const header = response.headers.get('retry-after');
+  if (!header) return undefined;
+
+  const numeric = Number(header);
+  if (!Number.isNaN(numeric) && numeric > 0) return numeric;
+
+  const date = Date.parse(header);
+  if (!Number.isNaN(date)) {
+    const seconds = (date - Date.now()) / 1000;
+    if (seconds > 0) return seconds;
+  }
+  return undefined;
+}
+
+/** Pull the backend's error code/type out of a (possibly proxy-wrapped) error body. */
+function readErrorCodeAndType(errorData: Record<string, unknown>): { code?: string; type?: string } {
+  const candidates = [errorData, errorData.errorData].filter(
+    (c): c is Record<string, unknown> => !!c && typeof c === 'object'
+  );
+  for (const candidate of candidates) {
+    const errorField = candidate.error;
+    if (errorField && typeof errorField === 'object') {
+      const obj = errorField as Record<string, unknown>;
+      return {
+        code: typeof obj.code === 'string' ? obj.code : undefined,
+        type: typeof obj.type === 'string' ? obj.type : undefined,
+      };
+    }
+    if (typeof candidate.code === 'string') {
+      return { code: candidate.code, type: typeof candidate.type === 'string' ? candidate.type : undefined };
+    }
+  }
+  return {};
+}
+
+/**
+ * Errors whose raw payload has already been sent to telemetry. Prevents
+ * double-reporting when nested retry generators re-throw the same error.
+ */
+const reportedErrors = new WeakSet<Error>();
+
+/** Mark an error as already reported to telemetry, then return it for throwing. */
+function markReported<T extends Error>(error: T): T {
+  reportedErrors.add(error);
+  return error;
+}
+
+/**
+ * Report a mid-stream (SSE) error to telemetry with its raw detail. No-op if
+ * this error object was already reported.
+ */
+function reportStreamError(error: StreamingError, url: string, requestBody: Record<string, unknown>): void {
+  if (reportedErrors.has(error)) return;
+  reportedErrors.add(error);
+  try {
+    trackBackendError(error, {
+      endpoint: url,
+      method: 'POST',
+      model: String(requestBody.model || 'unknown'),
+      gateway: typeof requestBody.gateway === 'string' ? requestBody.gateway : undefined,
+      requestId: error.requestId,
+      errorCode: error.code,
+      errorType: error.type,
+      rateLimitScope: error.rateLimitScope,
+      responseBody: error.rawDetail,
+    });
+  } catch {
+    // Telemetry must never break the stream.
+  }
+}
+
+/**
+ * Send the full raw failure payload to telemetry (Sentry). This is the ONLY
+ * place raw backend error text is allowed to go — never to the screen.
+ */
+function reportBackendFailure(
+  status: number,
+  errorData: unknown,
+  url: string,
+  requestBody: Record<string, unknown>,
+  extras: { requestId?: string; rateLimitScope?: string; retryCount?: number; errorCode?: string; errorType?: string }
+): void {
+  try {
+    let responseBody: string | undefined;
+    try {
+      responseBody = JSON.stringify(errorData);
+    } catch {
+      responseBody = String(errorData);
+    }
+    trackBackendError(new Error(`Chat API error: ${status} at ${url}`), {
+      endpoint: url,
+      statusCode: status,
+      method: 'POST',
+      model: String(requestBody.model || 'unknown'),
+      gateway: typeof requestBody.gateway === 'string' ? requestBody.gateway : undefined,
+      retryCount: extras.retryCount,
+      requestId: extras.requestId,
+      errorCode: extras.errorCode,
+      errorType: extras.errorType,
+      rateLimitScope: extras.rateLimitScope,
+      responseBody,
+    });
+  } catch {
+    // Telemetry must never break the stream.
+  }
+}
+
+/**
  * Handle HTTP error responses with appropriate error types.
+ *
+ * Every thrown error carries safe, user-facing copy in `.message` (mapped by
+ * status + backend error code via classifyApiError) plus the classified
+ * AppError so downstream display keeps request IDs / retry metadata. Raw
+ * backend text goes to telemetry only.
  */
 async function handleHttpError(
   response: Response,
@@ -71,80 +188,80 @@ async function handleHttpError(
 ): Promise<AsyncGenerator<StreamChunk> | null> {
   const errorData = await response.json().catch(() => ({}));
 
+  const retryAfterSeconds = readRetryAfterSeconds(response);
+  const rateLimitScopeHeader = response.headers.get('x-ratelimit-scope');
+  const headerRequestId = response.headers.get('x-request-id');
+  const { code: backendCode, type: backendType } = readErrorCodeAndType(errorData);
+
+  const appError = classifyApiError(response.status, errorData, {
+    retryAfter: retryAfterSeconds,
+    rateLimitScope: rateLimitScopeHeader,
+    requestId: headerRequestId,
+  });
+
   devError('API Error Response:', {
     status: response.status,
     errorData,
     url,
   });
 
+  // Raw payload → telemetry. Friendly copy → screen.
+  reportBackendFailure(response.status, errorData, url, requestBody, {
+    requestId: appError.requestId,
+    rateLimitScope: appError.rateLimitScope,
+    retryCount,
+    errorCode: backendCode,
+    errorType: backendType,
+  });
+
+  const throwWithAppError = (error: AppError): never => {
+    throw markReported(
+      new StreamingError(getUserMessage(error), {
+        code: error.code,
+        retryable: error.retryable,
+        requestId: error.requestId,
+        retryAfterSeconds: error.retryAfterSeconds,
+        rateLimitScope: error.rateLimitScope,
+        appError: error,
+      })
+    );
+  };
+
   // Handle specific status codes
   switch (response.status) {
     case 400: {
-      // Extract error message from various response formats:
-      // - Direct: errorData.detail, errorData.message
-      // - Nested error object: errorData.error?.message
-      // - Wrapped by API proxy: errorData.errorData?.detail, errorData.errorData?.message
-      const errorMessage =
+      // Internal-only raw text, used purely to classify legacy 400s that
+      // predate structured error codes. Never displayed.
+      const rawMessage = String(
         errorData.detail ||
-        errorData.error?.message ||
-        errorData.message ||
-        errorData.errorData?.detail ||
-        errorData.errorData?.message ||
-        errorData.errorData?.error?.message ||
-        'Bad request';
+          errorData.error?.message ||
+          errorData.message ||
+          errorData.errorData?.detail ||
+          errorData.errorData?.message ||
+          errorData.errorData?.error?.message ||
+          ''
+      ).toLowerCase();
 
-      devError('400 Bad Request details:', {
-        detail: errorData.detail,
-        message: errorData.message,
-        errorMessage: errorData.error?.message,
-        nestedDetail: errorData.errorData?.detail,
-        nestedMessage: errorData.errorData?.message,
-        fullErrorData: errorData,
-      });
-
-      if (
-        errorMessage.toLowerCase().includes('trial has expired') ||
-        errorMessage.toLowerCase().includes('insufficient credits')
-      ) {
-        throw new StreamingError(
-          'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge, or add credits to use premium models.'
+      if (rawMessage.includes('trial has expired') || rawMessage.includes('insufficient credits')) {
+        const creditsError = new ApiError(
+          'API_PAYMENT_REQUIRED',
+          'Trial credits have been used up. You can still use FREE models! Look for models with the "FREE" badge, or add credits to use premium models.',
+          { statusCode: 400, requestId: appError.requestId }
         );
+        return throwWithAppError(creditsError);
       }
 
-      if (errorMessage.toLowerCase().includes('upstream rejected')) {
-        throw new StreamingError(
-          `Backend error: ${errorMessage}. This may be a temporary issue. Please try again or select a different model.`
-        );
-      }
-
-      throw new StreamingError(`Bad request: ${errorMessage}`);
+      return throwWithAppError(appError);
     }
 
     case 401: {
       const errorCode = errorData.code;
 
-      // Capture auth error to Sentry
-      Sentry.captureException(
-        new Error(`Chat 401 Unauthorized: ${errorData.detail || errorData.message || 'Authentication required'}`),
-        {
-          tags: {
-            error_type: 'chat_auth_error',
-            http_status: 401,
-            error_code: errorCode || 'unknown',
-            model: String(requestBody.model || 'unknown'),
-          },
-          extra: {
-            errorData,
-            url,
-            retryCount,
-          },
-          level: 'warning',
-        }
-      );
-
       if (errorCode === 'GUEST_NOT_CONFIGURED') {
-        throw new AuthenticationError(
-          'Please sign in to use the chat feature. Create a free account to get started!'
+        throw markReported(
+          new AuthenticationError(
+            'Please sign in to use the chat feature. Create a free account to get started!'
+          )
         );
       }
 
@@ -172,61 +289,95 @@ async function handleHttpError(
         }
       }
 
-      throw new AuthenticationError(
-        'Your session has expired. Please sign in again to continue.'
+      throw markReported(
+        new AuthenticationError('Your session has expired. Please sign in again to continue.')
       );
     }
 
-    case 403:
+    case 402:
+      // Insufficient credits. classifyApiError produced API_PAYMENT_REQUIRED
+      // copy; the UI attaches an "Add credits" CTA to that code.
+      return throwWithAppError(appError);
+
+    case 403: {
       // 403 = the key is valid but lacks access/subscription for this action. This is NOT
       // an expired session; a re-login loop can never resolve a billing/access problem.
-      Sentry.captureException(
-        new Error('Chat 403 Forbidden - access/subscription denied'),
-        {
-          tags: {
-            error_type: 'chat_authorization_error',
-            http_status: 403,
-            model: String(requestBody.model || 'unknown'),
-          },
-          extra: {
-            errorData,
-            url,
-          },
-          level: 'warning',
-        }
+      if (appError.code === 'SUBSCRIPTION_INACTIVE') {
+        // subscription_* error codes — the UI attaches a "Renew" CTA.
+        return throwWithAppError(appError);
+      }
+      const accessError = new ApiError(
+        'API_ERROR',
+        "You don't have access to this model or action. If this is a paid model, add credits or upgrade your plan, then try again.",
+        { statusCode: 403, requestId: appError.requestId }
       );
-      throw new StreamingError(
-        "You don't have access to this model or action. If this is a paid model, add credits or upgrade your plan, then try again."
-      );
+      return throwWithAppError(accessError);
+    }
 
-    case 404:
-      throw new StreamingError(
-        `Model not found: ${errorData.detail || errorData.message || 'Unknown model'}`
+    case 404: {
+      const notFoundError = new ApiError(
+        'API_NOT_FOUND',
+        "That model isn't available. Please choose a different model.",
+        { statusCode: 404, requestId: appError.requestId }
       );
+      return throwWithAppError(notFoundError);
+    }
 
-    case 413:
-      throw new StreamingError(
-        'Image or request too large. Please try with a smaller image or reduce image quality.'
+    case 413: {
+      const tooLargeError = new ApiError(
+        'API_VALIDATION_ERROR',
+        'Image or request too large. Please try with a smaller image or reduce image quality.',
+        { statusCode: 413, requestId: appError.requestId }
       );
+      return throwWithAppError(tooLargeError);
+    }
 
     case 429: {
-      const detailMessage =
-        errorData.detail || errorData.message || errorData.error?.message || '';
+      const isUpstream = appError.rateLimitScope === 'upstream';
 
+      if (isUpstream) {
+        // The model provider is rate limited (common on free models) — this is
+        // NOT the user's fault. Auto-retry ONCE after Retry-After; the yielded
+        // status chunk lets the UI show a countdown while we wait.
+        if (retryCount === 0) {
+          const waitTime = Math.max(1000, Math.round((retryAfterSeconds ?? 3) * 1000)) + Math.floor(Math.random() * 500);
+          devLog(`Upstream rate limit, auto-retrying once in ${waitTime}ms...`);
+
+          return (async function* () {
+            yield {
+              status: 'rate_limit_retry' as const,
+              retryAfterMs: waitTime,
+              rateLimitScope: 'upstream' as const,
+            };
+            await sleep(waitTime);
+            yield* streamGenerator(url, apiKey, requestBody, Math.max(retryCount + 1, 1), maxRetries);
+          })();
+        }
+
+        throw markReported(
+          new RateLimitError(getUserMessage(appError), (retryAfterSeconds ?? 0) * 1000 || undefined, {
+            rateLimitScope: 'upstream',
+            requestId: appError.requestId,
+            appError,
+          })
+        );
+      }
+
+      // Gateway rate limit — the user is sending requests too quickly. Retry
+      // with backoff a few times, then surface the wait-N-seconds copy.
       if (retryCount < maxRetries) {
-        const retryAfterHeader = response.headers.get('retry-after');
-        const isConcurrencyLimit = detailMessage.toLowerCase().includes('concurrency');
-        const isBurstLimit = detailMessage.toLowerCase().includes('burst');
+        const rawDetail = String(
+          errorData.detail || errorData.message || errorData.error?.message || ''
+        ).toLowerCase();
+        const isConcurrencyLimit = rawDetail.includes('concurrency');
+        const isBurstLimit = rawDetail.includes('burst');
 
         const baseDelay = isConcurrencyLimit || isBurstLimit ? 3000 : 1500;
         const maxDelay = isConcurrencyLimit || isBurstLimit ? 30000 : 15000;
         let waitTime = Math.min(baseDelay * Math.pow(2, retryCount), maxDelay);
 
-        if (retryAfterHeader) {
-          const numericRetry = Number(retryAfterHeader);
-          if (!Number.isNaN(numericRetry) && numericRetry > 0) {
-            waitTime = Math.max(waitTime, numericRetry * 1000);
-          }
+        if (retryAfterSeconds) {
+          waitTime = Math.max(waitTime, retryAfterSeconds * 1000);
         }
 
         waitTime = Math.max(waitTime, 1500) + Math.floor(Math.random() * 500);
@@ -235,21 +386,24 @@ async function handleHttpError(
 
         // Return a generator that yields rate limit status then retries
         return (async function* () {
-          yield { status: 'rate_limit_retry' as const, retryAfterMs: waitTime };
+          yield {
+            status: 'rate_limit_retry' as const,
+            retryAfterMs: waitTime,
+            rateLimitScope: 'gateway' as const,
+          };
           await sleep(waitTime);
           yield* streamGenerator(url, apiKey, requestBody, retryCount + 1, maxRetries);
         })();
       }
 
-      throw new RateLimitError(
-        detailMessage || 'Rate limit exceeded. Please wait a moment and try again.'
+      throw markReported(
+        new RateLimitError(getUserMessage(appError), (retryAfterSeconds ?? 0) * 1000 || undefined, {
+          rateLimitScope: 'gateway',
+          requestId: appError.requestId,
+          appError,
+        })
       );
     }
-
-    case 500:
-      throw new StreamingError(
-        `Server error: ${errorData.detail || errorData.message || 'Internal server error'}. Please try again.`
-      );
 
     case 502:
     case 503:
@@ -266,17 +420,18 @@ async function handleHttpError(
         return streamGenerator(url, apiKey, requestBody, retryCount + 1, maxRetries);
       }
 
-      throw new StreamingError(
-        `Service unavailable. The backend appears to be temporarily unavailable. Please try again.`
+      const unavailableError = new ApiError(
+        'API_SERVER_ERROR',
+        'Service unavailable. The backend appears to be temporarily unavailable. Please try again.',
+        { statusCode: response.status, requestId: appError.requestId, retryable: true }
       );
+      return throwWithAppError(unavailableError);
     }
 
     default:
-      throw new StreamingError(
-        errorData.error?.message ||
-          errorData.detail ||
-          `Request failed with status ${response.status}`
-      );
+      // 500s and anything unmapped: generic copy from the classifier. The
+      // request ID rides along so the UI can show a subtle "Error ID".
+      return throwWithAppError(appError);
   }
 }
 
@@ -434,11 +589,16 @@ export async function* streamChatResponse(
 
         // Yield parsed chunks
         for (const chunk of chunks) {
-          // Handle error chunks from SSE parsing (e.g., finish_reason: 'error')
+          // Handle error chunks from SSE parsing (e.g., finish_reason: 'error').
+          // chunk.error.message is already safe copy from the parser.
           if (chunk.error) {
             throw new StreamingError(chunk.error.message, {
               type: chunk.error.type,
               code: chunk.error.code,
+              retryable: chunk.error.retryable ?? true,
+              requestId: chunk.error.requestId,
+              rawDetail: chunk.error.rawDetail,
+              appError: chunk.error.appError,
             });
           }
 
@@ -504,6 +664,11 @@ export async function* streamChatResponse(
       throw new StreamTimeoutError(
         'Request timed out. The model may be overloaded or generating a very long response.'
       );
+    }
+    // Mid-stream (SSE) errors weren't reported by handleHttpError — send their
+    // raw payload to telemetry here before rethrowing the friendly message.
+    if (error instanceof StreamingError) {
+      reportStreamError(error, url, requestBody);
     }
     throw error;
   }

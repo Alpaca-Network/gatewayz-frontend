@@ -11,6 +11,7 @@ import { ModelOption } from '@/components/chat/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 import { sentryMetrics } from '@/lib/sentry-metrics';
 import { isTauriEnvironment } from '@/lib/config';
+import { fromUnknown, getUserMessage } from '@/lib/errors';
 
 // Stream stopped error for clean cancellation
 class StreamStoppedError extends Error {
@@ -422,6 +423,25 @@ export function useChatStream() {
                     break;
                 }
 
+                // Rate-limit retry in progress: surface a countdown notice on the
+                // streaming assistant message (e.g. "model busy — retrying in Ns")
+                if (chunk.status === 'rate_limit_retry') {
+                    const retryNotice = {
+                        scope: chunk.rateLimitScope ?? 'gateway',
+                        retryAfterMs: chunk.retryAfterMs ?? 0,
+                        startedAt: Date.now(),
+                    };
+                    flushSync(() => {
+                        queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
+                            if (!old || old.length === 0) return old || [];
+                            const last = old[old.length - 1];
+                            if (!last || last.role !== 'assistant') return old;
+                            return [...old.slice(0, -1), { ...last, retryNotice }];
+                        });
+                    });
+                    continue;
+                }
+
                 chunkCount++;
 
                 if (chunkCount === 1) {
@@ -473,6 +493,7 @@ export function useChatStream() {
                                 reasoning: currentReasoning,
                                 isReasoningStreaming,
                                 isStreaming: true, // Ensure streaming flag stays true during updates
+                                retryNotice: undefined, // Content arrived — clear any rate-limit countdown
                             }];
                         });
                     });
@@ -597,21 +618,23 @@ export function useChatStream() {
                 stack: e instanceof Error ? e.stack : undefined
             });
             console.error("Streaming failed", e);
-            const errorMessage = e instanceof Error ? e.message : "Failed to complete response";
-            setStreamError(errorMessage);
+
+            // Classify into safe, user-facing copy + structured metadata. Raw
+            // error text was already sent to telemetry by the streaming layer
+            // and must never reach the screen.
+            const appError = fromUnknown(e);
+            const safeMessage = getUserMessage(appError);
+            setStreamError(safeMessage);
 
             // Track chat error with Sentry
             const provider = model.sourceGateway || 'unknown';
-            const errorType = e instanceof TypeError ? 'network' :
-                             e instanceof Error && e.message.includes('timeout') ? 'timeout' :
-                             e instanceof Error && e.message.includes('401') ? 'auth' :
-                             e instanceof Error && e.message.includes('429') ? 'rate_limit' :
-                             'stream_error';
-            sentryMetrics.trackChatError(model.value, provider, errorType, {
+            sentryMetrics.trackChatError(model.value, provider, appError.code.toLowerCase(), {
                 is_streaming: 'true'
             });
 
-            // Mark the assistant message as failed with error metadata, not appended to content
+            // Mark the assistant message as failed with error metadata, not appended
+            // to content. Partial streamed content stays visible — the error renders
+            // as a non-blocking notice below it.
             flushSync(() => {
                 queryClient.setQueryData(['chat-messages', sessionId], (old: any[] | undefined) => {
                     if (!old || old.length === 0) return old || [];
@@ -622,8 +645,16 @@ export function useChatStream() {
                         ...last,
                         content: last.content || '', // Keep existing content if any
                         isStreaming: false,
-                        error: errorMessage, // Store error separately, not in content
-                        hasError: true
+                        retryNotice: undefined,
+                        error: safeMessage, // Friendly copy only — never raw error text
+                        hasError: true,
+                        errorInfo: {
+                            code: appError.code,
+                            retryable: appError.retryable,
+                            requestId: appError.requestId,
+                            retryAfterSeconds: appError.retryAfterSeconds,
+                            rateLimitScope: appError.rateLimitScope,
+                        },
                     }];
                 });
             });

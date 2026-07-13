@@ -108,14 +108,25 @@ export async function POST(request: NextRequest) {
         const errorText = await response.text();
         let errorData: any;
         try { errorData = JSON.parse(errorText); } catch { errorData = { raw: errorText }; }
+
+        // Forward the full backend error body plus the headers the client
+        // needs to classify the failure (rate-limit scope, retry timing,
+        // request ID). The client maps these to friendly copy — raw text is
+        // never rendered.
+        const errorHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+        for (const name of ['retry-after', 'x-ratelimit-scope', 'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset', 'x-request-id']) {
+          const value = response.headers.get(name);
+          if (value) errorHeaders[name] = value;
+        }
+
         return new Response(JSON.stringify({
           error: 'Backend API Error',
           status: response.status,
-          message: errorData.message || errorData.detail || errorText.substring(0, 500),
           model: body.model,
+          errorData,
         }), {
           status: response.status,
-          headers: { 'Content-Type': 'application/json' },
+          headers: errorHeaders,
         });
       }
 

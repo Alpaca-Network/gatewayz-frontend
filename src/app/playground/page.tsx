@@ -20,6 +20,7 @@ import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { ReasoningDisplay } from '@/components/chat/reasoning-display';
 import { streamChatResponse } from '@/lib/streaming/stream-chat';
+import { fromUnknown, getUserMessage } from '@/lib/errors';
 import { usePrivy } from '@privy-io/react-auth';
 import { getApiKey } from '@/lib/api';
 import {
@@ -152,14 +153,12 @@ export default function PlaygroundPage() {
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'An error occurred';
-
       console.error('Error sending message:', error);
 
+      // Friendly copy only — raw error text stays in telemetry/console.
       toast({
         title: 'Error',
-        description: errorMessage,
+        description: getUserMessage(fromUnknown(error)),
         variant: 'destructive',
       });
     } finally {
