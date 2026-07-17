@@ -159,3 +159,24 @@ Fixes (verified against backend origin/main):
 ## Deferred (post-MVP)
 - Oversized-file splits (`models-client.tsx` 1,905, `gatewayz-auth-context.tsx` post-slim, `ChatInput.tsx` 1,547, credits page 1,068).
 - `docs/` (265 files) pruning pass; Statsig-vs-PostHog single-telemetry decision; Tauri extraction to its own workspace; chat-history UI rework against future backend chat-session changes.
+
+## Outcome
+
+Shipped on `refactor/mvp-north-star` (Tasks 0–14, 21 commits): −31.5k LOC in
+`src/` (171k → 139.5k), single chat-v2 tree, single auth model, single
+E2E framework, prepaid-only checkout, and a DB-driven catalog surface
+(`catalog-api.ts` + `use-catalog.ts`) now consumed by chat model-select and
+the settings/preset pages. Verification held the 21-failed-suite/255-failed-
+test baseline at every task (zero new failures); Playwright: 108 passed, 21
+failed (needs live Privy creds / IndexedDB emulation — both pre-existing,
+unrelated to this refactor), 140 skipped. Key audit-premise inversions
+(reported honestly, not fabricated): `lib/data.ts` and `gateway-registry.ts`
+were NOT hardcoded duplicates of the DB catalog — each holds data/behavior
+the backend genuinely lacks — so they were kept, not deleted; three of the
+plan's "three parallel chat-state systems" were already dead code, not live
+duplication, so Task 10 was a deletion, not a merge. Two of the four Phase-3-
+review follow-ups are done (model-select + settings pages now read
+`useModels`); two remain open (synthetic dashboard charts have no backend
+home; `/api/gateways` still merges frontend registry config with the
+backend list rather than reading everything server-side). See per-task
+`.superpowers/task-*.md` reports for full detail.

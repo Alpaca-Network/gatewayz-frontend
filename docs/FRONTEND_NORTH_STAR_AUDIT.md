@@ -1,3 +1,26 @@
+> **STATUS: EXECUTED.** This audit's findings were implemented on
+> `refactor/mvp-north-star` (Phases 0–4, Tasks 0–14). See the
+> `## Outcome` section of
+> `docs/superpowers/plans/2026-07-17-frontend-mvp-refactor.md` for what
+> shipped, verification evidence, and honest deviations from this audit's
+> premises (several of this doc's "hardcoded table" and "duplication"
+> findings turned out to be only partly accurate once the code was actually
+> migrated — see the plan's Task 8/9/11/12 notes for the corrected picture).
+>
+> Four items surfaced by the Phase 3 review are tracked as follow-ups:
+> 1. `components/chat-v2/model-select.tsx` wired onto `useModels` — **done**.
+> 2. `settings/page.tsx` + `settings/presets/new/page.tsx` wired onto
+>    `useModels` — **done**.
+> 3. Synthetic dashboard charts (`lib/data.ts`'s `topApps`/`organizationsData`/
+>    per-model token time-series) have no backend home — **remaining**,
+>    needs a product decision (build the backend endpoints, or cut the
+>    dashboard surface that renders them).
+> 4. `/api/gateways` still merges the frontend `gateway-registry.ts` config
+>    with the backend's `/v1/gateways` list rather than reading everything
+>    from the backend — **remaining**, needs a backend-merge decision (move
+>    colors/logos/priority/env-var-names server-side, or keep them
+>    frontend-only permanently).
+
 # Frontend North Star Alignment Audit — 2026-07-17
 
 Audited against `gatewayz-backend/docs/NORTH_STAR.md` (+ Amendments) and the post-refactor backend (`origin/main`, PR #2165–#2169). Repo: ~189k lines TS/TSX — larger than the refactored backend.
