@@ -97,3 +97,27 @@ So NOT blocked — only one system is load-bearing. The correct action was to de
 ### Verification
 - Grep: no references to `features/chat` or `hooks/chat/` remain.
 - `pnpm build` green; full `pnpm test` = **21 failed / 255 failed = baseline (zero new failures)**; suite count 160→159 only because the dead `ChatExperience.test` (was passing) was deleted with its source. chat-v2's live state code is untouched, so the Task-9 `/chat` 200 render smoke still holds.
+- Commit: `0bef34b5 refactor(chat): single chat-state system`
+
+---
+
+## Task 11 — Auth consolidation
+
+### Verified landscape (before any change)
+- **LIVE single auth API**: `src/context/gatewayz-auth-context.tsx` (v1) — consumed by `use-auth` and ~20 files (settings, signup, AuthGate, chat-v2, providers). It is self-contained and uses only `@/lib/session-cache`.
+- **DEAD parallel auth system**: `src/context/gatewayz-auth-context-v2.tsx` has **zero importers** and is the ONLY consumer of the entire `@/lib/auth/` module (auth-machine, auth-service, auth-config, index, types). So the whole `@/lib/auth/` module is dead-with-it.
+- **DEAD token-refresh pair**: `src/lib/token-refresh.ts` ← only `src/hooks/use-token-refresh.ts` ← nobody.
+- **xstate**: NOT a dependency at all (`grep xstate package.json` → empty). `auth-machine.ts` is a hand-rolled machine importing from `./types`, not xstate. The plan's "delete auth-machine (xstate) / remove xstate dep" premise doesn't apply.
+- **auth-store (Zustand)**: ~8 call sites (ChatLayout, model-select, ChatInput, desktop-auth-provider, use-text-to-speech, use-auth-sync, use-chat-stream, use-chat-queries) — **> 3**.
+
+### Performed (evidence over the plan's assumptions)
+- Deleted the dead parallel auth system: `gatewayz-auth-context-v2.tsx` + the whole `src/lib/auth/` module (auth-machine.ts, auth-service.ts, auth-config.ts, index.ts, types.ts).
+- Deleted the dead token-refresh pair (`hooks/use-token-refresh.ts` + `lib/token-refresh.ts`). (Plan said "merge the dup pair into one" — but both are dead, so merging would keep dead code; deleted instead.)
+- Kept: the live `gatewayz-auth-context.tsx` (v1) as the single auth model, and `session-cache.ts` (live).
+- **DEFERRED `auth-store.ts`** per the plan's own gate ("zustand store dies only if ≤3 call sites, else defer + report"): 8 call sites → deferred, reported here. It remains the live shared auth store for chat-v2 + hooks.
+- Note on the plan's "keep auth-service.ts (existing)": auth-service was found DEAD (only the orphaned -v2 context used it), so keeping it would have been keeping dead code — deleted with the rest of the dead module. The live context never used it.
+
+### Verification (never break login)
+- Grep: no dangling refs to `@/lib/auth`, `gatewayz-auth-context-v2`, `use-token-refresh`, or `lib/token-refresh`.
+- `pnpm lint` clean; `pnpm build` green; full `pnpm test` = **21 failed / 255 failed = baseline (zero new failures)**; total tests unchanged (deleted auth files had no tests).
+- Manual dev-server smoke (`pnpm dev`): `/signup` (login) → **200**, `/settings/keys` → **200**, `/chat` → **200**, `/` → **200**, with **no** auth/context module errors in the log — the live v1 auth context wires up correctly after removing the dead parallel system (a broken auth API would 500 / throw module errors on these pages). A full interactive Privy login needs real credentials/network (unavailable here); the render smoke + green auth test suites cover the wiring.
