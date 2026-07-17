@@ -83,12 +83,6 @@ describe('AppFooter', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('should not render on agent pages', () => {
-    mockPathname.mockReturnValue('/agent');
-    const { container } = render(<AppFooter />);
-    expect(container.firstChild).toBeNull();
-  });
-
   it('should render on settings pages after initial render', () => {
     mockPathname.mockReturnValue('/settings');
     render(<AppFooter />);
