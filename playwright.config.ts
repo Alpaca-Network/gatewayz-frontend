@@ -22,6 +22,7 @@ export default defineConfig({
     '**/*auth*.spec.ts',
     '**/*models*.spec.ts',
     '**/*chat*.spec.ts',
+    '**/mobile-browser-errors.spec.ts',
   ],
 
   // Run tests in files in parallel

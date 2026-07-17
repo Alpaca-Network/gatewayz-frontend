@@ -12,10 +12,16 @@
 
 import { test, expect, devices } from '@playwright/test';
 
-test.describe('Mobile Browser Error Handling', () => {
-  test.describe('iOS Safari', () => {
+// NOTE: devices['iPhone 13'] sets defaultBrowserType: 'webkit', which Playwright
+// forbids overriding inside a describe group (forces a new worker). This suite
+// only exercises JS-level mocks (indexedDB/localStorage/console), so we keep the
+// mobile viewport/UA emulation but run it on the configured (chromium) project
+// rather than force webkit.
+const { defaultBrowserType: _iPhone13BrowserType, ...iPhone13WithoutBrowserOverride } = devices['iPhone 13'];
+
+test.describe('iOS Safari', () => {
     test.use({
-      ...devices['iPhone 13'],
+      ...iPhone13WithoutBrowserOverride,
       userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
     });
 
@@ -331,4 +337,4 @@ test.describe('Mobile Browser Error Handling', () => {
       await expect(page.locator('[data-testid="email-auth-option"]')).toBeVisible();
     });
   });
-});
+
