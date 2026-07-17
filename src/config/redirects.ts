@@ -50,5 +50,23 @@ export function getRedirects(): Redirect[] {
         },
       ],
     },
+    // Catalog consolidation (Task 8): the DB-driven /models page is now the single
+    // model/provider browsing surface. The old admin-style /catalog/* pages (which
+    // called the admin-gated /providers router) are consolidated into /models.
+    {
+      source: '/catalog',
+      destination: '/models',
+      permanent: false,
+    },
+    {
+      source: '/catalog/models',
+      destination: '/models',
+      permanent: false,
+    },
+    {
+      source: '/catalog/providers',
+      destination: '/models',
+      permanent: false,
+    },
   ];
 }
