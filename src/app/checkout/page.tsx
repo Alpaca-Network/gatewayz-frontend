@@ -5,11 +5,10 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Copy, Gift, CheckCircle, Share2, Users, Sparkles, CreditCard, Check, Shield, Zap, Minus, Plus } from "lucide-react";
+import { ArrowLeft, Sparkles, CreditCard, Check, Shield, Zap, Minus, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getUserMessage } from '@/lib/errors';
-import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
-import { API_BASE_URL } from '@/lib/config';
+import { getUserData } from '@/lib/api';
 import { tierConfigs, creditPackages, TierConfig } from '@/lib/pricing-config';
 
 function CheckoutPageContent() {
@@ -29,11 +28,7 @@ function CheckoutPageContent() {
   const [selectedTier, setSelectedTier] = useState<string>(initialTier);
   const [quantity, setQuantity] = useState<number>(Math.max(1, Math.min(100, initialQuantity)));
 
-  const [referralCode, setReferralCode] = useState<string>('');
-  const [referralLink, setReferralLink] = useState<string>('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [referralLoading, setReferralLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const isDowngrade = action === 'downgrade';
@@ -81,35 +76,6 @@ function CheckoutPageContent() {
     setIsAuthenticated(!!userData);
   }, []);
 
-  // Fetch referral data in the background (non-blocking)
-  useEffect(() => {
-    const fetchReferralData = async () => {
-      const userData = getUserData();
-      if (!userData) {
-        setReferralLoading(false);
-        return;
-      }
-
-      try {
-        const codeResponse = await makeAuthenticatedRequest(`${API_BASE_URL}/referral/code`);
-
-        if (codeResponse.ok) {
-          const codeData = await codeResponse.json();
-          setReferralCode(codeData.referral_code || '');
-          setReferralLink(`${window.location.origin}/signup?ref=${codeData.referral_code}`);
-        }
-      } catch (error) {
-        console.error('Error fetching referral data:', error);
-      } finally {
-        setReferralLoading(false);
-      }
-    };
-
-    // Fetch referral data after a short delay to prioritize main content rendering
-    const timeoutId = setTimeout(fetchReferralData, 100);
-    return () => clearTimeout(timeoutId);
-  }, []);
-
   // Quantity handlers
   const handleQuantityChange = useCallback((newQuantity: number) => {
     const clampedQuantity = Math.max(1, Math.min(100, newQuantity));
@@ -128,20 +94,6 @@ function CheckoutPageContent() {
   const handlePlanChange = useCallback((newTier: string) => {
     setSelectedTier(newTier);
   }, []);
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      toast({ title: "Referral link copied to clipboard!" });
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      toast({
-        title: "Failed to copy link",
-        variant: "destructive",
-      });
-    }
-  };
 
   const handleProceedToPayment = async () => {
     setIsProcessing(true);
@@ -428,7 +380,7 @@ function CheckoutPageContent() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="max-w-2xl mx-auto">
           {/* Order Summary */}
           <Card className="h-fit">
             <CardHeader>
@@ -628,75 +580,6 @@ function CheckoutPageContent() {
                   </>
                 )}
               </Button>
-            </CardContent>
-          </Card>
-
-          {/* Referral CTA */}
-          <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 h-fit">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <Gift className="h-6 w-6 text-primary" />
-                Invite Friends
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-3">
-                <p className="text-base">
-                  Share your referral link with colleagues and friends to help them get started with Gatewayz.
-                </p>
-                <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
-                  <Users className="h-8 w-8 text-primary flex-shrink-0" />
-                  <div>
-                    <p className="font-semibold">Track who joins through your link</p>
-                    <p className="text-sm text-muted-foreground">See your referrals in your dashboard</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Referral Link Input */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Your Referral Link</label>
-                <div className="flex gap-2">
-                  <Input
-                    value={referralLoading ? "Loading..." : referralLink}
-                    readOnly
-                    className="text-sm bg-background"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => copyToClipboard(referralLink)}
-                    disabled={referralLoading || !referralLink}
-                    className={copied ? "bg-green-100 border-green-500" : ""}
-                  >
-                    {copied ? (
-                      <CheckCircle className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Share Button */}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => copyToClipboard(referralLink)}
-                disabled={referralLoading || !referralLink}
-              >
-                <Share2 className="h-4 w-4 mr-2" />
-                Share Referral Link
-              </Button>
-
-              {/* Referral Code Display */}
-              {referralCode && (
-                <div className="text-center pt-4 border-t">
-                  <p className="text-sm text-muted-foreground">
-                    Or share your referral code: <span className="font-mono font-bold text-foreground">{referralCode}</span>
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
         </div>

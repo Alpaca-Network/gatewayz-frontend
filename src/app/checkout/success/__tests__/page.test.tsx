@@ -40,45 +40,18 @@ jest.mock('@/components/ui/button', () => ({
   ),
 }));
 
-jest.mock('@/components/ui/input', () => ({
-  Input: ({ value, readOnly, className }: any) => (
-    <input
-      data-testid="input"
-      value={value}
-      readOnly={readOnly}
-      className={className}
-    />
-  ),
-}));
-
-// Mock the toast hook
-jest.mock('@/hooks/use-toast', () => ({
-  useToast: () => ({
-    toast: jest.fn(),
-  }),
-}));
-
 // Mock lucide-react icons
 jest.mock('lucide-react', () => ({
-  Copy: () => <span data-testid="icon-copy">Copy</span>,
   Gift: () => <span data-testid="icon-gift">Gift</span>,
   CheckCircle: () => <span data-testid="icon-check-circle">CheckCircle</span>,
-  Share2: () => <span data-testid="icon-share">Share</span>,
-  Users: () => <span data-testid="icon-users">Users</span>,
   Sparkles: () => <span data-testid="icon-sparkles">Sparkles</span>,
 }));
 
 // Mock the API module
 const mockGetUserData = jest.fn();
-const mockMakeAuthenticatedRequest = jest.fn();
 
 jest.mock('@/lib/api', () => ({
   getUserData: () => mockGetUserData(),
-  makeAuthenticatedRequest: (...args: any[]) => mockMakeAuthenticatedRequest(...args),
-}));
-
-jest.mock('@/lib/config', () => ({
-  API_BASE_URL: 'https://api.test.com',
 }));
 
 // Mock gtag for Google Ads conversion tracking
@@ -107,10 +80,6 @@ describe('CheckoutSuccessPage', () => {
         user_id: 1,
         api_key: 'test-api-key',
         email: 'test@example.com',
-      });
-      mockMakeAuthenticatedRequest.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
       });
     });
 
@@ -148,66 +117,11 @@ describe('CheckoutSuccessPage', () => {
       });
     });
 
-    it('should render the referral CTA section', async () => {
-      render(<CheckoutSuccessPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Invite Friends')).toBeInTheDocument();
-      });
-    });
-
-    it('should fetch and display the referral link', async () => {
-      render(<CheckoutSuccessPage />);
-
-      await waitFor(() => {
-        const inputs = screen.getAllByTestId('input');
-        const referralInput = inputs.find(input =>
-          (input as HTMLInputElement).value.includes('TESTREF123')
-        );
-        expect(referralInput).toBeInTheDocument();
-      });
-    });
-
-    it('should render Share Referral Link button', async () => {
-      render(<CheckoutSuccessPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Share Referral Link')).toBeInTheDocument();
-      });
-    });
-
-    it('should render Copy Link button', async () => {
-      render(<CheckoutSuccessPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Copy Link')).toBeInTheDocument();
-      });
-    });
-
     it('should render navigation buttons', async () => {
       render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('View Referral Dashboard')).toBeInTheDocument();
         expect(screen.getByText('Start Using Gatewayz')).toBeInTheDocument();
-      });
-    });
-
-    it('should display the referral code', async () => {
-      render(<CheckoutSuccessPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('TESTREF123')).toBeInTheDocument();
-      });
-    });
-
-    it('should call the referral code API', async () => {
-      render(<CheckoutSuccessPage />);
-
-      await waitFor(() => {
-        expect(mockMakeAuthenticatedRequest).toHaveBeenCalledWith(
-          'https://api.test.com/referral/code'
-        );
       });
     });
   });
@@ -246,42 +160,6 @@ describe('CheckoutSuccessPage', () => {
     });
   });
 
-  describe('referral messaging', () => {
-    beforeEach(() => {
-      mockGetUserData.mockReturnValue({
-        user_id: 1,
-        api_key: 'test-api-key',
-      });
-      mockMakeAuthenticatedRequest.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
-      });
-    });
-
-    it('should display the invite friends message', async () => {
-      render(<CheckoutSuccessPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText(/help them get started with Gatewayz/)).toBeInTheDocument();
-      });
-    });
-
-    it('should display referral tracking explanation', async () => {
-      render(<CheckoutSuccessPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Track who joins through your link')).toBeInTheDocument();
-      });
-    });
-
-    it('should display where to see referrals', async () => {
-      render(<CheckoutSuccessPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('See your referrals in your dashboard')).toBeInTheDocument();
-      });
-    });
-  });
 });
 
 describe('CheckoutSuccessPage - Credit purchase', () => {
@@ -290,10 +168,6 @@ describe('CheckoutSuccessPage - Credit purchase', () => {
     mockGetUserData.mockReturnValue({
       user_id: 1,
       api_key: 'test-api-key',
-    });
-    mockMakeAuthenticatedRequest.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
     });
   });
 
@@ -315,10 +189,6 @@ describe('CheckoutSuccessPage - plan URL parameter', () => {
       user_id: 1,
       api_key: 'test-api-key',
       email: 'test@example.com',
-    });
-    mockMakeAuthenticatedRequest.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
     });
   });
 
@@ -361,50 +231,12 @@ describe('CheckoutSuccessPage - plan URL parameter', () => {
   });
 });
 
-describe('CheckoutSuccessPage API error handling', () => {
-  beforeEach(() => {
-    mockGetUserData.mockReturnValue({
-      user_id: 1,
-      api_key: 'test-api-key',
-    });
-  });
-
-  it('should handle API failure gracefully', async () => {
-    mockMakeAuthenticatedRequest.mockResolvedValue({
-      ok: false,
-      status: 500,
-    });
-
-    render(<CheckoutSuccessPage />);
-
-    // Should still render the page structure
-    await waitFor(() => {
-      expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
-    });
-  });
-
-  it('should handle network errors gracefully', async () => {
-    mockMakeAuthenticatedRequest.mockRejectedValue(new Error('Network error'));
-
-    render(<CheckoutSuccessPage />);
-
-    // Should still render the page structure
-    await waitFor(() => {
-      expect(screen.getByText('Thank You for Your Purchase!')).toBeInTheDocument();
-    });
-  });
-});
-
 describe('CheckoutSuccessPage - Google Ads Conversion Tracking', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetUserData.mockReturnValue({
       user_id: 1,
       api_key: 'test-api-key',
-    });
-    mockMakeAuthenticatedRequest.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
     });
     (window as any).gtag = mockGtag;
   });
@@ -510,10 +342,6 @@ describe('CheckoutSuccessPage - Google Ads Conversion Tracking without session_i
     mockGetUserData.mockReturnValue({
       user_id: 1,
       api_key: 'test-api-key',
-    });
-    mockMakeAuthenticatedRequest.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
     });
     (window as any).gtag = mockGtag;
 

@@ -4,18 +4,14 @@ import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Copy, Gift, CheckCircle, Share2, Users, Sparkles } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { makeAuthenticatedRequest, getUserData } from '@/lib/api';
-import { API_BASE_URL } from '@/lib/config';
+import { Gift, CheckCircle, Sparkles } from "lucide-react";
+import { getUserData } from '@/lib/api';
 
 // Google Ads Purchase Conversion ID
 const GOOGLE_ADS_PURCHASE_CONVERSION_ID = 'AW-17515449277/fsG3CMPGlt8bEL2XgqBB';
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
-  const { toast } = useToast();
   const conversionTrackedRef = useRef(false);
 
   // Get URL parameters
@@ -27,11 +23,8 @@ function CheckoutSuccessContent() {
   const quantity = searchParams.get('quantity') || '1';
   const sessionId = searchParams.get('session_id') || '';
 
-  const [referralCode, setReferralCode] = useState<string>('');
-  const [referralLink, setReferralLink] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   // Track Google Ads purchase conversion on page load
   useEffect(() => {
@@ -61,7 +54,7 @@ function CheckoutSuccessContent() {
   const displayPlanName = plan || currentTier.name;
 
   useEffect(() => {
-    const fetchReferralData = async () => {
+    const checkAuth = async () => {
       setLoading(true);
 
       // Wait for authentication with retries
@@ -75,63 +68,12 @@ function CheckoutSuccessContent() {
         retries++;
       }
 
-      if (!userData) {
-        setLoading(false);
-        setIsAuthenticated(false);
-        return;
-      }
-
-      setIsAuthenticated(true);
-
-      try {
-        // Fetch referral code
-        const codeResponse = await makeAuthenticatedRequest(`${API_BASE_URL}/referral/code`);
-
-        if (codeResponse.ok) {
-          const codeData = await codeResponse.json();
-          setReferralCode(codeData.referral_code || '');
-          setReferralLink(`${window.location.origin}/signup?ref=${codeData.referral_code}`);
-        }
-      } catch (error) {
-        console.error('Error fetching referral data:', error);
-      } finally {
-        setLoading(false);
-      }
+      setIsAuthenticated(!!userData);
+      setLoading(false);
     };
 
-    fetchReferralData();
+    checkAuth();
   }, []);
-
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      toast({ title: "Referral link copied to clipboard!" });
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      toast({
-        title: "Failed to copy link",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const shareReferralLink = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'Join Gatewayz',
-          text: 'Sign up for Gatewayz using my referral link:',
-          url: referralLink,
-        });
-      } catch (error) {
-        // User cancelled or share failed, fallback to copy
-        copyToClipboard(referralLink);
-      }
-    } else {
-      copyToClipboard(referralLink);
-    }
-  };
 
   // Show authentication required message if not authenticated
   if (!loading && !isAuthenticated) {
@@ -208,95 +150,8 @@ function CheckoutSuccessContent() {
           </CardContent>
         </Card>
 
-        {/* Referral CTA - Main Focus */}
-        <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Gift className="h-6 w-6 text-primary" />
-              Invite Friends
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-3">
-              <p className="text-lg">
-                Share your referral link with colleagues and friends to help them get started with Gatewayz.
-              </p>
-              <div className="flex items-center gap-3 p-4 bg-muted rounded-lg">
-                <Users className="h-8 w-8 text-primary flex-shrink-0" />
-                <div>
-                  <p className="font-semibold">Track who joins through your link</p>
-                  <p className="text-sm text-muted-foreground">See your referrals in your dashboard</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Referral Link Input */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Your Referral Link</label>
-              <div className="flex gap-2">
-                <Input
-                  value={loading ? "Loading..." : referralLink}
-                  readOnly
-                  className="text-sm bg-background"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => copyToClipboard(referralLink)}
-                  disabled={loading || !referralLink}
-                  className={copied ? "bg-green-100 border-green-500" : ""}
-                >
-                  {copied ? (
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {/* Share Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                className="flex-1"
-                size="lg"
-                onClick={shareReferralLink}
-                disabled={loading || !referralLink}
-              >
-                <Share2 className="h-4 w-4 mr-2" />
-                Share Referral Link
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => copyToClipboard(referralLink)}
-                disabled={loading || !referralLink}
-                className="flex-1"
-              >
-                <Copy className="h-4 w-4 mr-2" />
-                Copy Link
-              </Button>
-            </div>
-
-            {/* Referral Code Display */}
-            {referralCode && (
-              <div className="text-center pt-4 border-t">
-                <p className="text-sm text-muted-foreground">
-                  Or share your referral code: <span className="font-mono font-bold text-foreground">{referralCode}</span>
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Navigation Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button
-            variant="outline"
-            onClick={() => window.location.href = '/settings/referrals'}
-          >
-            View Referral Dashboard
-          </Button>
           <Button
             onClick={() => window.location.href = '/chat'}
           >

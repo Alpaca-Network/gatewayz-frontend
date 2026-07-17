@@ -10,7 +10,6 @@ import {
   getStoredSessionTransferToken,
 } from "@/integrations/privy/auth-session-transfer";
 import { saveApiKey, saveUserData, type UserData } from "@/lib/api";
-import { toast } from "@/hooks/use-toast";
 
 // Cache for user data fetches to avoid duplicate requests within same session
 const userDataCache = new Map<string, { data: UserData; timestamp: number }>();
@@ -141,7 +140,6 @@ export function SessionInitializer() {
   const initializedRef = useRef(false);
   const waitingForPrivyRef = useRef(false);
   const actionProcessedRef = useRef(false);
-  const referralToastShownRef = useRef(false);
 
   useEffect(() => {
     // Skip if already initialized to prevent double execution
@@ -369,55 +367,6 @@ export function SessionInitializer() {
 
     processAction();
   }, [login, privyReady, status]);
-
-  // Handle referral code toast notification
-  useEffect(() => {
-    // Wait until user is authenticated
-    if (status !== "authenticated") {
-      return;
-    }
-
-    // Check for referral code in URL or localStorage
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    // Check if toast has already been shown (using sessionStorage for persistence across remounts)
-    const toastShown = sessionStorage.getItem('gatewayz_referral_toast_shown');
-    if (toastShown === 'true') {
-      return;
-    }
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const refCode = urlParams.get('ref') || localStorage.getItem('gatewayz_referral_code');
-
-    if (refCode) {
-      // Mark as shown in sessionStorage to persist across remounts
-      sessionStorage.setItem('gatewayz_referral_toast_shown', 'true');
-      referralToastShownRef.current = true;
-
-      // Show toast notification
-      toast({
-        title: "Welcome! You've been referred!",
-        description: "Thanks for joining through a referral. Start exploring 10,000+ AI models.",
-        variant: "default",
-      });
-
-      // Clean up the ref parameter from URL if present
-      if (urlParams.get('ref')) {
-        try {
-          urlParams.delete('ref');
-          const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
-          window.history.replaceState({}, document.title, newUrl);
-          console.log('[SessionInit] Cleaned up ref parameter from URL');
-        } catch (error) {
-          console.warn('[SessionInit] Failed to cleanup ref parameter:', error);
-        }
-      }
-
-      console.log('[SessionInit] Referral toast shown for code:', refCode);
-    }
-  }, [status]);
 
   return null;
 }

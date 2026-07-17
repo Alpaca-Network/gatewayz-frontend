@@ -7,7 +7,6 @@ import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Gift } from 'lucide-react';
-import { storeReferralCode } from '@/lib/referral';
 import { trackTwitterSignupClick } from '@/components/analytics/twitter-pixel';
 
 /**
@@ -15,12 +14,10 @@ import { trackTwitterSignupClick } from '@/components/analytics/twitter-pixel';
  * Renders immediately with proper visual structure for better FCP/LCP
  */
 function SignupCardContent({
-  refCode,
   ready,
   authStatus,
   onSignup
 }: {
-  refCode: string | null;
   ready: boolean;
   authStatus: 'idle' | 'unauthenticated' | 'authenticating' | 'authenticated' | 'error';
   onSignup: () => void;
@@ -40,25 +37,10 @@ function SignupCardContent({
           </div>
           <CardTitle className="text-2xl">Welcome to Gatewayz!</CardTitle>
           <CardDescription className="text-base">
-            {refCode ? (
-              <>
-                You've been invited! Sign up to access AI models and start building with Gatewayz.
-              </>
-            ) : (
-              <>
-                Sign up to access AI models and start building with Gatewayz.
-              </>
-            )}
+            Sign up to access AI models and start building with Gatewayz.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {refCode && (
-            <div className="bg-muted p-4 rounded-lg text-center">
-              <p className="text-sm text-muted-foreground mb-1">Referral Code</p>
-              <p className="text-lg font-mono font-bold">{refCode}</p>
-            </div>
-          )}
-
           <Button
             onClick={onSignup}
             disabled={isLoading || isAuthenticated}
@@ -118,51 +100,9 @@ function SignupContent() {
 
   // Memoize query params to prevent unstable effect dependencies
   // This prevents redirect loops when searchParams object changes
-  const returnUrl = useMemo(() => searchParams?.get('returnUrl') || '/chat', [searchParams]);
-  const refCode = useMemo(() => searchParams?.get('ref'), [searchParams]);
-
-  // Memoize redirect URL construction with proper encoding and hash handling
-  const redirectUrl = useMemo(() => {
-    if (!refCode) return returnUrl;
-
-    // Parse the URL to handle hash fragments correctly
-    // Query params must come BEFORE hash fragments per URL spec
-    const hashIndex = returnUrl.indexOf('#');
-    const hasHash = hashIndex !== -1;
-    const baseUrl = hasHash ? returnUrl.slice(0, hashIndex) : returnUrl;
-    const hashFragment = hasHash ? returnUrl.slice(hashIndex) : '';
-
-    // Clean up any trailing ? or & from the base URL (edge case handling)
-    const cleanedBaseUrl = baseUrl.replace(/[?&]+$/, '');
-
-    // Check if URL already has query params
-    const hasQueryParams = cleanedBaseUrl.includes('?');
-
-    // Check if ref param already exists to avoid duplicates
-    const urlObj = new URL(cleanedBaseUrl, 'http://dummy.com');
-    if (urlObj.searchParams.has('ref')) {
-      // Replace existing ref param
-      urlObj.searchParams.set('ref', refCode);
-      return `${urlObj.pathname}${urlObj.search}${hashFragment}`;
-    }
-
-    // Append ref param with proper encoding
-    const separator = hasQueryParams ? '&' : '?';
-    const encodedRef = encodeURIComponent(refCode);
-    return `${cleanedBaseUrl}${separator}ref=${encodedRef}${hashFragment}`;
-  }, [returnUrl, refCode]);
+  const redirectUrl = useMemo(() => searchParams?.get('returnUrl') || '/chat', [searchParams]);
 
   useEffect(() => {
-    // Handle referral code storage and authenticated user redirect in a single effect
-    // to prevent race condition where redirect could happen before referral code is stored
-
-    // First, capture and store referral code if present (can run before Privy is ready)
-    if (refCode) {
-      console.log('Referral code detected:', refCode);
-      // Store referral code using safe storage for use during authentication
-      storeReferralCode(refCode, 'signup');
-    }
-
     // Only redirect users who were ALREADY authenticated when they landed on this page
     // For new signups, the auth context handles the redirect (to /onboarding for new users)
     // This prevents a race condition where:
@@ -174,7 +114,7 @@ function SignupContent() {
       console.log('[Signup] Already authenticated user detected, redirecting to:', redirectUrl);
       router.push(redirectUrl);
     }
-  }, [ready, authStatus, router, redirectUrl, refCode]);
+  }, [ready, authStatus, router, redirectUrl]);
 
   useEffect(() => {
     // Auto-trigger Privy login modal for unauthenticated users
@@ -214,7 +154,6 @@ function SignupContent() {
   // This dramatically improves FCP/LCP by showing meaningful content immediately
   return (
     <SignupCardContent
-      refCode={refCode}
       ready={ready}
       authStatus={authStatus}
       onSignup={handleSignup}

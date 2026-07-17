@@ -166,7 +166,6 @@ export function getAdaptiveTimeout(baseTimeout: number): number {
 export const AUTH_STORAGE_KEYS = {
   API_KEY: 'gatewayz_api_key',
   USER_DATA: 'gatewayz_user_data',
-  REFERRAL_CODE: 'gatewayz_referral_code',
   SESSION_TRANSFER_TOKEN: 'gatewayz_session_transfer_token',
 } as const;
 

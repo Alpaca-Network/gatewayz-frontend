@@ -69,11 +69,6 @@ jest.mock('@/hooks/use-toast', () => ({
 // Mock lucide-react icons
 jest.mock('lucide-react', () => ({
   ArrowLeft: () => <span data-testid="icon-arrow-left">ArrowLeft</span>,
-  Copy: () => <span data-testid="icon-copy">Copy</span>,
-  Gift: () => <span data-testid="icon-gift">Gift</span>,
-  CheckCircle: () => <span data-testid="icon-check-circle">CheckCircle</span>,
-  Share2: () => <span data-testid="icon-share">Share</span>,
-  Users: () => <span data-testid="icon-users">Users</span>,
   Sparkles: () => <span data-testid="icon-sparkles">Sparkles</span>,
   CreditCard: () => <span data-testid="icon-credit-card">CreditCard</span>,
   Check: () => <span data-testid="icon-check">Check</span>,
@@ -85,15 +80,9 @@ jest.mock('lucide-react', () => ({
 
 // Mock the API module
 const mockGetUserData = jest.fn();
-const mockMakeAuthenticatedRequest = jest.fn();
 
 jest.mock('@/lib/api', () => ({
   getUserData: () => mockGetUserData(),
-  makeAuthenticatedRequest: (...args: any[]) => mockMakeAuthenticatedRequest(...args),
-}));
-
-jest.mock('@/lib/config', () => ({
-  API_BASE_URL: 'https://api.test.com',
 }));
 
 jest.mock('@/lib/pricing-config', () => ({
@@ -130,10 +119,6 @@ describe('CheckoutPage - Credit package discount visibility', () => {
       user_id: 1,
       api_key: 'test-api-key',
       email: 'test@example.com',
-    });
-    mockMakeAuthenticatedRequest.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ referral_code: 'TESTREF123' }),
     });
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,

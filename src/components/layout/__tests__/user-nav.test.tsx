@@ -183,7 +183,6 @@ describe('UserNav', () => {
       // Verify navigation links
       expect(await screen.findByRole('menuitem', { name: /account/i })).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: /credits/i })).toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: /referrals/i })).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: /api keys/i })).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: /activity/i })).toBeInTheDocument();
       expect(screen.getByRole('menuitem', { name: /presets/i })).toBeInTheDocument();

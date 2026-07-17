@@ -209,84 +209,6 @@ describe('auth-sync', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should include referral code from localStorage', async () => {
-      const mockPrivyUser = createMockPrivyUser();
-      const mockAccessToken = 'privy-access-token-xyz';
-      const mockAuthResponse = createMockAuthResponse({ is_new_user: true });
-
-      localStorage.setItem('gatewayz_referral_code', 'FRIEND123');
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify(mockAuthResponse),
-      });
-
-      await syncPrivyToGatewayz(mockPrivyUser, mockAccessToken, null);
-
-      const requestBody = JSON.parse(
-        (global.fetch as jest.Mock).mock.calls[0][1].body
-      );
-
-      expect(requestBody).toMatchObject({
-        has_referral_code: true,
-        referral_code: 'FRIEND123',
-      });
-    });
-
-    it('should capture referral code from URL and store it', async () => {
-      const mockPrivyUser = createMockPrivyUser();
-      const mockAccessToken = 'privy-access-token-xyz';
-      const mockAuthResponse = createMockAuthResponse({ is_new_user: true });
-
-      mockLocation({
-        search: '?ref=URLREF456',
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify(mockAuthResponse),
-      });
-
-      await syncPrivyToGatewayz(mockPrivyUser, mockAccessToken, null);
-
-      // Should be stored in localStorage
-      expect(localStorage.getItem('gatewayz_referral_code')).toBe('URLREF456');
-
-      const requestBody = JSON.parse(
-        (global.fetch as jest.Mock).mock.calls[0][1].body
-      );
-
-      expect(requestBody).toMatchObject({
-        has_referral_code: true,
-        referral_code: 'URLREF456',
-      });
-    });
-
-    it('should prefer localStorage referral code over URL', async () => {
-      const mockPrivyUser = createMockPrivyUser();
-      const mockAccessToken = 'privy-access-token-xyz';
-      const mockAuthResponse = createMockAuthResponse();
-
-      localStorage.setItem('gatewayz_referral_code', 'STORED123');
-
-      mockLocation({
-        search: '?ref=URLREF456',
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify(mockAuthResponse),
-      });
-
-      await syncPrivyToGatewayz(mockPrivyUser, mockAccessToken, null);
-
-      const requestBody = JSON.parse(
-        (global.fetch as jest.Mock).mock.calls[0][1].body
-      );
-
-      expect(requestBody.referral_code).toBe('STORED123');
-    });
-
     it('should transform Privy user data correctly', async () => {
       const mockPrivyUser = createMockPrivyUser({
         id: 'privy-xyz',
@@ -602,29 +524,6 @@ describe('auth-sync', () => {
       expect(requestBody.user.mfa_methods).toEqual([]);
     });
 
-    it('should handle empty referral code string', async () => {
-      const mockPrivyUser = createMockPrivyUser();
-      const mockAuthResponse = createMockAuthResponse();
-
-      mockLocation({
-        search: '?ref=',
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify(mockAuthResponse),
-      });
-
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
-
-      const requestBody = JSON.parse(
-        (global.fetch as jest.Mock).mock.calls[0][1].body
-      );
-
-      expect(requestBody.has_referral_code).toBe(false);
-      expect(requestBody.referral_code).toBeNull();
-    });
-
     it('should handle SSR environment (no window)', async () => {
       const originalWindow = global.window;
       (global as any).window = undefined;
@@ -643,8 +542,7 @@ describe('auth-sync', () => {
         (global.fetch as jest.Mock).mock.calls[0][1].body
       );
 
-      expect(requestBody.has_referral_code).toBe(false);
-      expect(requestBody.referral_code).toBeNull();
+      expect(requestBody.privy_user_id).toBe(mockPrivyUser.id);
 
       global.window = originalWindow;
     });

@@ -4,7 +4,6 @@ import { usePrivy, User, LinkedAccountWithMetadata } from '@privy-io/react-auth'
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData, AUTH_REFRESH_COMPLETE_EVENT, AUTH_REFRESH_EVENT } from '@/lib/api';
-import { safeLocalStorageGet, safeLocalStorageSet } from '@/lib/safe-storage';
 import { getUserMessage } from '@/lib/errors';
 
 // Helper to strip undefined values (copied from original context)
@@ -115,16 +114,6 @@ export function useAuthSync() {
       const isNewUser = !existingUserData;
       const hasStoredApiKey = Boolean(existingUserData?.api_key);
 
-      let referralCode = safeLocalStorageGet("gatewayz_referral_code");
-      if (!referralCode && typeof window !== "undefined") {
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlRefCode = urlParams.get("ref");
-        if (urlRefCode) {
-          referralCode = urlRefCode;
-          safeLocalStorageSet("gatewayz_referral_code", urlRefCode);
-        }
-      }
-
       const authRequestBody = {
         user: stripUndefined({
           id: user.id,
@@ -138,8 +127,6 @@ export function useAuthSync() {
         // ALWAYS request API key creation to avoid temp keys
         auto_create_api_key: true,
         is_new_user: isNewUser,
-        has_referral_code: !!referralCode,
-        referral_code: referralCode ?? null,
         privy_user_id: user.id,
         // Add trial credits if new
         ...(isNewUser ? { trial_credits: 3 } : {})
