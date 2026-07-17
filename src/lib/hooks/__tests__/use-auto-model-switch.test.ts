@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { useAutoModelSwitch, modelSupportsModality, getMultimodalModel, getImageGenerationModel, DEFAULT_IMAGE_GENERATION_MODEL } from '../use-auto-model-switch';
-import { ModelOption } from '@/components/chat/model-select';
+import { ModelOption } from '@/components/chat-v2/model-select';
 import * as Sentry from '@sentry/nextjs';
 
 // Mock Sentry

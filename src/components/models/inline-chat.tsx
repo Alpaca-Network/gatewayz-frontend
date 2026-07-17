@@ -12,7 +12,7 @@ import { fromUnknown, getUserMessage } from '@/lib/errors';
 import { normalizeModelId } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
-import { ReasoningDisplay } from '@/components/chat/reasoning-display';
+import { ReasoningDisplay } from '@/components/chat-v2/reasoning-display';
 
 interface Message {
   role: 'user' | 'assistant';

@@ -112,7 +112,7 @@ jest.mock('remark-gfm', () => ({
 }));
 
 // Mock reasoning-display
-jest.mock('@/components/chat/reasoning-display', () => ({
+jest.mock('@/components/chat-v2/reasoning-display', () => ({
   ReasoningDisplay: ({ reasoning }: { reasoning: string }) => (
     <div data-testid="reasoning-display">{reasoning}</div>
   ),

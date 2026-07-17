@@ -5,7 +5,7 @@
  * if a model supports tool/function calling.
  */
 
-import { checkModelToolSupport } from '@/components/chat/model-select';
+import { checkModelToolSupport } from '@/components/chat-v2/model-select';
 
 describe('checkModelToolSupport', () => {
   describe('OpenAI models', () => {

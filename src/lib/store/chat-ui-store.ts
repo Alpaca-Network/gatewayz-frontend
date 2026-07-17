@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ModelOption } from '@/components/chat/model-select';
+import { ModelOption } from '@/components/chat-v2/model-select';
 
 // All NEAR AI models available for Incognito mode
 // These models support privacy-focused conversations via NEAR AI

@@ -68,7 +68,7 @@ jest.mock('../ConnectionStatus', () => ({
 }));
 
 // Mock GuestChatCounter to avoid its dependencies
-jest.mock('@/components/chat/guest-chat-counter', () => ({
+jest.mock('@/components/chat-v2/guest-chat-counter', () => ({
   GuestChatCounter: () => <div data-testid="guest-chat-counter">GuestChatCounter</div>,
 }));
 
@@ -195,7 +195,7 @@ jest.mock('../MessageList', () => ({
 }));
 
 // Mock ModelSelect
-jest.mock('@/components/chat/model-select', () => ({
+jest.mock('@/components/chat-v2/model-select', () => ({
   ModelSelect: () => <div data-testid="model-select">Model Select</div>,
 }));
 

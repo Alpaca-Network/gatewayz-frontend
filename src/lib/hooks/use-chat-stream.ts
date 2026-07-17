@@ -7,7 +7,7 @@ import { ChatStreamHandler } from '@/lib/chat-stream-handler';
 import { useSaveMessage } from '@/lib/hooks/use-chat-queries';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { getApiKey, getUserData, saveUserData } from '@/lib/api';
-import { ModelOption } from '@/components/chat/model-select';
+import { ModelOption } from '@/components/chat-v2/model-select';
 import { ChatMessage } from '@/lib/chat-history';
 import { sentryMetrics } from '@/lib/sentry-metrics';
 import { isTauriEnvironment } from '@/lib/config';

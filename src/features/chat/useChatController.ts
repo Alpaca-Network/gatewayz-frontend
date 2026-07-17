@@ -11,7 +11,7 @@ import {
 import { getUserMessage } from "@/lib/errors";
 // Using modular streaming - the old streaming.ts is deprecated
 import { streamChatResponse } from "@/lib/streaming/index";
-import type { ModelOption } from "@/components/chat/model-select";
+import type { ModelOption } from "@/components/chat-v2/model-select";
 import { getChatApiUrl } from "@/lib/config";
 
 export type ChatSessionView = {

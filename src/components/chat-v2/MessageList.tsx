@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ChatMessage as ChatMessageBubble } from "@/components/chat/ChatMessage";
-import type { ChatErrorInfo, RetryNotice } from "@/components/chat/ChatMessage";
+import { ChatMessage as ChatMessageBubble } from "@/components/chat-v2/ChatMessage";
+import type { ChatErrorInfo, RetryNotice } from "@/components/chat-v2/ChatMessage";
 import type { ChatMessage as ChatMessageData } from "@/lib/chat-history";
 
 const getTextFromContent = (content: string | any[]): string => {

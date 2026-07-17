@@ -81,7 +81,7 @@ jest.mock('@/components/ui/tooltip', () => ({
   TooltipProvider: ({ children }: any) => <div>{children}</div>,
 }));
 
-jest.mock('@/components/chat/ChatMessage', () => ({
+jest.mock('@/components/chat-v2/ChatMessage', () => ({
   ChatMessage: ({ onCopy, onShare, content }: any) => (
     <div data-testid="chat-message">
       <button data-testid="copy-btn" onClick={onCopy}>Copy</button>

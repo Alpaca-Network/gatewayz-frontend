@@ -11,11 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { ChatMessage } from "@/components/chat/ChatMessage";
+import { ChatMessage } from "@/components/chat-v2/ChatMessage";
 import { useToast } from "@/hooks/use-toast";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import type { ModelOption } from "@/components/chat/model-select";
+import type { ModelOption } from "@/components/chat-v2/model-select";
 
 // Helper to extract text from multimodal content
 function getTextFromContent(content: string | Array<{ type: string; text?: string }>): string {
@@ -31,7 +31,7 @@ function getTextFromContent(content: string | Array<{ type: string; text?: strin
   return '';
 }
 
-const ModelSelect = dynamic(() => import("@/components/chat/model-select").then((m) => m.ModelSelect), {
+const ModelSelect = dynamic(() => import("@/components/chat-v2/model-select").then((m) => m.ModelSelect), {
   ssr: false,
   loading: () => <div className="h-10 w-[240px] rounded-md bg-muted animate-pulse" />,
 });

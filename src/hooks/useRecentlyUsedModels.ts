@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { ModelOption } from '@/components/chat/model-select';
+import type { ModelOption } from '@/components/chat-v2/model-select';
 
 const RECENTLY_USED_KEY = 'gatewayz_recently_used_models';
 const MAX_RECENT_MODELS = 5;

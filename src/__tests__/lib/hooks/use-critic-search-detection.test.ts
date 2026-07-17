@@ -7,7 +7,7 @@
 
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useCriticSearchDetection } from '@/lib/hooks/use-critic-search-detection';
-import { ModelOption } from '@/components/chat/model-select';
+import { ModelOption } from '@/components/chat-v2/model-select';
 
 // Mock fetch for API calls
 const mockFetch = jest.fn();

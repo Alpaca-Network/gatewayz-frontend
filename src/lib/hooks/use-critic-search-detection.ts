@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useState, useRef } from 'react';
-import { ModelOption } from '@/components/chat/model-select';
+import { ModelOption } from '@/components/chat-v2/model-select';
 import { useAutoSearchDetection } from './use-auto-search-detection';
 
 interface CriticResult {

@@ -19,10 +19,10 @@ import { ChatTimer } from './ChatTimer';
 // Lazy load heavy components - enable SSR to prevent hydration mismatch
 const ReactMarkdown = dynamic(() => import('react-markdown'), { ssr: true });
 const ReasoningDisplay = dynamic(
-  () => import('@/components/chat/reasoning-display').then(mod => ({ default: mod.ReasoningDisplay })),
+  () => import('@/components/chat-v2/reasoning-display').then(mod => ({ default: mod.ReasoningDisplay })),
   { ssr: true }
 );
-const SearchResults = dynamic(() => import('@/components/chat/SearchResults'), { ssr: true });
+const SearchResults = dynamic(() => import('@/components/chat-v2/SearchResults'), { ssr: true });
 
 /** Structured error metadata attached by use-chat-stream (from the classified AppError). */
 export interface ChatErrorInfo {

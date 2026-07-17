@@ -7,7 +7,7 @@
 
 import { renderHook } from '@testing-library/react';
 import { useAutoSearchDetection } from '@/lib/hooks/use-auto-search-detection';
-import { ModelOption } from '@/components/chat/model-select';
+import { ModelOption } from '@/components/chat-v2/model-select';
 
 describe('useAutoSearchDetection', () => {
   const mockModelWithTools: ModelOption = {

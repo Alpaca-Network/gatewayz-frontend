@@ -6,7 +6,7 @@
  */
 
 import { useCallback } from 'react';
-import { ModelOption } from '@/components/chat/model-select';
+import { ModelOption } from '@/components/chat-v2/model-select';
 
 // Keywords that strongly indicate need for current/real-time information
 const SEARCH_KEYWORDS = [

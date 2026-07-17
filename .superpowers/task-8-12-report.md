@@ -51,3 +51,27 @@ Available-for-cleanup (not done, to avoid risk/scope creep): the now-orphaned `M
 - TDD getters: RED (8 fail) → GREEN (8 pass). Redirects test: 27/27 (getters+redirects suites).
 - `pnpm lint && pnpm build`: (recorded below after run)
 - Migrations performed: 0 importers migrated (all three tables SKIPPED per above with reasons); 1 surface consolidated (/catalog → /models, 3 pages deleted).
+- Commit: `7adb079d refactor(catalog): DB-driven catalog getters+hooks as single source; consolidate /catalog into /models`
+
+---
+
+## Task 9 — One chat tree (chat-v2 is the survivor)
+
+### Reality vs plan
+The plan's "migrate exactly these 6, delete the rest" needed correcting against the real dependency graph (mapped before touching code):
+- `/chat` (`src/app/chat/page.tsx`) renders chat-v2's `ChatLayout` + legacy `free-models-banner`. chat-v2 concretely imports `ChatMessage` (MessageList) and `model-select` (ChatLayout).
+- `ChatMessage` **dynamically** imports `SearchResults` + `reasoning-display`; `reasoning-display` imports `chain-of-thought`; `ChatMessage` imports `ChatTimer`. So chat-v2's true transitive closure from the legacy tree is 7 files, not "ChatMessage + model-select".
+- `ai-sdk-chat-elements` in the plan's 6 does NOT exist (only a `.tsx.disabled`) — nothing to migrate.
+- `model-select` exports the `ModelOption` type consumed by ~8 non-chat-v2 files (lib/hooks/*, chat-ui-store, useRecentlyUsedModels, features/chat); `reasoning-display` is used by `/playground` + `models/inline-chat`; `mini-chat-widget` (not in the plan's 6) is used by the landing `TitleSection`. To satisfy the "only chat-v2 hits" gate, all of these had to be repointed.
+
+### Performed
+- **Migrated into `src/components/chat-v2/` (git mv, history preserved) — 9 files**: ChatMessage, ChatTimer, SearchResults, reasoning-display, chain-of-thought, model-select, free-models-banner, mini-chat-widget, guest-chat-counter. Moved their 6 test files into `chat-v2/__tests__/` (relative `../` imports stay valid).
+- **Deleted dead leaves (6)**: AudioPlayer.tsx (+ its test), ai-sdk-model-option.tsx, performance-monitor.tsx, ai-sdk-chat-elements.tsx.disabled, ai-sdk-chat.tsx.disabled.
+- **Repointed every importer** `@/components/chat/<name>` → `@/components/chat-v2/<name>` across src/ (external consumers, ChatMessage's dynamic imports, and jest.mock/spyOn string paths): app/chat/page, playground, inline-chat, TitleSection, features/chat/*, lib/hooks/* (use-chat-stream, use-auto-model-switch, use-auto-search-detection, use-critic-search-detection), lib/store/chat-ui-store, hooks/useRecentlyUsedModels, and the external test suites.
+- `src/components/chat/` is now entirely gone.
+- Task 8 interface note: model-select still self-fetches its list today; wiring it onto `useModels` is a follow-up (the hook exists and is ready). Left model-select's fetch logic intact this task to avoid coupling the file-move commit with a behavior change.
+
+### Verification
+- Grep gate: `grep -rn "@/components/chat/" src/ | grep -v chat-v2` → **empty** (only chat-v2 hits).
+- `pnpm lint` clean; `pnpm build` green (exit 0); full `pnpm test` = **21 failed suites / 255 failed tests = exact baseline (zero new failures)**. Total tests dropped 3982→3958 only because AudioPlayer's dead test was deleted. Verified the one moved failing suite (free-models-banner — "Low Credits $X remaining" credit-text assertions) was already failing pre-move (identical assertions in HEAD's copy; it's a pre-existing pricing/tier-fixture failure, not import breakage). ChatInput.test is a known pre-existing baseline failure.
+- Manual dev-server smoke (`pnpm dev`, no local backend): `GET /chat` → **HTTP 200** (chat-v2 renders, no module-not-found from the migration), `GET /models` → **200**, `GET /catalog/models` → **307 → /models** (Task 8 redirect live). Only log noise is backend-network errors to localhost:8000 (no backend running) — the expected fallback path, not a code fault. A live message-send Playwright run needs a live backend+credits (unavailable here); the render smoke + full chat-v2 Jest suites (ChatLayout/MessageList/ChatMessage/model-select all PASS) stand in.
