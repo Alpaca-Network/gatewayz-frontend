@@ -128,39 +128,12 @@ const nextConfig: NextConfig = {
           ],
         },
         {
-          // All other routes (except /agent): Apply strict security headers including X-Frame-Options: DENY
+          // All other routes: Apply strict security headers including X-Frame-Options: DENY
           // Using /:path* to match all paths including multi-segment paths like /api/health, /settings/account
-          // IMPORTANT: Must come BEFORE /agent rule so /agent can override it
           source: '/:path*',
           headers: [
             ...commonSecurityHeaders,
             ...frameProtectionHeaders,
-          ],
-        },
-        {
-          // Agent page: Allow iframe embedding from any origin (page embeds external coding agent)
-          // The agent page needs to embed external content and may receive postMessage from it
-          // IMPORTANT: Must come LAST to override the /:path* rule above
-          // In Next.js, when multiple rules match, the last one in the array wins
-          source: '/agent',
-          headers: [
-            ...commonSecurityHeaders,
-            // No X-Frame-Options or frame-ancestors CSP - allow embedding
-          ],
-        },
-        {
-          // Inbox page: Allow iframe embedding from trusted GatewayZ origins only
-          // GatewayZ embeds this inbox page in an iframe and uses postMessage for SSO with terragon-oss
-          // IMPORTANT: Must come LAST to override the /:path* rule above
-          source: '/inbox',
-          headers: [
-            ...commonSecurityHeaders,
-            {
-              // Allow embedding only from trusted GatewayZ origins
-              // Note: X-Frame-Options doesn't support multiple origins, so we use CSP frame-ancestors
-              key: 'Content-Security-Policy',
-              value: "frame-ancestors 'self' https://beta.gatewayz.ai https://gatewayz.ai https://www.gatewayz.ai https://inbox.gatewayz.ai",
-            },
           ],
         },
       ];

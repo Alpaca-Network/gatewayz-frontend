@@ -13,48 +13,15 @@ describe('Next.js config redirects', () => {
     redirects = getRedirects();
   });
 
-  describe('/inbox redirect', () => {
-    it('should have a redirect rule for /inbox', () => {
+  describe('/inbox and /code redirects (removed)', () => {
+    it('should NOT have a redirect rule for /inbox (Terragon dashboard retired)', () => {
       const inboxRedirect = redirects.find((r) => r.source === '/inbox');
-      expect(inboxRedirect).toBeDefined();
+      expect(inboxRedirect).toBeUndefined();
     });
 
-    it('should redirect /inbox to Terragon dashboard', () => {
-      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
-      expect(inboxRedirect?.destination).toBe(TERRAGON_DASHBOARD_URL);
-    });
-
-    it('should use temporary redirect (not permanent)', () => {
-      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
-      expect(inboxRedirect?.permanent).toBe(false);
-    });
-
-    it('should not have host-based restriction (redirects for all hosts)', () => {
-      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
-      // The redirect should NOT have a "has" property with host restrictions
-      expect(inboxRedirect).not.toHaveProperty('has');
-    });
-  });
-
-  describe('/code redirect', () => {
-    it('should have a redirect rule for /code', () => {
+    it('should NOT have a redirect rule for /code (Terragon dashboard retired)', () => {
       const codeRedirect = redirects.find((r) => r.source === '/code');
-      expect(codeRedirect).toBeDefined();
-    });
-
-    it('should redirect /code to Terragon dashboard', () => {
-      const codeRedirect = redirects.find((r) => r.source === '/code');
-      expect(codeRedirect?.destination).toBe(TERRAGON_DASHBOARD_URL);
-    });
-
-    it('should use temporary redirect (not permanent)', () => {
-      const codeRedirect = redirects.find((r) => r.source === '/code');
-      expect(codeRedirect?.permanent).toBe(false);
-    });
-
-    it('should not have host-based restriction (redirects for all hosts)', () => {
-      const codeRedirect = redirects.find((r) => r.source === '/code');
-      expect(codeRedirect).not.toHaveProperty('has');
+      expect(codeRedirect).toBeUndefined();
     });
   });
 
@@ -111,19 +78,4 @@ describe('Next.js config redirects', () => {
     });
   });
 
-  describe('redirect consistency', () => {
-    it('should have /inbox and /code redirect to the same destination', () => {
-      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
-      const codeRedirect = redirects.find((r) => r.source === '/code');
-
-      expect(inboxRedirect?.destination).toBe(codeRedirect?.destination);
-    });
-
-    it('should have /inbox and /code with the same permanent setting', () => {
-      const inboxRedirect = redirects.find((r) => r.source === '/inbox');
-      const codeRedirect = redirects.find((r) => r.source === '/code');
-
-      expect(inboxRedirect?.permanent).toBe(codeRedirect?.permanent);
-    });
-  });
 });

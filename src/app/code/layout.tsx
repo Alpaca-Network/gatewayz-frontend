@@ -1,28 +1,28 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Claude Code + GatewayZ | Gatewayz x Terragon',
+  title: 'Claude Code + GatewayZ',
   description: 'Use Claude Code with GatewayZ for smart AI routing, cost optimization, and access to 10+ models.',
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: 'https://beta.gatewayz.ai/code',
     siteName: 'Gatewayz',
-    title: 'Claude Code + GatewayZ | Gatewayz x Terragon',
+    title: 'Claude Code + GatewayZ',
     description: 'Use Claude Code with GatewayZ for smart AI routing, cost optimization, and access to 10+ models.',
     images: [
       {
         url: 'https://beta.gatewayz.ai/og-inbox.jpg',
         width: 1200,
         height: 630,
-        alt: 'Gatewayz x Terragon - Claude Code + GatewayZ',
+        alt: 'Claude Code + GatewayZ',
         type: 'image/jpeg',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Claude Code + GatewayZ | Gatewayz x Terragon',
+    title: 'Claude Code + GatewayZ',
     description: 'Use Claude Code with GatewayZ for smart AI routing, cost optimization, and access to 10+ models.',
     images: ['https://beta.gatewayz.ai/og-inbox.jpg'],
     creator: '@gatewayz_ai',

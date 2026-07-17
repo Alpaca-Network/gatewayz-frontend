@@ -121,111 +121,16 @@ describe('Next.js Config Security Headers', () => {
       });
     });
 
-    describe('/agent path (allows embedding)', () => {
-      it('should exist in headers config', () => {
+    describe('/agent and /inbox paths (removed with Terragon)', () => {
+      it('should NOT have a /agent header rule', () => {
         const agentRule = headersConfig.find(rule => rule.source === '/agent');
-        expect(agentRule).toBeDefined();
+        expect(agentRule).toBeUndefined();
       });
 
-      it('should NOT have X-Frame-Options header', () => {
-        const agentRule = headersConfig.find(rule => rule.source === '/agent');
-        const header = agentRule.headers.find(
-          (h: { key: string }) => h.key === 'X-Frame-Options'
-        );
-        expect(header).toBeUndefined();
-      });
-
-      it('should NOT have frame-ancestors CSP', () => {
-        const agentRule = headersConfig.find(rule => rule.source === '/agent');
-        const cspHeader = agentRule.headers.find(
-          (h: { key: string }) => h.key === 'Content-Security-Policy'
-        );
-        // Either no CSP header or no frame-ancestors in CSP
-        if (cspHeader) {
-          expect(cspHeader.value).not.toContain('frame-ancestors');
-        }
-      });
-
-      it('should still have common security headers', () => {
-        const agentRule = headersConfig.find(rule => rule.source === '/agent');
-        const hstsHeader = agentRule.headers.find(
-          (h: { key: string }) => h.key === 'Strict-Transport-Security'
-        );
-        expect(hstsHeader).toBeDefined();
-      });
-    });
-
-    describe('/inbox path (allows embedding from trusted origins)', () => {
-      it('should exist in headers config', () => {
+      it('should NOT have a /inbox header rule', () => {
         const inboxRule = headersConfig.find(rule => rule.source === '/inbox');
-        expect(inboxRule).toBeDefined();
+        expect(inboxRule).toBeUndefined();
       });
-
-      it('should NOT have X-Frame-Options header (not compatible with multiple origins)', () => {
-        const inboxRule = headersConfig.find(rule => rule.source === '/inbox');
-        const header = inboxRule.headers.find(
-          (h: { key: string }) => h.key === 'X-Frame-Options'
-        );
-        expect(header).toBeUndefined();
-      });
-
-      it('should have CSP with frame-ancestors for trusted GatewayZ origins', () => {
-        const inboxRule = headersConfig.find(rule => rule.source === '/inbox');
-        const cspHeader = inboxRule.headers.find(
-          (h: { key: string }) => h.key === 'Content-Security-Policy'
-        );
-        expect(cspHeader).toBeDefined();
-        expect(cspHeader.value).toContain('frame-ancestors');
-        expect(cspHeader.value).toContain("'self'");
-        expect(cspHeader.value).toContain('https://beta.gatewayz.ai');
-        expect(cspHeader.value).toContain('https://gatewayz.ai');
-        expect(cspHeader.value).toContain('https://www.gatewayz.ai');
-      });
-
-      it('should allow embedding from inbox.gatewayz.ai (terragon-oss)', () => {
-        const inboxRule = headersConfig.find(rule => rule.source === '/inbox');
-        const cspHeader = inboxRule.headers.find(
-          (h: { key: string }) => h.key === 'Content-Security-Policy'
-        );
-        expect(cspHeader.value).toContain('https://inbox.gatewayz.ai');
-      });
-
-      it('should NOT allow embedding from arbitrary origins', () => {
-        const inboxRule = headersConfig.find(rule => rule.source === '/inbox');
-        const cspHeader = inboxRule.headers.find(
-          (h: { key: string }) => h.key === 'Content-Security-Policy'
-        );
-        // Should not have wildcard or 'none' (which would be too permissive or too restrictive)
-        expect(cspHeader.value).not.toContain("frame-ancestors *");
-        expect(cspHeader.value).not.toContain("frame-ancestors 'none'");
-      });
-
-      it('should still have common security headers', () => {
-        const inboxRule = headersConfig.find(rule => rule.source === '/inbox');
-        const hstsHeader = inboxRule.headers.find(
-          (h: { key: string }) => h.key === 'Strict-Transport-Security'
-        );
-        expect(hstsHeader).toBeDefined();
-
-        const xContentType = inboxRule.headers.find(
-          (h: { key: string }) => h.key === 'X-Content-Type-Options'
-        );
-        expect(xContentType).toBeDefined();
-      });
-    });
-  });
-
-  describe('header rule ordering', () => {
-    it('should have /agent after /:path* to override it', () => {
-      const pathWildcardIndex = headersConfig.findIndex(rule => rule.source === '/:path*');
-      const agentIndex = headersConfig.findIndex(rule => rule.source === '/agent');
-      expect(agentIndex).toBeGreaterThan(pathWildcardIndex);
-    });
-
-    it('should have /inbox after /:path* to override it', () => {
-      const pathWildcardIndex = headersConfig.findIndex(rule => rule.source === '/:path*');
-      const inboxIndex = headersConfig.findIndex(rule => rule.source === '/inbox');
-      expect(inboxIndex).toBeGreaterThan(pathWildcardIndex);
     });
   });
 });

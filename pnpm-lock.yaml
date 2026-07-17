@@ -239,9 +239,6 @@ importers:
       undici-proxy:
         specifier: ^0.3.0
         version: 0.3.0(express@4.22.1)
-      web-vitals:
-        specifier: ^5.1.0
-        version: 5.1.0
       zod:
         specifier: ^3.24.2
         version: 3.25.76
@@ -303,9 +300,6 @@ importers:
       postcss:
         specifier: ^8
         version: 8.5.6
-      postcss-loader:
-        specifier: ^8.2.0
-        version: 8.2.0(postcss@8.5.6)(typescript@5.9.3)(webpack@5.104.1)
       react-scan:
         specifier: ^0.4.3
         version: 0.4.3(@types/react@18.3.27)(next@15.3.8(@babel/core@7.28.6)(@opentelemetry/api@1.9.0)(@playwright/test@1.57.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(rollup@4.55.1)
@@ -4746,15 +4740,6 @@ packages:
     resolution: {integrity: sha512-KIHbLJqu73RGr/hnbrO9uBeixNGuvSQjul/jdFvS/KFSIH1hWVd1ng7zOHx+YrEfInLG7q4n6GHQ9cDtxv/P6g==}
     engines: {node: '>= 0.10'}
 
-  cosmiconfig@9.0.0:
-    resolution: {integrity: sha512-itvL5h8RETACmOTFc4UfIyB2RfEHi71Ax6E/PivVxq9NseKbOWpeyHEOIbmAw1rs8Ak0VursQNww7lf7YtUwzg==}
-    engines: {node: '>=14'}
-    peerDependencies:
-      typescript: '>=4.9.5'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
   crc-32@1.2.2:
     resolution: {integrity: sha512-ROmzCKrTnOwybPcJApAA6WBWij23HVfGVNKqqrZpuyZOHqK2CwHSvpGuyt/UNNvaIjEd8X5IFGp4Mh+Ie1IHJQ==}
     engines: {node: '>=0.8'}
@@ -5100,10 +5085,6 @@ packages:
   entities@6.0.1:
     resolution: {integrity: sha512-aN97NXWF6AWBTahfVOIrB/NShkzi5H7F9r1s9mD3cDj4Ko5f2qhhVoYMibXF7GlLveb/D2ioWay8lxI97Ven3g==}
     engines: {node: '>=0.12'}
-
-  env-paths@2.2.1:
-    resolution: {integrity: sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A==}
-    engines: {node: '>=6'}
 
   error-ex@1.3.4:
     resolution: {integrity: sha512-sqQamAnR14VgCr1A618A3sGrygcpK+HEbenA/HiEAkkUwcZIIB/tgWqHFxWgOyDh4nB4JCRimh79dR5Ywc9MDQ==}
@@ -6177,10 +6158,6 @@ packages:
     resolution: {integrity: sha512-/imKNG4EbWNrVjoNC/1H5/9GFy+tqjGBHCaSsN+P2RnPqjsLmv6UD3Ej+Kj8nBWaRAwyk7kK5ZUc+OEatnTR3A==}
     hasBin: true
 
-  jiti@2.6.1:
-    resolution: {integrity: sha512-ekilCSN1jwRvIbgeg/57YFh8qQDNbwDb9xT/qu2DAHbFFZUicIl4ygVaAvzveMhMVr3LnpSKTNnwt8PoOfmKhQ==}
-    hasBin: true
-
   jose@4.15.9:
     resolution: {integrity: sha512-1vUQX+IdDMVPj4k8kOxgUqlcK518yluMuGZwqlr44FS1ppZB/5GWh4rZG89erpOBOJjU/OBsnCVFfapsRz6nEA==}
 
@@ -7072,19 +7049,6 @@ packages:
       tsx:
         optional: true
       yaml:
-        optional: true
-
-  postcss-loader@8.2.0:
-    resolution: {integrity: sha512-tHX+RkpsXVcc7st4dSdDGliI+r4aAQDuv+v3vFYHixb6YgjreG5AG4SEB0kDK8u2s6htqEEpKlkhSBUTvWKYnA==}
-    engines: {node: '>= 18.12.0'}
-    peerDependencies:
-      '@rspack/core': 0.x || 1.x
-      postcss: ^7.0.0 || ^8.0.1
-      webpack: ^5.0.0
-    peerDependenciesMeta:
-      '@rspack/core':
-        optional: true
-      webpack:
         optional: true
 
   postcss-nested@6.2.0:
@@ -8394,9 +8358,6 @@ packages:
 
   web-vitals@5.0.3:
     resolution: {integrity: sha512-4KmOFYxj7qT6RAdCH0SWwq8eKeXNhAFXR4PmgF6nrWFmrJ41n7lq3UCA6UK0GebQ4uu+XP8e8zGjaDO3wZlqTg==}
-
-  web-vitals@5.1.0:
-    resolution: {integrity: sha512-ArI3kx5jI0atlTtmV0fWU3fjpLmq/nD3Zr1iFFlJLaqa5wLBkUSzINwBPySCX/8jRyjlmy1Volw1kz1g9XE4Jg==}
 
   webextension-polyfill@0.10.0:
     resolution: {integrity: sha512-c5s35LgVa5tFaHhrZDnr3FpQpjj1BB+RXhLTYUxGqBVN460HkbM8TBtEqdXWbpTKfzwCcjAZVF7zXCYSKtcp9g==}
@@ -14875,15 +14836,6 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  cosmiconfig@9.0.0(typescript@5.9.3):
-    dependencies:
-      env-paths: 2.2.1
-      import-fresh: 3.3.1
-      js-yaml: 4.1.1
-      parse-json: 5.2.0
-    optionalDependencies:
-      typescript: 5.9.3
-
   crc-32@1.2.2: {}
 
   cross-fetch@3.2.0:
@@ -15181,8 +15133,6 @@ snapshots:
       tapable: 2.3.0
 
   entities@6.0.1: {}
-
-  env-paths@2.2.1: {}
 
   error-ex@1.3.4:
     dependencies:
@@ -16751,8 +16701,6 @@ snapshots:
 
   jiti@1.21.7: {}
 
-  jiti@2.6.1: {}
-
   jose@4.15.9: {}
 
   jose@6.1.3: {}
@@ -17906,17 +17854,6 @@ snapshots:
       postcss: 8.5.6
       tsx: 4.21.0
       yaml: 2.8.2
-
-  postcss-loader@8.2.0(postcss@8.5.6)(typescript@5.9.3)(webpack@5.104.1):
-    dependencies:
-      cosmiconfig: 9.0.0(typescript@5.9.3)
-      jiti: 2.6.1
-      postcss: 8.5.6
-      semver: 7.7.3
-    optionalDependencies:
-      webpack: 5.104.1
-    transitivePeerDependencies:
-      - typescript
 
   postcss-nested@6.2.0(postcss@8.5.6):
     dependencies:
@@ -19533,8 +19470,6 @@ snapshots:
   web-vitals@4.2.4: {}
 
   web-vitals@5.0.3: {}
-
-  web-vitals@5.1.0: {}
 
   webextension-polyfill@0.10.0: {}
 
