@@ -75,3 +75,25 @@ The plan's "migrate exactly these 6, delete the rest" needed correcting against 
 - Grep gate: `grep -rn "@/components/chat/" src/ | grep -v chat-v2` → **empty** (only chat-v2 hits).
 - `pnpm lint` clean; `pnpm build` green (exit 0); full `pnpm test` = **21 failed suites / 255 failed tests = exact baseline (zero new failures)**. Total tests dropped 3982→3958 only because AudioPlayer's dead test was deleted. Verified the one moved failing suite (free-models-banner — "Low Credits $X remaining" credit-text assertions) was already failing pre-move (identical assertions in HEAD's copy; it's a pre-existing pricing/tier-fixture failure, not import breakage). ChatInput.test is a known pre-existing baseline failure.
 - Manual dev-server smoke (`pnpm dev`, no local backend): `GET /chat` → **HTTP 200** (chat-v2 renders, no module-not-found from the migration), `GET /models` → **200**, `GET /catalog/models` → **307 → /models** (Task 8 redirect live). Only log noise is backend-network errors to localhost:8000 (no backend running) — the expected fallback path, not a code fault. A live message-send Playwright run needs a live backend+credits (unavailable here); the render smoke + full chat-v2 Jest suites (ChatLayout/MessageList/ChatMessage/model-select all PASS) stand in.
+- Commit: `22c8e9de refactor(chat): single chat-v2 tree — migrate shared components, delete legacy`
+
+---
+
+## Task 10 — One chat-state home + streaming cleanup
+
+### Verified premise (the plan's assumption was inverted)
+The plan assumed `src/hooks/chat/` is chat-v2's state home and warned to escalate BLOCKED "if chat-v2 depends on two state systems simultaneously." Reality (mapped + grep-verified):
+- chat-v2 uses **exactly ONE** state system: `@/lib/store/chat-ui-store` (Zustand) + `@/lib/hooks/use-chat-queries` (React Query) + `@/lib/hooks/use-chat-stream` (streaming). It does NOT import `src/hooks/chat/` nor `src/features/chat/`.
+- `src/hooks/chat/` (orchestrator: index, types, use-chat-input, use-chat-orchestrator, use-messages, use-sessions, use-streaming) — **zero non-self importers**, no tests. Fully orphaned (a dead third state system).
+- `src/features/chat/` (ChatExperience, useChatController + test) — **zero non-self importers**, not wired to any route. Fully orphaned (dead parallel system).
+
+So NOT blocked — only one system is load-bearing. The correct action was to delete the two dead systems, not fold them.
+
+### Performed
+- Deleted `src/features/chat/` (3 files) and `src/hooks/chat/` (7 files) — both fully orphaned.
+- Kept chat-v2's single system: `use-chat-stream.ts`, `chat-ui-store.ts`, `use-chat-queries.ts`.
+- Checked the plan's streaming-cleanup candidates: `src/lib/chat-stream-handler.ts` is imported by `use-chat-stream.ts` (chat-v2 live) and `src/lib/stream-coordinator.ts` by `src/lib/streaming/stream-chat.ts` (live engine) — both NOT orphaned, so KEPT. `src/lib/streaming/` kept (live engine).
+
+### Verification
+- Grep: no references to `features/chat` or `hooks/chat/` remain.
+- `pnpm build` green; full `pnpm test` = **21 failed / 255 failed = baseline (zero new failures)**; suite count 160→159 only because the dead `ChatExperience.test` (was passing) was deleted with its source. chat-v2's live state code is untouched, so the Task-9 `/chat` 200 render smoke still holds.
