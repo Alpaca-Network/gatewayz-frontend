@@ -280,10 +280,16 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for search
 
         // Perform server-side search with gateway=all to search across all models
-        // In desktop mode, use backend API directly since API routes don't exist
+        // In desktop mode, use backend API directly since API routes don't exist.
+        // NOTE: GET /v1/models has no `search` param (backend silently ignores it) -
+        // real full-text search lives at GET /v1/models/search?q=<query>
+        // (catalog.py search_models). See src/lib/models-service.ts for the
+        // equivalent fix on the browser/proxy path. The search endpoint's response
+        // shape is the same { data: [...] } array of raw model dicts as /v1/models,
+        // so the mapping below is unchanged.
         const isDesktop = typeof window !== 'undefined' && isTauriDesktop();
         const searchUrl = isDesktop
-          ? `${API_BASE_URL}/v1/models?gateway=all&search=${encodeURIComponent(query)}`
+          ? `${API_BASE_URL}/v1/models/search?q=${encodeURIComponent(query)}`
           : `/api/models?gateway=all&search=${encodeURIComponent(query)}`;
 
         const response = await fetch(searchUrl, { signal: controller.signal });

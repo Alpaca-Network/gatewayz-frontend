@@ -119,11 +119,15 @@ describe('GET /api/models/popular', () => {
 
   it('returns models from backend API when available', async () => {
     // Reset cache by waiting (or we can just accept cache behavior)
-    // For fresh test, mock a successful API response
+    // For fresh test, mock a successful API response shaped like the real
+    // GET /v1/models/trending contract (src/db/gateway_analytics.py get_trending_models()):
+    // items are { model, provider, requests, total_tokens, unique_users, gateway }, not
+    // { id, name, developer } directly — the route maps them.
     const mockApiResponse = {
+      success: true,
       data: [
-        { id: 'test/model-1', name: 'Test Model 1', developer: 'Test', category: 'Paid' },
-        { id: 'test/model-2', name: 'Test Model 2', developer: 'Test', category: 'Free' },
+        { model: 'test/model-1', provider: 'test', requests: 42, gateway: 'openrouter' },
+        { model: 'test/model-2', provider: 'test', requests: 17, gateway: 'openrouter' },
       ]
     };
 
@@ -142,6 +146,9 @@ describe('GET /api/models/popular', () => {
     expect(Array.isArray(data.data)).toBe(true);
     // Source should be either 'api', 'cache', or 'curated' depending on cache state
     expect(['api', 'cache', 'curated']).toContain(data.source);
+    if (data.source === 'api') {
+      expect(data.data[0]).toMatchObject({ id: 'test/model-1', developer: 'Test' });
+    }
   });
 
   it('falls back to curated list when API returns empty data', async () => {

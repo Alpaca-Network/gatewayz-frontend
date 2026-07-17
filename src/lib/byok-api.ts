@@ -9,7 +9,7 @@
  *   GET    /user/provider-keys                 -> { success, data: ProviderKey[], count }
  *   POST   /user/provider-keys                 body { provider_slug, api_key } -> { success, data }
  *   DELETE /user/provider-keys/{provider_slug} -> { success, provider_slug }
- *   GET    /gateways                           -> gateway registry (valid provider slugs)
+ *   GET    /v1/gateways                        -> gateway registry (valid provider slugs)
  */
 
 import { API_BASE_URL } from "@/lib/config";
@@ -37,7 +37,7 @@ export interface Gateway {
  * only offer these slugs.
  */
 export async function getGateways(): Promise<Gateway[]> {
-  const response = await makeAuthenticatedRequest(`${API_BASE_URL}/gateways`);
+  const response = await makeAuthenticatedRequest(`${API_BASE_URL}/v1/gateways`);
   if (!response.ok) {
     throw await parseErrorResponse(response, "Loading providers");
   }

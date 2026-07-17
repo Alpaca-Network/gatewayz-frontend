@@ -89,8 +89,11 @@ export default function SettingsPage() {
       setLoading(true);
 
       try {
-        // Fetch user settings from backend - now safe because apiKey is available
-        const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/settings`, {
+        // GET /user/settings never existed on the backend (always 404'd).
+        // The backend's only persistence for freeform per-user settings is the
+        // `settings` object on the user profile (src/schemas/users.py
+        // UserProfileResponse.settings: dict[str, Any]), returned by GET /user/profile.
+        const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/profile`, {
           signal: abortController.signal,
         });
 
@@ -100,11 +103,12 @@ export default function SettingsPage() {
         }
 
         if (response.ok) {
-          const data = await response.json();
+          const profile = await response.json();
+          const data = profile.settings || {};
 
           // Populate settings from backend
-          setLowBalanceNotifications(data.low_balance_notifications || false);
-          setLowBalanceThreshold(data.low_balance_threshold || 5.00);
+          setLowBalanceNotifications(data.low_balance_notifications ?? false);
+          setLowBalanceThreshold(data.low_balance_threshold ?? 5.00);
           setAlwaysEnforce(data.always_enforce_providers || false);
           setAllowedProviders(data.allowed_providers || []);
           setIgnoredProviders(data.ignored_providers || []);
@@ -139,18 +143,25 @@ export default function SettingsPage() {
     setSaving(true);
 
     try {
-      const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/settings`, {
+      // PUT /user/settings never existed on the backend (always 404'd). Persist
+      // via the profile's freeform `settings` field instead: PUT /user/profile
+      // accepts { name?, email?, preferences?, settings? } and merges `settings`
+      // into the users row (src/db/users.py update_user_profile).
+      const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          low_balance_notifications: lowBalanceNotifications,
-          always_enforce_providers: alwaysEnforce,
-          allowed_providers: allowedProviders,
-          ignored_providers: ignoredProviders,
-          default_provider_sort: defaultProviderSort,
-          default_model: defaultModel
+          settings: {
+            low_balance_notifications: lowBalanceNotifications,
+            low_balance_threshold: lowBalanceThreshold,
+            always_enforce_providers: alwaysEnforce,
+            allowed_providers: allowedProviders,
+            ignored_providers: ignoredProviders,
+            default_provider_sort: defaultProviderSort,
+            default_model: defaultModel
+          }
         })
       });
 

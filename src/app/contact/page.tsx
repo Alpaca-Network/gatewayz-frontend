@@ -64,29 +64,38 @@ export default function ContactPage() {
     },
   });
 
-  const onSubmit = async (data: ContactFormData) => {
+  // NOTE: There is no backend endpoint for contact form submissions
+  // (POST /v1/contact never existed — the old /api/contact proxy always
+  // 404'd against the backend and silently swallowed the error, logging the
+  // message to ephemeral serverless logs and telling the user it was "sent").
+  // Instead of a fake success, open the user's own mail client via a mailto:
+  // link so the message is actually delivered (least-code fix — no backend
+  // work required, and it fails loudly/visibly if the OS has no mail client
+  // configured, unlike the old silent no-op).
+  const onSubmit = (data: ContactFormData) => {
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
-      const response = await fetch('/api/contact', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
+      const subjectLabel = subjectOptions.find((o) => o.value === data.subject)?.label || data.subject;
+      const mailSubject = `[${subjectLabel}] Contact Form: ${data.name}`;
+      const mailBody = [
+        `Name: ${data.name}`,
+        `Email: ${data.email}`,
+        data.company ? `Company: ${data.company}` : null,
+        '',
+        data.message,
+      ]
+        .filter((line) => line !== null)
+        .join('\n');
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to send message');
-      }
+      const mailtoUrl = `mailto:sales@gatewayz.ai?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
+      window.location.href = mailtoUrl;
 
       setIsSubmitted(true);
       toast({
-        title: 'Message sent!',
-        description: 'Thank you for contacting us. We\'ll get back to you soon.',
+        title: 'Opening your email client…',
+        description: "We've prefilled a message to sales@gatewayz.ai — just hit send.",
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
@@ -112,9 +121,9 @@ export default function ContactPage() {
                   <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
                 </div>
               </div>
-              <h2 className="text-2xl font-bold mb-2">Thank You!</h2>
+              <h2 className="text-2xl font-bold mb-2">Almost there!</h2>
               <p className="text-muted-foreground mb-6">
-                Your message has been sent successfully. Our team will review your inquiry and get back to you within 24-48 hours.
+                We've opened your email client with a prefilled message to sales@gatewayz.ai — just hit send and our team will get back to you within 24-48 hours.
               </p>
               <Button onClick={() => { setIsSubmitted(false); form.reset(); }}>
                 Send Another Message
