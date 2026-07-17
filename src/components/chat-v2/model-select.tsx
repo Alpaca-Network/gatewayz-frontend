@@ -5,9 +5,9 @@ import * as React from "react"
 import { Check, ChevronDown, ChevronRight, ChevronsUpDown, Loader2, Star, Sparkles, Shield, Lock, ArrowDownAZ, Zap } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { getAdaptiveTimeout } from "@/lib/network-timeouts"
 import { isFreeModel, getModelPricingCategory } from "@/lib/model-pricing-utils"
-import { isTauriDesktop } from "@/lib/browser-detection"
+import { useModels } from "@/lib/hooks/use-catalog"
+import type { CatalogModel } from "@/lib/catalog-api"
 import { Button } from "@/components/ui/button"
 import {
   Command,
@@ -47,13 +47,9 @@ interface ModelSelectProps {
     isIncognitoMode?: boolean;
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-
-const CACHE_KEY = 'gatewayz_models_cache_v9_by_gateway';
 const FAVORITES_KEY = 'gatewayz_favorite_models';
-const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes - extended cache for maximum performance
-// All models are now fetched up-front and displayed without per-group caps.
-// The cache stores the complete list (subject only to localStorage quota).
+// Models are fetched via the shared `useModels` catalog hook (Task 8/react-query),
+// which handles caching (staleTime) — no manual localStorage cache needed here.
 
 const ROUTER_OPTION: ModelOption = {
   value: 'openrouter/auto',
@@ -211,6 +207,38 @@ export const checkModelToolSupport = (modelId: string, supportedParams?: string[
   return false
 };
 
+// Map a raw catalog model (from the DB-driven `useModels` hook) to the
+// ModelOption shape this component renders. Shared by both the full model
+// list and the server-side search results.
+export const mapCatalogModelToOption = (model: CatalogModel): ModelOption => {
+  const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
+  const category = getModelPricingCategory(model);
+  const developer = getDeveloper(model.id);
+
+  // Extract modalities from architecture.input_modalities
+  const modalities = model.architecture?.input_modalities?.map((m: string) =>
+    m.charAt(0).toUpperCase() + m.slice(1)
+  ) || ['Text'];
+
+  const speedTier = getModelSpeedTier(model.id, sourceGateway);
+  const supportsTools = checkModelToolSupport(model.id, model.supported_parameters);
+
+  return {
+    value: model.id,
+    label: cleanModelName(model.name),
+    category,
+    sourceGateway,
+    developer,
+    modalities,
+    speedTier,
+    supportsTools,
+    huggingfaceMetrics: (model as any).huggingface_metrics ? {
+      downloads: (model as any).huggingface_metrics.downloads || 0,
+      likes: (model as any).huggingface_metrics.likes || 0,
+    } : undefined,
+  };
+};
+
 export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = false }: ModelSelectProps) {
   const { isAuthenticated } = useAuth()
   const { userData } = useAuthStore()
@@ -220,36 +248,48 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
   const userCredits = userData?.total_credits ?? (_subAllowance + _purchased + _legacy)
   const hasNoCredits = isAuthenticated && userCredits <= 0
   const [open, setOpen] = React.useState(false)
-  const [models, setModels] = React.useState<ModelOption[]>([])
-  const [loading, setLoading] = React.useState(false)
   const [favorites, setFavorites] = React.useState<Set<string>>(new Set())
   const [expandedDevelopers, setExpandedDevelopers] = React.useState<Set<string>>(new Set(['Favorites', 'Incognito']))
   const [defaultModelSet, setDefaultModelSet] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState('')
-  const [totalAvailableModels, setTotalAvailableModels] = React.useState<number | null>(null)
-  const [searchResults, setSearchResults] = React.useState<ModelOption[]>([])
-  const [searchLoading, setSearchLoading] = React.useState(false)
   type SortMode = 'gateway' | 'az' | 'free-first' | 'speed'
   const [sortMode, setSortMode] = React.useState<SortMode>('gateway')
 
-  const persistModelsToCache = React.useCallback((options: ModelOption[], totalCount: number | null) => {
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({
-        data: options,
-        total: typeof totalCount === 'number' ? totalCount : null,
-        timestamp: Date.now()
-      }));
-    } catch (e) {
-      // localStorage quota exceeded — clear old cache so next load can refetch fresh
-      try {
-        localStorage.removeItem(CACHE_KEY);
-        localStorage.removeItem('gatewayz_models_cache');
-      } catch {
-        // Ignore
+  // Full model catalog — DB-driven via the shared `useModels` hook (Task 8).
+  // Handles desktop/Tauri vs. proxy routing and caching internally (see
+  // src/lib/catalog-api.ts / src/lib/hooks/use-catalog.ts).
+  const { data: rawModels, isLoading: modelsLoading } = useModels({ gateway: 'all' });
+  const loading = modelsLoading;
+
+  const models = React.useMemo(() => {
+    // Deduplicate models by ID - keep the first occurrence
+    const uniqueModelsMap = new Map<string, CatalogModel>();
+    (rawModels ?? []).forEach((model) => {
+      if (!uniqueModelsMap.has(model.id)) {
+        uniqueModelsMap.set(model.id, model);
       }
-    }
-  }, [])
+    });
+    const modelOptions = Array.from(uniqueModelsMap.values()).map(mapCatalogModelToOption);
+    // Filter to routable models only — a model without a sourceGateway
+    // cannot be routed by the gateway layer, so it is not actually available.
+    const availableOptions = modelOptions.filter(m => m.sourceGateway);
+    return ensureRouterOption(availableOptions);
+  }, [rawModels]);
+
+  const debouncedQueryTrim = debouncedSearchQuery.trim();
+  // Server-side search when the user types — same gateway=all + search filter
+  // as before, now routed through the shared catalog hook (which forwards to
+  // GET /v1/models/search?q=<query> for the actual full-text search).
+  const { data: rawSearchResults, isFetching: searchFetching } = useModels(
+    { gateway: 'all', search: debouncedQueryTrim },
+    { enabled: !!debouncedQueryTrim, keepPreviousData: true }
+  );
+  const searchLoading = !!debouncedQueryTrim && searchFetching;
+  const searchResults = React.useMemo(
+    () => (debouncedQueryTrim ? (rawSearchResults ?? []).map(mapCatalogModelToOption) : []),
+    [rawSearchResults, debouncedQueryTrim]
+  );
 
   // Debounce search query for performance
   React.useEffect(() => {
@@ -259,80 +299,6 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
-
-  // Perform server-side search when user types
-  React.useEffect(() => {
-    async function performServerSearch() {
-      const query = debouncedSearchQuery.trim();
-
-      // Clear search results if query is empty
-      if (!query) {
-        setSearchResults([]);
-        setSearchLoading(false);
-        return;
-      }
-
-      // Start loading
-      setSearchLoading(true);
-
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for search
-
-        // Perform server-side search with gateway=all to search across all models
-        // In desktop mode, use backend API directly since API routes don't exist.
-        // NOTE: GET /v1/models has no `search` param (backend silently ignores it) -
-        // real full-text search lives at GET /v1/models/search?q=<query>
-        // (catalog.py search_models). See src/lib/models-service.ts for the
-        // equivalent fix on the browser/proxy path. The search endpoint's response
-        // shape is the same { data: [...] } array of raw model dicts as /v1/models,
-        // so the mapping below is unchanged.
-        const isDesktop = typeof window !== 'undefined' && isTauriDesktop();
-        const searchUrl = isDesktop
-          ? `${API_BASE_URL}/v1/models/search?q=${encodeURIComponent(query)}`
-          : `/api/models?gateway=all&search=${encodeURIComponent(query)}`;
-
-        const response = await fetch(searchUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
-
-        if (response.ok) {
-          // Verify JSON response
-          const contentType = response.headers.get('content-type');
-          if (!contentType || !contentType.includes('application/json')) {
-            console.error('[ModelSelect] Search API returned non-JSON response (content-type:', contentType, ')');
-            return;
-          }
-          const data = await response.json();
-          if (data.data && Array.isArray(data.data)) {
-            const searchOptions: ModelOption[] = data.data.map((model: any) => {
-              const gateway = model.source_gateway || 'openrouter';
-              return {
-                value: model.id,
-                label: cleanModelName(model.name),
-                category: model.category || 'Paid',
-                developer: getDeveloper(model.id),
-                sourceGateway: gateway,
-                modalities: ['Text'],
-                speedTier: getModelSpeedTier(model.id, gateway),
-                huggingfaceMetrics: model.huggingface_metrics ? {
-                  downloads: model.huggingface_metrics.downloads || 0,
-                  likes: model.huggingface_metrics.likes || 0,
-                } : undefined,
-              };
-            });
-            setSearchResults(searchOptions);
-          }
-        }
-      } catch (error) {
-        console.error('[ModelSelect] Server search failed:', error);
-        // Keep previous results on error
-      } finally {
-        setSearchLoading(false);
-      }
-    }
-
-    performServerSearch();
-  }, [debouncedSearchQuery]);
 
   // Load favorites from localStorage
   React.useEffect(() => {
@@ -361,120 +327,6 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
       return next;
     });
   };
-
-  React.useEffect(() => {
-    async function fetchModels() {
-        // Check cache first
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-          try {
-            const { data, timestamp, total } = JSON.parse(cached);
-            // Validate cached data has correct structure
-            if (Date.now() - timestamp < CACHE_DURATION && Array.isArray(data) && data.length > 0 && data[0].value) {
-              const hydrated = ensureRouterOption(data as ModelOption[]);
-              setModels(hydrated);
-              setTotalAvailableModels(typeof total === 'number' ? total : null);
-              return;
-            } else {
-              // Clear invalid cache
-              localStorage.removeItem(CACHE_KEY);
-            }
-          } catch (e) {
-            // Clear corrupted cache
-            localStorage.removeItem(CACHE_KEY);
-          }
-        }
-
-      // Always fetch all models — no artificial cap
-      setLoading(true);
-      try {
-          const controller = new AbortController();
-          const timeoutMs = getAdaptiveTimeout(12000, {
-            maxMs: 25000,
-            slowNetworkMultiplier: 3,
-            mobileMultiplier: 2,
-          });
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-        // In desktop mode, API routes don't exist (static export), so fetch directly from backend
-        const isDesktop = typeof window !== 'undefined' && isTauriDesktop();
-        const modelsUrl = isDesktop
-          ? `${API_BASE_URL}/v1/models?gateway=all`
-          : `/api/models?gateway=all`;
-
-        const allGatewaysRes = await fetch(modelsUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
-
-        // Verify we got JSON response (in case static export returns HTML)
-        const contentType = allGatewaysRes.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          console.error('[ModelSelect] Models API returned non-JSON response (content-type:', contentType, ')');
-          throw new Error('Non-JSON response from models API');
-        }
-
-        const allGatewaysData = await allGatewaysRes.json();
-
-        // Combine models from all gateways
-        const allModels = [...(allGatewaysData.data || [])];
-
-        // Deduplicate models by ID - keep the first occurrence
-        const uniqueModelsMap = new Map();
-        allModels.forEach((model: any) => {
-          if (!uniqueModelsMap.has(model.id)) {
-            uniqueModelsMap.set(model.id, model);
-          }
-        });
-        const uniqueModels = Array.from(uniqueModelsMap.values());
-
-        const modelOptions: ModelOption[] = uniqueModels.map((model: any) => {
-          const sourceGateway = model.source_gateway || model.source_gateways?.[0] || '';
-          // Only OpenRouter models with :free suffix are legitimately free
-          const category = getModelPricingCategory(model);
-          const developer = getDeveloper(model.id);
-
-          // Extract modalities from architecture.input_modalities
-          const modalities = model.architecture?.input_modalities?.map((m: string) =>
-            m.charAt(0).toUpperCase() + m.slice(1)
-          ) || ['Text'];
-
-          // Get speed tier for performance indicators
-          const speedTier = getModelSpeedTier(model.id, sourceGateway);
-
-          // Check if model supports tool calling
-          const supportsTools = checkModelToolSupport(model.id, model.supported_parameters);
-
-          return {
-            value: model.id,
-            label: cleanModelName(model.name),
-            category,
-            sourceGateway,
-            developer,
-            modalities,
-            speedTier,
-            supportsTools,
-            huggingfaceMetrics: model.huggingface_metrics ? {
-              downloads: model.huggingface_metrics.downloads || 0,
-              likes: model.huggingface_metrics.likes || 0,
-            } : undefined,
-          };
-        });
-        // Filter to routable models only — a model without a sourceGateway
-        // cannot be routed by the gateway layer, so it is not actually available.
-        const availableOptions = modelOptions.filter(m => m.sourceGateway);
-        const normalizedOptions = ensureRouterOption(availableOptions);
-        setModels(normalizedOptions);
-        setTotalAvailableModels(normalizedOptions.length);
-
-        // Try to cache the results, but don't fail if quota exceeded
-        persistModelsToCache(normalizedOptions, normalizedOptions.length);
-      } catch (error) {
-        // Failed to fetch models
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchModels();
-    }, [persistModelsToCache]);
 
   // Group models by source gateway (infrastructure provider) and sort by priority/size
   const modelsByGateway = React.useMemo(() => {
@@ -797,10 +649,6 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
       });
     }
   }, [debouncedSearchQuery, filteredIncognitoModels.length, filteredGatewayKeysArray]);
-
-    // Total count is now resolved up-front from the initial fetch; no manual
-    // "load all" flow is needed because we fetch the complete list by default.
-    void totalAvailableModels;
 
   // Flat sorted list used when sortMode !== 'gateway'
   const sortedFlatModels = React.useMemo(() => {

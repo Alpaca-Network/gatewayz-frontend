@@ -2,6 +2,7 @@
 
 import { makeAuthenticatedRequest } from './api';
 import { parseErrorResponse } from './errors';
+import { isTauriDesktop } from './browser-detection';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -334,10 +335,14 @@ export interface GetModelsFilters {
   offset?: number;
 }
 
-// Client uses the relative Next proxy (avoids CORS); server-side falls back to
-// the direct backend URL so these getters remain usable from server components.
+// Client uses the relative Next proxy (avoids CORS); server-side AND Tauri
+// desktop (static export has no Next API routes at runtime, even though
+// `window` is defined in its webview) fall back to the direct backend URL so
+// these getters remain usable from server components and the desktop app.
 function catalogFetchBase(): string {
-  return typeof window !== 'undefined' ? '' : API_BASE_URL;
+  if (typeof window === 'undefined') return API_BASE_URL;
+  if (isTauriDesktop()) return API_BASE_URL;
+  return '';
 }
 
 /**
@@ -345,13 +350,35 @@ function catalogFetchBase(): string {
  * (backend GET /v1/models), unwrapping the `{ data: [...] }` envelope.
  */
 export async function getModels(filters: GetModelsFilters = {}): Promise<CatalogModel[]> {
+  const gateway = filters.gateway ?? 'all';
+  const base = catalogFetchBase();
+
+  // GET /v1/models has no `search` query param — the backend silently ignores
+  // it (src/routes/catalog.py get_all_models). Real full-text search lives at
+  // GET /v1/models/search?q=<query> (catalog.py search_models). The Next proxy
+  // (/api/models) already does this routing server-side (see
+  // models-service.ts fetchModelsFromGateway); when talking to the backend
+  // directly (Tauri desktop static export, or SSR) we must route there ourselves.
+  if (filters.search && base) {
+    const params = new URLSearchParams();
+    params.set('q', filters.search);
+    params.set('gateway', gateway);
+    if (filters.limit != null) params.set('limit', String(filters.limit));
+
+    const response = await fetch(`${base}/v1/models/search?${params.toString()}`, { cache: 'no-store' });
+    if (!response.ok) {
+      throw await parseErrorResponse(response, 'Searching models');
+    }
+    const body = await response.json();
+    return Array.isArray(body?.data) ? (body.data as CatalogModel[]) : [];
+  }
+
   const params = new URLSearchParams();
-  params.set('gateway', filters.gateway ?? 'all');
+  params.set('gateway', gateway);
   if (filters.limit != null) params.set('limit', String(filters.limit));
   if (filters.offset != null) params.set('offset', String(filters.offset));
   if (filters.search) params.set('search', filters.search);
 
-  const base = catalogFetchBase();
   const url = base
     ? `${base}/v1/models?${params.toString()}`
     : `/api/models?${params.toString()}`;

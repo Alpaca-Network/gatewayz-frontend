@@ -9,7 +9,7 @@
  * Interface note: `useModels` / `useModel` / `useProviders` are consumed by Task 9's
  * chat model-select migration — keep their names and shapes stable.
  */
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, keepPreviousData, type UseQueryResult } from '@tanstack/react-query';
 import {
   getModels,
   getModel,
@@ -25,12 +25,15 @@ const CATALOG_STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 /** List public catalog models (optionally filtered by gateway/search/paging). */
 export function useModels(
-  filters: GetModelsFilters = {}
+  filters: GetModelsFilters = {},
+  options: { enabled?: boolean; keepPreviousData?: boolean } = {}
 ): UseQueryResult<CatalogModel[]> {
   return useQuery({
     queryKey: ['catalog', 'models', filters],
     queryFn: () => getModels(filters),
     staleTime: CATALOG_STALE_TIME,
+    enabled: options.enabled ?? true,
+    placeholderData: options.keepPreviousData ? keepPreviousData : undefined,
   });
 }
 
