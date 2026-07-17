@@ -107,7 +107,7 @@ export default function SettingsPage() {
           const data = profile.settings || {};
 
           // Populate settings from backend
-          setLowBalanceNotifications(data.low_balance_notifications ?? true);
+          setLowBalanceNotifications(data.low_balance_notifications ?? false);
           setLowBalanceThreshold(data.low_balance_threshold ?? 5.00);
           setAlwaysEnforce(data.always_enforce_providers || false);
           setAllowedProviders(data.allowed_providers || []);
