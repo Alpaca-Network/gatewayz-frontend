@@ -8,10 +8,15 @@
  * response mapping (unwrapping the backend's `{ data }` / `{ gateways }` envelope).
  */
 import { getModels, getModel, getProviders, getGateways } from '@/lib/catalog-api';
+import { isTauriDesktop } from '@/lib/browser-detection';
 import {
   createSuccessResponse,
   setupFetchMock,
 } from '@/__tests__/utils/mock-fetch';
+
+jest.mock('@/lib/browser-detection', () => ({
+  isTauriDesktop: jest.fn(() => false),
+}));
 
 describe('catalog-api getters', () => {
   let mockFetch: jest.Mock;
@@ -103,6 +108,19 @@ describe('catalog-api getters', () => {
       const result = await getGateways();
 
       expect(lastUrl()).toContain('/api/gateways');
+      expect(result).toEqual(gateways);
+    });
+
+    it('uses catalogFetchBase() like its siblings: on Tauri desktop it hits the backend directly and unwraps data[]', async () => {
+      (isTauriDesktop as jest.Mock).mockReturnValueOnce(true);
+      const gateways = [{ id: 'openrouter', name: 'OpenRouter', color: 'bg-blue-500' }];
+      mockFetch.mockResolvedValueOnce(createSuccessResponse({ data: gateways, total: 1 }));
+
+      const result = await getGateways();
+
+      const url = lastUrl();
+      expect(url).toContain('/v1/gateways');
+      expect(url).not.toContain('/api/gateways');
       expect(result).toEqual(gateways);
     });
   });
