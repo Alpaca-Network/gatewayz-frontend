@@ -12,13 +12,10 @@ const navItems = [
   { href: "/settings/account", label: "Account" },
   { href: "/settings/credits", label: "Credits" },
   { href: "/settings/keys", label: "Keys" },
-  { href: "/settings/activity", label: "Activity" },
   { href: "/settings/presets", label: "Presets" },
-  { href: "/settings/cache", label: "Prompt Cache" },
   { href: "/settings/provisioning", label: "Provisioning Keys" },
   { href: "/settings/integrations", label: "Integrations (BYOK)" },
   { href: "/settings/privacy", label: "Privacy" },
-  { href: "/web-vitals", label: "Web Vitals" },
   { href: "/settings", label: "Settings" },
 ];
 

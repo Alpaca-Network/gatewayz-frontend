@@ -19,7 +19,6 @@ import { GTMLoader } from '@/components/analytics/gtm-loader';
 import { ErrorSuppressor } from '@/components/error-suppressor';
 import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
 import { SafeStorageShim } from '@/components/safe-storage-shim';
-import { WebVitalsReporter } from '@/components/web-vitals';
 import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
 import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
 import { DesktopProvider, WebOnly } from '@/components/providers/desktop-provider';
@@ -101,7 +100,6 @@ export default function RootLayout({
                 <FloatingNewChatButton />
                 <Analytics />
                 <SpeedInsights />
-                <WebVitalsReporter />
                 </DesktopProvider>
               </AnalyticsProvidersWrapper>
             </PrivyProviderWrapper>
