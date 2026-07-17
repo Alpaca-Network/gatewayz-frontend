@@ -1,20 +1,15 @@
 "use client";
 
-import { useMemo, lazy, Suspense, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
-import { format } from 'date-fns';
+import { Card, CardContent } from '@/components/ui/card';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Maximize, Copy, Check, Lock } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Copy, Check, Lock } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { providerData } from '@/lib/provider-data';
-import { generateChartData, generateStatsTable } from '@/lib/data';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import ReactMarkdown from "react-markdown";
 import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
@@ -32,9 +27,6 @@ import { getSourceGateway, formatPricingForDisplay } from '@/lib/model-pricing-u
 import { buildProviderConfigsRecord, getProviderDisplayName, type ProviderConfig } from '@/lib/provider-config';
 import { getGatewayDisplayName, getGatewayLogoWithFallback } from '@/lib/gateway-registry';
 
-// Lazy load heavy components
-const TopAppsTable = lazy(() => import('@/components/dashboard/top-apps-table'));
-
 type Model = ModelDetailRecord;
 
 const Section = ({ title, description, children, className }: { title: string, description?: string, children: React.ReactNode, className?: string }) => (
@@ -45,96 +37,7 @@ const Section = ({ title, description, children, className }: { title: string, d
     </section>
 );
 
-const ChartCard = ({ modelName, title, dataKey, yAxisFormatter }: { modelName: string, title: string; dataKey: "throughput" | "latency"; yAxisFormatter: (value: any) => string; }) => {
-    const providers = useMemo(() => providerData[modelName] || [], [modelName]);
-    const chartData = useMemo(() => generateChartData(providers, dataKey), [providers, dataKey]);
-    const statsTable = useMemo(() => generateStatsTable(providers, dataKey), [providers, dataKey]);
-
-    return (
-        <Dialog>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-base font-medium">{title}</CardTitle>
-                    <DialogTrigger asChild>
-                         <Button variant="ghost" size="icon" className="w-6 h-6">
-                            <Maximize className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                    </DialogTrigger>
-                </CardHeader>
-                <CardContent>
-                     <div className="h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={chartData}>
-                                <Tooltip
-                                    formatter={(value, name) => [`${value}${dataKey === 'latency' ? 's' : ' tps'}`, name]}
-                                    labelFormatter={(label) => format(new Date(label), "PPP")}
-                                     contentStyle={{
-                                        backgroundColor: 'hsl(var(--background))',
-                                        borderColor: 'hsl(var(--border))',
-                                      }}
-                                />
-                                {providers.map((p, i) => (
-                                     <Line key={p.name} type="monotone" dataKey={p.name} stroke={`hsl(var(--chart-${(i % 5) + 1}))`} dot={false} strokeWidth={2} />
-                                ))}
-                                <XAxis dataKey="date" tickLine={false} axisLine={false} tick={false} />
-                                <YAxis tickLine={false} axisLine={false} tickFormatter={yAxisFormatter} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
-                </CardContent>
-            </Card>
-             <DialogContent className="max-w-4xl h-auto flex flex-col bg-card text-card-foreground">
-                <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
-                     <p className="text-sm text-muted-foreground">Median {title} of the top providers for this model.</p>
-                </DialogHeader>
-                <div className="flex-grow my-4">
-                    <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                             <XAxis dataKey="date" tickFormatter={(label) => format(new Date(label), 'MMM d')} />
-                             <YAxis tickFormatter={yAxisFormatter} />
-                            <Tooltip
-                                formatter={(value, name) => [`${value}${dataKey === 'latency' ? 's' : ' tps'}`, name]}
-                                labelFormatter={(label) => format(new Date(label), "PPP")}
-                                 contentStyle={{
-                                    backgroundColor: 'hsl(var(--background))',
-                                    borderColor: 'hsl(var(--border))',
-                                  }}
-                             />
-                            <Legend />
-                            {providers.map((p, i) => (
-                                <Line key={p.name} type="monotone" dataKey={p.name} stroke={`hsl(var(--chart-${(i % 5) + 1}))`} />
-                            ))}
-                        </LineChart>
-                    </ResponsiveContainer>
-                </div>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Provider</TableHead>
-                            <TableHead className="text-right">Min {title}</TableHead>
-                            <TableHead className="text-right">Max {title}</TableHead>
-                            <TableHead className="text-right">Avg {title}</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {statsTable.map(stat => (
-                            <TableRow key={stat.provider}>
-                                <TableCell className="font-medium">{stat.provider}</TableCell>
-                                <TableCell className="text-right">{stat.min.toFixed(2)}{dataKey === 'latency' ? 's' : ' tps'}</TableCell>
-                                <TableCell className="text-right">{stat.max.toFixed(2)}{dataKey === 'latency' ? 's' : ' tps'}</TableCell>
-                                <TableCell className="text-right">{stat.avg.toFixed(2)}{dataKey === 'latency' ? 's' : ' tps'}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </DialogContent>
-        </Dialog>
-    )
-}
-
-type TabType = 'Playground' | 'Use Model' | 'Providers' | 'Activity' | 'Apps';
+type TabType = 'Playground' | 'Use Model' | 'Providers';
 
 export default function ModelProfilePage() {
     const params = useParams();
@@ -515,7 +418,7 @@ export default function ModelProfilePage() {
 
             <nav className="border-b overflow-x-auto -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 mb-8">
                 <div className="flex gap-4 lg:gap-6">
-                    {(['Playground', 'Use Model', 'Providers', 'Activity', 'Apps'] as TabType[]).map(item => (
+                    {(['Playground', 'Use Model', 'Providers'] as TabType[]).map(item => (
                         <Button
                             key={item}
                             variant="ghost"
@@ -895,122 +798,6 @@ console.log(response.choices[0].message.content);`
                                 <p className="text-muted-foreground">No gateway providers found for this model.</p>
                             </Card>
                         )}
-                    </div>
-                )}
-
-                {activeTab === 'Activity' && (
-                    <div>
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold">Recent Activity Of {model.name}</h2>
-                        </div>
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-sm text-muted-foreground">Total usage per day on Gatewayz</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="h-[400px]">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={generateChartData([], 'throughput').slice(0,90)}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                            <XAxis
-                                                dataKey="date"
-                                                tickFormatter={(label) => format(new Date(label), 'MMM d')}
-                                                tick={{ fontSize: 12 }}
-                                            />
-                                            <YAxis
-                                                tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
-                                                tick={{ fontSize: 12 }}
-                                            />
-                                            <Tooltip
-                                                formatter={(value: any) => [`${(value / 1000000).toFixed(2)}M`, "Usage"]}
-                                                labelFormatter={(label) => format(new Date(label), "PPP")}
-                                                contentStyle={{
-                                                    backgroundColor: 'hsl(var(--background))',
-                                                    borderColor: 'hsl(var(--border))',
-                                                }}
-                                            />
-                                            <Legend />
-                                            <Area
-                                                type="monotone"
-                                                dataKey="value"
-                                                name="Prompt Tokens"
-                                                stroke="#3b82f6"
-                                                fill="#3b82f6"
-                                                fillOpacity={0.6}
-                                                strokeWidth={2}
-                                            />
-                                            <Area
-                                                type="monotone"
-                                                dataKey="value2"
-                                                name="Completion Tokens"
-                                                stroke="#9ca3af"
-                                                fill="#9ca3af"
-                                                fillOpacity={0.3}
-                                                strokeWidth={2}
-                                            />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                )}
-
-                {activeTab === 'Apps' && (
-                    <div>
-                        <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold">Top Apps Using {model.name}</h2>
-                            <div className="flex items-center gap-4">
-                                <select className="border rounded px-3 py-2 text-sm">
-                                    <option>Top This Year</option>
-                                    <option>Top This Month</option>
-                                    <option>Top This Week</option>
-                                </select>
-                                <select className="border rounded px-3 py-2 text-sm">
-                                    <option>Sort By: All</option>
-                                    <option>Sort By: Tokens</option>
-                                    <option>Sort By: Growth</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {[1,2,3,4,5,6,7,8].map((i) => (
-                                <Card key={i} className="hover:shadow-lg transition-shadow">
-                                    <CardContent className="p-4">
-                                        <div className="flex items-start justify-between mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center border">
-                                                    <img src="/Google_Logo-black.svg" alt="Google" className="w-6 h-6" />
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-semibold">Google</h3>
-                                                    <span className="text-xs text-muted-foreground">#{i}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-                                            Autonomous Coding Agent That Is...
-                                        </p>
-                                        <div className="space-y-2">
-                                            <div>
-                                                <span className="text-2xl font-bold">21.7B</span>
-                                                <p className="text-xs text-muted-foreground">Tokens Generated</p>
-                                            </div>
-                                            <div className="text-green-600 font-semibold text-sm">
-                                                +13.06%
-                                                <span className="text-xs text-muted-foreground ml-1">Weekly Growth</span>
-                                            </div>
-                                        </div>
-                                        <Button variant="outline" size="sm" className="w-full mt-4">
-                                            View App →
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                        <div className="text-center mt-8">
-                            <Button variant="outline">Load More</Button>
-                        </div>
                     </div>
                 )}
 
