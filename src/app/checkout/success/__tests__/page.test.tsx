@@ -91,13 +91,12 @@ describe('CheckoutSuccessPage', () => {
       });
     });
 
-    it('should display the Pro tier name from URL params', async () => {
+    it('should display the default Credit Package name when no plan param is provided', async () => {
       render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        // Pro tier appears in the subscription active message - look for "Pro" in text
-        const proElements = screen.getAllByText(/Pro/);
-        expect(proElements.length).toBeGreaterThan(0);
+        const packageElements = screen.getAllByText(/Credit Package/);
+        expect(packageElements.length).toBeGreaterThan(0);
       });
     });
 
@@ -109,11 +108,11 @@ describe('CheckoutSuccessPage', () => {
       });
     });
 
-    it('should display Active status for subscription', async () => {
+    it('should display Completed status for the credit purchase', async () => {
       render(<CheckoutSuccessPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Active')).toBeInTheDocument();
+        expect(screen.getByText('Completed')).toBeInTheDocument();
       });
     });
 
@@ -220,13 +219,12 @@ describe('CheckoutSuccessPage - plan URL parameter', () => {
     navigation.useSearchParams = originalUseSearchParams;
   });
 
-  it('should fall back to tier config name when plan param is empty', async () => {
+  it('should fall back to the default Credit Package name when plan param is empty', async () => {
     render(<CheckoutSuccessPage />);
 
     await waitFor(() => {
-      // Pro tier appears from the tier config when plan is empty
-      const proElements = screen.getAllByText(/Pro/);
-      expect(proElements.length).toBeGreaterThan(0);
+      const packageElements = screen.getAllByText(/Credit Package/);
+      expect(packageElements.length).toBeGreaterThan(0);
     });
   });
 });

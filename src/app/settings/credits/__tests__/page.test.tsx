@@ -61,10 +61,6 @@ jest.mock('@/components/tier/tier-info-card', () => ({
   TierInfoCard: () => <div data-testid="tier-info-card">TierInfoCard</div>,
 }));
 
-jest.mock('@/components/pricing/pricing-section', () => ({
-  PricingSection: () => <div data-testid="pricing-section">PricingSection</div>,
-}));
-
 describe('CreditsPage', () => {
   const mockBasicUserData: UserData = {
     user_id: 1,
@@ -151,17 +147,6 @@ describe('CreditsPage', () => {
       });
 
       expect(screen.getByTestId('tier-info-card')).toBeInTheDocument();
-    });
-
-    it('should render PricingSection component', async () => {
-      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
-
-      await act(async () => {
-        render(<CreditsPage />);
-        jest.runAllTimers();
-      });
-
-      expect(screen.getByTestId('pricing-section')).toBeInTheDocument();
     });
 
     it('should display Available Balance section', async () => {

@@ -1,53 +1,30 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo, useCallback } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { ArrowLeft, Sparkles, CreditCard, Check, Shield, Zap, Minus, Plus } from "lucide-react";
+import { ArrowLeft, Sparkles, CreditCard, Shield, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { getUserMessage } from '@/lib/errors';
 import { getUserData } from '@/lib/api';
-import { tierConfigs, creditPackages, TierConfig } from '@/lib/pricing-config';
+import { creditPackages } from '@/lib/pricing-config';
 
+// Prepaid-only checkout: this page handles credit top-ups exclusively
+// (subscription management — subscribe/upgrade/downgrade/cancel — was
+// removed; see D-FE1 in docs/superpowers/plans/2026-07-17-frontend-mvp-refactor.md).
+// Entry point: /settings/credits -> /checkout?package=<id>&mode=credits[&amount=<custom>]
 function CheckoutPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
 
   // Get URL parameters
-  const initialTier = searchParams.get('tier') || '';
   const creditPackageId = searchParams.get('package') || '';
-  const mode = searchParams.get('mode') || 'subscription'; // 'subscription' or 'credits'
   const customAmountParam = searchParams.get('amount') || '';
-  const action = searchParams.get('action') || ''; // 'upgrade' or 'downgrade'
-  const initialQuantity = parseInt(searchParams.get('quantity') || '1', 10);
-
-  // Local state for plan/quantity selection (allows changes without page reload)
-  const [selectedTier, setSelectedTier] = useState<string>(initialTier);
-  const [quantity, setQuantity] = useState<number>(Math.max(1, Math.min(100, initialQuantity)));
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-
-  const isDowngrade = action === 'downgrade';
-  const isUpgrade = action === 'upgrade';
-  const isCancel = action === 'cancel';
-
-  // Determine what we're purchasing
-  const isSubscription = mode === 'subscription' && selectedTier;
-  const isCreditPurchase = mode === 'credits' && creditPackageId;
-
-  const currentTier = selectedTier ? tierConfigs[selectedTier.toLowerCase()] : null;
-
-  // Available subscription tiers for switching (exclude enterprise and starter)
-  const availableTiers = useMemo(() =>
-    Object.values(tierConfigs).filter(
-      (t: TierConfig) => t.stripePriceId && t.priceValue > 0
-    ) as TierConfig[],
-    []
-  );
 
   // Handle custom package with dynamic amount from URL
   // Min $5 to meet Stripe requirements, max $10,000 for safety
@@ -76,25 +53,6 @@ function CheckoutPageContent() {
     setIsAuthenticated(!!userData);
   }, []);
 
-  // Quantity handlers
-  const handleQuantityChange = useCallback((newQuantity: number) => {
-    const clampedQuantity = Math.max(1, Math.min(100, newQuantity));
-    setQuantity(clampedQuantity);
-  }, []);
-
-  const incrementQuantity = useCallback(() => {
-    setQuantity(prev => Math.min(100, prev + 1));
-  }, []);
-
-  const decrementQuantity = useCallback(() => {
-    setQuantity(prev => Math.max(1, prev - 1));
-  }, []);
-
-  // Plan switching handler
-  const handlePlanChange = useCallback((newTier: string) => {
-    setSelectedTier(newTier);
-  }, []);
-
   const handleProceedToPayment = async () => {
     setIsProcessing(true);
 
@@ -110,149 +68,7 @@ function CheckoutPageContent() {
         return;
       }
 
-      // Handle cancel subscription (downgrade to free/starter tier)
-      if (isCancel) {
-        const cancelResponse = await fetch('/api/stripe/cancel', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: userData.email,
-            cancelImmediately: false, // Cancel at period end to let user keep access
-          }),
-        });
-
-        if (!cancelResponse.ok) {
-          const errorData = await cancelResponse.json();
-          throw new Error(errorData.error || 'Failed to cancel subscription');
-        }
-
-        const cancelData = await cancelResponse.json();
-
-        toast({
-          title: "Subscription cancelled",
-          description: cancelData.message || "Your subscription has been cancelled.",
-        });
-
-        // Redirect to settings page after successful cancellation
-        router.push('/settings/credits?cancelled=success');
-        return;
-      }
-
-      // Handle downgrade - update subscription to lower tier (e.g., Max -> Pro)
-      if (isDowngrade && isSubscription && currentTier) {
-        if (!currentTier.stripePriceId) {
-          toast({
-            title: "Subscription not configured",
-            description: "Please contact support.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const downgradeResponse = await fetch('/api/stripe/downgrade', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            email: userData.email,
-            newPriceId: currentTier.stripePriceId,
-            newTier: selectedTier,
-          }),
-        });
-
-        if (!downgradeResponse.ok) {
-          const errorData = await downgradeResponse.json();
-          throw new Error(errorData.error || 'Failed to process downgrade');
-        }
-
-        const downgradeData = await downgradeResponse.json();
-
-        toast({
-          title: "Subscription updated!",
-          description: downgradeData.message || `You've been downgraded to the ${currentTier.name} plan.`,
-        });
-
-        // Redirect to settings page after successful downgrade
-        router.push('/settings/credits?downgrade=success');
-        return;
-      }
-
-      if (isSubscription && currentTier) {
-        // Handle subscription checkout
-        if (!currentTier.stripePriceId) {
-          toast({
-            title: "Subscription not configured",
-            description: "Please contact support.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        // Handle upgrade from existing subscription (e.g., Pro -> Max)
-        if (isUpgrade) {
-          const upgradeResponse = await fetch('/api/stripe/upgrade', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              email: userData.email,
-              newPriceId: currentTier.stripePriceId,
-              newTier: selectedTier,
-            }),
-          });
-
-          if (!upgradeResponse.ok) {
-            const errorData = await upgradeResponse.json();
-            throw new Error(errorData.error || 'Failed to process upgrade');
-          }
-
-          const upgradeData = await upgradeResponse.json();
-
-          toast({
-            title: "Subscription upgraded!",
-            description: upgradeData.message || `You've been upgraded to the ${currentTier.name} plan.`,
-          });
-
-          // Redirect to settings page after successful upgrade
-          router.push('/settings/credits?upgrade=success');
-          return;
-        }
-
-        // Handle new subscription (no existing subscription)
-        const response = await fetch('/api/stripe/subscribe', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            priceId: currentTier.stripePriceId,
-            productId: currentTier.stripeProductId,
-            userEmail: userData.email,
-            userId: userData.user_id,
-            apiKey: userData.api_key,
-            tier: selectedTier,
-            plan: currentTier.name,
-            quantity: quantity,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to start subscription');
-        }
-
-        const data = await response.json();
-
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          throw new Error('No checkout URL received');
-        }
-      } else if (isCreditPurchase && currentPackage) {
+      if (currentPackage) {
         // Handle credit purchase checkout
         const response = await fetch('/api/stripe/checkout', {
           method: 'POST',
@@ -282,10 +98,10 @@ function CheckoutPageContent() {
           throw new Error('No checkout URL received');
         }
       } else {
-        // Fallback: Mode/parameter mismatch - show error and redirect to pricing
+        // Fallback: no valid package selected - show error and redirect to credits
         toast({
           title: "Invalid checkout configuration",
-          description: "Please select a plan from our pricing page.",
+          description: "Please select a credit package from the credits page.",
           variant: "destructive",
         });
         router.push('/settings/credits');
@@ -327,8 +143,8 @@ function CheckoutPageContent() {
     );
   }
 
-  // Show error if no valid tier or package selected
-  if (!currentTier && !currentPackage) {
+  // Show error if no valid package selected
+  if (!currentPackage) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/30 px-4">
         <Card className="w-full max-w-md">
@@ -336,13 +152,13 @@ function CheckoutPageContent() {
             <div className="text-center space-y-4">
               <CreditCard className="h-12 w-12 mx-auto text-muted-foreground" />
               <div>
-                <h3 className="text-lg font-semibold">No Plan Selected</h3>
+                <h3 className="text-lg font-semibold">No Package Selected</h3>
                 <p className="text-muted-foreground mt-2">
-                  Please select a plan from our pricing page
+                  Please select a credit package from the credits page
                 </p>
               </div>
               <Button onClick={() => router.push('/settings/credits')}>
-                View Plans
+                View Credit Packages
               </Button>
             </div>
           </CardContent>
@@ -366,17 +182,9 @@ function CheckoutPageContent() {
 
         {/* Header */}
         <div className="text-center space-y-4">
-          <h1 className="text-3xl font-bold">
-            {isCancel ? 'Cancel Your Subscription' : isDowngrade ? 'Downgrade Your Plan' : isUpgrade ? 'Upgrade Your Plan' : 'Confirm Your Order'}
-          </h1>
+          <h1 className="text-3xl font-bold">Confirm Your Order</h1>
           <p className="text-muted-foreground text-lg">
-            {isCancel
-              ? 'You will keep access until the end of your billing period'
-              : isDowngrade
-              ? 'Review your plan change before confirming'
-              : isUpgrade
-              ? 'Review your upgrade before proceeding'
-              : 'Review your selection before proceeding to payment'}
+            Review your selection before proceeding to payment
           </p>
         </div>
 
@@ -386,163 +194,47 @@ function CheckoutPageContent() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5" />
-                {isCancel ? 'Cancellation Summary' : 'Order Summary'}
+                Order Summary
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Plan Switcher - only show for subscriptions without action (new purchases) */}
-              {isSubscription && !isDowngrade && !isUpgrade && !isCancel && availableTiers.length > 1 && (
-                <div className="space-y-3">
-                  <label className="text-sm font-medium">Select Plan</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {availableTiers.map((tierOption) => (
-                      <button
-                        key={tierOption.id}
-                        onClick={() => handlePlanChange(tierOption.id)}
-                        className={`p-3 rounded-lg border-2 transition-all text-left ${
-                          selectedTier.toLowerCase() === tierOption.id
-                            ? `border-primary ${tierOption.bgColor}`
-                            : 'border-muted hover:border-muted-foreground/50'
-                        }`}
-                      >
-                        <div className={`font-semibold ${tierOption.color}`}>
-                          {tierOption.name}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {tierOption.price}/mo
-                        </div>
-                        {tierOption.popular && (
-                          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                            Popular
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Quantity Selector - only for subscriptions */}
-              {isSubscription && currentTier && currentTier.priceValue > 0 && !isCancel && (
-                <div className="space-y-3">
-                  <label className="text-sm font-medium">Number of Licenses</label>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={decrementQuantity}
-                      disabled={quantity <= 1}
-                      className="h-10 w-10"
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={quantity}
-                      onChange={(e) => handleQuantityChange(parseInt(e.target.value, 10) || 1)}
-                      className="w-20 text-center"
-                    />
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={incrementQuantity}
-                      disabled={quantity >= 100}
-                      className="h-10 w-10"
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                      × {currentTier.price}/mo = <span className="font-semibold">${currentTier.priceValue * quantity}/mo</span>
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Selected Plan/Package */}
-              {currentTier && (
-                <div className="space-y-4">
-                  <div className={`p-4 rounded-lg ${currentTier.bgColor}`}>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className={`text-xl font-bold ${currentTier.color}`}>
-                          {currentTier.name} Plan {quantity > 1 && `(×${quantity})`}
-                        </h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {currentTier.description}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold">
-                          {quantity > 1 ? `$${currentTier.priceValue * quantity}` : currentTier.price}
-                        </p>
-                        {currentTier.priceValue > 0 && (
-                          <p className="text-sm text-muted-foreground">/month</p>
-                        )}
-                      </div>
+              {/* Selected Credit Package */}
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-xl font-bold text-blue-600">
+                        {currentPackage.name} Credit Package
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        ${currentPackage.creditValue} in credits
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold">${currentPackage.price}</p>
+                      <p className="text-sm text-muted-foreground">one-time</p>
                     </div>
                   </div>
+                </div>
 
-                  {currentTier.originalPrice && currentTier.discount && (
+                {currentPackage.price < currentPackage.creditValue && (
+                  <>
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground line-through">{currentTier.originalPrice}</span>
+                      <span className="text-muted-foreground line-through">${currentPackage.creditValue}</span>
                       <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1 rounded-full font-medium">
-                        {currentTier.discount}
+                        {currentPackage.discount}
                       </span>
                     </div>
-                  )}
 
-                  <div className="space-y-2">
-                    <p className="font-medium text-sm">What's included:</p>
-                    {currentTier.features.map((feature, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <Check className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm">{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {currentPackage && (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-xl font-bold text-blue-600">
-                          {currentPackage.name} Credit Package
-                        </h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          ${currentPackage.creditValue} in credits
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold">${currentPackage.price}</p>
-                        <p className="text-sm text-muted-foreground">one-time</p>
-                      </div>
+                    <div className="p-3 bg-muted rounded-lg text-sm">
+                      <p>
+                        <span className="font-semibold">You save: </span>
+                        ${currentPackage.creditValue - currentPackage.price}
+                      </p>
                     </div>
-                  </div>
-
-                  {currentPackage.price < currentPackage.creditValue && (
-                    <>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground line-through">${currentPackage.creditValue}</span>
-                        <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-3 py-1 rounded-full font-medium">
-                          {currentPackage.discount}
-                        </span>
-                      </div>
-
-                      <div className="p-3 bg-muted rounded-lg text-sm">
-                        <p>
-                          <span className="font-semibold">You save: </span>
-                          ${currentPackage.creditValue - currentPackage.price}
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+                  </>
+                )}
+              </div>
 
               {/* Trust Badges */}
               <div className="pt-4 border-t space-y-3">
@@ -576,7 +268,7 @@ function CheckoutPageContent() {
                 ) : (
                   <>
                     <CreditCard className="h-4 w-4 mr-2" />
-                    {isCancel ? 'Cancel Subscription' : isDowngrade ? 'Confirm Downgrade' : isUpgrade ? 'Proceed with Upgrade' : 'Proceed to Payment'}
+                    Proceed to Payment
                   </>
                 )}
               </Button>
