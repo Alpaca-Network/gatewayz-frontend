@@ -188,7 +188,6 @@ export interface AuthRequestBody {
   refresh_token?: string | null;
   session_update_action?: string | null;
   is_new_user?: boolean | null;
-  referral_code?: string | null;
   environment_tag?: string | null;
   auto_create_api_key?: boolean | null;
   // Legacy fields for backward compatibility

@@ -25,7 +25,6 @@ import {
   storeSessionTransferToken,
   getStoredSessionTransferToken,
 } from "@/integrations/privy/auth-session-transfer";
-import { getReferralCode, clearReferralCode } from "@/lib/referral";
 import { resetGuestMessageCount } from "@/lib/guest-chat";
 import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
 import { trackSignupConversion } from "@/components/analytics/google-analytics";
@@ -605,16 +604,6 @@ export function GatewayzAuthProvider({
       lastSyncedPrivyIdRef.current = authData.privy_user_id || null;
       setStatus("authenticated");
 
-      // Clear referral code and reset guest message count if present
-      const referralCode = getReferralCode();
-      if (referralCode) {
-        clearReferralCode();
-        if (authData.is_new_user ?? isNewUserExpected) {
-          localStorage.setItem("gatewayz_show_referral_bonus", "true");
-        }
-        console.log("[Auth] Referral code cleared from localStorage after successful auth");
-      }
-
       // Reset guest message count when user signs up
       resetGuestMessageCount();
       console.log("[Auth] Guest message count reset after successful auth");
@@ -757,10 +746,6 @@ export function GatewayzAuthProvider({
       const isNewUser = !existingGatewayzUser;
       const hasStoredApiKey = Boolean(existingGatewayzUser?.api_key);
 
-      // Get referral code using utility (checks URL and localStorage)
-      const referralCode = getReferralCode();
-      console.log("[Auth] Final referral code:", referralCode);
-
       const authRequestBody = {
         user: stripUndefined({
           id: privyUser.id,
@@ -775,8 +760,6 @@ export function GatewayzAuthProvider({
         // Existing users should get their existing key back to avoid replacing live keys with temp keys
         auto_create_api_key: isNewUser || !hasStoredApiKey,
         is_new_user: isNewUser,
-        has_referral_code: !!referralCode,
-        referral_code: referralCode ?? null,
         privy_user_id: privyUser.id,
       };
 

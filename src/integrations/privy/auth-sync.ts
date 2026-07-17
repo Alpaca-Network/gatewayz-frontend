@@ -78,21 +78,6 @@ export async function syncPrivyToGatewayz(
   const isNewUser = !existingUserData;
   const hasStoredApiKey = Boolean(existingUserData?.api_key);
 
-  // Check for referral code from storage or URL
-  let referralCode = null;
-  if (typeof window !== 'undefined') {
-    referralCode = localStorage.getItem('gatewayz_referral_code');
-    if (!referralCode) {
-      const urlParams = new URLSearchParams(window.location.search);
-      const urlRefCode = urlParams.get('ref');
-      if (urlRefCode) {
-        referralCode = urlRefCode;
-        localStorage.setItem('gatewayz_referral_code', urlRefCode);
-        console.log('[AuthSync] Captured referral code from URL:', urlRefCode);
-      }
-    }
-  }
-
   // Build auth request body (matches the one in gatewayz-auth-context.tsx)
   const authRequestBody = {
     user: stripUndefined({
@@ -147,8 +132,6 @@ export async function syncPrivyToGatewayz(
     // Existing users should get their existing key back to avoid replacing live keys with temp keys
     auto_create_api_key: isNewUser || !hasStoredApiKey,
     is_new_user: isNewUser,
-    has_referral_code: !!referralCode,
-    referral_code: referralCode ?? null,
     privy_user_id: privyUser.id,
   };
 

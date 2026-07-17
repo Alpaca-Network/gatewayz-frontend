@@ -23,10 +23,6 @@ jest.mock('@/lib/network-timeouts', () => ({
 jest.mock('@/lib/retry-utils', () => ({
   retryFetch: jest.fn((fn) => fn()),
 }));
-jest.mock('@/lib/referral', () => ({
-  getReferralCode: jest.fn(() => null),
-  clearReferralCode: jest.fn(),
-}));
 jest.mock('@/lib/guest-chat', () => ({
   resetGuestMessageCount: jest.fn(),
 }));

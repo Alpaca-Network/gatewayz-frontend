@@ -100,16 +100,6 @@ export function clearAuthData(): void {
   }
 }
 
-export function getReferralCode(): string | null {
-  const storage = getStorage();
-  if (!storage) return null;
-  try {
-    return storage.getItem(AUTH_STORAGE_KEYS.REFERRAL_CODE);
-  } catch {
-    return null;
-  }
-}
-
 // =============================================================================
 // ERROR HELPERS
 // =============================================================================
@@ -455,7 +445,6 @@ export class AuthService {
       email,  // Top-level email field for backend
       privy_user_id: privyUserId,  // Keep for compatibility
       auth_method: authMethod,
-      referral_code: getReferralCode(),
     };
   }
 

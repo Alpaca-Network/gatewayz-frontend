@@ -39,12 +39,6 @@ jest.mock('@/context/gatewayz-auth-context', () => ({
   }),
 }));
 
-// Mock referral utilities
-const mockStoreReferralCode = jest.fn();
-jest.mock('@/lib/referral', () => ({
-  storeReferralCode: (...args: unknown[]) => mockStoreReferralCode(...args),
-}));
-
 // Mock Twitter pixel tracking
 const mockTrackTwitterSignupClick = jest.fn();
 jest.mock('@/components/analytics/twitter-pixel', () => ({
@@ -107,7 +101,6 @@ describe('SignupPage', () => {
     mockAuthStatus = 'unauthenticated';
     mockLogin.mockClear();
     mockPush.mockClear();
-    mockStoreReferralCode.mockClear();
     mockTrackTwitterSignupClick.mockClear();
   });
 
@@ -187,18 +180,6 @@ describe('SignupPage', () => {
       });
     });
 
-    it('should include ref code in redirect URL when already authenticated', async () => {
-      mockAuthenticated = true;
-      mockAuthStatus = 'authenticated';
-      mockSearchParams.set('ref', 'TEST123');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/chat?ref=TEST123');
-      });
-    });
-
     it('should NOT auto-redirect for new signups (auth context handles this)', async () => {
       // User starts unauthenticated, then authenticates (simulating new signup flow)
       mockAuthenticated = false;
@@ -225,160 +206,6 @@ describe('SignupPage', () => {
       }, { timeout: 100 });
     });
 
-    it('should handle returnUrl with existing query params and ref code', async () => {
-      mockAuthenticated = true;
-      mockAuthStatus = 'authenticated';
-      mockSearchParams.set('returnUrl', '/chat?model=gpt-4');
-      mockSearchParams.set('ref', 'TEST123');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/chat?model=gpt-4&ref=TEST123');
-      });
-    });
-
-    it('should properly encode referral codes with special characters', async () => {
-      mockAuthenticated = true;
-      mockAuthStatus = 'authenticated';
-      mockSearchParams.set('ref', 'TEST&=?#123');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        // Special characters should be URL-encoded
-        expect(mockPush).toHaveBeenCalledWith('/chat?ref=TEST%26%3D%3F%23123');
-      });
-    });
-
-    it('should handle hash fragments correctly (query before hash)', async () => {
-      mockAuthenticated = true;
-      mockAuthStatus = 'authenticated';
-      mockSearchParams.set('returnUrl', '/chat#section');
-      mockSearchParams.set('ref', 'HASH123');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        // Query param should come BEFORE hash fragment
-        expect(mockPush).toHaveBeenCalledWith('/chat?ref=HASH123#section');
-      });
-    });
-
-    it('should handle returnUrl with both query params and hash', async () => {
-      mockAuthenticated = true;
-      mockAuthStatus = 'authenticated';
-      mockSearchParams.set('returnUrl', '/chat?model=gpt-4#section');
-      mockSearchParams.set('ref', 'COMPLEX123');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/chat?model=gpt-4&ref=COMPLEX123#section');
-      });
-    });
-
-    it('should replace existing ref param to avoid duplicates', async () => {
-      mockAuthenticated = true;
-      mockAuthStatus = 'authenticated';
-      mockSearchParams.set('returnUrl', '/chat?ref=OLD123&model=gpt-4');
-      mockSearchParams.set('ref', 'NEW123');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        // Should replace OLD123 with NEW123, not append
-        expect(mockPush).toHaveBeenCalledWith('/chat?ref=NEW123&model=gpt-4');
-      });
-    });
-
-    it('should handle malformed returnUrl ending with ?', async () => {
-      mockAuthenticated = true;
-      mockAuthStatus = 'authenticated';
-      mockSearchParams.set('returnUrl', '/chat?');
-      mockSearchParams.set('ref', 'TEST123');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        // Should clean up trailing ? and add ref correctly
-        expect(mockPush).toHaveBeenCalledWith('/chat?ref=TEST123');
-      });
-    });
-
-    it('should handle malformed returnUrl ending with &', async () => {
-      mockAuthenticated = true;
-      mockAuthStatus = 'authenticated';
-      mockSearchParams.set('returnUrl', '/settings?foo=bar&');
-      mockSearchParams.set('ref', 'TEST123');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        // Should clean up trailing & and add ref correctly
-        expect(mockPush).toHaveBeenCalledWith('/settings?foo=bar&ref=TEST123');
-      });
-    });
-  });
-
-  describe('Referral code handling', () => {
-    it('should store referral code when present in URL', async () => {
-      mockSearchParams.set('ref', 'REFERRAL123');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        expect(mockStoreReferralCode).toHaveBeenCalledWith('REFERRAL123', 'signup');
-      });
-    });
-
-    it('should not store referral code when not present', () => {
-      render(<SignupPage />);
-
-      expect(mockStoreReferralCode).not.toHaveBeenCalled();
-    });
-
-    it('should display referral code in the UI', () => {
-      mockSearchParams.set('ref', 'DISPLAY123');
-
-      render(<SignupPage />);
-
-      expect(screen.getByText('DISPLAY123')).toBeInTheDocument();
-      expect(screen.getByText('Referral Code')).toBeInTheDocument();
-    });
-
-    it('should show referral-specific welcome message', () => {
-      mockSearchParams.set('ref', 'WELCOME123');
-
-      render(<SignupPage />);
-
-      expect(screen.getByText(/You've been invited!/)).toBeInTheDocument();
-    });
-
-    it('should store referral code BEFORE redirecting already-authenticated users (race condition fix)', async () => {
-      // This test verifies the fix for the race condition where redirect could happen
-      // before referral code storage completes for already-authenticated users
-      mockAuthenticated = true;
-      mockAuthStatus = 'authenticated';
-      mockSearchParams.set('ref', 'RACE_TEST');
-
-      render(<SignupPage />);
-
-      await waitFor(() => {
-        // Verify referral code was stored
-        expect(mockStoreReferralCode).toHaveBeenCalledWith('RACE_TEST', 'signup');
-      });
-
-      // Verify redirect happened (but after storage)
-      await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/chat?ref=RACE_TEST');
-      });
-
-      // Verify storage was called before push
-      const storeCallOrder = mockStoreReferralCode.mock.invocationCallOrder[0];
-      const pushCallOrder = mockPush.mock.invocationCallOrder[0];
-      expect(storeCallOrder).toBeLessThan(pushCallOrder);
-    });
   });
 
   describe('Loading state', () => {

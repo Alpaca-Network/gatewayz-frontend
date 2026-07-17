@@ -26,5 +26,4 @@ export {
   getUserData,
   saveUserData,
   clearAuthData,
-  getReferralCode,
 } from './auth-service';

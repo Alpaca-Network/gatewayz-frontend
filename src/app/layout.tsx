@@ -19,7 +19,6 @@ import { GTMLoader } from '@/components/analytics/gtm-loader';
 import { ErrorSuppressor } from '@/components/error-suppressor';
 import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
 import { SafeStorageShim } from '@/components/safe-storage-shim';
-import { ReferralToast } from '@/components/referral/referral-toast';
 import { WebVitalsReporter } from '@/components/web-vitals';
 import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
 import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
@@ -99,7 +98,6 @@ export default function RootLayout({
                 <Toaster />
                 <AppFooter />
                 <WelcomeDialog />
-                <ReferralToast />
                 <FloatingNewChatButton />
                 <Analytics />
                 <SpeedInsights />
