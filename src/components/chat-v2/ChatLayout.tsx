@@ -9,7 +9,7 @@ import { ChatSidebar } from "./ChatSidebar";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { ConnectionStatus } from "./ConnectionStatus";
-import { ModelSelect } from "@/components/chat/model-select";
+import { ModelSelect } from "@/components/chat-v2/model-select";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
 import { useAuthStore } from "@/lib/store/auth-store";

@@ -83,6 +83,19 @@ describe('Next.js config redirects', () => {
     });
   });
 
+  describe('/catalog consolidation redirects (Task 8)', () => {
+    it.each(['/catalog', '/catalog/models', '/catalog/providers'])(
+      'redirects %s to /models (temporary, no host restriction)',
+      (source) => {
+        const rule = redirects.find((r) => r.source === source);
+        expect(rule).toBeDefined();
+        expect(rule?.destination).toBe('/models');
+        expect(rule?.permanent).toBe(false);
+        expect(rule).not.toHaveProperty('has');
+      }
+    );
+  });
+
   describe('redirect destination validation', () => {
     it('should use HTTPS protocol for Terragon URL', () => {
       expect(TERRAGON_DASHBOARD_URL).toMatch(/^https:\/\//);

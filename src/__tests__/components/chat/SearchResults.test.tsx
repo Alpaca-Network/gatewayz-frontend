@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { SearchResults } from '@/components/chat/SearchResults';
+import { SearchResults } from '@/components/chat-v2/SearchResults';
 
 // Mock lucide-react icons
 jest.mock('lucide-react', () => ({

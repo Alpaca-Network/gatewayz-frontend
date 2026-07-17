@@ -1,16 +1,18 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import CheckoutPage from '../page';
 
 // Mock next/navigation
+// Prepaid-only checkout (D-FE1): the page only ever receives package/mode/amount
+// params from /settings/credits -> /checkout?package=<id>&mode=credits.
 const mockBack = jest.fn();
 const mockPush = jest.fn();
 jest.mock('next/navigation', () => ({
   useSearchParams: () => ({
     get: (key: string) => {
       const params: Record<string, string> = {
-        tier: 'pro',
-        mode: 'subscription',
+        package: 'tier2',
+        mode: 'credits',
       };
       return params[key] || null;
     },
@@ -74,8 +76,6 @@ jest.mock('lucide-react', () => ({
   Check: () => <span data-testid="icon-check">Check</span>,
   Shield: () => <span data-testid="icon-shield">Shield</span>,
   Zap: () => <span data-testid="icon-zap">Zap</span>,
-  Minus: () => <span data-testid="icon-minus">Minus</span>,
-  Plus: () => <span data-testid="icon-plus">Plus</span>,
 }));
 
 // Mock the API module
@@ -86,51 +86,6 @@ jest.mock('@/lib/api', () => ({
 }));
 
 jest.mock('@/lib/pricing-config', () => ({
-  tierConfigs: {
-    pro: {
-      id: 'pro',
-      name: 'Pro',
-      description: 'Scale with confidence',
-      price: '$10',
-      priceValue: 10,
-      originalPrice: '$20/month',
-      discount: 'Save 50%',
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-      features: [
-        '50% discount on first $10 credits',
-        'Access to 10,000+ models',
-        'Smart cost optimization',
-        'Advanced analytics',
-        'Priority support',
-        '99.9% uptime SLA',
-      ],
-      ctaText: 'Get Started',
-      stripePriceId: 'price_test_pro',
-      stripeProductId: 'prod_test_pro',
-    },
-    max: {
-      id: 'max',
-      name: 'Max',
-      description: 'Higher limits, priority access',
-      price: '$75',
-      priceValue: 75,
-      originalPrice: '$150/month',
-      discount: 'Save 50%',
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100',
-      features: [
-        '50% discount on $150 credits',
-        '10x more usage than Pro',
-        'Higher output limits for all tasks',
-        'Early access to advanced features',
-      ],
-      ctaText: 'Get Started',
-      popular: true,
-      stripePriceId: 'price_test_max',
-      stripeProductId: 'prod_test_max',
-    },
-  },
   creditPackages: {
     tier1: { id: 'tier1', name: 'Starter', creditValue: 10, price: 9, discount: '10% off' },
     tier2: { id: 'tier2', name: 'Growth', creditValue: 100, price: 75, discount: '25% off' },
@@ -172,11 +127,11 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
       });
     });
 
-    it('should display the Pro tier details from URL params', async () => {
+    it('should display the credit package details from URL params', async () => {
       render(<CheckoutPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('Pro Plan')).toBeInTheDocument();
+        expect(screen.getByText('Growth Credit Package')).toBeInTheDocument();
       });
     });
 
@@ -185,14 +140,6 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Order Summary')).toBeInTheDocument();
-      });
-    });
-
-    it('should display the Pro tier features', async () => {
-      render(<CheckoutPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText('Access to 10,000+ models')).toBeInTheDocument();
       });
     });
 
@@ -260,7 +207,7 @@ describe('CheckoutPage - Pre-purchase Confirmation', () => {
 
 });
 
-describe('CheckoutPage - No plan selected', () => {
+describe('CheckoutPage - No package selected', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetUserData.mockReturnValue({
@@ -269,143 +216,19 @@ describe('CheckoutPage - No plan selected', () => {
     });
   });
 
-  // Override the mock to return no tier/package
-  it('should display no plan selected message when tier is empty', async () => {
+  it('should display no package selected message when package param is empty', async () => {
     jest.doMock('next/navigation', () => ({
       useSearchParams: () => ({
         get: () => null,
       }),
       useRouter: () => ({
         back: mockBack,
+        push: mockPush,
       }),
     }));
 
     // Note: This test would need the module to be re-imported to work correctly
     // For simplicity, we're testing the happy path in other tests
-  });
-});
-
-describe('CheckoutPage - Credit package mode', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetUserData.mockReturnValue({
-      user_id: 1,
-      api_key: 'test-api-key',
-      email: 'test@example.com',
-    });
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ url: 'https://checkout.stripe.com/test' }),
-    });
-  });
-
-  it('should handle credit package mode', async () => {
-    // Note: To fully test credit package mode, you would need to mock useSearchParams
-    // to return package and mode=credits parameters. This test validates the setup.
-    render(<CheckoutPage />);
-
-    await waitFor(() => {
-      // The page should load with the subscription mode by default
-      expect(screen.getByText('Confirm Your Order')).toBeInTheDocument();
-    });
-  });
-});
-
-describe('CheckoutPage - Quantity selector', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetUserData.mockReturnValue({
-      user_id: 1,
-      api_key: 'test-api-key',
-      email: 'test@example.com',
-    });
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ url: 'https://checkout.stripe.com/test' }),
-    });
-  });
-
-  it('should render quantity selector for subscription plans', async () => {
-    render(<CheckoutPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Number of Licenses')).toBeInTheDocument();
-    });
-  });
-
-  it('should render increment and decrement buttons', async () => {
-    render(<CheckoutPage />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('icon-minus')).toBeInTheDocument();
-      expect(screen.getByTestId('icon-plus')).toBeInTheDocument();
-    });
-  });
-
-  it('should display quantity input with default value of 1', async () => {
-    render(<CheckoutPage />);
-
-    await waitFor(() => {
-      const inputs = screen.getAllByTestId('input');
-      const quantityInput = inputs.find(input =>
-        (input as HTMLInputElement).type === 'number'
-      );
-      expect(quantityInput).toBeInTheDocument();
-      expect((quantityInput as HTMLInputElement).value).toBe('1');
-    });
-  });
-});
-
-describe('CheckoutPage - Plan switcher', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetUserData.mockReturnValue({
-      user_id: 1,
-      api_key: 'test-api-key',
-      email: 'test@example.com',
-    });
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ url: 'https://checkout.stripe.com/test' }),
-    });
-  });
-
-  it('should render plan selection options', async () => {
-    render(<CheckoutPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Select Plan')).toBeInTheDocument();
-    });
-  });
-
-  it('should display available tier options', async () => {
-    render(<CheckoutPage />);
-
-    await waitFor(() => {
-      // Both Pro and Max tiers should be shown as options
-      expect(screen.getByText('Pro')).toBeInTheDocument();
-      expect(screen.getByText('Max')).toBeInTheDocument();
-    });
-  });
-
-  it('should allow switching between plans without page reload', async () => {
-    render(<CheckoutPage />);
-
-    await waitFor(() => {
-      // Initially showing Pro plan details
-      expect(screen.getByText('Pro Plan')).toBeInTheDocument();
-    });
-
-    // Find the Max button and click it
-    const maxButton = screen.getByText('Max').closest('button');
-    if (maxButton) {
-      fireEvent.click(maxButton);
-    }
-
-    await waitFor(() => {
-      // Should now show Max plan details
-      expect(screen.getByText('Max Plan')).toBeInTheDocument();
-    });
   });
 });
 
@@ -443,7 +266,7 @@ describe('CheckoutPage - Fast loading (no auth polling)', () => {
   });
 });
 
-describe('CheckoutPage - Subscription discount visibility', () => {
+describe('CheckoutPage - Credit package discount visibility', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetUserData.mockReturnValue({
@@ -453,21 +276,21 @@ describe('CheckoutPage - Subscription discount visibility', () => {
     });
   });
 
-  it('should display discount for subscription plans with discount info', async () => {
+  it('should display discount for credit packages with discount info', async () => {
     render(<CheckoutPage />);
 
     await waitFor(() => {
-      // Pro plan has discount: 'Save 50%' and originalPrice in mock
-      expect(screen.getByText('Save 50%')).toBeInTheDocument();
+      // tier2 package has discount: '25% off' in mock
+      expect(screen.getByText('25% off')).toBeInTheDocument();
     });
   });
 
-  it('should display original price with strikethrough for discounted plans', async () => {
+  it('should display original credit value with strikethrough for discounted packages', async () => {
     render(<CheckoutPage />);
 
     await waitFor(() => {
-      // Pro plan has originalPrice: '$20/month' in mock
-      expect(screen.getByText('$20/month')).toBeInTheDocument();
+      // tier2 package has creditValue: 100 in mock
+      expect(screen.getByText('$100')).toBeInTheDocument();
     });
   });
 });

@@ -1,0 +1,60 @@
+                    [36m<span[39m
+                      [33mdata-testid[39m=[32m"icon-check"[39m
+                    [36m>[39m
+                      [0m✓[0m
+                    [36m</span>[39m
+                    [36m<span[39m
+                      [33mclass[39m=[32m"text-sm text-gray-600 leading-snug"[39m
+                    [36m>[39m
+                      [0m24/7 dedicated support[0m
+                    [36m</span>[39m
+                  [36m</div>[39m
+                  [36m<div[39m
+                    [33mclass[39m=[32m"flex items-start gap-2.5"[39m
+                  [36m>[39m
+                    [36m<span[39m
+                      [33mdata-testid[39m=[32m"icon-check"[39m
+                    [36m>[39m
+                      [0m✓[0m
+                    [36m</span>[39m
+                    [36m<span[39m
+                      [33mclass[39m=[32m"text-sm text-gray-600 leading-snug"[39m
+                    [36m>[39m
+                      [0m99.99% uptime SLA[0m
+                    [36m</span>[39m
+                  [36m</div>[39m
+                [36m</div>[39m
+                [36m<button[39m
+                  [33mclass[39m=[32m"w-full mt-auto"[39m
+                  [33mdata-testid[39m=[32m"button"[39m
+                [36m>[39m
+                  [0mBook your audit[0m
+                [36m</button>[39m
+              [36m</div>[39m
+            [36m</div>[39m
+          [36m</div>[39m
+        [36m</section>[39m
+      [36m</div>[39m
+    [36m</body>[39m
+
+      102 |     render(<PricingSection />);
+      103 |
+    > 104 |     expect(screen.getByText('$0')).toBeInTheDocument();
+          |                   ^
+      105 |     expect(screen.getByText('$8')).toBeInTheDocument();
+      106 |     expect(screen.getByText('$75')).toBeInTheDocument();
+      107 |     expect(screen.getByText('$350')).toBeInTheDocument();
+
+      at Object.getElementError (node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:37:19)
+      at node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+      at node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+      at node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+      at Object.getByText (src/components/sections/__tests__/PricingSection.test.tsx:104:19)
+
+
+Test Suites: 23 failed, 154 passed, 177 total
+Tests:       261 failed, 15 skipped, 4019 passed, 4295 total
+Snapshots:   0 total
+Time:        111.953 s
+Ran all test suites.
+ ELIFECYCLE  Test failed. See above for more details.

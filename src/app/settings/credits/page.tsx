@@ -27,7 +27,6 @@ import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData
 import { formatCredits, formatCreditsDollar } from '@/lib/format-credits';
 import { API_BASE_URL, CREDIT_TOPUP_FEE_RATE, applyTopupFee } from '@/lib/config';
 import { TierInfoCard } from '@/components/tier/tier-info-card';
-import { PricingSection } from '@/components/pricing/pricing-section';
 
 // Confetti/Emoji explosion component
 const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
@@ -570,9 +569,6 @@ function CreditsPageContent() {
       <div className="max-w-2xl mx-auto">
         <TierInfoCard />
       </div>
-
-      {/* Pricing Section */}
-      <PricingSection />
 
       {/* Success message after Stripe payment */}
       {showSuccessMessage && (

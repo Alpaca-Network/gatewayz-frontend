@@ -13,8 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, Info, PlusCircle, X } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
-import { models, type Model } from "@/lib/models-data";
+import { useMemo, useState } from "react";
+import { useModels } from "@/lib/hooks/use-catalog";
+import type { CatalogModel } from "@/lib/catalog-api";
+import { getDeveloper } from "@/components/chat-v2/model-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
@@ -34,24 +36,31 @@ const ParameterInput = ({ label, description, includeSwitch = true }: { label: s
     )
 }
 
-const modelGroups = models.reduce((groups, model) => {
-    const category = model.series;
-    if (!groups[category]) {
-        groups[category] = [];
-    }
-    groups[category].push(model);
-    return groups;
-}, {} as Record<string, Model[]>);
-
 export default function NewPresetPage() {
     const [providerPrefs, setProviderPrefs] = useState(false);
-    const [selectedModels, setSelectedModels] = useState<Model[]>([]);
+    const [selectedModels, setSelectedModels] = useState<CatalogModel[]>([]);
     const [open, setOpen] = useState(false);
 
-    const handleModelSelect = (model: Model) => {
-        setSelectedModels(prev => 
-            prev.find(m => m.name === model.name)
-                ? prev.filter(m => m.name !== model.name)
+    // DB-driven catalog (Task 8) — replaces the static `models` table from
+    // lib/models-data. Grouped by developer/org (closest live equivalent of
+    // the old static "series" grouping, e.g. GPT / Qwen / Gemini).
+    const { data: catalogModels } = useModels({ gateway: 'all' });
+    const modelGroups = useMemo(() => {
+        const groups: Record<string, CatalogModel[]> = {};
+        (catalogModels ?? []).forEach(model => {
+            const category = getDeveloper(model.id);
+            if (!groups[category]) {
+                groups[category] = [];
+            }
+            groups[category].push(model);
+        });
+        return groups;
+    }, [catalogModels]);
+
+    const handleModelSelect = (model: CatalogModel) => {
+        setSelectedModels(prev =>
+            prev.find(m => m.id === model.id)
+                ? prev.filter(m => m.id !== model.id)
                 : [...prev, model]
         );
     };
@@ -123,14 +132,14 @@ export default function NewPresetPage() {
                                         <CommandGroup key={groupName} heading={groupName}>
                                             {groupModels.map((model) => (
                                                 <CommandItem
-                                                    key={model.name}
-                                                    value={model.name}
+                                                    key={model.id}
+                                                    value={model.id}
                                                     onSelect={() => handleModelSelect(model)}
                                                     className="flex items-center justify-between"
                                                 >
                                                     <span>{model.name}</span>
                                                     <Checkbox
-                                                        checked={selectedModels.some(m => m.name === model.name)}
+                                                        checked={selectedModels.some(m => m.id === model.id)}
                                                         className="mr-2"
                                                     />
                                                 </CommandItem>
@@ -142,7 +151,7 @@ export default function NewPresetPage() {
                         </PopoverContent>
                     </Popover>
                     {selectedModels.map(model => (
-                        <Badge key={model.name} variant="secondary" className="flex items-center gap-1">
+                        <Badge key={model.id} variant="secondary" className="flex items-center gap-1">
                             {model.name}
                             <button onClick={() => handleModelSelect(model)} className="rounded-full hover:bg-muted-foreground/20 p-0.5">
                                 <X className="h-3 w-3" />

@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
-import { ReasoningDisplay } from '@/components/chat/reasoning-display';
+import { ReasoningDisplay } from '@/components/chat-v2/reasoning-display';
 import { streamChatResponse } from '@/lib/streaming/stream-chat';
 import { fromUnknown, getUserMessage } from '@/lib/errors';
 import { usePrivy } from '@privy-io/react-auth';

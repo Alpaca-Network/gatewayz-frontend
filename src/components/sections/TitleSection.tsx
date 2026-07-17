@@ -1,6 +1,6 @@
 "use client";
 
-import { MiniChatWidget } from '@/components/chat/mini-chat-widget';
+import { MiniChatWidget } from '@/components/chat-v2/mini-chat-widget';
 
 export default function TitleSection() {
     return(

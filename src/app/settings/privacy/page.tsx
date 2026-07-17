@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 export default function PrivacyPage() {
   return (
     <div className="space-y-8">
@@ -23,18 +21,6 @@ export default function PrivacyPage() {
             improvement. Check each provider&apos;s terms for details.
           </li>
         </ul>
-      </div>
-
-      <div>
-        <h3 className="text-xl font-semibold mb-2">Prompt Caching</h3>
-        <p className="text-sm text-muted-foreground">
-          If you enable prompt caching, your requests are routed through a caching proxy. Manage
-          this setting in{" "}
-          <Link href="/settings/cache" className="text-primary underline">
-            Prompt Cache
-          </Link>
-          .
-        </p>
       </div>
 
       <div>

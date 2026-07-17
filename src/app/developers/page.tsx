@@ -2,11 +2,10 @@
 "use client"
 
 import { useMemo, useState, useEffect } from 'react';
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Bot, Search, ArrowRight, Package, BarChart, ChevronDown } from 'lucide-react';
-import Link from 'next/link';
+import { Bot, Search, Package, BarChart, ChevronDown } from 'lucide-react';
 import Image from 'next/image';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -98,13 +97,6 @@ const OrganizationCard = ({ org }: { org: Organization }) => {
                     </div>
                 </div>
             </CardContent>
-            <CardFooter className="p-6 pt-4">
-                <Link href={`/organizations/${encodeURIComponent(org.author)}`} className="w-full">
-                    <Button variant="outline" className="w-full">
-                        View Profile <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                </Link>
-            </CardFooter>
         </Card>
     );
 };

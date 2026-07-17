@@ -26,7 +26,7 @@ global.cancelAnimationFrame = mockCancelAnimationFrame as any;
 
 // Mock ChatMessage component
 const mockOnRetry = jest.fn();
-jest.mock('@/components/chat/ChatMessage', () => ({
+jest.mock('@/components/chat-v2/ChatMessage', () => ({
   ChatMessage: ({ role, content, hasError, onRetry, onRegenerate, onLike, onDislike, onShare, isStreaming }: any) => (
     <div data-testid={`message-${role}`} data-has-error={hasError} data-is-streaming={isStreaming}>
       <span data-testid="content">{typeof content === 'string' ? content : JSON.stringify(content)}</span>
@@ -423,7 +423,7 @@ describe('MessageList', () => {
 
       // Update mock to capture onCopy
       let capturedOnCopy: (() => void) | null = null;
-      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+      jest.spyOn(require('@/components/chat-v2/ChatMessage'), 'ChatMessage').mockImplementation(
         ({ onCopy }: any) => {
           capturedOnCopy = onCopy;
           return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
@@ -459,7 +459,7 @@ describe('MessageList', () => {
       ];
 
       // Update mock to capture onCopy
-      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+      jest.spyOn(require('@/components/chat-v2/ChatMessage'), 'ChatMessage').mockImplementation(
         ({ onCopy }: any) => {
           return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
         }
@@ -490,7 +490,7 @@ describe('MessageList', () => {
       ];
 
       // Update mock to capture onCopy
-      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+      jest.spyOn(require('@/components/chat-v2/ChatMessage'), 'ChatMessage').mockImplementation(
         ({ onCopy }: any) => {
           return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
         }
@@ -522,7 +522,7 @@ describe('MessageList', () => {
       ];
 
       // Update mock to capture onCopy
-      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+      jest.spyOn(require('@/components/chat-v2/ChatMessage'), 'ChatMessage').mockImplementation(
         ({ onCopy }: any) => {
           return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
         }
@@ -563,7 +563,7 @@ describe('MessageList', () => {
 
       // Update mock to capture onCopy
       let capturedOnCopy: (() => void) | null = null;
-      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+      jest.spyOn(require('@/components/chat-v2/ChatMessage'), 'ChatMessage').mockImplementation(
         ({ onCopy }: any) => {
           capturedOnCopy = onCopy;
           return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
@@ -599,7 +599,7 @@ describe('MessageList', () => {
       ];
 
       // Update mock to capture onCopy
-      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+      jest.spyOn(require('@/components/chat-v2/ChatMessage'), 'ChatMessage').mockImplementation(
         ({ onCopy }: any) => {
           return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
         }
@@ -630,7 +630,7 @@ describe('MessageList', () => {
       ];
 
       // Update mock to capture onCopy
-      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+      jest.spyOn(require('@/components/chat-v2/ChatMessage'), 'ChatMessage').mockImplementation(
         ({ onCopy }: any) => {
           return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
         }
@@ -662,7 +662,7 @@ describe('MessageList', () => {
       ];
 
       // Update mock to capture onCopy
-      jest.spyOn(require('@/components/chat/ChatMessage'), 'ChatMessage').mockImplementation(
+      jest.spyOn(require('@/components/chat-v2/ChatMessage'), 'ChatMessage').mockImplementation(
         ({ onCopy }: any) => {
           return <div data-testid="message"><button data-testid="copy-btn" onClick={onCopy}>Copy</button></div>;
         }

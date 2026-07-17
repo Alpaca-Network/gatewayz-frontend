@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -19,25 +19,19 @@ import { useToast } from "@/hooks/use-toast";
 import { makeAuthenticatedRequest } from "@/lib/api";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { API_BASE_URL } from "@/lib/config";
-import { models } from "@/lib/models-data";
+import { useModels } from "@/lib/hooks/use-catalog";
+import { getDeveloper } from "@/components/chat-v2/model-select";
 import { X, Loader2 } from "lucide-react";
-
-// Get unique providers from models data
-const getUniqueProviders = () => {
-  const providers = new Set<string>();
-  models.forEach(model => {
-    if (model.developer) {
-      providers.add(model.developer);
-    }
-  });
-  return Array.from(providers).sort();
-};
 
 export default function SettingsPage() {
   const router = useRouter();
   const { user } = usePrivy();
   const { toast } = useToast();
   const { status, apiKey, privyReady, login } = useGatewayzAuth();
+
+  // DB-driven catalog (Task 8) — single source for the provider/model lists
+  // rendered below (replaces the static `models` table from lib/models-data).
+  const { data: catalogModels } = useModels({ gateway: 'all' });
 
   // State management
   const [loading, setLoading] = useState(true);
@@ -52,7 +46,14 @@ export default function SettingsPage() {
   const [defaultModel, setDefaultModel] = useState("auto-router");
   const [saving, setSaving] = useState(false);
 
-  const availableProviders = getUniqueProviders();
+  // Get unique providers (model developer/org) from the live catalog
+  const availableProviders = useMemo(() => {
+    const providers = new Set<string>();
+    (catalogModels ?? []).forEach(model => {
+      providers.add(getDeveloper(model.id));
+    });
+    return Array.from(providers).sort();
+  }, [catalogModels]);
 
   // Check if auth is still loading
   const isAuthLoading = !privyReady || status === "idle" || status === "authenticating";
@@ -417,8 +418,8 @@ export default function SettingsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="auto-router">Gatewayz Router</SelectItem>
-            {models.slice(0, 20).map(model => (
-              <SelectItem key={model.name} value={model.name}>
+            {(catalogModels ?? []).slice(0, 20).map(model => (
+              <SelectItem key={model.id} value={model.name}>
                 {model.name}
               </SelectItem>
             ))}

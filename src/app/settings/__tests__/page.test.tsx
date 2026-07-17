@@ -75,11 +75,24 @@ jest.mock('@/lib/api', () => ({
   makeAuthenticatedRequest: jest.fn(),
 }));
 
-jest.mock('@/lib/models-data', () => ({
-  models: [
-    { name: 'test-model', developer: 'TestDev' },
-    { name: 'test-model-2', developer: 'TestDev2' },
-  ],
+// SettingsPage now reads the catalog via the shared `useModels` hook (Task 8)
+// instead of the static lib/models-data table. Mock it so the component
+// doesn't need a real QueryClientProvider / network call in tests.
+jest.mock('@/lib/hooks/use-catalog', () => ({
+  useModels: jest.fn(() => ({
+    data: [
+      { id: 'testdev/test-model', name: 'test-model' },
+      { id: 'testdev2/test-model-2', name: 'test-model-2' },
+    ],
+    isLoading: false,
+  })),
+}));
+
+jest.mock('@/components/chat-v2/model-select', () => ({
+  getDeveloper: (modelId: string) => {
+    const dev = modelId.split('/')[0];
+    return dev === 'testdev' ? 'TestDev' : dev === 'testdev2' ? 'TestDev2' : dev;
+  },
 }));
 
 // Mock toast

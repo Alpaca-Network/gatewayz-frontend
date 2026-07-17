@@ -19,30 +19,36 @@ pnpm test:all         # All tests
 ```
 
 **Package manager:** pnpm (never use npm or yarn)
-**Deployment:** Firebase App Hosting, Node 18+
+**Deployment:** Vercel (primary), Railway (secondary), Tauri (desktop). Firebase App Hosting scaffold was removed (dead, unused) in the 2026-07 MVP North Star refactor — see `docs/superpowers/plans/2026-07-17-frontend-mvp-refactor.md`.
 
 ## Key Architecture
 
+**Post-refactor note (2026-07):** this codebase went through an MVP North Star alignment refactor that cut ~30k LOC of duplicate engines, dead surfaces, and hardcoded catalog data. See the plan's `## Outcome` section for what changed and why. In short: **one** chat UI tree (`chat-v2`), **one** auth model (`GatewayzAuthContext` + `session-cache.ts`, no xstate/dup context), **one** DB-driven catalog path (`catalog-api.ts` + `lib/hooks/use-catalog.ts`), prepaid-only checkout (no subscription management UI), single E2E framework (Playwright only, Cypress cut), single lockfile (pnpm).
+
 ### Directory Layout
 - `src/app/` — Next.js App Router pages + API routes
-- `src/components/` — React components (187 files, `ui/` = shadcn/Radix primitives)
-- `src/context/` — React Context providers (auth, gateway)
-- `src/hooks/` — Custom hooks (28 files)
-- `src/lib/` — Services, utilities, stores (80+ files)
-- `src/lib/store/` — Zustand stores (auth, chat UI)
-- `src/lib/streaming/` — SSE parser, chat streaming
+- `src/components/` — React components (`ui/` = shadcn/Radix primitives, `chat-v2/` = the single surviving chat tree)
+- `src/context/` — React Context providers (`gatewayz-auth-context.tsx` is the single auth API, `gateway-context.tsx`)
+- `src/hooks/` — Custom hooks
+- `src/lib/` — Services, utilities, stores
+- `src/lib/store/` — Zustand stores (`auth-store.ts`, `chat-ui-store.ts`)
+- `src/lib/streaming/` — SSE parser, chat streaming (the only streaming engine — the old `lib/streaming.ts` monolith was deleted)
+- `src/lib/hooks/use-catalog.ts` — `useModels`/`useModel`/`useProviders`/`useGateways` react-query hooks; the canonical way for client components to read the model/provider/gateway catalog
+- `src/lib/catalog-api.ts` — typed getters backing the catalog hooks, reading the backend's DB-driven catalog via the Next `/api/*` proxies (desktop/Tauri routes straight to the backend, since static export has no API routes)
 - `src/types/` — TypeScript type definitions
 
 ### State Management
-- **Auth:** `GatewayzAuthContext` (`src/context/gatewayz-auth-context.tsx`)
+- **Auth:** `GatewayzAuthContext` (`src/context/gatewayz-auth-context.tsx`) — single auth model; the parallel xstate-flavored context, `lib/auth/` module, and dup token-refresh pair were deleted
 - **Gateway routing:** `GatewayContext` (`src/context/gateway-context.tsx`)
 - **UI state:** Zustand stores (`src/lib/store/`)
-- **Server state:** React Query (`@tanstack/react-query`)
+- **Server state:** React Query (`@tanstack/react-query`) — the caching standard; catalog-side Redis caching was retired (chat-session Redis caching is unaffected and stays)
 - **Persistence:** localStorage (`gatewayz_api_key`, `gatewayz_user_data`)
 
 ### Key Services
-- `src/lib/models-service.ts` — Multi-gateway model fetching (17+ providers)
-- `src/lib/gateway-registry.ts` — Dynamic gateway registration
+- `src/lib/models-service.ts` — Multi-gateway model fetching (server-side; backs `/api/models`)
+- `src/lib/catalog-api.ts` + `src/lib/hooks/use-catalog.ts` — DB-driven catalog getters/hooks (single source of truth for client components)
+- `src/lib/gateway-registry.ts` — Frontend-only gateway display config (colors/logos/priority/env-vars) + validation/normalization; the backend `/v1/gateways` list is merged with this at `/api/gateways`. Kept deliberately (not hardcoded catalog duplication — see the refactor plan's Task 8 notes).
+- `src/lib/models-data.ts` — Static model table. Kept deliberately as the Tauri static-export / CI / offline fallback only; no longer a primary data source for any live client component.
 - `src/lib/chat-history.ts` — Chat session/history management
 - `src/lib/api.ts` — API auth & utilities
 - `src/lib/ai-sdk-chat-service.ts` — Vercel AI SDK chat service

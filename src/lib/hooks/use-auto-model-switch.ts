@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import * as Sentry from '@sentry/nextjs';
-import { ModelOption } from '@/components/chat/model-select';
+import { ModelOption } from '@/components/chat-v2/model-select';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { useToast } from '@/hooks/use-toast';
 

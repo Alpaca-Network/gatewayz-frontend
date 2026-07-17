@@ -11,8 +11,6 @@ export function AppFooter() {
   const pathname = usePathname();
   const [isChatPage, setIsChatPage] = useState(false);
   const [isModelsPage, setIsModelsPage] = useState(false);
-  const [isAgentPage, setIsAgentPage] = useState(false);
-  const [isInboxPage, setIsInboxPage] = useState(false);
   const [isSettingsPage, setIsSettingsPage] = useState(false);
   const [showFooter, setShowFooter] = useState(false);
   const [hasScrolledPastFold, setHasScrolledPastFold] = useState(false);
@@ -20,8 +18,6 @@ export function AppFooter() {
   useEffect(() => {
     setIsChatPage(pathname?.startsWith('/chat') ?? false);
     setIsModelsPage(pathname?.startsWith('/models') ?? false);
-    setIsAgentPage(pathname?.startsWith('/agent') ?? false);
-    setIsInboxPage(pathname?.startsWith('/inbox') ?? false);
     setIsSettingsPage(pathname?.startsWith('/settings') ?? false);
   }, [pathname]);
 
@@ -54,16 +50,6 @@ export function AppFooter() {
 
   // Hide footer on models page (has sidebar layout)
   if (isModelsPage) {
-    return null;
-  }
-
-  // Hide footer on agent pages (full-screen embedded coding agent)
-  if (isAgentPage) {
-    return null;
-  }
-
-  // Hide footer on inbox pages (full-screen embedded Terragon inbox)
-  if (isInboxPage) {
     return null;
   }
 

@@ -14,13 +14,12 @@ function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const conversionTrackedRef = useRef(false);
 
-  // Get URL parameters
-  const tier = searchParams.get('tier') || 'pro';
+  // Get URL parameters. This page is credit-top-up only (D-FE1); the
+  // Stripe checkout success_url always sets tier=credits (see
+  // src/app/api/stripe/checkout/route.ts).
   const rawPlan = searchParams.get('plan') || '';
   // Sanitize plan parameter - only allow alphanumeric, spaces, and basic punctuation
   const plan = rawPlan.replace(/[^a-zA-Z0-9\s\-_.]/g, '');
-  const priceId = searchParams.get('priceId') || '';
-  const quantity = searchParams.get('quantity') || '1';
   const sessionId = searchParams.get('session_id') || '';
 
   const [loading, setLoading] = useState(true);
@@ -39,18 +38,8 @@ function CheckoutSuccessContent() {
     }
   }, [sessionId]);
 
-  // Tier display configuration
-  const tierConfig: Record<string, { name: string; color: string; bgColor: string; isCredits?: boolean }> = {
-    starter: { name: 'Starter', color: 'text-gray-600', bgColor: 'bg-gray-100' },
-    pro: { name: 'Pro', color: 'text-blue-600', bgColor: 'bg-blue-100' },
-    max: { name: 'Max', color: 'text-purple-600', bgColor: 'bg-purple-100' },
-    enterprise: { name: 'Enterprise', color: 'text-amber-600', bgColor: 'bg-amber-100' },
-    credits: { name: 'Credit Package', color: 'text-green-600', bgColor: 'bg-green-100', isCredits: true },
-  };
-
-  const currentTier = tierConfig[tier.toLowerCase()] || tierConfig.pro;
-  const isCredits = currentTier.isCredits;
-  // Use plan parameter if provided, otherwise fall back to tier config name
+  const currentTier = { name: 'Credit Package', color: 'text-green-600', bgColor: 'bg-green-100' };
+  // Use plan parameter if provided, otherwise fall back to the default name
   const displayPlanName = plan || currentTier.name;
 
   useEffect(() => {
@@ -109,11 +98,7 @@ function CheckoutSuccessContent() {
           </div>
           <h1 className="text-3xl font-bold">Thank You for Your Purchase!</h1>
           <p className="text-muted-foreground text-lg">
-            {isCredits ? (
-              <>Your credits have been added to your account.</>
-            ) : (
-              <>Your <span className={`font-semibold ${currentTier.color}`}>{displayPlanName}</span> subscription is now active.</>
-            )}
+            Your credits have been added to your account.
           </p>
         </div>
 
@@ -128,22 +113,16 @@ function CheckoutSuccessContent() {
           <CardContent>
             <div className="space-y-3">
               <div className="flex justify-between items-center py-2 border-b">
-                <span className="text-muted-foreground">{isCredits ? 'Purchase' : 'Plan'}</span>
+                <span className="text-muted-foreground">Purchase</span>
                 <span className={`font-semibold px-3 py-1 rounded-full text-sm ${currentTier.bgColor} ${currentTier.color}`}>
                   {displayPlanName}
                 </span>
               </div>
-              {quantity && parseInt(quantity) > 1 && (
-                <div className="flex justify-between items-center py-2 border-b">
-                  <span className="text-muted-foreground">Quantity</span>
-                  <span className="font-semibold">{quantity}</span>
-                </div>
-              )}
               <div className="flex justify-between items-center py-2">
                 <span className="text-muted-foreground">Status</span>
                 <span className="flex items-center gap-2 text-green-600 font-semibold">
                   <CheckCircle className="h-4 w-4" />
-                  {isCredits ? 'Completed' : 'Active'}
+                  Completed
                 </span>
               </div>
             </div>

@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { ChatLayout } from "@/components/chat-v2/ChatLayout";
-import { FreeModelsBanner } from "@/components/chat/free-models-banner";
+import { FreeModelsBanner } from "@/components/chat-v2/free-models-banner";
 import { useAuth } from "@/hooks/use-auth";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
