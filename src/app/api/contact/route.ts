@@ -37,7 +37,13 @@ export async function POST(request: NextRequest) {
     const subjectLabel = subjectLabels[subject] || subject;
 
     try {
-      // Send via backend API with retry logic for transient errors
+      // NOTE: POST /v1/contact does not exist on the backend and never has —
+      // this always 404s and falls through to the "log + fake success" path
+      // below. The contact page (src/app/contact/page.tsx) no longer calls
+      // this route at all; it now opens a mailto: link directly so messages
+      // are actually delivered instead of silently logged. This route is kept
+      // only for backward compatibility with any other caller and its
+      // existing test suite — do not build new features on `/v1/contact`.
       const response = await retryFetch(
         () => fetch(`${API_BASE_URL}/v1/contact`, {
           method: 'POST',

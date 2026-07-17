@@ -265,18 +265,24 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
     pageCount++;
     // Only include offset for server-side requests (client requests don't paginate)
     const offsetParam = (!isClientSide && offset > 0) ? `&offset=${offset}` : '';
-    const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
-    const limitParam = `limit=${requestLimit}${offsetParam}${searchParam}`;
+    const limitParam = `limit=${requestLimit}${offsetParam}`;
 
     // Build URLs based on environment
     // Client-side: use Next.js API route (/api/models) to avoid CORS - single request, no pagination
     // Server-side: try both v1/models and /models endpoints using Promise.race for fast fallback
+    //
+    // NOTE: GET /v1/models has no `search` query param — the backend silently ignores it
+    // (src/routes/catalog.py get_all_models/get_models). Real full-text search lives at
+    // GET /v1/models/search?q=<query> (catalog.py search_models, line ~2401), which has no
+    // bare (non-v1) fallback, so search requests skip the /models fallback URL entirely.
     const urls = isClientSide
-      ? [`/api/models?gateway=${gateway}&${limitParam}`]
-      : [
-        `${baseUrl}/v1/models?gateway=${gateway}&${limitParam}`,
-        `${baseUrl}/models?gateway=${gateway}&${limitParam}`
-      ];
+      ? [`/api/models?gateway=${gateway}&${limitParam}${search ? `&search=${encodeURIComponent(search)}` : ''}`]
+      : search
+        ? [`${baseUrl}/v1/models/search?q=${encodeURIComponent(search)}&gateway=${gateway}&${limitParam}`]
+        : [
+          `${baseUrl}/v1/models?gateway=${gateway}&${limitParam}`,
+          `${baseUrl}/models?gateway=${gateway}&${limitParam}`
+        ];
 
     const maxRetries = 3;
     let retryCount = 0;

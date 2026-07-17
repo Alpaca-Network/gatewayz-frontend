@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/app/api/middleware/error-handler';
-import { API_BASE_URL } from '@/lib/config';
 import Stripe from 'stripe';
 
 export async function POST(req: NextRequest) {
@@ -100,65 +99,15 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      console.log(`Crediting ${credits} credits to user ${userId || userEmail}`);
+      console.log(`Checkout completed for user ${userId || userEmail} (${credits} credits, tier=${tier ?? 'n/a'}) — crediting handled by backend /api/stripe/webhook`);
 
-      try {
-        // Call your backend API to credit the user
-        // Parse credits - handle both cents and credits
-        const creditsAmount = typeof credits === 'string' ? parseInt(credits) : credits;
-
-        const requestPayload = {
-          user_id: userId ? parseInt(userId) : undefined,
-          email: userEmail,
-          credits: creditsAmount,
-          transaction_type: 'purchase',
-          description: `Stripe payment - ${credits} credits`,
-          stripe_session_id: session.id,
-          payment_id: paymentId ? parseInt(paymentId) : undefined,
-          amount: session.amount_total ? session.amount_total / 100 : undefined, // Convert cents to dollars
-          stripe_payment_intent: session.payment_intent as string,
-          // Include tier information for subscription tracking
-          ...(tier && { tier }),
-          ...(checkoutType && { checkout_type: checkoutType }),
-        };
-
-        console.log('Sending credit request to backend:', requestPayload);
-
-        const response = await fetch(`${API_BASE_URL}/user/credits`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestPayload),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Failed to credit user:', {
-            status: response.status,
-            error: errorText,
-            userId,
-            credits,
-            sessionId: session.id,
-            requestPayload,
-          });
-          // Still return 200 to Stripe to prevent infinite retries
-          return NextResponse.json(
-            { error: 'Failed to credit user', received: true },
-            { status: 200 }
-          );
-        }
-
-        const result = await response.json();
-        console.log('Successfully processed payment and credited user:', result);
-      } catch (error) {
-        console.error('Error crediting user:', error);
-        // Return 200 to prevent retries - error is logged for manual review
-        return NextResponse.json(
-          { error: 'Error processing payment', received: true },
-          { status: 200 }
-        );
-      }
+      // NOTE: This proxy previously POSTed to `${API_BASE_URL}/user/credits` to
+      // sync the credit, but that endpoint never existed on the backend (404,
+      // silently swallowed — the catch below just logged and returned 200). The
+      // backend's own Stripe webhook (src/routes/payments.py) is registered
+      // directly with Stripe and performs the real crediting from this same
+      // checkout.session.completed event. Do not re-add a client-side credit
+      // sync call here.
     } else {
       // Log unhandled event types but still return 200
       console.info('Unhandled Stripe webhook event type:', event.type);

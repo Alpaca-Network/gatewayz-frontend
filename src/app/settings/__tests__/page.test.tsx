@@ -208,14 +208,18 @@ describe('SettingsPage', () => {
 
       const mockResponse = {
         ok: true,
+        // GET /user/profile returns a UserProfileResponse; these settings live
+        // under its freeform `settings` object (src/schemas/users.py).
         json: () => Promise.resolve({
-          low_balance_notifications: true,
-          low_balance_threshold: 10.00,
-          always_enforce_providers: true,
-          allowed_providers: ['TestDev'],
-          ignored_providers: [],
-          default_provider_sort: 'cost',
-          default_model: 'test-model',
+          settings: {
+            low_balance_notifications: true,
+            low_balance_threshold: 10.00,
+            always_enforce_providers: true,
+            allowed_providers: ['TestDev'],
+            ignored_providers: [],
+            default_provider_sort: 'cost',
+            default_model: 'test-model',
+          },
         }),
       };
       (makeAuthenticatedRequest as jest.Mock).mockResolvedValue(mockResponse);
@@ -319,9 +323,11 @@ describe('SettingsPage', () => {
       resolveRequest!({
         ok: true,
         json: () => Promise.resolve({
-          low_balance_notifications: true,
-          default_provider_sort: 'balanced',
-          default_model: 'auto-router',
+          settings: {
+            low_balance_notifications: true,
+            default_provider_sort: 'balanced',
+            default_model: 'auto-router',
+          },
         }),
       });
 
@@ -347,9 +353,11 @@ describe('SettingsPage', () => {
       const mockResponse = {
         ok: true,
         json: () => Promise.resolve({
-          low_balance_notifications: true,
-          default_provider_sort: 'balanced',
-          default_model: 'auto-router',
+          settings: {
+            low_balance_notifications: true,
+            default_provider_sort: 'balanced',
+            default_model: 'auto-router',
+          },
         }),
       };
       (makeAuthenticatedRequest as jest.Mock).mockResolvedValue(mockResponse);
@@ -387,9 +395,11 @@ describe('SettingsPage', () => {
       const mockResponse = {
         ok: true,
         json: () => Promise.resolve({
-          low_balance_notifications: true,
-          default_provider_sort: 'balanced',
-          default_model: 'auto-router',
+          settings: {
+            low_balance_notifications: true,
+            default_provider_sort: 'balanced',
+            default_model: 'auto-router',
+          },
         }),
       };
       (makeAuthenticatedRequest as jest.Mock).mockResolvedValue(mockResponse);

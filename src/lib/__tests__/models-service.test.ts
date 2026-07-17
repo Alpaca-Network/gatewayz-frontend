@@ -68,6 +68,11 @@ describe('models-service', () => {
       expect(Array.isArray(result.data)).toBe(true);
     }, 15000);
 
+    // Server-side (non-browser) search URL construction is covered in
+    // models-service.search.node.test.ts (@jest-environment node), since this
+    // file runs under jsdom where `window` is defined and getModelsForGateway
+    // always takes the client-proxy branch (`/api/models?...`).
+
     describe('Model Deduplication', () => {
       // Consolidated deduplication tests - previously spread across 3 separate tests
 

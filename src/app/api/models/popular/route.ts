@@ -22,6 +22,43 @@ export interface PopularModel {
   sourceGateway?: string;
 }
 
+// Shape of a single item in GET /v1/models/trending's `data` array
+// (backend: src/db/gateway_analytics.py get_trending_models())
+interface TrendingModelItem {
+  model: string;
+  provider?: string;
+  requests?: number;
+  total_tokens?: number;
+  unique_users?: number;
+  gateway?: string;
+}
+
+// Derive a display name from a model id like "openai/gpt-4o" -> "Gpt 4o"
+function deriveNameFromModelId(modelId: string): string {
+  const slug = modelId.includes('/') ? modelId.split('/').slice(1).join('/') : modelId;
+  return slug
+    .replace(/[-_]/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+// Map a /v1/models/trending item to the PopularModel shape this route returns
+function mapTrendingToPopular(item: TrendingModelItem): PopularModel {
+  return {
+    id: item.model,
+    name: deriveNameFromModelId(item.model) || item.model,
+    developer: item.provider ? capitalize(item.provider) : 'Unknown',
+    usage_count: item.requests,
+    sourceGateway: item.gateway,
+  };
+}
+
 // Fallback popular models based on industry trends and community usage
 // This list is updated periodically to reflect current popularity
 // NOTE: Model IDs with sourceGateway should include the gateway prefix for proper backend routing
@@ -66,14 +103,18 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        // Try to fetch from backend API (if it supports popular models endpoint)
+        // Fetch real usage-based popularity from the backend's trending endpoint.
+        // NOTE: GET /v1/models/popular never existed on the backend (always 404'd,
+        // silently swallowed by the catch below) — the real endpoint is
+        // GET /v1/models/trending (src/routes/catalog.py get_trending_models_api),
+        // sorted by real Gatewayz usage (requests/tokens/users), not a static list.
         // Always fetch MAX_POPULAR_MODELS to ensure cache can serve any limit up to that value
         try {
           // Use AbortController for Node.js compatibility (AbortSignal.timeout requires Node 17.3+)
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-          const response = await fetch(`${API_BASE_URL}/v1/models/popular?limit=${MAX_POPULAR_MODELS}`, {
+          const response = await fetch(`${API_BASE_URL}/v1/models/trending?limit=${MAX_POPULAR_MODELS}`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
@@ -87,7 +128,9 @@ export async function GET(request: NextRequest) {
             const data = await response.json();
             if (data.data && Array.isArray(data.data) && data.data.length > 0) {
               // Cache the full response (up to MAX_POPULAR_MODELS)
-              const modelsToCache = data.data.slice(0, MAX_POPULAR_MODELS) as PopularModel[];
+              const modelsToCache = (data.data as TrendingModelItem[])
+                .slice(0, MAX_POPULAR_MODELS)
+                .map(mapTrendingToPopular);
               cachedPopularModels = modelsToCache;
               cacheTimestamp = now;
               span.setAttribute('source', 'backend_api');
@@ -99,8 +142,7 @@ export async function GET(request: NextRequest) {
             }
           }
         } catch (apiError) {
-          // Backend API doesn't support popular models or failed
-          // Fall through to use fallback
+          // Backend API unavailable (network/timeout) — fall through to use fallback
           console.log('[Popular Models] Backend API unavailable, using fallback:', apiError);
         }
 
