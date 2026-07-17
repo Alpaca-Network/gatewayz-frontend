@@ -121,3 +121,39 @@ So NOT blocked — only one system is load-bearing. The correct action was to de
 - Grep: no dangling refs to `@/lib/auth`, `gatewayz-auth-context-v2`, `use-token-refresh`, or `lib/token-refresh`.
 - `pnpm lint` clean; `pnpm build` green; full `pnpm test` = **21 failed / 255 failed = baseline (zero new failures)**; total tests unchanged (deleted auth files had no tests).
 - Manual dev-server smoke (`pnpm dev`): `/signup` (login) → **200**, `/settings/keys` → **200**, `/chat` → **200**, `/` → **200**, with **no** auth/context module errors in the log — the live v1 auth context wires up correctly after removing the dead parallel system (a broken auth API would 500 / throw module errors on these pages). A full interactive Privy login needs real credentials/network (unavailable here); the render smoke + green auth test suites cover the wiring.
+- Commit: `6c6e381d refactor(auth): consolidate to context+service, drop parallel state models`
+
+---
+
+## Task 12 — Caching standard (D-FE6), catalog-side Redis retirement only
+
+### Verified state
+- **Catalog-side Redis is already effectively retired.** The model fetch path (`models-service.ts` → `getModelsForGateway`) uses an in-memory `modelsCache`, and `invalidateModelsCache` returns 0 ("no Redis entries"). No model path writes Redis via cache-strategies. `/api/cache/warm-models` + `/api/cron/warm-cache` only warm that per-instance in-memory cache (the docstrings say "Redis" but the impl calls `getModelsForGateway`, in-memory).
+- **`cache-strategies.ts`**: 6 importers (chat/stats, chat/search, chat/sessions, chat-cache-invalidation, cache/invalidate, user/me) — **> 2**, and predominantly the live **chat-session** cache layer. Per the plan's gate ("delete if importers ≤2, else defer") → **DEFERRED** (and chat-session Redis must stay per guidance).
+- **`redis-client.ts`**: low-level client, used only via cache-strategies (chat-session). Kept.
+- **Settings react-query migration**: no heavy `useEffect`+`fetch` exists in `src/app/settings/**` — only `settings/account/page.tsx` has 2 fetches, and those are Stripe billing (`/api/stripe/customer`, `/api/stripe/portal`), out of the catalog/caching scope. react-query is already the established standard (Task 8 `use-catalog` hooks + existing `use-chat-queries`). Nothing to migrate here.
+
+### Performed
+- Deleted `src/lib/redis-metrics.ts` — fully orphaned (zero importers, no test). Per the plan's "keep ONLY chat-session paths in redis-metrics" — it had none, so the whole file goes. This is the concrete catalog/Redis-side dead-code retirement.
+- Deleted `scripts/dev/test-redis-metrics.mjs` — its subject (redis-metrics) is gone.
+
+### Deferred / left intentionally (reported, not done)
+- `cache-strategies.ts` deletion — DEFERRED per the >2-importer gate; it's the live chat-session cache and must not be touched.
+- Vestigial catalog-Redis surface left in place to avoid risk for ~zero runtime benefit: the unused `MODELS_*` cache-key constants inside the shared `cache-strategies.ts`, the model branch of `/api/cache/invalidate` (harmless no-ops against never-written `models:*` keys), and `warm-models`/`cron/warm-cache` (the latter is live in `vercel.json` — removing cron infra is an ops change, not made here). Flagged as safe follow-up cleanup.
+
+### Verification
+- `pnpm build` green; full `pnpm test` = baseline (see below); no dangling `redis-metrics` refs.
+
+---
+
+## Overall summary
+Commits (one per task, on `refactor/mvp-north-star`):
+- Task 8: `7adb079d` — catalog getters+hooks (TDD) + /catalog→/models consolidation
+- Task 9: `22c8e9de` — single chat-v2 tree
+- Task 10: `0bef34b5` — single chat-state system
+- Task 11: `6c6e381d` — auth consolidation (drop dead parallel system)
+- Task 12: (see git log) — catalog/Redis dead-code retirement
+
+Every task: `pnpm lint && pnpm build` green; full `pnpm test` held at the **21 failed suites / 255 failed tests** baseline (ZERO new failures across all five tasks). Test total shrank only as dead tests were removed with their dead source.
+
+Parked/deferred (with reasons above): the three hardcoded tables (Task 8 — backend lacks the data), `auth-store.ts` (Task 11 — >3 call sites), `cache-strategies.ts` + vestigial catalog-Redis constants (Task 12 — shared chat-session, >2 gate).
