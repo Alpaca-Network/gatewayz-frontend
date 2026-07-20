@@ -1,62 +1,30 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Bot } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import Link from 'next/link';
-import { models as staticModels } from '@/lib/models-data';
 import { getModelUrl } from '@/lib/utils';
-import { safeParseJson } from '@/lib/http';
-
-interface Model {
-    id: string;
-    name: string;
-    description?: string;
-    provider_slug?: string;
-}
+import { useModels } from '@/lib/hooks/use-catalog';
 
 interface SearchBarProps {
     autoOpenOnFocus?: boolean;
 }
 
-type ModelCache = {
-    data: Model[];
-    timestamp: number;
-};
-
-const MEMORY_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-let inMemoryModelCache: ModelCache | null = null;
-
 export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
     const [open, setOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [allModels, setAllModels] = useState<Model[]>([]);
-    const [loading, setLoading] = useState(false);
     const [shouldFetchModels, setShouldFetchModels] = useState(false);
     const fetchTriggeredRef = useRef(false);
 
-    // Transform static models to the format we need
-    const staticModelsList = useMemo(() =>
-        staticModels.map(m => ({
-            id: `${m.developer}/${m.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-            name: m.name,
-            description: m.description,
-            provider_slug: m.developer
-        })),
-        []
+    // DB-backed catalog (North Star) — single call to fetch models from all
+    // gateways, cached client-side by react-query (5 min staleTime).
+    const { data: allModels = [], isLoading: loading } = useModels(
+        { gateway: 'all', limit: 1000 },
+        { enabled: shouldFetchModels }
     );
-
-    useEffect(() => {
-        setAllModels(staticModelsList);
-    }, [staticModelsList]);
-
-    useEffect(() => {
-        if (inMemoryModelCache && Date.now() - inMemoryModelCache.timestamp < MEMORY_CACHE_DURATION) {
-            setAllModels(inMemoryModelCache.data);
-        }
-    }, []);
 
     const enableModelFetch = useCallback(() => {
         if (fetchTriggeredRef.current) {
@@ -65,85 +33,6 @@ export function SearchBar({ autoOpenOnFocus = true }: SearchBarProps) {
         fetchTriggeredRef.current = true;
         setShouldFetchModels(true);
     }, []);
-
-    useEffect(() => {
-        if (open) {
-            enableModelFetch();
-        }
-    }, [open, enableModelFetch]);
-
-    useEffect(() => {
-        if (!shouldFetchModels) {
-            return;
-        }
-
-        let cancelled = false;
-
-        const hydrateFromCache = () => {
-            if (inMemoryModelCache && Date.now() - inMemoryModelCache.timestamp < MEMORY_CACHE_DURATION) {
-                setAllModels(inMemoryModelCache.data);
-                return true;
-            }
-            return false;
-        };
-
-        if (hydrateFromCache()) {
-            return;
-        }
-
-        const fetchModels = async () => {
-            setLoading(true);
-            try {
-                // Single API call to fetch models from all gateways
-                // This replaces 7 individual gateway calls to fix N+1 API performance issue
-                const response = await fetch(`/api/models?gateway=all&limit=1000`);
-
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch models: ${response.status}`);
-                }
-
-                const payload = await safeParseJson<{ data?: Model[] }>(
-                    response,
-                    '[SearchBar] all-gateways'
-                );
-
-                const combinedModels = payload?.data || [];
-
-                // Deduplicate models by ID (backend should handle this, but extra safety)
-                const uniqueModelsMap = new Map();
-                combinedModels.forEach((model: any) => {
-                    if (!uniqueModelsMap.has(model.id)) {
-                        uniqueModelsMap.set(model.id, model);
-                    }
-                });
-                const models = Array.from(uniqueModelsMap.values());
-
-                if (!cancelled) {
-                    setAllModels(models);
-                    inMemoryModelCache = {
-                        data: models,
-                        timestamp: Date.now()
-                    };
-                }
-            } catch (error) {
-                if (!cancelled) {
-                    console.log('Failed to fetch models:', error);
-                    // Fallback to static models on error
-                    setAllModels(staticModelsList);
-                }
-            } finally {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        fetchModels();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [shouldFetchModels]);
 
     const filteredModels = useMemo(() => {
         if (!searchTerm) return allModels.slice(0, 10);

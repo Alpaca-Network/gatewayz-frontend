@@ -14,8 +14,7 @@ import { generateStaticParamsForModels } from './utils';
  * This enables ISR and fast page loads for important models
  *
  * Pages will be pre-generated for:
- * - All static models (from models-data.ts)
- * - Top 30-50 models from popular gateways
+ * - Top 30-50 models from the live DB-backed catalog
  *
  * For server mode (web), any model not in this list will:
  * 1. Generate the page on first request (with `fallback: 'blocking'`)

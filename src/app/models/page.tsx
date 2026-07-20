@@ -1,8 +1,7 @@
 import * as Sentry from '@sentry/nextjs';
 import ModelsClient from './models-client';
 import { getModelsForGateway } from '@/lib/models-service';
-import { models as staticModels } from '@/lib/models-data';
-import { transformStaticModel } from '@/lib/model-detail-utils';
+import { getModels } from '@/lib/catalog-api';
 import { mergeLegacyModelsToUnique } from '@/types/models';
 import type { Model as LegacyModel, UniqueModel } from '@/types/models';
 
@@ -12,10 +11,14 @@ type Model = LegacyModel;
 /**
  * Models page rendering configuration
  *
- * For desktop static export (NEXT_STATIC_EXPORT=true):
- * - Page is pre-rendered with static models only
- * - Client-side fetching is disabled (no API routes available)
- * - Users see curated static models from models-data.ts
+ * The DB is the source of truth for the catalog (North Star) — there is no
+ * hardcoded model table backing this page anymore.
+ *
+ * For desktop static export (NEXT_STATIC_EXPORT=true) and CI builds:
+ * - No Next API routes are available (static export) / no live backend is
+ *   assumed reachable (CI), so we still call the backend directly via
+ *   `@/lib/catalog-api` (it targets the backend URL directly when there's no
+ *   `window`/Tauri desktop context) rather than embedding stale sample data.
  *
  * For server mode (web):
  * - Uses ISR with revalidation to keep models fresh
@@ -33,9 +36,9 @@ async function getAllModels(): Promise<UniqueModel[]> {
     const isCI = process.env.CI === 'true' && !process.env.VERCEL;
 
     if (isStaticExport || isCI) {
-      console.log(`[Models Page] ${isStaticExport ? 'Static export' : 'CI build'} mode - using static models`);
-      const legacyModels = staticModels.map((model) => transformStaticModel(model) as unknown as Model);
-      return mergeLegacyModelsToUnique(legacyModels);
+      console.log(`[Models Page] ${isStaticExport ? 'Static export' : 'CI build'} mode - fetching catalog directly from backend`);
+      const catalogModels = await getModels({ gateway: 'all' });
+      return mergeLegacyModelsToUnique(catalogModels as unknown as Model[]);
     }
 
     // Fetch all models from backend
@@ -56,18 +59,19 @@ async function getAllModels(): Promise<UniqueModel[]> {
     return uniqueModels;
 
   } catch (error) {
-    console.error('[Models Page] Failed to fetch models, falling back to static:', error);
+    console.error('[Models Page] Failed to fetch models:', error);
     Sentry.captureException(error, {
-      tags: { component: 'models-page', fallback: 'static' },
+      tags: { component: 'models-page', fallback: 'empty' },
       extra: {
         NEXT_STATIC_EXPORT: process.env.NEXT_STATIC_EXPORT,
         CI: process.env.CI,
         VERCEL: process.env.VERCEL,
       },
     });
-    // Fallback to static models on error
-    const legacyModels = staticModels.map((model) => transformStaticModel(model) as unknown as Model);
-    return mergeLegacyModelsToUnique(legacyModels);
+    // The DB-backed catalog is the source of truth — there is no hardcoded
+    // model table to fall back to. Render an empty catalog rather than
+    // stale/deleted-provider data when the backend is fully unreachable.
+    return [];
   }
 }
 

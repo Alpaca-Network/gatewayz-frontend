@@ -1,4 +1,3 @@
-import { models } from '@/lib/models-data';
 import { getErrorMessage, isAbortOrNetworkError } from '@/lib/network-error';
 import {
   VALID_GATEWAYS,
@@ -7,10 +6,8 @@ import {
   normalizeGatewayId,
   isValidGateway,
   autoRegisterGatewaysFromModels,
-  getAllActiveGatewayIds,
 } from '@/lib/gateway-registry';
 import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
-import { isPerMillionPricingGateway, isPerBillionPricingGateway } from '@/lib/model-pricing-utils';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -72,51 +69,6 @@ function calculateRetryDelay(
   waitTime += jitter;
 
   return waitTime;
-}
-
-// Transform static models data to backend format
-function transformModel(model: any, gateway: string) {
-  const resolvedGateway = gateway === 'all' ? 'openrouter' : gateway;
-
-  // Normalize model name for URL-safe ID
-  // Extract actual model name by removing provider prefix (e.g., "Anthropic: " from "Anthropic: Claude 3.5 Sonnet")
-  const nameParts = model.name.split(':');
-  const modelNamePart = nameParts.length > 1 ? nameParts[1].trim() : model.name;
-  const normalizedName = modelNamePart.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
-  // Static models-data uses per-million pricing (e.g., 0.15 = $0.15/M)
-  // For standard gateways: convert to per-token format for consistency with API responses
-  // formatPricingForDisplay() will multiply by 1,000,000 for display
-  // For per-million gateways (e.g., onerouter): keep as-is since formatPricingForDisplay
-  // skips the multiplication for these gateways
-  const shouldConvertToPerToken = !isPerMillionPricingGateway(resolvedGateway);
-  const promptPrice = shouldConvertToPerToken
-    ? (model.inputCost / 1000000).toString()
-    : model.inputCost.toString();
-  const completionPrice = shouldConvertToPerToken
-    ? (model.outputCost / 1000000).toString()
-    : model.outputCost.toString();
-
-  return {
-    id: `${model.developer}/${normalizedName}`,
-    name: model.name,
-    description: model.description,
-    context_length: model.context * 1000, // Convert K to actual number
-    pricing: {
-      prompt: promptPrice,
-      completion: completionPrice,
-    },
-    architecture: {
-      input_modalities: model.modalities.map((m: string) => m.toLowerCase()),
-      output_modalities: ['text'] // Default output modality
-    },
-    supported_parameters: model.supportedParameters,
-    provider_slug: model.developer,
-    provider_slugs: [model.developer], // NEW: Track provider as array for consistent display
-    source_gateway: resolvedGateway, // Keep for backwards compatibility
-    source_gateways: [resolvedGateway], // NEW: Track gateway as array for consistent display
-    is_private: model.is_private // Preserve is_private field if present
-  };
 }
 
 export async function getModelsForGateway(gateway: string, limit?: number, search?: string) {
@@ -183,8 +135,10 @@ async function fetchModelsLogic(gateway: string, limit?: number, search?: string
     return { data: models };
   }
 
-  // Fallback to static data (only used if API fails)
-  return { data: getStaticFallbackModels(gateway) };
+  // The DB-backed catalog is the source of truth (North Star) — there is no
+  // hardcoded model table to fall back to. Return an empty result rather than
+  // stale/deleted-provider data when the backend has nothing for this gateway.
+  return { data: [] };
 }
 
 // Helper function to build request headers (uses centralized gateway registry)
@@ -438,78 +392,6 @@ async function fetchModelsFromGateway(gateway: string, limit?: number, search?: 
     console.log(`[Models] Total fetched for gateway ${gateway}: ${allModels.length} models`);
   }
   return allModels;
-}
-
-// Helper function to get static fallback models
-function getStaticFallbackModels(gateway: string): any[] {
-  // Only log fallback usage in development to reduce console noise in production
-  if (process.env.NODE_ENV === 'development') {
-    console.warn(`[Models] No models fetched from API for ${gateway}, using static fallback (${models.length} models)`);
-  }
-  let transformedModels;
-
-  // Normalize gateway to canonical ID (e.g., 'hug' -> 'huggingface')
-  // This ensures aliases are resolved before any lookups
-  const normalizedGateway = normalizeGatewayId(gateway);
-
-  // Map developers to their preferred gateways
-  const developerToGateway: Record<string, string> = {
-    'alpaca-network': 'alpaca',
-    'near': 'near',
-    'alibaba': 'alibaba',
-    'google': 'google',
-    'clarifai': 'clarifai',
-    'onerouter': 'onerouter',
-    // Add more mappings as needed
-  };
-
-  if (normalizedGateway === 'all') {
-    // Assign models to gateways based on their developer field if possible
-    transformedModels = models.map((model) => {
-      // Check if this developer has a specific gateway mapping
-      const assignedGateway = developerToGateway[model.developer] || 'openrouter';
-      return transformModel(model, assignedGateway);
-    });
-  } else {
-    // Get models for specific gateway by filtering by developer field
-    // This maps gateway names to their corresponding developer identifiers
-    const gatewayToDeveloper: Record<string, string> = {
-      'alpaca': 'alpaca-network',
-      'near': 'near',
-      'alibaba': 'alibaba',
-      'google': 'google',
-      'clarifai': 'clarifai',
-      'onerouter': 'onerouter',
-      // Add more mappings as needed for other gateways
-    };
-
-    let gatewayModels;
-
-    // If we have a specific developer mapping, filter by developer field
-    if (gatewayToDeveloper[normalizedGateway]) {
-      const developerName = gatewayToDeveloper[normalizedGateway];
-      gatewayModels = models.filter(m => m.developer === developerName);
-    } else {
-      // For gateways without specific mappings, distribute models evenly as before
-      // Uses dynamic function to include runtime-registered gateways
-      const allGateways = getAllActiveGatewayIds();
-      const modelsPerGateway = Math.ceil(models.length / allGateways.length);
-
-      // Use normalized gateway for lookup to handle aliases correctly
-      const gatewayIndex = allGateways.indexOf(normalizedGateway);
-      if (gatewayIndex !== -1) {
-        const startIndex = gatewayIndex * modelsPerGateway;
-        const endIndex = gatewayIndex === allGateways.length - 1 ? models.length : (gatewayIndex + 1) * modelsPerGateway;
-        gatewayModels = models.slice(startIndex, endIndex);
-      } else {
-        gatewayModels = models; // Default to all models for unknown gateways
-      }
-    }
-
-    transformedModels = gatewayModels.map(m => transformModel(m, normalizedGateway));
-  }
-
-  return transformedModels;
 }
 
 /**
