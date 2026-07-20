@@ -8,6 +8,11 @@
  * This module works alongside:
  * - gateway-registry.ts: Display names, colors, logos
  * - provider-model-formats.ts: Model ID transformation functions
+ *
+ * TODO(north-star): BYOK direct-provider plumbing (base URLs / api-key
+ * placeholders / model-id formatting for calling providers directly from the
+ * Playground), not a display catalog table — see the TODO at the top of
+ * `gateway-registry.ts` for the open backend-merge decision this depends on.
  */
 
 import { getGatewayDisplayName } from './gateway-registry';
