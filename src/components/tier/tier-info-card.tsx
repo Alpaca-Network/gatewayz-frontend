@@ -70,8 +70,8 @@ export function TierInfoCard() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle>Subscription Plan</CardTitle>
-            <CardDescription>Manage your account tier and billing</CardDescription>
+            <CardTitle>Account Plan</CardTitle>
+            <CardDescription>Your current plan and credit usage</CardDescription>
           </div>
           <div className="flex items-center gap-2">
             {isTrial && (
@@ -123,7 +123,7 @@ export function TierInfoCard() {
               )}
             </div>
             <p className="text-xs text-emerald-600 dark:text-emerald-400">
-              Upgrade to a paid plan to continue using all features after your trial ends.
+              Add credits to continue using all features after your trial ends.
             </p>
           </div>
         )}
@@ -138,7 +138,7 @@ export function TierInfoCard() {
               </p>
             </div>
             <p className="text-sm text-red-700 dark:text-red-300">
-              Upgrade to a paid plan to continue using all features and access your credits.
+              Buy credits to continue using all features and access your account.
             </p>
           </div>
         )}
@@ -278,7 +278,7 @@ export function TierInfoCard() {
         {!hasSubscription && tier === 'basic' && !isTrial && !trialExpired && (
           <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3">
             <p className="text-sm text-blue-900 dark:text-blue-100">
-              You're using the pay-per-use plan. Upgrade to Pro or Max for monthly billing and benefits.
+              You're using the pay-per-use plan. Buy credits any time to keep going.
             </p>
           </div>
         )}

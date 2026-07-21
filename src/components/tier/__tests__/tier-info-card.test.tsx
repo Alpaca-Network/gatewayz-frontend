@@ -93,8 +93,8 @@ describe('TierInfoCard', () => {
       expect(screen.getByText('Days Remaining')).toBeInTheDocument();
       expect(screen.getByText('7 days')).toBeInTheDocument();
       expect(screen.getByText('Expires On')).toBeInTheDocument();
-      // Should show upgrade prompt
-      expect(screen.getByText(/Upgrade to a paid plan/i)).toBeInTheDocument();
+      // Should show credits-only follow-up prompt (no subscription CTA)
+      expect(screen.getByText(/Add credits to continue/i)).toBeInTheDocument();
     });
 
     it('should show trial expiring soon warning', () => {
@@ -191,7 +191,7 @@ describe('TierInfoCard', () => {
       expect(screen.getByText('Expired')).toBeInTheDocument();
       // Should show expired trial notice
       expect(screen.getByText('Your trial has expired')).toBeInTheDocument();
-      expect(screen.getByText(/Upgrade to a paid plan to continue/i)).toBeInTheDocument();
+      expect(screen.getByText(/Buy credits to continue/i)).toBeInTheDocument();
     });
   });
 
