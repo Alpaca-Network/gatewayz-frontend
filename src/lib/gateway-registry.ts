@@ -18,6 +18,21 @@
  * 1. Add entry to GATEWAYS array below
  * 2. If API key required, add env var to .env
  * 3. That's it! All files auto-import from here.
+ *
+ * TODO(north-star): This is functional plumbing (header building, gateway-id
+ * validation/normalization for the `/api/models` proxy), not a pure display
+ * table, so it hasn't been deleted the way `lib/models-data.ts` was — but the
+ * static GATEWAYS list below still hardcodes ~30 gateways, several of which
+ * the backend no longer serves live (North Star narrowed live providers to
+ * openai/anthropic/xai/soon-moonshot). `docs/FRONTEND_NORTH_STAR_AUDIT.md`
+ * (top-of-file "Outcome" note, item 4) already flags `/api/gateways` merging
+ * this registry with the backend's `/v1/gateways` list as an open decision
+ * needing a backend call: either move colors/logos/priority/env-var-names
+ * server-side (letting the frontend read them from `useGateways()` /
+ * `catalog-api.getGateways()` alone), or keep this registry frontend-only
+ * permanently. `lib/provider-config.ts` (BYOK direct-provider API base
+ * URLs/model-id formats) has the same dependency on this file and should be
+ * resolved in the same pass.
  */
 
 import React from 'react';

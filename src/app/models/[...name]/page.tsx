@@ -9,18 +9,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Copy, Check, Lock } from 'lucide-react';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
-import { providerData } from '@/lib/provider-data';
 import ReactMarkdown from "react-markdown";
 import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/config';
-import { models as staticModels } from '@/lib/models-data';
 import { getApiKey } from '@/lib/api';
 import { InlineChat } from '@/components/models/inline-chat';
 import { safeParseJson } from '@/lib/http';
 import {
-    findModelByRouteParams,
     getModelGateways,
-    transformStaticModel,
     type ModelDetailRecord,
 } from '@/lib/model-detail-utils';
 import { getSourceGateway, formatPricingForDisplay } from '@/lib/model-pricing-utils';
@@ -55,7 +51,6 @@ export default function ModelProfilePage() {
     const [apiKey, setApiKey] = useState('gw_live_YOUR_API_KEY_HERE');
     const [selectedProvider, setSelectedProvider] = useState<string>('gatewayz');
     const [selectedPlaygroundProvider, setSelectedPlaygroundProvider] = useState<string>('gatewayz');
-    const transformedStaticModels = useMemo(() => staticModels.map((model) => transformStaticModel(model)), []);
 
     // Extract catch-all parameter and parse it
     // For URL /models/near/deepseek-ai/deepseek-v3-1
@@ -136,64 +131,16 @@ export default function ModelProfilePage() {
                 return;
             }
 
-            // Get provider performance data if available
-            const modelProviderData = providerData[model.name] || [];
-
-            if (modelProviderData.length > 0) {
-                // Find provider with lowest total cost (input + output)
-                let bestProvider = modelProviderData[0];
-                for (const provider of modelProviderData) {
-                    const currentCost = provider.inputCost + provider.outputCost;
-                    const bestCost = bestProvider.inputCost + bestProvider.outputCost;
-
-                    // Use cost as primary criteria, latency as tiebreaker
-                    if (currentCost < bestCost ||
-                        (currentCost === bestCost && provider.latency && bestProvider.latency && provider.latency < bestProvider.latency)) {
-                        bestProvider = provider;
-                    }
-                }
-
-                // Map provider name to gateway slug
-                const providerNameToGateway: Record<string, string> = {
-                    'DeepInfra': 'deepinfra',
-                    'Nebius AI Studio': 'nebius',
-                    'Fireworks': 'fireworks',
-                    'Together AI': 'together',
-                    'Groq': 'groq',
-                    'Google': 'google',
-                    'Anthropic': 'gatewayz',
-                    'AWS Bedrock': 'gatewayz',
-                    'OpenRouter': 'openrouter',
-                    'Cerebras': 'cerebras',
-                    'xAI': 'xai',
-                    'Hugging Face': 'huggingface',
-                };
-
-                const gateway = providerNameToGateway[bestProvider.name] || modelProviders[0];
-                setSelectedProvider(gateway);
-                setSelectedPlaygroundProvider(gateway);
-            } else {
-                // No performance data, default to first available provider
-                setSelectedProvider(modelProviders[0]);
-                setSelectedPlaygroundProvider(modelProviders[0]);
-            }
+            // No per-provider performance data from the DB-backed catalog yet
+            // (no hardcoded synthetic table here) — default to the first
+            // available provider.
+            setSelectedProvider(modelProviders[0]);
+            setSelectedPlaygroundProvider(modelProviders[0]);
         }
     }, [modelProviders, model]);
 
     useEffect(() => {
         let mounted = true;
-
-        const staticFoundModel = findModelByRouteParams(transformedStaticModels, {
-            modelId,
-            developer,
-            modelNameParam
-        });
-
-        if (staticFoundModel && mounted) {
-            setModel(staticFoundModel);
-            setAllModels(transformedStaticModels);
-            setLoading(false);
-        }
 
         const fetchModelDetail = async () => {
             try {
@@ -228,7 +175,7 @@ export default function ModelProfilePage() {
                         : getModelGateways(payload.data);
                     setModelProviders(providerList ?? []);
                     setLoading(false);
-                } else if (!staticFoundModel) {
+                } else {
                     setModel(null);
                     setLoading(false);
                 }
@@ -239,10 +186,8 @@ export default function ModelProfilePage() {
                 if (!mounted) {
                     return;
                 }
-                if (!staticFoundModel) {
-                    setModel(null);
-                    setLoading(false);
-                }
+                setModel(null);
+                setLoading(false);
                 setLoadingProviders(false);
             }
         };
@@ -252,7 +197,7 @@ export default function ModelProfilePage() {
         return () => {
             mounted = false;
         };
-    }, [modelId, developer, modelNameParam, transformedStaticModels]);
+    }, [modelId, developer, modelNameParam]);
 
     const relatedModels = useMemo(() => {
       if(!model) return [];

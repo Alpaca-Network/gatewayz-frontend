@@ -6,15 +6,11 @@ import {
   findModelByRouteParams,
   getModelGateways,
   getRelatedModels,
-  transformStaticModel,
   type ModelDetailRecord,
 } from '@/lib/model-detail-utils';
-import { models as staticModels } from '@/lib/models-data';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-const TRANSFORMED_STATIC_MODELS: ModelDetailRecord[] = staticModels.map((model) => transformStaticModel(model));
 
 export async function GET(request: NextRequest) {
   return Sentry.startSpan(
@@ -44,42 +40,37 @@ export async function GET(request: NextRequest) {
         span.setAttribute('models_checked', gatewayModels.length);
       } catch (error) {
         gatewayFetchFailed = true;
-        console.warn('[ModelDetail] Failed to fetch gateway models, falling back to static data', error);
+        console.warn('[ModelDetail] Failed to fetch gateway models', error);
         Sentry.captureException(error, {
           tags: { api_route: '/api/models/detail', stage: 'gateway_fetch' },
         });
       }
 
       try {
-        const gatewayMatch = gatewayFetchFailed
+        const targetModel = gatewayFetchFailed
           ? undefined
           : findModelByRouteParams(gatewayModels, lookupParams);
-        const staticMatch = findModelByRouteParams(TRANSFORMED_STATIC_MODELS, lookupParams);
-
-        const targetModel = gatewayMatch ?? staticMatch;
 
         if (!targetModel) {
-          span.setAttribute('status', 'not_found');
-          return NextResponse.json({ error: 'Model not found' }, { status: 404 });
+          span.setAttribute('status', gatewayFetchFailed ? 'upstream_error' : 'not_found');
+          return NextResponse.json(
+            { error: 'Model not found' },
+            { status: gatewayFetchFailed ? 502 : 404 }
+          );
         }
 
-        const dataSource = gatewayMatch ? 'gateway' : 'static';
         const providers = getModelGateways(targetModel);
-        const related = getRelatedModels(
-          gatewayMatch ? gatewayModels : TRANSFORMED_STATIC_MODELS,
-          targetModel,
-          12
-        );
+        const related = getRelatedModels(gatewayModels, targetModel, 12);
 
         span.setAttribute('status', 'success');
         span.setAttribute('provider_count', providers.length);
-        span.setAttribute('data_source', dataSource);
+        span.setAttribute('data_source', 'gateway');
 
         return NextResponse.json({
           data: targetModel,
           providers,
           related,
-          source: dataSource,
+          source: 'gateway',
         });
       } catch (error) {
         console.error('[ModelDetail] Unexpected error resolving model detail:', error);
