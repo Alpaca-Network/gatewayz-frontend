@@ -48,4 +48,20 @@ describe('models-service search (server-side)', () => {
     expect(requestedUrls.some((url) => /\/v1\/models\?gateway=openrouter/.test(url))).toBe(true);
     expect(requestedUrls.some((url) => url.includes('/v1/models/search'))).toBe(false);
   });
+
+  it('caps catalog page requests at the backend search limit', async () => {
+    await getModelsForGateway('openrouter', 1000);
+
+    const requestedUrls = mockFetch.mock.calls.map((call) => String(call[0]));
+    expect(requestedUrls.some((url) => url.includes('limit=100'))).toBe(true);
+    expect(requestedUrls.every((url) => !url.includes('limit=1000'))).toBe(true);
+  });
+
+  it('uses the same bounded page size for search requests', async () => {
+    await getModelsForGateway('all', 1000, 'claude');
+
+    const requestedUrls = mockFetch.mock.calls.map((call) => String(call[0]));
+    expect(requestedUrls.some((url) => url.includes('/v1/models/search') && url.includes('limit=100'))).toBe(true);
+    expect(requestedUrls.every((url) => !url.includes('limit=1000'))).toBe(true);
+  });
 });

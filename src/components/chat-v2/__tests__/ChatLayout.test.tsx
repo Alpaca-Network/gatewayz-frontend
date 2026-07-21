@@ -1,6 +1,17 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 
+const mockSearchParamValues: Record<string, string | null> = {};
+const mockCatalogModels = [
+  {
+    id: 'grok-3',
+    name: 'Grok 3',
+    source_gateway: 'xai',
+    is_active: true,
+    health_status: 'healthy',
+  },
+];
+
 // Mock UI components
 jest.mock('@/components/ui/button', () => ({
   Button: ({ children, onClick, ...props }: any) => (
@@ -126,6 +137,10 @@ jest.mock('@/lib/hooks/use-auth-sync', () => ({
   })),
 }));
 
+jest.mock('@/lib/hooks/use-catalog', () => ({
+  useModels: () => ({ data: mockCatalogModels, isLoading: false }),
+}));
+
 const mockCreateSessionMutateAsync = jest.fn();
 jest.mock('@/lib/hooks/use-chat-queries', () => ({
   useSessionMessages: () => ({ data: [], isLoading: false }),
@@ -162,7 +177,7 @@ jest.mock('@tanstack/react-query', () => ({
 // Mock next/navigation for useSearchParams
 jest.mock('next/navigation', () => ({
   useSearchParams: () => ({
-    get: jest.fn(() => null),
+    get: jest.fn((key: string) => mockSearchParamValues[key] ?? null),
   }),
 }));
 
@@ -197,6 +212,14 @@ jest.mock('../MessageList', () => ({
 // Mock ModelSelect
 jest.mock('@/components/chat-v2/model-select', () => ({
   ModelSelect: () => <div data-testid="model-select">Model Select</div>,
+  isCatalogModelSelectable: (model: any) => Boolean(model.source_gateway),
+  mapCatalogModelToOption: (model: any) => ({
+    value: model.id,
+    label: model.name,
+    category: 'General',
+    sourceGateway: model.source_gateway,
+    modalities: ['Text'],
+  }),
 }));
 
 // Import after mocks
@@ -207,11 +230,13 @@ describe('ChatLayout', () => {
     jest.clearAllMocks();
     mockIsIncognitoMode = false;
     mockSetIncognitoMode.mockClear();
+    Object.keys(mockSearchParamValues).forEach(key => delete mockSearchParamValues[key]);
     delete (window as any).__chatInputSend;
     delete (window as any).__chatInputFocus;
   });
 
   afterEach(() => {
+    Object.keys(mockSearchParamValues).forEach(key => delete mockSearchParamValues[key]);
     delete (window as any).__chatInputSend;
     delete (window as any).__chatInputFocus;
   });
@@ -346,6 +371,27 @@ describe('ChatLayout', () => {
 
       rafSpy.mockRestore();
       warnSpy.mockRestore();
+    });
+  });
+
+  describe('URL prompts', () => {
+    it('replaces an unavailable requested model with a live catalog model before sending', async () => {
+      mockSearchParamValues.message = 'Explain routing';
+      mockSearchParamValues.model = 'removed-provider/unavailable-model';
+      const mockSend = jest.fn();
+      (window as any).__chatInputSend = mockSend;
+
+      render(<ChatLayout />);
+
+      await waitFor(() => {
+        expect(mockSetSelectedModel).toHaveBeenCalledWith(
+          expect.objectContaining({ value: 'grok-3', sourceGateway: 'xai' })
+        );
+      });
+      expect(mockSetSelectedModel).not.toHaveBeenCalledWith(
+        expect.objectContaining({ value: 'removed-provider/unavailable-model' })
+      );
+      await waitFor(() => expect(mockSend).toHaveBeenCalled());
     });
   });
 });
@@ -1356,7 +1402,7 @@ describe('Prompt chips', () => {
     expect(mockFocus).toHaveBeenCalled();
   });
 
-  it('should switch to image generation model when "Create image" chip is clicked', () => {
+  it('should not inject a model when "Create image" chip is clicked', () => {
     (window as any).__chatInputFocus = jest.fn();
     render(<ChatLayout />);
 
@@ -1364,13 +1410,8 @@ describe('Prompt chips', () => {
     const createImageChip = screen.getByText('Create image');
     fireEvent.click(createImageChip);
 
-    // Should switch to image generation model (Gatewayz Router)
-    expect(mockSetSelectedModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        value: 'openrouter/auto',
-        label: 'Gatewayz Router',
-      })
-    );
+    // The live catalog remains the only source of model selection.
+    expect(mockSetSelectedModel).not.toHaveBeenCalled();
 
     // Should also set the input value
     expect(mockSetInputValue).toHaveBeenCalledWith('Create an image of ');
