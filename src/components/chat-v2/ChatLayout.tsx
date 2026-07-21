@@ -9,9 +9,14 @@ import { ChatSidebar } from "./ChatSidebar";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { ConnectionStatus } from "./ConnectionStatus";
-import { ModelSelect } from "@/components/chat-v2/model-select";
+import {
+  ModelSelect,
+  isCatalogModelSelectable,
+  mapCatalogModelToOption,
+} from "@/components/chat-v2/model-select";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
+import { useModels } from "@/lib/hooks/use-catalog";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { usePrivy } from "@privy-io/react-auth";
 import { getApiKey } from "@/lib/api";
@@ -21,7 +26,6 @@ import { useNetworkStatus } from "@/hooks/use-network-status";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCreateSession } from "@/lib/hooks/use-chat-queries";
 import { useToast } from "@/hooks/use-toast";
-import { getImageGenerationModel } from "@/lib/hooks/use-auto-model-switch";
 import { SURPRISE_PROMPTS } from "@/lib/surprise-prompts";
 import {
   AlertDialog,
@@ -54,8 +58,8 @@ const ALL_PROMPTS = [
     { title: "What's the difference between HTTP and HTTPS?", subtitle: "Learn about web security basics" },
 ];
 
-// Quick action prompt chips
-// useImageModel: if true, switches to the default image generation model when clicked
+// Quick action prompt chips. The legacy useImageModel field only describes the
+// prompt intent; live catalog data remains the sole source for model selection.
 const PROMPT_CHIPS = [
     { label: "Create image", icon: ImageIcon, prompt: "Create an image of ", useImageModel: true },
     { label: "Analyze data", icon: BarChart3, prompt: "Analyze the following data: ", useImageModel: false },
@@ -150,6 +154,13 @@ export function ChatLayout() {
    const queryClient = useQueryClient();
    const createSession = useCreateSession();
    const { toast } = useToast();
+   const { data: catalogModels = [], isLoading: catalogModelsLoading } = useModels({ gateway: 'all' });
+   const selectableCatalogModels = useMemo(
+       () => catalogModels
+           .filter(isCatalogModelSelectable)
+           .map(mapCatalogModelToOption),
+       [catalogModels]
+   );
 
    // Track if user has clicked a prompt (to immediately hide welcome screen)
    const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
@@ -176,7 +187,7 @@ export function ChatLayout() {
        const messageParam = searchParams.get('message');
        const modelParam = searchParams.get('model');
 
-       if (messageParam && !urlMessageProcessedRef.current) {
+       if (messageParam && !urlMessageProcessedRef.current && !catalogModelsLoading) {
            urlMessageProcessedRef.current = true;
 
            // Always disable incognito mode when using chat prompts from homepage/start pages
@@ -189,28 +200,19 @@ export function ChatLayout() {
            // after this effect has already checked the stale isIncognitoMode value.
            setIncognitoMode(false);
 
-           // Set model from URL if provided
-           if (modelParam) {
-               // Create a minimal ModelOption from the URL parameter
-               const modelParts = modelParam.split('/');
-               const modelLabel = modelParts.length > 1 ? modelParts[modelParts.length - 1] : modelParam;
-               const gateway = modelParts.length > 1 ? modelParts[0] : undefined;
+           // A deep link may request a model, but it may only select an entry
+           // currently advertised by the live catalog. Otherwise retain a live
+           // current selection or fall back to the first live model.
+           const requestedModel = modelParam
+               ? selectableCatalogModels.find(model => model.value === modelParam)
+               : null;
+           const currentLiveModel = selectedModel
+               ? selectableCatalogModels.find(model => model.value === selectedModel.value)
+               : null;
+           const liveModel = requestedModel ?? currentLiveModel ?? selectableCatalogModels[0] ?? null;
 
-               // Format label: replace dashes/underscores with spaces and capitalize each word
-               const formattedLabel = modelLabel
-                   .replace(/[-_]/g, ' ')
-                   .split(' ')
-                   .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-                   .join(' ');
-
-               setSelectedModel({
-                   value: modelParam,
-                   label: formattedLabel,
-                   category: 'General',
-                   sourceGateway: gateway,
-                   developer: gateway ? gateway.charAt(0).toUpperCase() + gateway.slice(1) : undefined,
-                   modalities: ['Text']
-               });
+           if (liveModel && liveModel.value !== selectedModel?.value) {
+               setSelectedModel(liveModel);
            }
 
            // Set the input value so it's visible in the textarea
@@ -228,6 +230,15 @@ export function ChatLayout() {
            // and open the login modal so they can sign up and then send manually.
            if (!isAuthenticated) {
                login();
+               return;
+           }
+
+           if (!liveModel) {
+               toast({
+                   title: "No model available",
+                   description: "The live catalog does not currently contain a routable model.",
+                   variant: "destructive",
+               });
                return;
            }
 
@@ -263,7 +274,18 @@ export function ChatLayout() {
                pendingTimeoutRef.current = null;
            }
        };
-   }, [searchParams, setInputValue, setSelectedModel, setIncognitoMode, isAuthenticated, login]);
+   }, [
+       searchParams,
+       catalogModelsLoading,
+       selectableCatalogModels,
+       selectedModel,
+       setInputValue,
+       setSelectedModel,
+       setIncognitoMode,
+       isAuthenticated,
+       login,
+       toast,
+   ]);
 
    // Clear pending prompt once we have real messages OR when session changes
    useEffect(() => {
@@ -332,15 +354,9 @@ export function ChatLayout() {
        });
    };
 
-   // Handle prompt chip selection - just sets input value without sending, allows user to complete the prompt
-   // If useImageModel is true, switches to the default image generation model
-   const handlePromptChipSelect = (prompt: string, useImageModel?: boolean) => {
-       // Switch to image generation model if requested
-       if (useImageModel) {
-           const imageModel = getImageGenerationModel();
-           setSelectedModel(imageModel);
-       }
-
+   // Prompt chips only fill the composer. Model selection stays catalog-driven;
+   // the legacy flag is retained in the chip shape without injecting a model.
+   const handlePromptChipSelect = (prompt: string, _useImageModel?: boolean) => {
        setInputValue(prompt);
        // Focus the input field so user can continue typing
        if (typeof window !== 'undefined' && (window as any).__chatInputFocus) {

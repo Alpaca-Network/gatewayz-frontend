@@ -1,4 +1,4 @@
-import { useChatUIStore, INCOGNITO_DEFAULT_MODEL, NEAR_INCOGNITO_MODELS } from '../chat-ui-store';
+import { useChatUIStore } from '../chat-ui-store';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -77,53 +77,6 @@ describe('chat-ui-store', () => {
     });
   });
 
-  describe('INCOGNITO_DEFAULT_MODEL', () => {
-    it('should export the incognito default model constant', () => {
-      expect(INCOGNITO_DEFAULT_MODEL).toBeDefined();
-      expect(INCOGNITO_DEFAULT_MODEL.value).toBe('near/zai-org/GLM-4.6');
-      expect(INCOGNITO_DEFAULT_MODEL.label).toBe('GLM-4.6');
-      expect(INCOGNITO_DEFAULT_MODEL.sourceGateway).toBe('near');
-    });
-  });
-
-  describe('NEAR_INCOGNITO_MODELS', () => {
-    it('should export all NEAR incognito models', () => {
-      expect(NEAR_INCOGNITO_MODELS).toBeDefined();
-      expect(Array.isArray(NEAR_INCOGNITO_MODELS)).toBe(true);
-      expect(NEAR_INCOGNITO_MODELS.length).toBe(4);
-    });
-
-    it('should include all 4 tested NEAR AI models', () => {
-      const modelIds = NEAR_INCOGNITO_MODELS.map(m => m.value);
-
-      expect(modelIds).toContain('near/zai-org/GLM-4.6');
-      expect(modelIds).toContain('near/deepseek-ai/DeepSeek-V3.1');
-      expect(modelIds).toContain('near/openai/gpt-oss-120b');
-      expect(modelIds).toContain('near/Qwen/Qwen3-30B-A3B-Instruct-2507');
-    });
-
-    it('should have all models with near gateway', () => {
-      NEAR_INCOGNITO_MODELS.forEach(model => {
-        expect(model.sourceGateway).toBe('near');
-      });
-    });
-
-    it('should have INCOGNITO_DEFAULT_MODEL as the first model', () => {
-      expect(NEAR_INCOGNITO_MODELS[0]).toEqual(INCOGNITO_DEFAULT_MODEL);
-    });
-
-    it('should have valid model structure for all models', () => {
-      NEAR_INCOGNITO_MODELS.forEach(model => {
-        expect(model.value).toBeDefined();
-        expect(model.label).toBeDefined();
-        expect(model.category).toBeDefined();
-        expect(model.sourceGateway).toBe('near');
-        expect(model.developer).toBeDefined();
-        expect(model.modalities).toContain('Text');
-      });
-    });
-  });
-
   describe('isIncognitoMode', () => {
     it('should have initial incognito mode set to false', () => {
       const state = useChatUIStore.getState();
@@ -167,14 +120,13 @@ describe('chat-ui-store', () => {
       expect(localStorageMock.setItem).toHaveBeenLastCalledWith('gatewayz_incognito_mode', 'false');
     });
 
-    it('should switch to GLM-4.6 model when incognito mode is enabled', () => {
+    it('should clear the model until the live NEAR catalog loads', () => {
       const { setIncognitoMode } = useChatUIStore.getState();
 
       setIncognitoMode(true);
 
       const state = useChatUIStore.getState();
-      expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
-      expect(state.selectedModel?.label).toBe('GLM-4.6');
+      expect(state.selectedModel).toBeNull();
     });
 
     it('should restore previous model when incognito mode is disabled', () => {
@@ -190,9 +142,9 @@ describe('chat-ui-store', () => {
 
       const { setIncognitoMode } = useChatUIStore.getState();
 
-      // Enable incognito - should switch to GLM-4.6 and save previous model
+      // Enable incognito - the catalog owns selection and the previous model is saved
       setIncognitoMode(true);
-      expect(useChatUIStore.getState().selectedModel?.value).toBe('near/zai-org/GLM-4.6');
+      expect(useChatUIStore.getState().selectedModel).toBeNull();
       expect(useChatUIStore.getState().previousModel?.value).toBe('openai/gpt-4');
 
       // Disable incognito - should restore previous model (GPT-4)
@@ -220,14 +172,14 @@ describe('chat-ui-store', () => {
       );
     });
 
-    it('should switch model via toggleIncognitoMode', () => {
+    it('should clear the model via toggleIncognitoMode until the catalog resolves it', () => {
       const { toggleIncognitoMode } = useChatUIStore.getState();
 
       toggleIncognitoMode();
 
       const state = useChatUIStore.getState();
       expect(state.isIncognitoMode).toBe(true);
-      expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
+      expect(state.selectedModel).toBeNull();
     });
 
     it('should be idempotent - calling setIncognitoMode(false) when already off should not change model', () => {
@@ -362,29 +314,35 @@ describe('chat-ui-store', () => {
       // Verify state was fixed
       const state = useChatUIStore.getState();
       expect(state.isIncognitoMode).toBe(true);
-      expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
-      expect(state.selectedModel?.sourceGateway).toBe('near');
+      expect(state.selectedModel).toBeNull();
       expect(state.previousModel?.value).toBe('openrouter/deepseek/deepseek-r1');
       expect(state._hasHydrated).toBe(true);
     });
 
-    it('should not change state if already using a NEAR model', () => {
+    it('should clear a persisted NEAR model so the current catalog revalidates it', () => {
       localStorageMock.setItem('gatewayz_incognito_mode', 'true');
 
-      // State is already correct
+      const persistedNearModel = {
+        value: 'near/deepseek-ai/DeepSeek-V3.1',
+        label: 'DeepSeek V3.1',
+        category: 'General',
+        sourceGateway: 'near',
+        developer: 'DeepSeek',
+        modalities: ['Text']
+      };
       useChatUIStore.setState({
         isIncognitoMode: true,
-        selectedModel: INCOGNITO_DEFAULT_MODEL,
+        selectedModel: persistedNearModel,
         previousModel: null,
         _hasHydrated: false
       });
 
       useChatUIStore.getState().syncIncognitoState();
 
-      // State should remain unchanged (except _hasHydrated)
       const state = useChatUIStore.getState();
       expect(state.isIncognitoMode).toBe(true);
-      expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
+      expect(state.selectedModel).toBeNull();
+      expect(state.previousModel).toEqual(persistedNearModel);
       expect(state._hasHydrated).toBe(true);
     });
 
@@ -482,7 +440,7 @@ describe('chat-ui-store', () => {
       // Should restore the stored GPT-4 as previousModel, not the SSR default DeepSeek R1
       const state = useChatUIStore.getState();
       expect(state.isIncognitoMode).toBe(true);
-      expect(state.selectedModel?.value).toBe('near/zai-org/GLM-4.6');
+      expect(state.selectedModel).toBeNull();
       expect(state.previousModel?.value).toBe('openai/gpt-4');
       expect(state._hasHydrated).toBe(true);
     });

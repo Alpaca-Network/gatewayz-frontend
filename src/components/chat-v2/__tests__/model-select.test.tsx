@@ -5,7 +5,7 @@ import {
   getGatewayAbbrev,
   getDeveloper,
   getModelSpeedTier,
-  ensureRouterOption,
+  isCatalogModelSelectable,
 } from '../model-select';
 
 // Mock isTauriDesktop for desktop mode tests
@@ -174,61 +174,34 @@ describe('getModelSpeedTier', () => {
   });
 });
 
-// Test ensureRouterOption helper function
-describe('ensureRouterOption', () => {
-  const ROUTER_VALUE = 'openrouter/auto';
+describe('isCatalogModelSelectable', () => {
+  const liveModel = {
+    id: 'openai/gpt-4o',
+    name: 'GPT-4o',
+    source_gateway: 'openai',
+    is_active: true,
+    is_routable: true,
+    health_status: 'healthy',
+  };
 
-  it('should add router option to empty array', () => {
-    const result = ensureRouterOption([]);
-    expect(result.length).toBe(1);
-    expect(result[0].value).toBe(ROUTER_VALUE);
-    expect(result[0].label).toBe('Gatewayz Router');
+  it('allows a live, routable catalog model', () => {
+    expect(isCatalogModelSelectable(liveModel)).toBe(true);
   });
 
-  it('should prepend router option when not present', () => {
-    const models: ModelOption[] = [
-      { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid' },
-      { value: 'anthropic/claude-3', label: 'Claude 3', category: 'Paid' },
-    ];
-    const result = ensureRouterOption(models);
-    expect(result.length).toBe(3);
-    expect(result[0].value).toBe(ROUTER_VALUE);
-    expect(result[1].value).toBe('openai/gpt-4');
+  it('rejects models without a routing source', () => {
+    expect(isCatalogModelSelectable({ ...liveModel, source_gateway: undefined })).toBe(false);
   });
 
-  it('should not duplicate router option when already present', () => {
-    const models: ModelOption[] = [
-      { value: ROUTER_VALUE, label: 'Existing Router', category: 'Router' },
-      { value: 'openai/gpt-4', label: 'GPT-4', category: 'Paid' },
-    ];
-    const result = ensureRouterOption(models);
-    expect(result.length).toBe(2);
-    // Router option should be merged with default properties
-    expect(result[0].value).toBe(ROUTER_VALUE);
+  it('rejects inactive models', () => {
+    expect(isCatalogModelSelectable({ ...liveModel, is_active: false })).toBe(false);
   });
 
-  it('should preserve original model properties', () => {
-    const models: ModelOption[] = [
-      {
-        value: 'openai/gpt-4',
-        label: 'GPT-4',
-        category: 'Paid',
-        developer: 'OpenAI',
-        speedTier: 'medium',
-      },
-    ];
-    const result = ensureRouterOption(models);
-    expect(result[1].developer).toBe('OpenAI');
-    expect(result[1].speedTier).toBe('medium');
+  it('rejects unroutable models', () => {
+    expect(isCatalogModelSelectable({ ...liveModel, is_routable: false })).toBe(false);
   });
 
-  it('should set router with correct default properties', () => {
-    const result = ensureRouterOption([]);
-    const router = result[0];
-    expect(router.category).toBe('Router');
-    expect(router.sourceGateway).toBe('openrouter');
-    expect(router.developer).toBe('Alpaca');
-    expect(router.modalities).toEqual(['Text', 'Image', 'File', 'Audio', 'Video']);
+  it('rejects models whose health is down', () => {
+    expect(isCatalogModelSelectable({ ...liveModel, health_status: 'DOWN' })).toBe(false);
   });
 });
 

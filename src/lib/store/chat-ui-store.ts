@@ -1,46 +1,6 @@
 import { create } from 'zustand';
 import { ModelOption } from '@/components/chat-v2/model-select';
 
-// All NEAR AI models available for Incognito mode
-// These models support privacy-focused conversations via NEAR AI
-export const NEAR_INCOGNITO_MODELS: ModelOption[] = [
-  {
-    value: 'near/zai-org/GLM-4.6',
-    label: 'GLM-4.6',
-    category: 'General',
-    sourceGateway: 'near',
-    developer: 'ZAI',
-    modalities: ['Text']
-  },
-  {
-    value: 'near/deepseek-ai/DeepSeek-V3.1',
-    label: 'DeepSeek V3.1',
-    category: 'General',
-    sourceGateway: 'near',
-    developer: 'DeepSeek',
-    modalities: ['Text']
-  },
-  {
-    value: 'near/openai/gpt-oss-120b',
-    label: 'GPT OSS 120B',
-    category: 'General',
-    sourceGateway: 'near',
-    developer: 'OpenAI',
-    modalities: ['Text']
-  },
-  {
-    value: 'near/Qwen/Qwen3-30B-A3B-Instruct-2507',
-    label: 'Qwen3 30B A3B Instruct',
-    category: 'General',
-    sourceGateway: 'near',
-    developer: 'Qwen',
-    modalities: ['Text']
-  },
-];
-
-// Incognito mode default model (first model in the list)
-export const INCOGNITO_DEFAULT_MODEL: ModelOption = NEAR_INCOGNITO_MODELS[0];
-
 // Storage keys for persistence
 const INCOGNITO_STORAGE_KEY = 'gatewayz_incognito_mode';
 const PREVIOUS_MODEL_STORAGE_KEY = 'gatewayz_previous_model';
@@ -66,12 +26,6 @@ const getPreviousModel = (): ModelOption | null => {
   } catch {
     return null;
   }
-};
-
-// Helper to check if a model is a valid NEAR incognito model
-const isNearIncognitoModel = (model: ModelOption | null): boolean => {
-  if (!model) return false;
-  return model.sourceGateway === 'near' || model.value.startsWith('near/');
 };
 
 // Helper to get auto-enable search preference from localStorage
@@ -115,24 +69,11 @@ interface ChatUIState {
   setAutoEnableSearch: (enabled: boolean) => void;
 }
 
-// Standard default model — used as initial placeholder before the catalog loads.
-// ModelSelect will replace this with the best available model from the live catalog
-// (see the defaultModelSet effect in model-select.tsx).
-// Using a common OpenRouter-routed model that is broadly available.
-const STANDARD_DEFAULT_MODEL: ModelOption = {
-  value: 'anthropic/claude-sonnet-4.6',
-  label: 'Claude Sonnet 4.6',
-  category: 'General',
-  sourceGateway: 'openrouter',
-  developer: 'Anthropic',
-  modalities: ['Text', 'Image']
-};
-
 export const useChatUIStore = create<ChatUIState>((set, get) => ({
   activeSessionId: null,
   mobileSidebarOpen: false,
   inputValue: '',
-  selectedModel: getInitialIncognitoState() ? INCOGNITO_DEFAULT_MODEL : STANDARD_DEFAULT_MODEL,
+  selectedModel: null,
   messageStartTime: null,
   isIncognitoMode: getInitialIncognitoState(),
   previousModel: getPreviousModel(),
@@ -166,9 +107,9 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
       }
     }
 
-    // If incognito mode is enabled but selected model is not a NEAR model,
-    // we need to fix the state (this happens due to SSR hydration mismatch)
-    if (storedIncognito && !isNearIncognitoModel(state.selectedModel)) {
+    // ModelSelect resolves the first live NEAR model from the catalog. Keep the
+    // store model-free during hydration so no removed provider can be selected.
+    if (storedIncognito) {
       // Read the actual previous model from localStorage (not the SSR default)
       const storedPreviousModel = getPreviousModel();
       // If no stored previous model, use current SSR model as fallback
@@ -177,7 +118,7 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
         _hasHydrated: true,
         isIncognitoMode: true,
         previousModel: previousModel,
-        selectedModel: INCOGNITO_DEFAULT_MODEL
+        selectedModel: null
       });
 
       // Only persist to localStorage if we didn't have a stored value
@@ -222,22 +163,18 @@ export const useChatUIStore = create<ChatUIState>((set, get) => ({
 
     // Update state
     if (enabled) {
-      // Entering incognito: save current model and switch to incognito model
+      // Entering incognito: save current model. ModelSelect will choose the
+      // first live NEAR catalog entry, or leave selection empty when unavailable.
       set({
         isIncognitoMode: true,
         previousModel: currentModel,
-        selectedModel: INCOGNITO_DEFAULT_MODEL
+        selectedModel: null
       });
     } else {
       // Exiting incognito: restore previous model
-      // NOTE: If user changed the model while in incognito mode via ModelSelect,
-      // that change is intentionally not persisted because incognito mode is
-      // specifically about using GLM-4.6 for privacy. Changing the model while
-      // in incognito effectively overrides the incognito behavior for that session,
-      // but exiting still restores the pre-incognito model.
       set({
         isIncognitoMode: false,
-        selectedModel: previousModel || STANDARD_DEFAULT_MODEL
+        selectedModel: previousModel || null
       });
     }
   },
