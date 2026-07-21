@@ -1,62 +1,13 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import * as Sentry from '@sentry/nextjs';
-import { ModelOption } from '@/components/chat-v2/model-select';
+import {
+  type ModelOption,
+  isCatalogModelSelectable,
+  mapCatalogModelToOption,
+} from '@/components/chat-v2/model-select';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { useToast } from '@/hooks/use-toast';
-
-// Default model for image generation tasks
-// The Gatewayz Router supports image generation via tools and routes to the best provider
-export const DEFAULT_IMAGE_GENERATION_MODEL: ModelOption = {
-  value: 'openrouter/auto',
-  label: 'Gatewayz Router',
-  category: 'Router',
-  sourceGateway: 'openrouter',
-  developer: 'Alpaca',
-  modalities: ['Text', 'Image', 'File', 'Audio', 'Video']
-};
-
-// Get the default model for image generation
-export const getImageGenerationModel = (): ModelOption => {
-  return DEFAULT_IMAGE_GENERATION_MODEL;
-};
-
-// List of known multimodal models that support image input
-// These are prioritized in order of preference
-const MULTIMODAL_MODELS: ModelOption[] = [
-  DEFAULT_IMAGE_GENERATION_MODEL,
-  {
-    value: 'google/gemini-2.0-flash-001',
-    label: 'Gemini 2.0 Flash',
-    category: 'Multimodal',
-    sourceGateway: 'openrouter',
-    developer: 'Google',
-    modalities: ['Text', 'Image']
-  },
-  {
-    value: 'anthropic/claude-3.5-sonnet',
-    label: 'Claude 3.5 Sonnet',
-    category: 'Multimodal',
-    sourceGateway: 'openrouter',
-    developer: 'Anthropic',
-    modalities: ['Text', 'Image']
-  },
-  {
-    value: 'openai/gpt-4o',
-    label: 'GPT-4o',
-    category: 'Multimodal',
-    sourceGateway: 'openrouter',
-    developer: 'OpenAI',
-    modalities: ['Text', 'Image']
-  },
-  {
-    value: 'openai/gpt-4o-mini',
-    label: 'GPT-4o mini',
-    category: 'Multimodal',
-    sourceGateway: 'openrouter',
-    developer: 'OpenAI',
-    modalities: ['Text', 'Image']
-  },
-];
+import { useModels } from '@/lib/hooks/use-catalog';
 
 // Helper to check if a model supports a specific modality
 export const modelSupportsModality = (
@@ -88,24 +39,18 @@ export const modelSupportsModality = (
   }
 };
 
-// Get the best multimodal model for a given media type
-export const getMultimodalModel = (mediaType: 'image' | 'video' | 'audio' | 'file'): ModelOption => {
+export type MediaType = 'image' | 'video' | 'audio' | 'file';
+
+// Choose only from models that the live backend catalog currently advertises.
+export const getMultimodalModel = (
+  models: ModelOption[],
+  mediaType: MediaType
+): ModelOption | null => {
   try {
-    // For now, return the first model that supports the media type
-    // The Gatewayz Router is the default as it supports all modalities
-    const model = MULTIMODAL_MODELS.find(m =>
+    return models.find(m =>
       modelSupportsModality(m.modalities, mediaType)
-    );
-
-    if (!model) {
-      // Fallback to router if no suitable model found
-      console.warn(`[getMultimodalModel] No model found for ${mediaType}, using Gatewayz Router`);
-      return MULTIMODAL_MODELS[0];
-    }
-
-    return model;
+    ) ?? null;
   } catch (error) {
-    // Fallback: return Gatewayz Router on any error
     Sentry.captureException(error, {
       tags: {
         function: 'getMultimodalModel',
@@ -118,15 +63,20 @@ export const getMultimodalModel = (mediaType: 'image' | 'video' | 'audio' | 'fil
       },
       level: 'error',
     });
-    return MULTIMODAL_MODELS[0];
+    return null;
   }
 };
-
-export type MediaType = 'image' | 'video' | 'audio' | 'file';
 
 export function useAutoModelSwitch() {
   const { toast } = useToast();
   const setSelectedModel = useChatUIStore(state => state.setSelectedModel);
+  const { data: catalogModels } = useModels({ gateway: 'all' });
+  const availableModels = useMemo(
+    () => (catalogModels ?? [])
+      .filter(isCatalogModelSelectable)
+      .map(mapCatalogModelToOption),
+    [catalogModels]
+  );
 
   /**
    * Check if the current model supports the given media type.
@@ -143,7 +93,15 @@ export function useAutoModelSwitch() {
     try {
       // If no model is selected, select a multimodal one
       if (!currentModel) {
-        const newModel = getMultimodalModel(mediaType);
+        const newModel = getMultimodalModel(availableModels, mediaType);
+        if (!newModel) {
+          toast({
+            title: 'No compatible model available',
+            description: `No live model currently advertises ${mediaType} input support.`,
+            variant: 'destructive',
+          });
+          return false;
+        }
         setSelectedModel(newModel);
         toast({
           title: 'Model switched',
@@ -156,8 +114,16 @@ export function useAutoModelSwitch() {
       const supportsMedia = modelSupportsModality(currentModel.modalities, mediaType);
 
       if (!supportsMedia) {
-        // Find a model that supports this media type
-        const newModel = getMultimodalModel(mediaType);
+        // Find a live catalog model that supports this media type.
+        const newModel = getMultimodalModel(availableModels, mediaType);
+        if (!newModel) {
+          toast({
+            title: 'No compatible model available',
+            description: `No live model currently advertises ${mediaType} input support.`,
+            variant: 'destructive',
+          });
+          return false;
+        }
 
         // Validate the new model has required fields
         if (!newModel.value || !newModel.label) {
@@ -197,7 +163,7 @@ export function useAutoModelSwitch() {
 
       return false;
     }
-  }, [setSelectedModel, toast]);
+  }, [availableModels, setSelectedModel, toast]);
 
   /**
    * Check if the current model supports image input

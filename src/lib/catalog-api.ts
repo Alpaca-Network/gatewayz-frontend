@@ -45,6 +45,9 @@ export interface CatalogModel {
   source_gateway?: string;
   source_gateways?: string[];
   is_private?: boolean;
+  is_active?: boolean;
+  is_routable?: boolean;
+  health_status?: string;
   // Passthrough for any additional fields the backend adds.
   [key: string]: unknown;
 }

@@ -21,7 +21,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { NEAR_INCOGNITO_MODELS } from "@/lib/store/chat-ui-store"
 import { useAuth } from "@/hooks/use-auth"
 import { useAuthStore } from "@/lib/store/auth-store"
 
@@ -50,25 +49,6 @@ interface ModelSelectProps {
 const FAVORITES_KEY = 'gatewayz_favorite_models';
 // Models are fetched via the shared `useModels` catalog hook (Task 8/react-query),
 // which handles caching (staleTime) — no manual localStorage cache needed here.
-
-const ROUTER_OPTION: ModelOption = {
-  value: 'openrouter/auto',
-  label: 'Gatewayz Router',
-  category: 'Router',
-  sourceGateway: 'openrouter',
-  developer: 'Alpaca',
-  modalities: ['Text', 'Image', 'File', 'Audio', 'Video'] // Router supports all modalities
-};
-
-export const ensureRouterOption = (options: ModelOption[]): ModelOption[] => {
-  const hasRouter = options.some((option) => option.value === ROUTER_OPTION.value);
-  if (hasRouter) {
-    return options.map((option) =>
-      option.value === ROUTER_OPTION.value ? { ...ROUTER_OPTION, ...option } : option
-    );
-  }
-  return [{ ...ROUTER_OPTION }, ...options];
-};
 
 // Clean model name by removing redundant suffixes like "(Free)" since we show icons
 export const cleanModelName = (name: string): string => {
@@ -239,6 +219,16 @@ export const mapCatalogModelToOption = (model: CatalogModel): ModelOption => {
   };
 };
 
+export const isCatalogModelSelectable = (model: CatalogModel): boolean => {
+  const sourceGateway = model.source_gateway || model.source_gateways?.[0];
+  const healthStatus = String(model.health_status || '').toLowerCase();
+
+  return Boolean(sourceGateway)
+    && model.is_active !== false
+    && model.is_routable !== false
+    && healthStatus !== 'down';
+};
+
 export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = false }: ModelSelectProps) {
   const { isAuthenticated } = useAuth()
   const { userData } = useAuthStore()
@@ -250,7 +240,6 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
   const [open, setOpen] = React.useState(false)
   const [favorites, setFavorites] = React.useState<Set<string>>(new Set())
   const [expandedDevelopers, setExpandedDevelopers] = React.useState<Set<string>>(new Set(['Favorites', 'Incognito']))
-  const [defaultModelSet, setDefaultModelSet] = React.useState(false)
   const [searchQuery, setSearchQuery] = React.useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = React.useState('')
   type SortMode = 'gateway' | 'az' | 'free-first' | 'speed'
@@ -265,7 +254,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
   const models = React.useMemo(() => {
     // Deduplicate models by ID - keep the first occurrence
     const uniqueModelsMap = new Map<string, CatalogModel>();
-    (rawModels ?? []).forEach((model) => {
+    (rawModels ?? []).filter(isCatalogModelSelectable).forEach((model) => {
       if (!uniqueModelsMap.has(model.id)) {
         uniqueModelsMap.set(model.id, model);
       }
@@ -274,8 +263,10 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     // Filter to routable models only — a model without a sourceGateway
     // cannot be routed by the gateway layer, so it is not actually available.
     const availableOptions = modelOptions.filter(m => m.sourceGateway);
-    return ensureRouterOption(availableOptions);
-  }, [rawModels]);
+    return isIncognitoMode
+      ? availableOptions.filter(model => model.sourceGateway?.toLowerCase() === 'near')
+      : availableOptions;
+  }, [rawModels, isIncognitoMode]);
 
   const debouncedQueryTrim = debouncedSearchQuery.trim();
   // Server-side search when the user types — same gateway=all + search filter
@@ -287,8 +278,16 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
   );
   const searchLoading = !!debouncedQueryTrim && searchFetching;
   const searchResults = React.useMemo(
-    () => (debouncedQueryTrim ? (rawSearchResults ?? []).map(mapCatalogModelToOption) : []),
-    [rawSearchResults, debouncedQueryTrim]
+    () => {
+      if (!debouncedQueryTrim) return [];
+      const selectable = (rawSearchResults ?? [])
+        .filter(isCatalogModelSelectable)
+        .map(mapCatalogModelToOption);
+      return isIncognitoMode
+        ? selectable.filter(model => model.sourceGateway?.toLowerCase() === 'near')
+        : selectable;
+    },
+    [rawSearchResults, debouncedQueryTrim, isIncognitoMode]
   );
 
   // Debounce search query for performance
@@ -439,51 +438,18 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     });
   }, [modelsByGateway]);
 
-  // Set a sensible default model once the catalog has loaded.
-  // Priority: claude-3.5-sonnet → gpt-4o → gemini-flash → first non-router priced model → first model.
-  // Only fires once and only when the current default is the hardcoded placeholder that
-  // doesn't exist in the catalog (cerebras/qwen-3-32b).
+  // Reconcile selection exclusively against the live catalog. This also clears
+  // persisted/deprecated selections and switches to a live NEAR model only when
+  // incognito mode has an advertised NEAR catalog entry.
   React.useEffect(() => {
-    if (defaultModelSet || models.length === 0) return;
-    // Only override if the currently selected model isn't in the fetched catalog
-    const isInCatalog = models.some(m => m.value === selectedModel?.value);
-    if (isInCatalog) {
-      setDefaultModelSet(true);
-      return;
-    }
+    if (modelsLoading) return;
+    if (selectedModel && models.some(model => model.value === selectedModel.value)) return;
 
-    // Ranked preference list of model IDs — ordered by quality/availability
-    const preferenceList = [
-      'anthropic/claude-sonnet-4.6',
-      'anthropic/claude-sonnet-4.5',
-      'anthropic/claude-sonnet-4',
-      'anthropic/claude-3.5-sonnet',
-      'anthropic/claude-3.7-sonnet',
-      'openai/gpt-4o',
-      'openai/gpt-4o-mini',
-      'google/gemini-2.0-flash-001',
-      'google/gemini-flash-1.5',
-      'anthropic/claude-3.5-haiku',
-      'anthropic/claude-3-haiku',
-    ];
-
-    // Try preference list first
-    for (const id of preferenceList) {
-      const found = models.find(m => m.value === id);
-      if (found) {
-        onSelectModel(found);
-        setDefaultModelSet(true);
-        return;
-      }
+    const nextModel = models[0] ?? null;
+    if ((selectedModel?.value ?? null) !== (nextModel?.value ?? null)) {
+      onSelectModel(nextModel);
     }
-
-    // Fallback: first non-router model with a sourceGateway (skip ROUTER_OPTION)
-    const first = models.find(m => m.value !== 'openrouter/auto' && m.sourceGateway);
-    if (first) {
-      onSelectModel(first);
-    }
-    setDefaultModelSet(true);
-  }, [models, selectedModel, defaultModelSet, onSelectModel]);
+  }, [models, selectedModel, modelsLoading, onSelectModel]);
 
   // Get favorite models
   const favoriteModels = React.useMemo(() => {
@@ -530,7 +496,7 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
       return {
         modelsByGateway,
         favoriteModels,
-        incognitoModels: NEAR_INCOGNITO_MODELS,
+        incognitoModels: isIncognitoMode ? models : [],
       };
     }
 
@@ -579,14 +545,16 @@ export function ModelSelect({ selectedModel, onSelectModel, isIncognitoMode = fa
     const filteredFavorites = modelsToFilter.filter(model =>
       favorites.has(model.value) && matchesQuery(model)
     );
-    const filteredIncognito = NEAR_INCOGNITO_MODELS.filter(model => matchesQuery(model));
+    const filteredIncognito = isIncognitoMode
+      ? modelsToFilter.filter(model => matchesQuery(model))
+      : [];
 
     return {
       modelsByGateway: filteredByGateway,
       favoriteModels: filteredFavorites,
       incognitoModels: filteredIncognito,
     };
-  }, [debouncedSearchQuery, modelsByGateway, favoriteModels, mergedModelsForSearch, favorites]);
+  }, [debouncedSearchQuery, modelsByGateway, favoriteModels, mergedModelsForSearch, favorites, isIncognitoMode, models]);
 
   // Destructure for cleaner access in render
   const filteredModelsByGateway = filteredData.modelsByGateway;

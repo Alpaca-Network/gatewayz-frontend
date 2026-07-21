@@ -10,6 +10,7 @@ import {
 import { trackBadBackendResponse, trackBackendNetworkError, trackBackendProcessingError } from '@/lib/backend-error-tracking';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
+const MODEL_PAGE_SIZE = 100;
 
 // TypeScript interface for paginated API response
 interface PaginatedResponse {
@@ -191,9 +192,10 @@ function getApiBaseUrl(): string {
 // Helper function to fetch models from a specific gateway
 async function fetchModelsFromGateway(gateway: string, limit?: number, search?: string): Promise<any[]> {
   const allModels: any[] = [];
-  // Backend enforces max limit of 1000 per page (returns 422 for higher values)
-  // Use 1000 as default page size for optimal throughput with pagination
-  const requestLimit = limit ? Math.min(limit, 1000) : 1000;
+  // Keep catalog and search requests on the same bounded page contract. Search
+  // rejects values above 100, and using a stable page size prevents callers from
+  // selecting a stale parameter-specific response-cache variant.
+  const requestLimit = Math.min(limit ?? MODEL_PAGE_SIZE, MODEL_PAGE_SIZE);
   // Use centralized PRIORITY_GATEWAYS for fast gateway detection
   // Timeouts: 180s for 'all' (aggregated endpoint needs time to fetch from all gateways),
   // 5s for fast gateways, 30s for slow (HuggingFace)
