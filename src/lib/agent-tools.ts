@@ -241,7 +241,8 @@ export OPENAI_API_KEY={{API_KEY}}`,
       language: 'bash',
     },
     caveats: [
-      "Continue's codebase indexing uses an embeddings endpoint. Gatewayz does not serve /v1/embeddings yet, so configure a separate embeddings provider or disable indexing.",
+      "Continue's codebase indexing needs an embeddings model. Gatewayz serves /v1/embeddings — namespace the model explicitly, e.g. openai/text-embedding-3-small.",
+      'Embeddings are forwarded at cost and are not currently metered through the credit ledger, so indexing spend appears on the upstream provider rather than your Gatewayz balance.',
     ],
     recommendedModels: ['anthropic/claude-sonnet-4', 'openai/gpt-4o'],
     seo: {
