@@ -14,18 +14,15 @@ type OSType = 'windows' | 'macos' | 'linux';
 export default function ClaudeCodePage() {
   const { toast } = useToast();
   const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>({});
-  const { ready, authenticated, login } = usePrivy();
+  const { authenticated } = usePrivy();
   const [apiKey, setApiKey] = useState('');
   const [selectedOS, setSelectedOS] = useState<OSType>('windows');
 
-  // Check authentication and redirect if needed
-  useEffect(() => {
-    if (!ready) return;
-
-    if (!authenticated) {
-      login();
-    }
-  }, [ready, authenticated, login]);
+  // Deliberately NOT auth-gated. This is an acquisition page: it has to render
+  // for logged-out visitors and for crawlers, otherwise it is worth nothing at
+  // the top of the funnel and nothing for search. Signed-in users get their key
+  // inlined below; everyone else gets the full setup instructions plus a
+  // sign-in prompt where the key would be.
 
   // Detect OS on mount
   useEffect(() => {
