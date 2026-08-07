@@ -69,7 +69,7 @@ export ANTHROPIC_AUTH_TOKEN={{API_KEY}}`,
       'Claude Code speaks the Anthropic Messages API. Gatewayz serves it natively at /v1/messages — no translation proxy required.',
       'Prompt caching is passed through, so your system prompt and file context are billed at the cache rate on repeat turns.',
     ],
-    recommendedModels: ['anthropic/claude-sonnet-4', 'anthropic/claude-opus-4'],
+    recommendedModels: ['anthropic/claude-sonnet-4-5-20250929', 'anthropic/claude-opus-4-5-20251101'],
     seo: {
       title: 'Run Claude Code on Gatewayz — setup guide',
       description:
@@ -100,7 +100,7 @@ export ANTHROPIC_AUTH_TOKEN={{API_KEY}}`,
         code: `API Provider:   OpenAI Compatible
 Base URL:       ${GATEWAY_URL}/v1
 API Key:        {{API_KEY}}
-Model ID:       anthropic/claude-sonnet-4`,
+Model ID:       anthropic/claude-sonnet-4-5-20250929`,
         note: 'Cline settings → API Provider. Any model ID from the Gatewayz catalog works.',
       },
     ],
@@ -112,7 +112,7 @@ Model ID:       anthropic/claude-sonnet-4`,
     caveats: [
       'Cline relies on tool calling and structured output — both are forwarded to the provider unmodified.',
     ],
-    recommendedModels: ['anthropic/claude-sonnet-4', 'openai/gpt-4o', 'deepseek/deepseek-v3'],
+    recommendedModels: ['anthropic/claude-sonnet-4-5-20250929', 'openai/gpt-4o', 'openai/gpt-4o-mini'],
     seo: {
       title: 'Run Cline on Gatewayz — setup guide',
       description:
@@ -140,20 +140,20 @@ export OPENAI_API_KEY={{API_KEY}}`,
       },
       {
         label: 'Run against a model',
-        code: 'aider --model openai/anthropic/claude-sonnet-4',
+        code: 'aider --model openai/anthropic/claude-sonnet-4-5-20250929',
         language: 'bash',
         note: "Aider prefixes custom endpoints with 'openai/'. The rest is the Gatewayz model ID.",
       },
     ],
     verify: {
       label: 'Verify',
-      code: 'aider --model openai/anthropic/claude-sonnet-4 --message "what does this repo do?"',
+      code: 'aider --model openai/anthropic/claude-sonnet-4-5-20250929 --message "what does this repo do?"',
       language: 'bash',
     },
     caveats: [
       "Aider's model-prefix convention means the full argument is openai/<gatewayz-model-id>. This is an Aider quirk, not a Gatewayz one.",
     ],
-    recommendedModels: ['anthropic/claude-sonnet-4', 'deepseek/deepseek-v3', 'openai/gpt-4o'],
+    recommendedModels: ['anthropic/claude-sonnet-4-5-20250929', 'openai/gpt-4o-mini', 'openai/gpt-4o'],
     seo: {
       title: 'Run Aider on Gatewayz — setup guide',
       description:
@@ -184,7 +184,7 @@ export OPENAI_API_KEY={{API_KEY}}`,
         "apiKey": "{{API_KEY}}"
       },
       "models": {
-        "anthropic/claude-sonnet-4": { "name": "Claude Sonnet 4" }
+        "anthropic/claude-sonnet-4-5-20250929": { "name": "Claude Sonnet 4.5" }
       }
     }
   }
@@ -198,7 +198,7 @@ export OPENAI_API_KEY={{API_KEY}}`,
       code: 'opencode run "summarise this repository"',
       language: 'bash',
     },
-    recommendedModels: ['anthropic/claude-sonnet-4', 'openai/gpt-4o'],
+    recommendedModels: ['anthropic/claude-sonnet-4-5-20250929', 'openai/gpt-4o'],
     seo: {
       title: 'Run OpenCode on Gatewayz — setup guide',
       description:
@@ -225,7 +225,7 @@ export OPENAI_API_KEY={{API_KEY}}`,
     {
       "title": "Claude Sonnet 4 (Gatewayz)",
       "provider": "openai",
-      "model": "anthropic/claude-sonnet-4",
+      "model": "anthropic/claude-sonnet-4-5-20250929",
       "apiBase": "${GATEWAY_URL}/v1",
       "apiKey": "{{API_KEY}}"
     }
@@ -244,7 +244,7 @@ export OPENAI_API_KEY={{API_KEY}}`,
       "Continue's codebase indexing needs an embeddings model. Gatewayz serves /v1/embeddings — namespace the model explicitly, e.g. openai/text-embedding-3-small.",
       'Embeddings are forwarded at cost and are not currently metered through the credit ledger, so indexing spend appears on the upstream provider rather than your Gatewayz balance.',
     ],
-    recommendedModels: ['anthropic/claude-sonnet-4', 'openai/gpt-4o'],
+    recommendedModels: ['anthropic/claude-sonnet-4-5-20250929', 'openai/gpt-4o'],
     seo: {
       title: 'Run Continue on Gatewayz — setup guide',
       description:
