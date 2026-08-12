@@ -166,6 +166,12 @@ const PROVIDER_API_CONFIGS: Record<string, ProviderApiConfig> = {
     apiKeyPlaceholder: 'sk-...',
     modelIdFormat: stripDeveloperPrefix,
   },
+  meta: {
+    baseUrl: 'https://api.meta.ai/v1',
+    requiresApiKey: true,
+    apiKeyPlaceholder: '...',
+    modelIdFormat: keepFullModelId,
+  },
 };
 
 /**
