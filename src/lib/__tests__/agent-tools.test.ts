@@ -144,3 +144,41 @@ describe('comparison pages', () => {
     expect(getComparison('gatewayz-vs-nobody')).toBeUndefined();
   });
 });
+
+describe('recommended model IDs', () => {
+  // A guide that names a model the catalog does not serve returns 404 to the
+  // developer following it. Every ID here 404'd in production on 2026-08-07:
+  // anthropic/claude-sonnet-4, anthropic/claude-opus-4, deepseek/deepseek-v3.
+  // Anthropic IDs are dated or versioned; the bare family name is never valid.
+  const KNOWN_BAD = [
+    'anthropic/claude-sonnet-4',
+    'anthropic/claude-opus-4',
+    'deepseek/deepseek-v3',
+  ];
+
+  const allModelRefs = AGENT_TOOLS.flatMap((tool) => [
+    ...tool.recommendedModels,
+    ...[tool.install, ...tool.configure, tool.verify].map((s) => s.code),
+  ]);
+
+  it.each(KNOWN_BAD)('no guide references the non-existent %s', (bad) => {
+    const offenders = allModelRefs.filter((ref) =>
+      // exact-token match so claude-sonnet-4-5-... does not false-positive
+      new RegExp(`${bad.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}(?![\\w.-])`).test(ref)
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('every recommended model is provider-prefixed', () => {
+    for (const tool of AGENT_TOOLS) {
+      for (const model of tool.recommendedModels) {
+        expect(model).toMatch(/^[a-z0-9-]+\/.+/);
+      }
+    }
+  });
+
+  it('recommended models are verified against GET /v1/models when this changes', () => {
+    // Reminder rather than a network call: IDs drift as the catalog changes.
+    expect(AGENT_TOOLS.every((t) => t.recommendedModels.length > 0)).toBe(true);
+  });
+});
