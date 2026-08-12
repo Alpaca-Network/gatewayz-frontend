@@ -305,6 +305,13 @@ export const GATEWAYS: GatewayConfig[] = [
     priority: 'slow',
     logo: '/morpheus-logo.svg',
   },
+  {
+    id: 'meta',
+    name: 'Meta',
+    color: 'bg-blue-700',
+    priority: 'slow',
+    logo: '/Meta_Logo-black.svg',
+  },
 
   // Deprecated gateways (kept for backward compatibility)
   {
