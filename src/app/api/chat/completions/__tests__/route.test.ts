@@ -344,30 +344,39 @@ describe('Chat Completions API Route', () => {
   });
 
   describe('Authentication', () => {
-    test('should return 401 when no API key provided and GUEST_API_KEY not configured', async () => {
-      // When no API key is provided and GUEST_API_KEY is not configured, return 401
-      delete process.env.GUEST_API_KEY;
-
+    test('should forward guest requests anonymously (no Authorization header, no shared key)', async () => {
+      // Guests must NOT be authenticated as a real backend account. Sending no
+      // Authorization header makes the backend apply its own anonymous gate
+      // (free-model-only allowlist), instead of this proxy silently granting
+      // access to a shared, credited account.
       const requestBody = {
         model: 'openrouter/auto',
         messages: [{ role: 'user', content: 'Hello' }],
         stream: true,
       };
 
-      const request = createMockRequest(requestBody);
-      const response = await POST(request);
+      const mockChunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
 
-      // Should return 401 with GUEST_NOT_CONFIGURED error
-      expect(response.status).toBe(401);
-      const data = await response.json();
-      expect(data.code).toBe('GUEST_NOT_CONFIGURED');
-      expect(data.message).toContain('sign in');
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'content-type': 'text/event-stream',
+        }),
+        body: createMockStream(mockChunks),
+      });
+
+      const request = createMockRequest(requestBody);
+      await POST(request);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[1].headers['Authorization']).toBeUndefined();
     });
 
-    test('should use GUEST_API_KEY when explicit guest request and GUEST_API_KEY is configured', async () => {
-      // Set GUEST_API_KEY for this test
-      process.env.GUEST_API_KEY = 'test-guest-key';
-
+    test('explicit guest request ("apiKey": "guest") is also forwarded anonymously', async () => {
       const requestBody = {
         model: 'openrouter/auto',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -392,33 +401,8 @@ describe('Chat Completions API Route', () => {
       const request = createMockRequest(requestBody);
       await POST(request);
 
-      // Verify the guest API key was used
       const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
-      expect(fetchCall[1].headers['Authorization']).toBe('Bearer test-guest-key');
-
-      // Clean up
-      delete process.env.GUEST_API_KEY;
-    });
-
-    test('should return 401 for explicit guest request when GUEST_API_KEY not configured', async () => {
-      // Ensure GUEST_API_KEY is not set
-      delete process.env.GUEST_API_KEY;
-
-      const requestBody = {
-        model: 'openrouter/auto',
-        messages: [{ role: 'user', content: 'Hello' }],
-        stream: true,
-        apiKey: 'guest', // Explicit guest request
-      };
-
-      const request = createMockRequest(requestBody);
-      const response = await POST(request);
-
-      // Should return 401 with GUEST_NOT_CONFIGURED error
-      expect(response.status).toBe(401);
-      const data = await response.json();
-      expect(data.code).toBe('GUEST_NOT_CONFIGURED');
-      expect(data.message).toContain('sign in');
+      expect(fetchCall[1].headers['Authorization']).toBeUndefined();
     });
 
     test('should accept API key from Authorization header', async () => {
@@ -766,10 +750,7 @@ describe('Chat Completions API Route', () => {
       delete process.env.GUEST_API_KEY;
     });
 
-    test('should treat missing API key as guest request', async () => {
-      // Set GUEST_API_KEY for this test
-      process.env.GUEST_API_KEY = 'test-guest-key';
-
+    test('should treat missing API key as guest request and forward anonymously', async () => {
       const requestBody = {
         model: 'openrouter/auto',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -794,38 +775,17 @@ describe('Chat Completions API Route', () => {
       const request = createMockRequestWithIP(requestBody, '192.168.1.90');
       const response = await POST(request);
 
-      // Should succeed using GUEST_API_KEY
       expect(response.status).toBe(200);
 
-      // Verify the guest API key was used
+      // No shared account key — the backend sees this as a true anonymous request.
       const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
-      expect(fetchCall[1].headers['Authorization']).toBe('Bearer test-guest-key');
+      expect(fetchCall[1].headers['Authorization']).toBeUndefined();
+      // The real client IP is forwarded so the backend's own anonymous rate
+      // limiter buckets by visitor, not by this proxy's egress IP.
+      expect(fetchCall[1].headers['X-Forwarded-For']).toBe('192.168.1.90');
 
       // Should have rate limit headers for guest request
       expect(response.headers.get('X-RateLimit-Limit')).toBe('3');
-
-      // Clean up
-      delete process.env.GUEST_API_KEY;
-    });
-
-    test('should return 401 when missing API key and GUEST_API_KEY not configured', async () => {
-      // Ensure GUEST_API_KEY is not set
-      delete process.env.GUEST_API_KEY;
-
-      const requestBody = {
-        model: 'openrouter/auto',
-        messages: [{ role: 'user', content: 'Hello' }],
-        stream: true,
-        // No apiKey provided
-      };
-
-      const request = createMockRequestWithIP(requestBody, '192.168.1.91');
-      const response = await POST(request);
-
-      // Should return 401 with GUEST_NOT_CONFIGURED error
-      expect(response.status).toBe(401);
-      const data = await response.json();
-      expect(data.code).toBe('GUEST_NOT_CONFIGURED');
     });
 
     test('should include detail field in 429 response', async () => {
