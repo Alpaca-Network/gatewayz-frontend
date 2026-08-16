@@ -37,17 +37,15 @@ export async function POST(request: NextRequest) {
       (request as any).__guestClientIP = clientIP;
     }
 
-    // Resolve API key
+    // Resolve API key. Guests (no key, or the explicit 'guest' sentinel) get NO
+    // Authorization header at all — forwarded as a true anonymous request so the
+    // backend's own is_anonymous gate (free-model-only allowlist) applies. This
+    // used to fall back to a shared, real, credited GUEST_API_KEY with no model
+    // restriction here, letting any signed-out visitor request any paid model.
+    const headerApiKey = request.headers.get('authorization')?.replace('Bearer ', '');
     const apiKey = body.apiKey && body.apiKey !== 'guest'
       ? body.apiKey
-      : (request.headers.get('authorization')?.replace('Bearer ', '') || process.env.GUEST_API_KEY || '');
-
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: 'No API key provided' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
+      : (headerApiKey && headerApiKey !== 'guest' ? headerApiKey : undefined);
 
     // Normalize model ID
     if (body.model) {
@@ -83,13 +81,23 @@ export async function POST(request: NextRequest) {
     const { apiKey: _apiKey, ...forwardBody } = body;
 
     try {
+      const isGuest = !apiKey;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(body.stream ? { 'Accept': 'text/event-stream' } : {}),
+      };
+      if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+      if (isGuest) {
+        // Real client IP so the backend's own anonymous rate limiter buckets by
+        // visitor, not by this server's egress IP.
+        headers['X-Forwarded-For'] = clientIP;
+      }
+
       const response = await fetch(targetUrl.toString(), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          ...(body.stream ? { 'Accept': 'text/event-stream' } : {}),
-        },
+        headers,
         body: JSON.stringify(forwardBody),
         signal: abortController.signal,
       });
