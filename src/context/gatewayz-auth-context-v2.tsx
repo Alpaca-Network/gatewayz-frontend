@@ -149,6 +149,11 @@ export function GatewayzAuthProvider({
   const lastSyncedPrivyIdRef = useRef<string | null>(null);
   const betaRedirectAttemptedRef = useRef(false);
 
+  // Tracks whether the localStorage session restore has settled, so Privy's
+  // readiness effect doesn't invalidate a still-valid restored session while
+  // restoreSession() is still awaiting its backend check (see syncWithBackend).
+  const [sessionRestored, setSessionRestored] = useState(false);
+
   // Initialize auth machine
   useEffect(() => {
     if (machineRef.current) return;
@@ -206,6 +211,7 @@ export function GatewayzAuthProvider({
       } else {
         machineRef.current?.send({ type: "SESSION_INVALID" });
       }
+      setSessionRestored(true);
     };
 
     restoreSession();
@@ -231,6 +237,10 @@ export function GatewayzAuthProvider({
         if (machine.isAuthenticated) {
           // Keep existing session if we have one
           console.log("[AuthV2] Privy not authenticated, but keeping existing session");
+        } else if (!sessionRestored) {
+          // localStorage restore is still in flight — don't invalidate a
+          // session that might still turn out to be valid.
+          console.log("[AuthV2] Waiting for session restore before invalidating");
         } else {
           machine.send({ type: "SESSION_INVALID" });
         }
@@ -318,7 +328,7 @@ export function GatewayzAuthProvider({
         syncInProgressRef.current = false;
       }
     },
-    [privyReady, privyAuthenticated, privyUser, getAccessToken, enableBetaRedirect]
+    [privyReady, privyAuthenticated, privyUser, getAccessToken, enableBetaRedirect, sessionRestored]
   );
 
   // Auto-sync when Privy auth changes
