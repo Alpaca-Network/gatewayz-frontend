@@ -86,13 +86,37 @@ function forwardErrorHeaders(backendResponse: Response): Record<string, string> 
 }
 
 /**
+ * Build headers for the backend request. Omits Authorization entirely when
+ * apiKey is falsy — this is what makes a guest request anonymous to the
+ * backend (a present-but-empty Bearer token is not the same as no header).
+ */
+function buildBackendHeaders(
+  apiKey: string | undefined,
+  forwardedForIP: string | null,
+  extra?: Record<string, string>
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...extra,
+  };
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+  if (forwardedForIP) {
+    headers['X-Forwarded-For'] = forwardedForIP;
+  }
+  return headers;
+}
+
+/**
  * Process LLM completion without tracing
  */
 async function processCompletion(
   body: any,
-  apiKey: string,
+  apiKey: string | undefined,
   targetUrl: string,
-  timeoutMs: number
+  timeoutMs: number,
+  forwardedForIP: string | null = null
 ) {
   const startTime = Date.now();
   const maxRetries = 3;
@@ -120,10 +144,7 @@ async function processCompletion(
 
           const response = await fetch(targetUrl, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-            },
+            headers: buildBackendHeaders(apiKey, forwardedForIP),
             body: JSON.stringify(body),
             signal: abortController.signal,
           });
@@ -295,6 +316,7 @@ export async function POST(request: NextRequest) {
   let timeoutMs = 30000; // Default timeout
   let body: any; // Declare outside try block so it's accessible in catch block
   let targetUrl: URL | undefined; // Declare outside try block for catch block access
+  let isGuestRequest = false; // Declare outside try block for catch block access
 
   try {
     profiler.markStage(requestId, 'parse_request_body');
@@ -316,31 +338,30 @@ export async function POST(request: NextRequest) {
     // Determine if this is an explicit guest request vs missing/invalid API key
     const isExplicitGuestRequest = apiKey === 'guest';
     const isMissingApiKey = !apiKey || apiKey.trim() === '';
-    const isGuestRequest = isExplicitGuestRequest || isMissingApiKey;
+    isGuestRequest = isExplicitGuestRequest || isMissingApiKey;
 
-    // For explicit guest requests or missing API key, check rate limit and use the guest API key
+    // The IP to forward to the backend as X-Forwarded-For for guest requests, so the
+    // backend's own anonymous rate limiter / model allowlist buckets by real visitor
+    // instead of by this server's egress IP.
+    let guestForwardedIP: string | null = null;
+
+    // For explicit guest requests or missing API key: apply a local rate-limit check
+    // for fast, friendly UX, then forward the request WITHOUT an Authorization header.
+    //
+    // IMPORTANT: guests must NOT be authenticated as a real backend account here.
+    // This used to swap in a shared GUEST_API_KEY (a real, credited account), which let
+    // any signed-out visitor request ANY paid model with nothing but this rate limiter
+    // standing between them and the shared account's balance. Sending no Authorization
+    // header instead makes the backend treat the request as truly anonymous, so its own
+    // `is_anonymous` gate enforces the free-model-only allowlist (see
+    // gatewayz-backend/src/services/anonymous_rate_limiter.py) regardless of what this
+    // proxy does or doesn't check.
     if (isGuestRequest) {
-      const guestKey = process.env.GUEST_API_KEY;
-
-      // Check key is configured BEFORE consuming rate limit quota.
-      // If GUEST_API_KEY is missing or is the placeholder, fail immediately without
-      // touching the counter — otherwise misconfigured setups burn the user's daily quota.
-      if (!guestKey || guestKey === 'your-guest-api-key') {
-        console.warn('[API Completions] Guest mode attempted but GUEST_API_KEY not configured');
-        return new Response(JSON.stringify({
-          error: 'Guest mode not available',
-          code: 'GUEST_NOT_CONFIGURED',
-          message: 'Please sign in to use the chat feature. Create a free account to get started!',
-          detail: 'Guest chat is temporarily unavailable. Sign up for a free account to continue.'
-        }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
+      apiKey = undefined;
 
       const clientIP = getClientIP(request);
+      guestForwardedIP = clientIP;
 
-      // Check guest rate limit only after confirming guest key is valid
       const rateLimitCheck = checkGuestRateLimit(clientIP);
 
       if (!rateLimitCheck.allowed) {
@@ -372,13 +393,11 @@ export async function POST(request: NextRequest) {
       // This ensures failed requests don't consume guest quota
       (request as any).__guestClientIP = clientIP;
 
-      console.log('[API Completions] Guest mode detected:', {
+      console.log('[API Completions] Guest mode detected (anonymous, no shared key):', {
         isExplicitGuestRequest,
         isMissingApiKey,
         clientIP,
-        usingKey: guestKey.substring(0, 15) + '...'
       });
-      apiKey = guestKey;
     }
 
     // Resolve router models to actual model IDs
@@ -465,11 +484,7 @@ export async function POST(request: NextRequest) {
 
           const response = await fetch(targetUrl, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-              'Accept': 'text/event-stream',
-            },
+            headers: buildBackendHeaders(apiKey, guestForwardedIP, { 'Accept': 'text/event-stream' }),
             body: JSON.stringify(body),
             signal: abortController.signal,
           });
@@ -563,7 +578,13 @@ export async function POST(request: NextRequest) {
             let userMessage = errorData.message || errorData.detail || errorText.substring(0, 500);
             let errorType = 'api_error';
 
-            if (response.status === 401 || response.status === 403) {
+            const backendErrorCode = errorData?.detail?.error?.code;
+            if (isGuestRequest && (backendErrorCode === 'anonymous_model_restricted' || backendErrorCode === 'missing_api_key')) {
+              // Guest hit the backend's own anonymous gate: either the model isn't on the
+              // free-tier allowlist, or anonymous access is disabled entirely right now.
+              userMessage = 'This model requires an account. Sign up for free to chat with any model.';
+              errorType = 'guest_model_restricted';
+            } else if (response.status === 401 || response.status === 403) {
               if (response.status === 403) {
                 // 403 = the API key is valid but lacks access/subscription for this action.
                 // This is NOT an expired session — telling the user to log out and back in
@@ -785,7 +806,7 @@ export async function POST(request: NextRequest) {
 
     // For non-streaming requests, use Braintrust tracing
     profiler.markStage(requestId, 'process_completion_start');
-    const result = await processCompletion(body, apiKey, targetUrl.toString(), timeoutMs);
+    const result = await processCompletion(body, apiKey, targetUrl.toString(), timeoutMs, guestForwardedIP);
     profiler.markStage(requestId, 'process_completion_complete');
 
     // Handle non-streaming response
@@ -866,8 +887,15 @@ export async function POST(request: NextRequest) {
       let userMessage = errorData.message || errorData.detail || 'An error occurred';
       let errorType = 'api_error';
 
+      const backendErrorCode = errorData?.detail?.error?.code;
       // Handle specific HTTP status codes with proper Sentry logging
-      if (httpError.status === 404) {
+      if (
+        isGuestRequest &&
+        (backendErrorCode === 'anonymous_model_restricted' || backendErrorCode === 'missing_api_key')
+      ) {
+        userMessage = 'This model requires an account. Sign up for free to chat with any model.';
+        errorType = 'guest_model_restricted';
+      } else if (httpError.status === 404) {
         userMessage = 'The requested model or endpoint was not found. The model may be temporarily unavailable or the configuration may need to be updated.';
         errorType = 'not_found_error';
 
