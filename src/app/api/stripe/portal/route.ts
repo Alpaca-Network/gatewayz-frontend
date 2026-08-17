@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
+import { resolveAuthenticatedEmail } from '@/app/api/middleware/auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,14 +16,13 @@ export async function POST(req: NextRequest) {
       apiVersion: '2025-10-29.clover',
     });
 
-    const { email } = await req.json();
-
-    if (!email) {
-      return NextResponse.json(
-        { error: 'Email is required' },
-        { status: 400 }
-      );
+    // Resolve the caller's email from their API key — never trust a
+    // client-supplied email, or anyone could hijack anyone else's billing portal.
+    const auth = await resolveAuthenticatedEmail(req);
+    if (auth.error) {
+      return auth.error;
     }
+    const { email } = auth;
 
     // Search for customer by email
     const customers = await stripe.customers.list({

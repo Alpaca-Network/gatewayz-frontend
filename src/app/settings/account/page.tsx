@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { usePrivy, type LinkedAccountWithMetadata, type EmailWithMetadata, type GoogleOAuthWithMetadata, type GithubOAuthWithMetadata } from '@privy-io/react-auth';
-import { getUserData } from '@/lib/api';
+import { getUserData, makeAuthenticatedRequest } from '@/lib/api';
 
 interface StripePaymentMethod {
   id: string;
@@ -39,7 +39,7 @@ export default function AccountPage() {
 
       try {
         setLoadingStripe(true);
-        const response = await fetch(`/api/stripe/customer?email=${encodeURIComponent(email)}`);
+        const response = await makeAuthenticatedRequest('/api/stripe/customer');
 
         if (response.ok) {
           const data = await response.json();
@@ -128,12 +128,8 @@ export default function AccountPage() {
 
   const openStripePortal = async () => {
     try {
-      const response = await fetch('/api/stripe/portal', {
+      const response = await makeAuthenticatedRequest('/api/stripe/portal', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: userEmail }),
       });
 
       if (response.ok) {
