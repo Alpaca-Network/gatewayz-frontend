@@ -7,138 +7,17 @@
 
 import { isTauri, getAuthToken, setAuthToken, clearAuthToken } from "./tauri";
 
-/**
- * Configuration for desktop OAuth
- */
-export interface DesktopOAuthConfig {
-  /** The OAuth provider (e.g., 'google', 'github') */
-  provider: string;
-  /** The OAuth client ID */
-  clientId: string;
-  /** The redirect URI scheme (e.g., 'gatewayz://') */
-  redirectScheme: string;
-  /** The authorization endpoint */
-  authorizationEndpoint: string;
-  /** The token endpoint */
-  tokenEndpoint: string;
-  /** OAuth scopes to request */
-  scopes: string[];
-}
-
-/**
- * Desktop OAuth providers configuration
- */
-export const DESKTOP_OAUTH_PROVIDERS: Record<string, DesktopOAuthConfig> = {
-  google: {
-    provider: "google",
-    clientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "",
-    redirectScheme: "gatewayz",
-    authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-    tokenEndpoint: "https://oauth2.googleapis.com/token",
-    scopes: ["openid", "email", "profile"],
-  },
-  github: {
-    provider: "github",
-    clientId: process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID || "",
-    redirectScheme: "gatewayz",
-    authorizationEndpoint: "https://github.com/login/oauth/authorize",
-    tokenEndpoint: "https://github.com/login/oauth/access_token",
-    scopes: ["read:user", "user:email"],
-  },
-};
-
-/**
- * Generate a cryptographically secure random string for OAuth state/PKCE
- */
-function generateRandomString(length: number): string {
-  const array = new Uint8Array(length);
-  crypto.getRandomValues(array);
-  return Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join(
-    ""
-  );
-}
-
-/**
- * Generate OAuth authorization URL for desktop deep linking
- */
-export function generateDesktopOAuthUrl(provider: string): string {
-  const config = DESKTOP_OAUTH_PROVIDERS[provider];
-  if (!config) {
-    throw new Error(`Unknown OAuth provider: ${provider}`);
-  }
-
-  // Generate state for CSRF protection
-  const state = generateRandomString(32);
-  sessionStorage.setItem("oauth_state", state);
-
-  // Build the authorization URL
-  const params = new URLSearchParams({
-    client_id: config.clientId,
-    redirect_uri: `${config.redirectScheme}://auth/callback`,
-    response_type: "code",
-    scope: config.scopes.join(" "),
-    state: state,
-  });
-
-  return `${config.authorizationEndpoint}?${params.toString()}`;
-}
-
-/**
- * Handle OAuth callback from deep link
- */
-export async function handleDesktopOAuthCallback(
-  query: string
-): Promise<{ success: boolean; error?: string }> {
-  const params = new URLSearchParams(query);
-  const code = params.get("code");
-  const state = params.get("state");
-  const error = params.get("error");
-
-  if (error) {
-    return { success: false, error };
-  }
-
-  if (!code || !state) {
-    return { success: false, error: "Missing code or state parameter" };
-  }
-
-  // Verify state matches
-  const storedState = sessionStorage.getItem("oauth_state");
-  if (state !== storedState) {
-    return { success: false, error: "Invalid state parameter" };
-  }
-
-  // Clear stored state
-  sessionStorage.removeItem("oauth_state");
-
-  // Exchange code for token via backend
-  try {
-    const response = await fetch("/api/auth/desktop/callback", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ code }),
-    });
-
-    if (!response.ok) {
-      const data = await response.json();
-      return { success: false, error: data.error || "Authentication failed" };
-    }
-
-    const { token } = await response.json();
-
-    // Store token securely
-    await setAuthToken(token);
-
-    return { success: true };
-  } catch (e) {
-    return {
-      success: false,
-      error: e instanceof Error ? e.message : "Unknown error",
-    };
-  }
-}
+// NOTE: this module used to also contain a legacy raw-OAuth "code exchange"
+// path (generateDesktopOAuthUrl/handleDesktopOAuthCallback/initiateDesktopOAuth,
+// posting a client-supplied `code` to /api/auth/desktop/callback). That
+// backend route never verified the code was real — it minted a session token
+// from unverified input, a full auth-bypass shape — and the path was dead
+// code besides: the real desktop login flow (src/app/login/page.tsx's
+// desktop branch, via DesktopAuthProvider.login()) already gets a real,
+// backend-verified Gatewayz api_key through the same Privy sync used on web,
+// and hands it to the app via a `gatewayz://auth/callback?token=...` deep
+// link — see the `token && userId` branch in desktop-provider.tsx. Both the
+// legacy path and the route it called have been removed.
 
 /**
  * Check if user is authenticated in desktop environment

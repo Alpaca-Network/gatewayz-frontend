@@ -97,9 +97,6 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
     // Parse credits as number, default to 0 if not provided
     const credits = creditsStr ? parseInt(creditsStr, 10) : 0;
 
-    // Legacy format: code, state (for backwards compatibility)
-    const code = params.get("code");
-
     if (token && userId) {
       // Deduplicate: check if we've already processed this token
       // The Rust backend may emit multiple events with retry logic for reliability
@@ -213,23 +210,8 @@ export function DesktopProvider({ children }: DesktopProviderProps) {
           window.sessionStorage.removeItem(processedKey);
         }
       }
-    } else if (code) {
-      // Legacy format: OAuth code exchange (kept for backwards compatibility)
-      try {
-        const { handleDesktopOAuthCallback } = await import("@/lib/desktop");
-        const result = await handleDesktopOAuthCallback(query);
-
-        if (result.success) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-          router.push("/chat");
-        } else {
-          console.error("[Desktop Auth] Legacy callback failed:", result.error);
-        }
-      } catch (error) {
-        console.error("[Desktop Auth] Error handling legacy callback:", error);
-      }
     } else {
-      console.error("[Desktop Auth] Invalid callback: missing token or code");
+      console.error("[Desktop Auth] Invalid callback: missing token or user_id");
     }
   });
 

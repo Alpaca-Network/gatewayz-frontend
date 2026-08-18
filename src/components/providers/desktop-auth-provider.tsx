@@ -100,7 +100,8 @@ export function DesktopAuthProvider({ children, storageStatus }: DesktopAuthProv
   }, [refreshCredentials, setZustandLoading]);
 
   // Listen for AUTH_REFRESH_EVENT to update state after OAuth login callback
-  // This ensures the UI updates when handleDesktopOAuthCallback stores the token
+  // This ensures the UI updates when the deep-link callback stores the token
+  // (see the `token && userId` branch in desktop-provider.tsx)
   useEffect(() => {
     const handleAuthRefresh = () => {
       console.info("[Auth] Desktop: AUTH_REFRESH_EVENT received, refreshing credentials");

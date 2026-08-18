@@ -47,7 +47,6 @@ export async function POST(
     // Send message data in JSON body to support long content
     console.log(`Chat messages API - Saving message to: ${url}`);
     console.log(`Chat messages API - Content length: ${content.length} chars`);
-    console.log(`Chat messages API - API Key:`, apiKey ? `${apiKey.substring(0, 10)}...` : 'None');
     console.log(`Chat messages API - Session ID: ${id} (cleaned: ${cleanSessionId})`);
 
     const response = await fetch(url, {

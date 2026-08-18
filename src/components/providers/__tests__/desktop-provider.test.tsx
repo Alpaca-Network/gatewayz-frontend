@@ -23,7 +23,6 @@ const mockUseDesktopUpdates = jest.fn(() => ({
 const mockUseNewChatEvent = jest.fn();
 const mockUseAuthCallback = jest.fn();
 const mockUseNavigateEvent = jest.fn();
-const mockHandleDesktopOAuthCallback = jest.fn(() => Promise.resolve({ success: true }));
 
 jest.mock('@/lib/desktop', () => ({
   useIsTauri: () => mockUseIsTauri(),
@@ -34,7 +33,6 @@ jest.mock('@/lib/desktop', () => ({
   useAuthCallback: (cb: (query: string) => void) => mockUseAuthCallback(cb),
   useNavigateEvent: (cb: (path: string) => void) => mockUseNavigateEvent(cb),
   showNotification: jest.fn(),
-  handleDesktopOAuthCallback: (...args: unknown[]) => mockHandleDesktopOAuthCallback(...args),
 }));
 
 // Mock @/lib/api module
@@ -415,52 +413,6 @@ describe('Auth Callback Handler', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
-  it('should handle legacy OAuth code format', async () => {
-    jest.useRealTimers();
-    mockHandleDesktopOAuthCallback.mockResolvedValue({ success: true });
-
-    render(
-      <DesktopProvider>
-        <div>Test Content</div>
-      </DesktopProvider>
-    );
-
-    // Invoke the auth callback with legacy format
-    const query = 'code=auth_code_123&state=state123';
-    await act(async () => {
-      await capturedAuthCallback!(query);
-    });
-
-    // Verify legacy handler was called
-    expect(mockHandleDesktopOAuthCallback).toHaveBeenCalledWith(query);
-    expect(mockPush).toHaveBeenCalledWith('/chat');
-  });
-
-  it('should not navigate on legacy OAuth failure', async () => {
-    jest.useRealTimers();
-    mockHandleDesktopOAuthCallback.mockResolvedValue({ success: false, error: 'Invalid code' });
-
-    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-
-    render(
-      <DesktopProvider>
-        <div>Test Content</div>
-      </DesktopProvider>
-    );
-
-    // Invoke the auth callback with legacy format
-    const query = 'code=invalid_code&state=state123';
-    await act(async () => {
-      await capturedAuthCallback!(query);
-    });
-
-    // Verify navigation did not occur
-    expect(mockPush).not.toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalled();
-
-    consoleSpy.mockRestore();
-  });
-
   it('should log error for invalid callback without token or code', async () => {
     jest.useRealTimers();
 
@@ -479,7 +431,7 @@ describe('Auth Callback Handler', () => {
     });
 
     // Verify error was logged
-    expect(consoleSpy).toHaveBeenCalledWith('[Desktop Auth] Invalid callback: missing token or code');
+    expect(consoleSpy).toHaveBeenCalledWith('[Desktop Auth] Invalid callback: missing token or user_id');
     expect(mockPush).not.toHaveBeenCalled();
 
     consoleSpy.mockRestore();

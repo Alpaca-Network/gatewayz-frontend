@@ -70,8 +70,6 @@ export async function POST(req: NextRequest) {
 
     console.log('[Checkout API] Calling backend checkout:', backendUrl);
     console.log('[Checkout API] Request body:', JSON.stringify(requestBody));
-    console.log('[Checkout API] API key starts with:', apiKey?.substring(0, 7) || 'undefined');
-
     const response = await fetch(`${backendUrl}/api/stripe/checkout-session`, {
       method: 'POST',
       headers: {
