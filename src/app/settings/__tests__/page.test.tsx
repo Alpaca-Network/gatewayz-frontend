@@ -232,6 +232,8 @@ describe('SettingsPage', () => {
             ignored_providers: [],
             default_provider_sort: 'cost',
             default_model: 'test-model',
+            routing_mode: 'quality',
+            routing_industry: 'legal',
           },
         }),
       };
@@ -247,6 +249,40 @@ describe('SettingsPage', () => {
       await waitFor(() => {
         expect(screen.getByText('Save Settings')).toBeInTheDocument();
       });
+    });
+
+    it('should load routing_mode and routing_industry defaults when absent from settings', async () => {
+      (useGatewayzAuth as jest.Mock).mockReturnValue({
+        status: 'authenticated',
+        apiKey: 'test-api-key',
+        privyReady: true,
+        login: mockLogin,
+      });
+
+      const mockResponse = {
+        ok: true,
+        json: () => Promise.resolve({
+          settings: {
+            default_provider_sort: 'balanced',
+            default_model: 'auto-router',
+            // routing_mode / routing_industry intentionally absent
+          },
+        }),
+      };
+      (makeAuthenticatedRequest as jest.Mock).mockResolvedValue(mockResponse);
+
+      render(<SettingsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Save Settings')).toBeInTheDocument();
+      });
+
+      // Defaults render as selected options in the (mocked) Select components
+      expect(screen.getByText('Auto-Router Preferences')).toBeInTheDocument();
+      expect(screen.getByText('Routing mode')).toBeInTheDocument();
+      expect(screen.getByText('Line of work')).toBeInTheDocument();
+      expect(screen.getByText('Let Gatewayz decide')).toBeInTheDocument();
+      expect(screen.getByText('General')).toBeInTheDocument();
     });
 
     it('should not call API when not authenticated', () => {
@@ -294,6 +330,57 @@ describe('SettingsPage', () => {
 
       // Verify the settings use default values (not loaded from API)
       // The page renders with defaults, allowing user to retry or refresh
+    });
+  });
+
+  describe('Save Settings', () => {
+    it('should include routing_mode and routing_industry in the PUT body on save', async () => {
+      (useGatewayzAuth as jest.Mock).mockReturnValue({
+        status: 'authenticated',
+        apiKey: 'test-api-key',
+        privyReady: true,
+        login: mockLogin,
+      });
+
+      const mockLoadResponse = {
+        ok: true,
+        json: () => Promise.resolve({
+          settings: {
+            default_provider_sort: 'balanced',
+            default_model: 'auto-router',
+            routing_mode: 'price',
+            routing_industry: 'finance_accounting',
+          },
+        }),
+      };
+      const mockSaveResponse = { ok: true, json: () => Promise.resolve({}) };
+
+      (makeAuthenticatedRequest as jest.Mock)
+        .mockResolvedValueOnce(mockLoadResponse) // initial GET /user/profile
+        .mockResolvedValueOnce(mockSaveResponse); // PUT /user/profile on save
+
+      render(<SettingsPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Save Settings')).toBeInTheDocument();
+      });
+
+      const saveButton = screen.getAllByRole('button', { name: /Save/i })[0];
+      await act(async () => {
+        saveButton.click();
+      });
+
+      await waitFor(() => {
+        expect(makeAuthenticatedRequest).toHaveBeenCalledTimes(2);
+      });
+
+      const putCall = (makeAuthenticatedRequest as jest.Mock).mock.calls[1];
+      const putOptions = putCall[1] as { method: string; body: string };
+      expect(putOptions.method).toBe('PUT');
+
+      const putBody = JSON.parse(putOptions.body);
+      expect(putBody.settings.routing_mode).toBe('price');
+      expect(putBody.settings.routing_industry).toBe('finance_accounting');
     });
   });
 

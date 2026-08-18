@@ -44,6 +44,8 @@ export default function SettingsPage() {
   const [ignoredProviders, setIgnoredProviders] = useState<string[]>([]);
   const [defaultProviderSort, setDefaultProviderSort] = useState("balanced");
   const [defaultModel, setDefaultModel] = useState("auto-router");
+  const [routingMode, setRoutingMode] = useState("auto");
+  const [routingIndustry, setRoutingIndustry] = useState("general");
   const [saving, setSaving] = useState(false);
 
   // Get unique providers (model developer/org) from the live catalog
@@ -115,6 +117,8 @@ export default function SettingsPage() {
           setIgnoredProviders(data.ignored_providers || []);
           setDefaultProviderSort(data.default_provider_sort || "balanced");
           setDefaultModel(data.default_model || "auto-router");
+          setRoutingMode(data.routing_mode || "auto");
+          setRoutingIndustry(data.routing_industry || "general");
           // Only mark as loaded on successful API response
           setSettingsLoaded(true);
         }
@@ -161,7 +165,9 @@ export default function SettingsPage() {
             allowed_providers: allowedProviders,
             ignored_providers: ignoredProviders,
             default_provider_sort: defaultProviderSort,
-            default_model: defaultModel
+            default_model: defaultModel,
+            routing_mode: routingMode,
+            routing_industry: routingIndustry
           }
         })
       });
@@ -425,6 +431,50 @@ export default function SettingsPage() {
             ))}
           </SelectContent>
         </Select>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Auto-Router Preferences"
+        description="Tune how the Gatewayz Router picks a model on your behalf when Default Model is set to Gatewayz Router."
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="text-sm text-muted-foreground mb-2 block">Routing mode</label>
+            <Select value={routingMode} onValueChange={setRoutingMode}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Let Gatewayz decide</SelectItem>
+                <SelectItem value="quality">Best quality</SelectItem>
+                <SelectItem value="price">Cheapest</SelectItem>
+                <SelectItem value="fast">Fastest</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-sm text-muted-foreground mb-2 block">Line of work</label>
+            <Select value={routingIndustry} onValueChange={setRoutingIndustry}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="general">General</SelectItem>
+                <SelectItem value="software_engineering">Software Engineering</SelectItem>
+                <SelectItem value="legal">Legal</SelectItem>
+                <SelectItem value="medical_healthcare">Medical / Healthcare</SelectItem>
+                <SelectItem value="finance_accounting">Finance / Accounting</SelectItem>
+                <SelectItem value="marketing_sales">Marketing / Sales</SelectItem>
+                <SelectItem value="customer_support">Customer Support</SelectItem>
+                <SelectItem value="education">Education</SelectItem>
+                <SelectItem value="research_science">Research / Science</SelectItem>
+                <SelectItem value="creative_writing">Creative Writing</SelectItem>
+                <SelectItem value="business_operations">Business Operations</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </SettingsSection>
 
       <div className="flex justify-end pt-6">
