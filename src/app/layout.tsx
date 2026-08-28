@@ -20,6 +20,7 @@ import { ErrorSuppressor } from '@/components/error-suppressor';
 import { AnalyticsProvidersWrapper } from '@/components/providers/analytics-providers-wrapper';
 import { SafeStorageShim } from '@/components/safe-storage-shim';
 import { EarlyErrorSuppressor } from '@/components/early-error-suppressor';
+import { OrganizationSchema } from './organization-schema';
 import { FloatingNewChatButton } from '@/components/chat-v2/FloatingNewChatButton';
 import { DesktopProvider, WebOnly } from '@/components/providers/desktop-provider';
 
@@ -46,6 +47,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className="scroll-smooth">
       <head>
+        {/* Estate entity graph — same @id as www.gatewayz.ai, so both surfaces
+            resolve to one organisation rather than two (FR-A6.2). */}
+        <OrganizationSchema />
         {/* Early error suppressor must run before wallet extensions inject ethereum */}
         <EarlyErrorSuppressor />
         {/* Rybbit Analytics */}
