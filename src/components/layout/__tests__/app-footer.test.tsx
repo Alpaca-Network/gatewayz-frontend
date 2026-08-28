@@ -18,8 +18,8 @@ jest.mock('next/link', () => {
 // Mock next/image
 jest.mock('next/image', () => ({
   __esModule: true,
-  default: (props: { src: string; alt: string; width: number; height: number; className?: string }) => (
-    <img {...props} />
+  default: (props: { src: string; alt?: string; width: number; height: number; className?: string }) => (
+    <img {...props} alt={props.alt || ''} />
   ),
 }));
 
