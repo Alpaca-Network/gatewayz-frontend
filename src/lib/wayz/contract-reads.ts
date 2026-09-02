@@ -63,15 +63,17 @@ export async function readStakingState(
   const pendingTuple =
     pendingResult.status === 'success' ? (pendingResult.result as readonly [bigint, bigint]) : undefined;
 
+  const ZERO = BigInt(0);
+
   return {
-    tokenBalance: tokenBalanceResult.status === 'success' ? (tokenBalanceResult.result as bigint) : 0n,
-    stakedBalance: stakedBalanceResult.status === 'success' ? (stakedBalanceResult.result as bigint) : 0n,
+    tokenBalance: tokenBalanceResult.status === 'success' ? (tokenBalanceResult.result as bigint) : ZERO,
+    stakedBalance: stakedBalanceResult.status === 'success' ? (stakedBalanceResult.result as bigint) : ZERO,
     pending: {
-      amount: pendingTuple ? pendingTuple[0] : 0n,
-      unlockAt: pendingTuple ? pendingTuple[1] : 0n,
+      amount: pendingTuple ? pendingTuple[0] : ZERO,
+      unlockAt: pendingTuple ? pendingTuple[1] : ZERO,
     },
-    totalStaked: totalStakedResult.status === 'success' ? (totalStakedResult.result as bigint) : 0n,
-    allowance: allowanceResult.status === 'success' ? (allowanceResult.result as bigint) : 0n,
+    totalStaked: totalStakedResult.status === 'success' ? (totalStakedResult.result as bigint) : ZERO,
+    allowance: allowanceResult.status === 'success' ? (allowanceResult.result as bigint) : ZERO,
     paused: pausedResult.status === 'success' ? (pausedResult.result as boolean) : false,
   };
 }

@@ -80,7 +80,7 @@ export class FaucetError extends Error {
 /** Parses a decimal wei string into a bigint. Empty/undefined -> 0n. */
 function toBigInt(value: string | number | null | undefined): bigint {
   if (value === null || value === undefined || value === '') {
-    return 0n;
+    return BigInt(0);
   }
   return BigInt(value);
 }
