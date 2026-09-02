@@ -35,6 +35,21 @@ jest.mock('@privy-io/react-auth', () => ({
   },
 }));
 
+// Mock @privy-io/wagmi — it's ESM-only (no CJS build, see wagmi-config.test.ts's comment) so
+// Jest can't load the real package at all. This suite only exercises Privy config, not wagmi
+// wiring (see wagmi-config.test.ts for chain coverage), and the real WagmiProvider needs
+// usePrivy()/useWallets() from @privy-io/react-auth, which isn't mocked above.
+// `virtual: true` — Jest can't resolve @privy-io/wagmi's module path at all (see above), so
+// it can't mock it the normal way either.
+jest.mock(
+  '@privy-io/wagmi',
+  () => ({
+    WagmiProvider: ({ children }: any) => <div data-testid="wagmi-provider">{children}</div>,
+    createConfig: (args: any) => args,
+  }),
+  { virtual: true }
+);
+
 // Mock the GatewayzAuthProvider and GatewayzAuthContext
 jest.mock('@/context/gatewayz-auth-context', () => {
   const { createContext } = require('react');
@@ -187,7 +202,7 @@ describe('PrivyProviderWrapper', () => {
       );
     });
 
-    it('should have exactly 4 login methods', () => {
+    it('should have exactly 5 login methods', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 
       render(
@@ -197,7 +212,7 @@ describe('PrivyProviderWrapper', () => {
       );
 
       const config = (global as any).__PRIVY_CONFIG__;
-      expect(config.loginMethods).toHaveLength(4);
+      expect(config.loginMethods).toHaveLength(5);
     });
 
     it('should include sms login method for phone authentication', () => {
@@ -211,6 +226,49 @@ describe('PrivyProviderWrapper', () => {
 
       const config = (global as any).__PRIVY_CONFIG__;
       expect(config.loginMethods).toContain('sms');
+    });
+  });
+
+  describe('Wallet & Chains Configuration', () => {
+    it('should include wallet in loginMethods', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      expect(config.loginMethods).toContain('wallet');
+    });
+
+    it('should support both Base and Avalanche Fuji (43113)', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      const supportedChainIds = config.supportedChains.map((chain: any) => chain.id);
+      expect(supportedChainIds).toContain(43113);
+      expect(supportedChainIds).toContain(8453);
+    });
+
+    it('should keep Base as the default chain', () => {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
+
+      render(
+        <PrivyProviderWrapper>
+          <div>Test Child</div>
+        </PrivyProviderWrapper>
+      );
+
+      const config = (global as any).__PRIVY_CONFIG__;
+      expect(config.defaultChain.id).toBe(8453);
     });
   });
 
@@ -560,7 +618,8 @@ describe('PrivyProviderWrapper', () => {
       expect(config.loginMethods).toContain('sms');
       expect(config.loginMethods).toContain('google');
       expect(config.loginMethods).toContain('github');
-      expect(config.loginMethods).toHaveLength(4);
+      expect(config.loginMethods).toContain('wallet');
+      expect(config.loginMethods).toHaveLength(5);
     });
   });
 
@@ -591,8 +650,8 @@ describe('PrivyProviderWrapper', () => {
       );
 
       const config = (global as any).__PRIVY_CONFIG__;
-      // Order: email (most common), sms (phone auth), google, github
-      expect(config.loginMethods).toEqual(['email', 'sms', 'google', 'github']);
+      // Order: email (most common), sms (phone auth), google, github, wallet
+      expect(config.loginMethods).toEqual(['email', 'sms', 'google', 'github', 'wallet']);
     });
   });
 
