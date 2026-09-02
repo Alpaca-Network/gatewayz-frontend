@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { UnstakeCard } from '../UnstakeCard';
 import { useOnchainStakingState, useRequestUnstake, useCancelUnstake, useWithdraw } from '@/lib/hooks/use-wayz-staking';
 
@@ -62,5 +62,37 @@ describe('UnstakeCard', () => {
 
     expect(screen.getByRole('button', { name: /request unstake/i })).toBeInTheDocument();
     expect(screen.queryByTestId('unstake-countdown')).not.toBeInTheDocument();
+  });
+
+  it('rejects an amount with more than 18 fractional digits instead of silently rounding', async () => {
+    const requestMutation = mockMutation();
+    (useRequestUnstake as jest.Mock).mockReturnValue(requestMutation);
+    mockUseOnchainStakingState.mockReturnValue({
+      data: { pending: { amount: 0n, unlockAt: 0n } },
+    });
+
+    render(<UnstakeCard address={ADDRESS as never} />);
+
+    fireEvent.change(screen.getByLabelText(/amount to unstake/i), {
+      target: { value: '1.1234567890123456789' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /request unstake/i }));
+
+    await waitFor(() => expect(requestMutation.mutateAsync).not.toHaveBeenCalled());
+  });
+
+  it('accepts a valid decimal amount and requests the unstake', async () => {
+    const requestMutation = mockMutation();
+    (useRequestUnstake as jest.Mock).mockReturnValue(requestMutation);
+    mockUseOnchainStakingState.mockReturnValue({
+      data: { pending: { amount: 0n, unlockAt: 0n } },
+    });
+
+    render(<UnstakeCard address={ADDRESS as never} />);
+
+    fireEvent.change(screen.getByLabelText(/amount to unstake/i), { target: { value: '1.5' } });
+    fireEvent.click(screen.getByRole('button', { name: /request unstake/i }));
+
+    await waitFor(() => expect(requestMutation.mutateAsync).toHaveBeenCalledWith(15n * 10n ** 17n));
   });
 });

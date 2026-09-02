@@ -1,24 +1,15 @@
 "use client";
 
 import { useState, type FormEvent } from 'react';
-import { parseUnits, type Address } from 'viem';
+import type { Address } from 'viem';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useOnchainStakingState, useApproveAndStake } from '@/lib/hooks/use-wayz-staking';
 import { formatWayz } from '@/lib/wayz/format';
+import { parseWayzAmount } from '@/lib/wayz/amount';
 import { isWayzConfigured } from '@/lib/wayz/addresses';
-
-function parseAmountOrNull(amount: string): bigint | null {
-  if (!amount.trim()) return null;
-  try {
-    const parsed = parseUnits(amount, 18);
-    return parsed > BigInt(0) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
 
 export function StakeForm({ address }: { address: Address }) {
   const [amount, setAmount] = useState('');
@@ -32,7 +23,7 @@ export function StakeForm({ address }: { address: Address }) {
   const allowance = onchainQuery.data?.allowance ?? BigInt(0);
   const disabled = !configured || paused || mutation.isPending;
 
-  const parsedAmount = parseAmountOrNull(amount);
+  const parsedAmount = parseWayzAmount(amount);
   const needsApproval = parsedAmount !== null && parsedAmount > allowance;
 
   const handleMax = () => setAmount(formatWayz(balance, 18));

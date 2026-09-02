@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { parseUnits, type Address } from 'viem';
+import type { Address } from 'viem';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useOnchainStakingState, useRequestUnstake, useCancelUnstake, useWithdraw } from '@/lib/hooks/use-wayz-staking';
 import { formatWayz, formatCountdown } from '@/lib/wayz/format';
+import { parseWayzAmount } from '@/lib/wayz/amount';
 
 export function UnstakeCard({ address }: { address: Address }) {
   const [amount, setAmount] = useState('');
@@ -33,14 +34,8 @@ export function UnstakeCard({ address }: { address: Address }) {
 
   const handleRequest = async (event: FormEvent) => {
     event.preventDefault();
-    let parsedAmount: bigint;
-    try {
-      parsedAmount = parseUnits(amount || '0', 18);
-    } catch {
-      toast({ title: 'Enter a valid amount', variant: 'destructive' });
-      return;
-    }
-    if (parsedAmount <= BigInt(0)) {
+    const parsedAmount = parseWayzAmount(amount);
+    if (!parsedAmount) {
       toast({ title: 'Enter an amount greater than zero', variant: 'destructive' });
       return;
     }
