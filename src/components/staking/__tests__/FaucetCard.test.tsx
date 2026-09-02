@@ -11,7 +11,10 @@ const mockUseFaucetStatus = useFaucetStatus as jest.Mock;
 const mockUseClaimFaucet = useClaimFaucet as jest.Mock;
 
 const ADDRESS = '0x1000000000000000000000000000000000000a';
-const TEN_WAYZ = 10n * 10n ** 18n;
+// The backend returns claim_amount as whole WAYZ (e.g. "1000"), NOT wei —
+// see faucet.py's comment on /faucet/status and /faucet/claim. Using a
+// number here (not a scaled bigint) is the point of these fixtures.
+const CLAIM_AMOUNT_WAYZ = 1000;
 
 describe('FaucetCard', () => {
   beforeEach(() => {
@@ -21,7 +24,7 @@ describe('FaucetCard', () => {
   it('shows the ineligible reason with min_requests', () => {
     mockUseFaucetStatus.mockReturnValue({
       isLoading: false,
-      data: { configured: true, eligible: false, min_requests: 1, claim_amount: TEN_WAYZ, claim: null },
+      data: { configured: true, eligible: false, min_requests: 1, claim_amount: CLAIM_AMOUNT_WAYZ, claim: null },
     });
 
     render(<FaucetCard address={ADDRESS as never} />);
@@ -29,15 +32,15 @@ describe('FaucetCard', () => {
     expect(screen.getByText(/complete at least 1 inference request/i)).toBeInTheDocument();
   });
 
-  it('shows a claim button with the amount when eligible', () => {
+  it('shows a claim button with the whole-WAYZ amount when eligible (not scaled as wei)', () => {
     mockUseFaucetStatus.mockReturnValue({
       isLoading: false,
-      data: { configured: true, eligible: true, min_requests: 1, claim_amount: TEN_WAYZ, claim: null },
+      data: { configured: true, eligible: true, min_requests: 1, claim_amount: CLAIM_AMOUNT_WAYZ, claim: null },
     });
 
     render(<FaucetCard address={ADDRESS as never} />);
 
-    expect(screen.getByRole('button', { name: /claim 10 wayz/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /claim 1000 wayz/i })).toBeInTheDocument();
   });
 
   it('shows the existing claim status and a Snowtrace link when already claimed', () => {
@@ -47,7 +50,7 @@ describe('FaucetCard', () => {
         configured: true,
         eligible: true,
         min_requests: 1,
-        claim_amount: TEN_WAYZ,
+        claim_amount: CLAIM_AMOUNT_WAYZ,
         claim: {
           status: 'sent',
           wallet_address: ADDRESS,
@@ -69,7 +72,7 @@ describe('FaucetCard', () => {
   it('shows an unconfigured message when the faucet is not set up', () => {
     mockUseFaucetStatus.mockReturnValue({
       isLoading: false,
-      data: { configured: false, eligible: false, min_requests: 1, claim_amount: 0n, claim: null },
+      data: { configured: false, eligible: false, min_requests: 1, claim_amount: 0, claim: null },
     });
 
     render(<FaucetCard address={ADDRESS as never} />);

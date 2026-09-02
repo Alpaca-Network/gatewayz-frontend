@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useFaucetStatus, useClaimFaucet } from '@/lib/hooks/use-wayz-staking';
 import { FaucetError, describeFaucetError } from '@/lib/wayz/staking-api';
-import { formatWayz } from '@/lib/wayz/format';
 
 const SNOWTRACE_TESTNET_TX_URL = 'https://testnet.snowtrace.io/tx/';
 
@@ -19,7 +18,7 @@ export function FaucetCard({ address }: { address: Address | null }) {
   const handleClaim = async () => {
     try {
       const result = await claimMutation.mutateAsync();
-      toast({ title: `Claimed ${formatWayz(result.amount)} WAYZ` });
+      toast({ title: `Claimed ${result.amount} WAYZ` });
     } catch (error) {
       const description =
         error instanceof FaucetError ? describeFaucetError(error) : error instanceof Error ? error.message : undefined;
@@ -97,7 +96,7 @@ export function FaucetCard({ address }: { address: Address | null }) {
       <CardContent className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">You&apos;re eligible for testnet WAYZ.</p>
         <Button onClick={handleClaim} disabled={claimMutation.isPending}>
-          Claim {formatWayz(data.claim_amount)} WAYZ
+          Claim {data.claim_amount} WAYZ
         </Button>
       </CardContent>
     </Card>

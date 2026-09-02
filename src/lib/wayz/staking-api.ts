@@ -22,7 +22,10 @@ export interface WalletStaking {
   last_synced_at: string | null;
   synced: boolean;
   total_staked: bigint;
-  daily_inference_capacity: number;
+  // A whole-number capacity, not wei — kept as bigint (like the backend's
+  // other digit-string fields) rather than a bare `number` cast, since the
+  // backend sends it as a JSON string (`str(Config.WAYZ_DAILY_INFERENCE_CAPACITY)`).
+  daily_inference_capacity: bigint;
   contracts: StakingContracts;
   configured: boolean;
 }
@@ -30,7 +33,7 @@ export interface WalletStaking {
 export interface StakingSummary {
   total_staked: bigint;
   wallet_count: number;
-  daily_inference_capacity: number;
+  daily_inference_capacity: bigint;
   unstake_cooldown_seconds: number;
   last_synced_block: number | null;
   last_synced_at: string | null;
@@ -49,7 +52,11 @@ export interface FaucetStatus {
   configured: boolean;
   eligible: boolean;
   min_requests: number;
-  claim_amount: bigint;
+  // Whole WAYZ (human-readable), NOT wei — the backend returns
+  // `str(Config.WAYZ_FAUCET_CLAIM_AMOUNT)` deliberately in this unit (see
+  // faucet.py's comment on the /faucet/claim response). Never run this
+  // through formatUnits/formatWayz, which assume an 18-decimal wei value.
+  claim_amount: number;
   claim: FaucetClaim | null;
 }
 
@@ -61,7 +68,8 @@ export interface FaucetNonce {
 export interface FaucetClaimResult {
   success: boolean;
   tx_hash: string;
-  amount: bigint;
+  // Whole WAYZ, not wei — see FaucetStatus.claim_amount.
+  amount: number;
 }
 
 /** Thrown for any non-2xx response from a `/faucet/*` or `/staking/*` call. */
@@ -77,12 +85,26 @@ export class FaucetError extends Error {
   }
 }
 
-/** Parses a decimal wei string into a bigint. Empty/undefined -> 0n. */
+/** Parses a decimal wei (or wei-like whole-count) string into a bigint. Empty/undefined -> 0n. */
 function toBigInt(value: string | number | null | undefined): bigint {
   if (value === null || value === undefined || value === '') {
     return BigInt(0);
   }
   return BigInt(value);
+}
+
+/**
+ * Parses a whole-WAYZ (human-readable, NOT wei) decimal string into a
+ * number — used only for the faucet's `claim_amount`/`amount` fields, which
+ * the backend deliberately returns in this unit (see faucet.py). Every
+ * other WAYZ amount in this file is wei and goes through `toBigInt` instead.
+ */
+function parseWholeWayz(value: string | number | null | undefined): number {
+  if (value === null || value === undefined || value === '') {
+    return 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 async function extractErrorDetail(response: Response): Promise<string> {
@@ -114,7 +136,7 @@ export async function getWalletStaking(address: string): Promise<WalletStaking> 
     last_synced_at: (data.last_synced_at as string) ?? null,
     synced: Boolean(data.synced),
     total_staked: toBigInt(data.total_staked as string),
-    daily_inference_capacity: (data.daily_inference_capacity as number) ?? 0,
+    daily_inference_capacity: toBigInt(data.daily_inference_capacity as string),
     contracts: data.contracts as StakingContracts,
     configured: Boolean(data.configured),
   };
@@ -128,7 +150,7 @@ export async function getStakingSummary(): Promise<StakingSummary> {
   return {
     total_staked: toBigInt(data.total_staked as string),
     wallet_count: (data.wallet_count as number) ?? 0,
-    daily_inference_capacity: (data.daily_inference_capacity as number) ?? 0,
+    daily_inference_capacity: toBigInt(data.daily_inference_capacity as string),
     unstake_cooldown_seconds: (data.unstake_cooldown_seconds as number) ?? 0,
     last_synced_block: (data.last_synced_block as number) ?? null,
     last_synced_at: (data.last_synced_at as string) ?? null,
@@ -149,7 +171,7 @@ export async function getFaucetStatus(walletAddress: string): Promise<FaucetStat
     configured: Boolean(data.configured),
     eligible: Boolean(data.eligible),
     min_requests: (data.min_requests as number) ?? 0,
-    claim_amount: toBigInt(data.claim_amount as string),
+    claim_amount: parseWholeWayz(data.claim_amount as string),
     claim: claim
       ? {
           status: claim.status as FaucetClaimStatus,
@@ -181,7 +203,7 @@ export async function claimFaucet(walletAddress: string, signature: string): Pro
   return {
     success: body.success,
     tx_hash: body.tx_hash,
-    amount: toBigInt(body.amount),
+    amount: parseWholeWayz(body.amount),
   };
 }
 

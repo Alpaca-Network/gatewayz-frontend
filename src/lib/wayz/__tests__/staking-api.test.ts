@@ -32,7 +32,9 @@ describe('staking-api', () => {
             last_synced_at: '2026-09-01T00:00:00Z',
             synced: true,
             total_staked: '999000000000000000000',
-            daily_inference_capacity: 42,
+            // Backend sends this as a JSON string (str(Config.WAYZ_DAILY_INFERENCE_CAPACITY)),
+            // a whole-number capacity, not wei — parsed to bigint like the other digit-string fields.
+            daily_inference_capacity: '42',
             contracts: { chain_id: 43113, token: '0x1', staking: '0x2' },
             configured: true,
           },
@@ -45,7 +47,7 @@ describe('staking-api', () => {
       expect(result.staked_amount).toBe(123n * 10n ** 18n);
       expect(result.daily_allowance).toBe(5n * 10n ** 18n);
       expect(result.total_staked).toBe(999n * 10n ** 18n);
-      expect(result.daily_inference_capacity).toBe(42);
+      expect(result.daily_inference_capacity).toBe(42n);
       expect(result.contracts.chain_id).toBe(43113);
     });
   });
@@ -58,7 +60,7 @@ describe('staking-api', () => {
           data: {
             total_staked: '123000000000000000000',
             wallet_count: 3,
-            daily_inference_capacity: 10,
+            daily_inference_capacity: '10',
             unstake_cooldown_seconds: 604800,
             last_synced_block: 200,
             last_synced_at: null,
@@ -72,6 +74,7 @@ describe('staking-api', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('https://api.gatewayz.ai/staking/summary');
       expect(result.total_staked).toBe(123n * 10n ** 18n);
+      expect(result.daily_inference_capacity).toBe(10n);
       expect(result.configured).toBe(false);
     });
   });
@@ -86,7 +89,10 @@ describe('staking-api', () => {
             configured: true,
             eligible: true,
             min_requests: 1,
-            claim_amount: '10000000000000000000',
+            // Backend sends this as whole WAYZ (str(Config.WAYZ_FAUCET_CLAIM_AMOUNT)),
+            // NOT wei — see faucet.py's comment on this field. Must not be run
+            // through toBigInt/formatUnits, which would treat "1000" as 1000 wei.
+            claim_amount: '1000',
             claim: null,
           },
         })
@@ -100,7 +106,7 @@ describe('staking-api', () => {
           headers: expect.objectContaining({ Authorization: 'Bearer test-api-key' }),
         })
       );
-      expect(result.claim_amount).toBe(10n * 10n ** 18n);
+      expect(result.claim_amount).toBe(1000);
       expect(result.claim).toBeNull();
     });
   });
@@ -126,10 +132,10 @@ describe('staking-api', () => {
   });
 
   describe('claimFaucet', () => {
-    it('POSTs wallet address + signature and parses the mint amount', async () => {
+    it('POSTs wallet address + signature and parses the whole-WAYZ mint amount (not wei)', async () => {
       saveApiKey('test-api-key');
       mockFetch.mockResolvedValueOnce(
-        createSuccessResponse({ success: true, tx_hash: '0xdeadbeef', amount: '10000000000000000000' })
+        createSuccessResponse({ success: true, tx_hash: '0xdeadbeef', amount: '1000' })
       );
 
       const result = await claimFaucet('0xabc', '0xsig');
@@ -142,7 +148,7 @@ describe('staking-api', () => {
         })
       );
       expect(result.tx_hash).toBe('0xdeadbeef');
-      expect(result.amount).toBe(10n * 10n ** 18n);
+      expect(result.amount).toBe(1000);
     });
 
     it.each([
