@@ -9,16 +9,17 @@
  *  - the write flows (`contract-writes.ts`), wired up as mutations that
  *    invalidate the reads above on success.
  *
- * Wallet state comes from `useActiveWallet` (a STUB on this branch pending
- * #2243 — see src/lib/hooks/use-active-wallet.ts) and the EIP-1193 provider
- * from `wallet-provider.ts`, so writes are inert (and every mutation throws
- * a clear "not connected" error) until that branch merges in.
+ * Wallet state comes from `useActiveWallet` (Privy-backed, see
+ * src/lib/hooks/use-active-wallet.ts) and the EIP-1193 provider from
+ * `wallet-provider.ts`'s `useEip1193Provider`, which resolves the active
+ * Privy wallet's provider — every mutation throws a clear "not connected"
+ * error when no wallet is connected.
  */
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { createWalletClient, custom, type Address } from 'viem';
 import { avalancheFuji } from '@/lib/wayz/chains';
 import { useActiveWallet } from '@/lib/hooks/use-active-wallet';
-import { getEip1193Provider } from '@/lib/wayz/wallet-provider';
+import { useEip1193Provider } from '@/lib/wayz/wallet-provider';
 import { getWayzAddresses } from '@/lib/wayz/addresses';
 import { readStakingState, publicClient, type StakingState } from '@/lib/wayz/contract-reads';
 import {
@@ -90,23 +91,32 @@ export function useFaucetStatus(address: string | null): UseQueryResult<FaucetSt
   });
 }
 
-/** Builds a write context from the active wallet, or null if not connected/ready. */
-function useWriteContext(): WriteContext | null {
+/**
+ * Returns a function that builds a `WriteContext` from the active wallet, or
+ * null if not connected. Building it is async — `getEip1193Provider()`
+ * (Privy's `wallet.getEthereumProvider()`) resolves a promise — so this
+ * can't hand back a ready `WriteContext` synchronously; each mutation's
+ * `mutationFn` awaits the builder instead.
+ */
+function useWriteContext(): (() => Promise<WriteContext>) | null {
   const wallet = useActiveWallet();
+  const getProvider = useEip1193Provider();
+
   if (!wallet.isConnected || !wallet.address) {
     return null;
   }
 
-  const walletClient = createWalletClient({
-    chain: avalancheFuji,
-    transport: custom(getEip1193Provider()),
-  });
+  const account = wallet.address;
+  const switchToFuji = wallet.switchToFuji;
 
-  return {
-    walletClient,
-    publicClient,
-    account: wallet.address,
-    switchToFuji: wallet.switchToFuji,
+  return async () => {
+    const provider = await getProvider();
+    const walletClient = createWalletClient({
+      chain: avalancheFuji,
+      transport: custom(provider),
+    });
+
+    return { walletClient, publicClient, account, switchToFuji };
   };
 }
 
@@ -121,14 +131,15 @@ function useInvalidateStaking(address: Address | null) {
 
 /** Approve (if needed) + stake `amount`. */
 export function useApproveAndStake(address: Address | null) {
-  const ctx = useWriteContext();
+  const buildCtx = useWriteContext();
   const invalidate = useInvalidateStaking(address);
   const { token, staking } = getWayzAddresses();
 
   return useMutation({
     mutationFn: async ({ amount, currentAllowance }: { amount: bigint; currentAllowance: bigint }) => {
-      if (!ctx) throw new Error('Connect your wallet first.');
+      if (!buildCtx) throw new Error('Connect your wallet first.');
       if (!token || !staking) throw new Error('Staking contracts are not configured yet.');
+      const ctx = await buildCtx();
       return approveAndStakeWrite(ctx, { tokenAddress: token, stakingAddress: staking, amount, currentAllowance });
     },
     onSuccess: invalidate,
@@ -137,14 +148,15 @@ export function useApproveAndStake(address: Address | null) {
 
 /** Request an unstake of `amount`. */
 export function useRequestUnstake(address: Address | null) {
-  const ctx = useWriteContext();
+  const buildCtx = useWriteContext();
   const invalidate = useInvalidateStaking(address);
   const { staking } = getWayzAddresses();
 
   return useMutation({
     mutationFn: async (amount: bigint) => {
-      if (!ctx) throw new Error('Connect your wallet first.');
+      if (!buildCtx) throw new Error('Connect your wallet first.');
       if (!staking) throw new Error('Staking contract is not configured yet.');
+      const ctx = await buildCtx();
       return requestUnstakeWrite(ctx, { stakingAddress: staking, amount });
     },
     onSuccess: invalidate,
@@ -153,14 +165,15 @@ export function useRequestUnstake(address: Address | null) {
 
 /** Cancel the pending unstake request. */
 export function useCancelUnstake(address: Address | null) {
-  const ctx = useWriteContext();
+  const buildCtx = useWriteContext();
   const invalidate = useInvalidateStaking(address);
   const { staking } = getWayzAddresses();
 
   return useMutation({
     mutationFn: async () => {
-      if (!ctx) throw new Error('Connect your wallet first.');
+      if (!buildCtx) throw new Error('Connect your wallet first.');
       if (!staking) throw new Error('Staking contract is not configured yet.');
+      const ctx = await buildCtx();
       return cancelUnstakeWrite(ctx, { stakingAddress: staking });
     },
     onSuccess: invalidate,
@@ -169,14 +182,15 @@ export function useCancelUnstake(address: Address | null) {
 
 /** Withdraw a pending unstake once its cooldown has elapsed. */
 export function useWithdraw(address: Address | null) {
-  const ctx = useWriteContext();
+  const buildCtx = useWriteContext();
   const invalidate = useInvalidateStaking(address);
   const { staking } = getWayzAddresses();
 
   return useMutation({
     mutationFn: async () => {
-      if (!ctx) throw new Error('Connect your wallet first.');
+      if (!buildCtx) throw new Error('Connect your wallet first.');
       if (!staking) throw new Error('Staking contract is not configured yet.');
+      const ctx = await buildCtx();
       return withdrawWrite(ctx, { stakingAddress: staking });
     },
     onSuccess: invalidate,

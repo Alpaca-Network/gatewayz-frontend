@@ -17,7 +17,7 @@ Nothing is deployed to Fuji yet. The page and nav link degrade cleanly until
 | --- | --- | --- |
 | `NEXT_PUBLIC_WAYZ_TOKEN_ADDRESS` | for staking | WAYZToken contract address on Fuji. Empty today. |
 | `NEXT_PUBLIC_WAYZ_STAKING_ADDRESS` | for staking | WAYZStaking contract address on Fuji. Empty today. |
-| `NEXT_PUBLIC_FUJI_RPC_URL` | no | Overrides the default public Fuji RPC (`https://api.avax-test.network/ext/bc/C/rpc`) used for on-chain reads. |
+| `NEXT_PUBLIC_AVALANCHE_FUJI_RPC_URL` | no | Overrides the default public Fuji RPC (`https://api.avax-test.network/ext/bc/C/rpc`) used both by the app's wagmi config (`feat/wayz-wallet-connect`, #2243) and by this dashboard's on-chain reads — one var, not two. |
 | `NEXT_PUBLIC_WAYZ_STAKING_PREVIEW` | no | Set to `true` to show the "Staking" nav link before contracts are deployed. |
 
 ## Data flow
@@ -67,33 +67,34 @@ token amount.
 | 502 | mint failed | "The mint transaction failed. Please try again shortly." |
 | 503 | faucet unconfigured | "The testnet faucet is not configured yet." |
 
-## What's stubbed pending #2243
+## Wallet integration (Privy, via #2243)
 
-Workstream A (`feat/wayz-wallet-connect`, gatewayz-frontend#2243) owns wallet
-connect, chain switching, and EIP-191 signing (Privy), plus mounting the
-wagmi provider app-wide. Until that merges, two files on this branch are
-minimal STUBs — each carries a `// STUB — superseded by
-feat/wayz-wallet-connect (#2243)...` header on line 1, and the orchestrator
-keeps that branch's version on merge:
+Workstream A (`feat/wayz-wallet-connect`, gatewayz-frontend#2243, merged
+`2102a8a7`) owns wallet connect, chain switching, EIP-191 signing, and the
+wagmi provider mount. This dashboard consumes it through two seams:
 
-- `src/lib/hooks/use-active-wallet.ts` — always reports "disconnected"; every
-  action (`connect`, `switchToFuji`, `signMessage`) rejects.
-- `src/lib/wayz/chains.ts` — re-exports `FUJI_CHAIN_ID`, `FUJI_RPC_URL`, and
-  the `avalancheFuji`/`base` viem chain objects that #2243's real version
-  will also export, so this branch and #2243 agree on the same interface.
-
-Everything downstream of `useActiveWallet` (reads, writes, the dashboard
-components) is written against that interface, so swapping the stub for
-#2243's real implementation is a two-file change with no ripple elsewhere.
-
-The single choke point for the wallet's EIP-1193 provider is
-`src/lib/wayz/wallet-provider.ts#getEip1193Provider` — it reads
-`window.ethereum` today; after #2243 merges it should read the active Privy
-wallet's `getEthereumProvider()` instead, and nothing else in `src/lib/wayz/`
-needs to change.
+- `src/lib/hooks/use-active-wallet.ts` — Privy-backed (`usePrivy`/
+  `useWallets`). Exposes `address`, `chainId`, `isConnected`, `isReady`,
+  `walletClientType`, and `connect`/`switchToFuji`/`signMessage`. Used
+  directly by `WalletGate`, `StakingPageClient`, and `useClaimFaucet`
+  (`signMessage` returns the 0x-prefixed signature string, passed straight
+  to `POST /faucet/claim`).
+- `src/lib/wayz/wallet-provider.ts#useEip1193Provider` — the single seam
+  that knows the wallet's EIP-1193 provider comes from the active Privy
+  wallet's `getEthereumProvider()` (async — verified against the installed
+  `@privy-io/react-auth@3.10.2` types). `use-wayz-staking.ts`'s
+  `useWriteContext` awaits it to build a fresh viem `WalletClient`
+  (`createWalletClient({chain: avalancheFuji, transport: custom(provider)})`)
+  inside each mutation's `mutationFn` — building it can't happen
+  synchronously in the hook body since resolving the provider is async.
+  Privy's `EIP1193Provider` type and viem's are structurally distinct (both
+  describe the same `request`/`on`/`removeListener` surface, but disagree
+  on `on`'s strict typing); the cast between them is safe because viem's
+  `custom()` transport only ever calls `.request(...)` (verified against
+  the installed `viem@2.44.2` source).
 
 ## Out of scope (this workstream)
 
-Wallet/Privy configuration (Workstream A); the backend indexer/faucet
-(Workstream C); linking a wallet to a Gatewayz account; mainnet; enforcing
-the daily inference allowance client-side.
+The backend indexer/faucet (Workstream C); linking a wallet to a Gatewayz
+account (Epic 2); mainnet; enforcing the daily inference allowance
+client-side.
