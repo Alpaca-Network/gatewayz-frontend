@@ -150,6 +150,10 @@ const nextConfig: NextConfig = {
       net: false,
       tls: false,
       dns: false,
+      // @wagmi/connectors' MetaMask connector (pulled in transitively by @privy-io/wagmi's
+      // wallet support) optionally imports this React Native package for its mobile SDK path;
+      // it's unused on web. Documented fix from wagmi/MetaMask SDK for this exact warning.
+      '@react-native-async-storage/async-storage': false,
     };
 
     // Handle module resolution for client-side
