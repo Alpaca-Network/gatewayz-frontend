@@ -29,6 +29,16 @@ jest.mock('@/hooks/use-toast', () => ({
   }),
 }));
 
+// Mock the useActiveWallet hook
+const mockConnectWallet = jest.fn();
+const mockUseActiveWallet = jest.fn(() => ({
+  address: null as `0x${string}` | null,
+  connect: mockConnectWallet,
+}));
+jest.mock('@/lib/hooks/use-active-wallet', () => ({
+  useActiveWallet: () => mockUseActiveWallet(),
+}));
+
 // Mock Next.js Link component
 jest.mock('next/link', () => {
   return ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -57,6 +67,46 @@ describe('UserNav', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseActiveWallet.mockReturnValue({ address: null, connect: mockConnectWallet });
+  });
+
+  describe('Wallet Display', () => {
+    it('should show a "Connect wallet" item when no wallet is active', async () => {
+      const user = userEvent.setup();
+      render(<UserNav user={mockUser} />);
+
+      await user.click(screen.getByRole('button'));
+
+      expect(await screen.findByRole('menuitem', { name: /connect wallet/i })).toBeInTheDocument();
+    });
+
+    it('should call connect() when "Connect wallet" is clicked', async () => {
+      const user = userEvent.setup();
+      mockConnectWallet.mockResolvedValue(undefined);
+      render(<UserNav user={mockUser} />);
+
+      await user.click(screen.getByRole('button'));
+      const connectItem = await screen.findByRole('menuitem', { name: /connect wallet/i });
+      await user.click(connectItem);
+
+      await waitFor(() => {
+        expect(mockConnectWallet).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('should show a truncated wallet address when a wallet is active', async () => {
+      mockUseActiveWallet.mockReturnValue({
+        address: '0x1234567890abcdef1234567890abcdef12345678',
+        connect: mockConnectWallet,
+      });
+      const user = userEvent.setup();
+      render(<UserNav user={mockUser} />);
+
+      await user.click(screen.getByRole('button'));
+
+      expect(await screen.findByText(/0x1234\.\.\.5678/)).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: /connect wallet/i })).not.toBeInTheDocument();
+    });
   });
 
   describe('Sign Out Functionality', () => {

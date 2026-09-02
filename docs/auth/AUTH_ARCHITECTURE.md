@@ -78,6 +78,51 @@ Properties from usePrivy():
 - getAccessToken(): Promise<string | null> - Get Privy access token
 ```
 
+### 2.3 Wallets & Chains (WAYZ Testnet)
+
+Added for gatewayz-backend#2243 (Milestone 1 — WAYZ Token & Staking Testnet, Avalanche Fuji).
+
+**Wallet login method:** `"wallet"` was added to `loginMethods` in `privy-web-provider.tsx`
+(alongside `email`, `sms`, `google`, `github`), so users can connect an external wallet
+(MetaMask, Coinbase Wallet, WalletConnect, etc.) directly from the Privy login/connect modal, in
+addition to the existing embedded wallet Privy already creates for web2 logins.
+
+**Supported chains:** `supportedChains: [base, avalancheFuji]` (`viem/chains`,
+`FUJI_CHAIN_ID = 43113` in `src/lib/wayz/chains.ts`). **Base stays the default chain** — this
+does not change existing users' behavior. The WAYZ staking dashboard is expected to switch to
+Fuji explicitly via `useActiveWallet().switchToFuji()` rather than the app defaulting to it.
+
+**wagmi:** `src/lib/wayz/wagmi-config.ts` builds a `wagmi` `Config` via `@privy-io/wagmi`'s
+`createConfig` (not plain `wagmi`) so wallets wagmi sees stay in sync with Privy's connection
+state. `WayzWagmiProvider` (`src/components/providers/wagmi-provider.tsx`) mounts `@privy-io/wagmi`'s
+`WagmiProvider` inside `<PrivyProvider>` in `privy-web-provider.tsx` — i.e. only on web, never
+on Tauri desktop (see §2.1's Tauri bypass).
+
+**`useActiveWallet()` hook (`src/lib/hooks/use-active-wallet.ts`)** — the single, contractual way
+client components read/act on the connected wallet:
+
+```typescript
+interface ActiveWallet {
+  address: `0x${string}` | null;
+  chainId: number | null;
+  isConnected: boolean;
+  isReady: boolean;               // false until usePrivy().ready
+  walletClientType: string | null; // "privy" (embedded), "metamask", "coinbase_wallet", ...
+  connect: () => Promise<void>;
+  switchToFuji: () => Promise<void>;
+  signMessage: (message: string) => Promise<string>; // EIP-191 personal_sign
+}
+```
+
+Degrades to a disconnected-but-`isReady:true` object when Privy isn't mounted (Tauri desktop) —
+callers never need a platform check of their own.
+
+**Not in scope yet:** linking a wallet to the Gatewayz account (persisting a wallet↔`user_id`
+relationship) is Epic 2 (gatewayz-backend#2248-2254). `useActiveWallet` is purely client-side
+wallet access for the current browser session — the backend has no record of it. The faucet and
+staking indexer (gatewayz-backend#2268, #2270) instead prove wallet ownership per-request via a
+signed message, exactly what `signMessage()` above is for.
+
 ---
 
 ## 3. GATEWAYZ AUTH CONTEXT

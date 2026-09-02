@@ -16,6 +16,7 @@ import { Copy } from "lucide-react";
 import { useTier } from "@/hooks/use-tier";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { getUserMessage } from "@/lib/errors";
+import { useActiveWallet } from "@/lib/hooks/use-active-wallet";
 
 interface UserNavProps {
   user: any; // Privy user object
@@ -25,6 +26,7 @@ export function UserNav({ user }: UserNavProps) {
   const { logout } = useGatewayzAuth();
   const { toast } = useToast();
   const { tier, tierDisplayName } = useTier();
+  const { address: activeWalletAddress, connect: connectWallet } = useActiveWallet();
 
   const handleSignOut = async () => {
     try {
@@ -33,6 +35,18 @@ export function UserNav({ user }: UserNavProps) {
     } catch (error) {
       toast({
         title: "Error signing out",
+        description: getUserMessage(error),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleConnectWallet = async () => {
+    try {
+      await connectWallet();
+    } catch (error) {
+      toast({
+        title: "Error connecting wallet",
         description: getUserMessage(error),
         variant: "destructive",
       });
@@ -130,6 +144,18 @@ export function UserNav({ user }: UserNavProps) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          {activeWalletAddress ? (
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.preventDefault();
+                copyToClipboard(activeWalletAddress);
+              }}
+            >
+              Wallet: {formatAddress(activeWalletAddress)}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={handleConnectWallet}>Connect wallet</DropdownMenuItem>
+          )}
           <Link href="/settings/account">
             <DropdownMenuItem>Account</DropdownMenuItem>
           </Link>
