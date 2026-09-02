@@ -25,8 +25,8 @@ export const wayzStakingAbi = parseAbi([
   'error StillCoolingDown(uint256 unlockAt)',
   'error ZeroAddress()',
 
-  'event Staked(address indexed account, uint256 amount)',
-  'event UnstakeRequested(address indexed account, uint256 amount, uint256 unlockAt)',
-  'event UnstakeCancelled(address indexed account, uint256 amount)',
-  'event Withdrawn(address indexed account, uint256 amount)',
+  'event Staked(address indexed staker, uint256 amount, uint256 newTotalStaked)',
+  'event UnstakeRequested(address indexed staker, uint256 amount, uint256 unlockAt)',
+  'event UnstakeCancelled(address indexed staker, uint256 amount)',
+  'event Withdrawn(address indexed staker, uint256 amount)',
 ]);
