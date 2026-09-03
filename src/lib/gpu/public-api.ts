@@ -3,6 +3,13 @@
 // No auth; these are the aggregate-only, cached, rate-limited `/gpu/public/*`
 // routes — never a source of wallet/endpoint/provider identity, only display
 // aggregates (see the "aggregate-only guarantee" test in spec.md §6).
+//
+// IMPORTANT: these three routes return their payload DIRECTLY, with NO
+// `{success, data}` envelope — confirmed against `src/routes/gpu_public.py`'s
+// module docstring ("No auth, no envelope... not the `{success, data}`
+// wrapper the authenticated /gpu/* routes use") and its handlers, which
+// `return data`/`return list[dict]` straight from `src/db/gpu_rollups.py`.
+// Do not "fix" `getJson` to unwrap `.data` — that was Fix round 1's mistake.
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
 export type GpuNodeStatus = 'registered' | 'active' | 'degraded' | 'offline' | 'disabled';
@@ -81,8 +88,7 @@ async function getJson<T>(url: string): Promise<T> {
   if (!response.ok) {
     throw new GpuPublicApiError(response.status);
   }
-  const body = (await response.json()) as { success: boolean; data: T };
-  return body.data;
+  return (await response.json()) as T;
 }
 
 /** GET /gpu/public/summary (public, cached 30s server-side). */

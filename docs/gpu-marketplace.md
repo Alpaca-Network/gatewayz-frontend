@@ -34,20 +34,43 @@ underlying react-query hooks) — flipping the flag on before the backend exists
   one-time node token), earnings section (accrued/settled/void, work + settlements with
   Snowtrace links).
 
-## Contracts (confirmed against the real backend, Fix round 1)
+## Contracts (verified against the real, merged backend code — Fix round 2)
 
+Every fixture in this feature's tests is now copied from the backend's own test
+assertions or response models, cited by file:line in the test itself — not derived
+from the spec doc, which turned out to omit or misdescribe several of these.
+
+- **`/gpu/public/summary|nodes|utilization` return the payload DIRECTLY — no
+  `{success, data}` envelope.** Confirmed against `src/routes/gpu_public.py`'s module
+  docstring and `tests/routes/test_gpu_public.py` (`response.json() == _SUMMARY`, no
+  `.data` unwrap). `public-api.ts`'s `getJson` does not unwrap `.data` for these three;
+  the authenticated `/gpu/*` routes (`gpu.py`, `gpu_earnings.py`) DO still use that
+  envelope, and `provider-api.ts` still unwraps `.data` for those.
 - **`GET /gpu/public/utilization` response shape**, confirmed against
-  `src/schemas/gpu_public.py` (backend W-C branch):
-  `{window, group, series: [{hour, key, requests, prompt_tokens, completion_tokens,
-  avg_latency_ms, error_rate, active_nodes}]}` — one flat array, each point tagged with
-  `key` (the region or model id) so the chart can pivot into one line per key. Note the
-  per-point field is `key`, not `group` (`group` is only the top-level query param /
-  response echo of `region`|`model`).
+  `src/schemas/gpu_public.py`: `{window, group, series: [{hour, key, requests,
+  prompt_tokens, completion_tokens, avg_latency_ms, error_rate, active_nodes}]}` — each
+  point tagged with `key` (the region or model id), not `group` (`group` is only the
+  top-level query-param echo).
 - **`GET /gpu/providers/me`'s earnings field is named `earnings`**, not
   `earnings_summary`: `{provider, nodes, earnings: {accrued_wei, settled_wei,
-  void_wei?}}` (decimal strings). `void_wei` is optional on the wire (A1 is still adding
-  it) — `parseEarningsSummary`/`toBigInt` in `provider-api.ts` default a missing value to
-  `0n`.
+  void_wei?}}` (decimal strings), per `src/routes/gpu.py`'s `get_my_provider`/
+  `_earnings_summary`. `void_wei` is optional on the wire there — `toBigInt` in
+  `provider-api.ts` defaults a missing value to `0n`.
+- **`GET /gpu/providers/me/earnings` nests its totals under `data.totals`**, not flat
+  on `data` — `{data: {totals: {accrued_wei, settled_wei, void_wei}, work, settlements}}`
+  per `src/routes/gpu_earnings.py`'s `get_my_earnings` (approved PR #2288) and
+  `tests/routes/test_gpu_earnings.py`. Each settlement also carries a backend-computed
+  `id` and `tx_url` — `EarningsSection` now links to the provided `tx_url` instead of
+  reconstructing one from `tx_hash` (that duplication was a round-1 nit; fixed here since
+  it's the same code path).
+- **`POST /gpu/nodes`'s 400 error body doesn't carry the raw reason in `error.detail`.**
+  The app-wide handler (`src/utils/error_handlers.py` ->
+  `DetailedErrorFactory.invalid_parameter`) always sets `error.detail` to a static,
+  unrelated string and puts the actual raw reason (`"endpoint_unreachable"` /
+  `"models_mismatch"`) in `error.context.parameter_value` instead — confirmed against
+  `tests/routes/test_gpu.py`'s own assertions on that exact field. `provider-api.ts`'s
+  `codeForCreateNodeStatus` now reads `error.context.parameter_value`
+  (`readErrorParameterValue`), not `error.detail`.
 - **Provider onboarding guide link** in the public dashboard's trust-disclosure card
   points at gatewayz-backend's GitHub-hosted `docs/gpu/PROVIDER_ONBOARDING.md` on `main`
   (W-E) rather than an in-repo `/docs/*` page — the onboarding doc lives in the backend

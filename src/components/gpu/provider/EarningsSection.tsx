@@ -7,8 +7,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatWayz } from '@/lib/wayz/format';
 import { useMyGpuEarnings } from '@/lib/hooks/use-gpu-provider';
 
-const SNOWTRACE_TESTNET_TX_URL = 'https://testnet.snowtrace.io/tx/';
-
 export function EarningsSection() {
   const earningsQuery = useMyGpuEarnings();
   const data = earningsQuery.data;
@@ -99,7 +97,7 @@ export function EarningsSection() {
                 </TableHeader>
                 <TableBody>
                   {data.settlements.map((settlement) => (
-                    <TableRow key={`${settlement.period_start}-${settlement.period_end}`}>
+                    <TableRow key={settlement.id}>
                       <TableCell className="text-sm text-muted-foreground">
                         {new Date(settlement.period_start).toLocaleDateString()} –{' '}
                         {new Date(settlement.period_end).toLocaleDateString()}
@@ -109,13 +107,8 @@ export function EarningsSection() {
                         <Badge variant="outline">{settlement.status}</Badge>
                       </TableCell>
                       <TableCell>
-                        {settlement.tx_hash ? (
-                          <a
-                            className="text-primary underline"
-                            href={`${SNOWTRACE_TESTNET_TX_URL}${settlement.tx_hash}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
+                        {settlement.tx_url ? (
+                          <a className="text-primary underline" href={settlement.tx_url} target="_blank" rel="noreferrer">
                             View on Snowtrace
                           </a>
                         ) : (

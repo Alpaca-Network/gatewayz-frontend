@@ -170,8 +170,26 @@ describe('gpu/provider-api', () => {
       expect(result.node_token).toBe('gw_node_abc123');
     });
 
-    it('maps 400 endpoint_unreachable and 403 provider_not_approved', async () => {
-      mockFetch.mockResolvedValueOnce(createErrorResponse({ error: { detail: 'endpoint_unreachable' } }, 400));
+    // The 400 body shape here (`error.context.parameter_value`, NOT `error.detail`) is
+    // copied from gatewayz-backend tests/routes/test_gpu.py's own assertions:
+    // `test_register_node_endpoint_unreachable` (L283) and
+    // `test_register_node_models_mismatch` (L295), both of which assert
+    // `response.json()["error"]["context"]["parameter_value"]` — the app-wide handler
+    // (src/utils/error_handlers.py -> DetailedErrorFactory.invalid_parameter) always
+    // sets `error.detail` to an unrelated static string, so `.detail` must never be
+    // read for disambiguation here.
+    it('maps 400 endpoint_unreachable from error.context.parameter_value', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createErrorResponse(
+          {
+            error: {
+              detail: 'One of your request parameters has an incorrect type.',
+              context: { parameter_name: 'request', parameter_value: 'endpoint_unreachable' },
+            },
+          },
+          400
+        )
+      );
       await expect(
         createGpuNode({
           name: 'n',
@@ -184,7 +202,35 @@ describe('gpu/provider-api', () => {
           models: [],
         })
       ).rejects.toMatchObject({ status: 400, code: 'endpoint_unreachable' });
+    });
 
+    it('maps 400 models_mismatch from error.context.parameter_value', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createErrorResponse(
+          {
+            error: {
+              detail: 'One of your request parameters has an incorrect type.',
+              context: { parameter_name: 'request', parameter_value: 'models_mismatch' },
+            },
+          },
+          400
+        )
+      );
+      await expect(
+        createGpuNode({
+          name: 'n',
+          region: 'us-east',
+          gpu_model: 'x',
+          vram_gb: 1,
+          bandwidth_mbps: 1,
+          endpoint_url: 'https://x.example.com',
+          endpoint_api_key: 'k',
+          models: [],
+        })
+      ).rejects.toMatchObject({ status: 400, code: 'models_mismatch' });
+    });
+
+    it('maps 403 to provider_not_approved regardless of body', async () => {
       mockFetch.mockResolvedValueOnce(createErrorResponse({}, 403));
       await expect(
         createGpuNode({
@@ -234,14 +280,16 @@ describe('gpu/provider-api', () => {
   });
 
   describe('getMyGpuEarnings', () => {
-    it('GETs /gpu/providers/me/earnings and parses wei strings to bigint', async () => {
+    // Response shape (`data.totals.{accrued_wei,settled_wei,void_wei}` + `data.work` +
+    // `data.settlements` with `id`/`tx_url`) copied from gatewayz-backend
+    // tests/routes/test_gpu_earnings.py::test_earnings_returns_totals_work_and_settlements
+    // (L22-42) and src/routes/gpu_earnings.py's `get_my_earnings`/`_settlement_view`.
+    it('GETs /gpu/providers/me/earnings, reads totals from data.totals, and parses wei strings to bigint', async () => {
       mockFetch.mockResolvedValueOnce(
         createSuccessResponse({
           success: true,
           data: {
-            accrued_wei: '123000000000000000000',
-            settled_wei: '456000000000000000000',
-            void_wei: '0',
+            totals: { accrued_wei: '123000000000000000000', settled_wei: '456000000000000000000', void_wei: '0' },
             work: [
               {
                 billing_ref: 'br_1',
@@ -254,11 +302,13 @@ describe('gpu/provider-api', () => {
             ],
             settlements: [
               {
+                id: 1,
                 period_start: '2026-09-02T00:00:00Z',
                 period_end: '2026-09-03T00:00:00Z',
                 amount_wei: '456000000000000000000',
-                tx_hash: '0xdeadbeef',
                 status: 'sent',
+                tx_hash: '0xdeadbeef',
+                tx_url: 'https://testnet.snowtrace.io/tx/0xdeadbeef',
               },
             ],
           },
@@ -271,6 +321,37 @@ describe('gpu/provider-api', () => {
       expect(result.settled_wei).toBe(456n * 10n ** 18n);
       expect(result.work[0].billing_ref).toBe('br_1');
       expect(result.settlements[0].amount_wei).toBe(456n * 10n ** 18n);
+      expect(result.settlements[0].tx_url).toBe('https://testnet.snowtrace.io/tx/0xdeadbeef');
+    });
+
+    // Mirrors test_earnings_settlement_without_tx_hash_has_no_tx_url (L64-84 area).
+    it('handles a settlement with no tx_hash/tx_url (still pending)', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createSuccessResponse({
+          success: true,
+          data: {
+            totals: { accrued_wei: '0', settled_wei: '0', void_wei: '0' },
+            work: [],
+            settlements: [
+              {
+                id: 2,
+                period_start: '2026-09-01T00:00:00Z',
+                period_end: '2026-09-02T00:00:00Z',
+                amount_wei: '500',
+                status: 'pending',
+                tx_hash: null,
+                tx_url: null,
+              },
+            ],
+          },
+        })
+      );
+
+      const result = await getMyGpuEarnings();
+
+      expect(result.settlements[0].tx_hash).toBeNull();
+      expect(result.settlements[0].tx_url).toBeNull();
+      expect(result.settlements[0].amount_wei).toBe(500n);
     });
   });
 

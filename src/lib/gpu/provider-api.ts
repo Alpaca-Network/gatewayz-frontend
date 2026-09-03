@@ -101,10 +101,15 @@ export interface GpuWorkRow {
 }
 
 export interface GpuSettlementRow {
+  id: number;
   period_start: string;
   period_end: string;
   amount_wei: bigint;
   tx_hash: string | null;
+  /** Backend-computed Snowtrace URL (`_settlement_view` in gpu_earnings.py) — use this
+   *  rather than reconstructing one from `tx_hash`, so a network change on the backend
+   *  side doesn't silently desync this client's hardcoded testnet host. */
+  tx_url: string | null;
   status: GpuSettlementStatus;
 }
 
@@ -147,14 +152,19 @@ function toBigInt(value: string | number | null | undefined): bigint {
   return BigInt(value);
 }
 
-// The app-wide error handler masks 409/422 response bodies (status is the only signal there —
-// see WD-frontend.md's Contracts note), but does NOT mask 400/403, so those can carry a
-// snake_case `detail` hint the same way wallet-auth-api.ts's link endpoint does. Read it only
-// as an optional disambiguation hint, never a required one.
-async function readErrorDetail(response: Response): Promise<string> {
+// `error.detail` on a 400 here is NOT the raw reason string ("models_mismatch",
+// "endpoint_unreachable") — the app-wide handler's generic-400 branch
+// (src/utils/error_handlers.py -> DetailedErrorFactory.invalid_parameter) always sets
+// `error.detail` to a STATIC message and puts the actual raw string in
+// `error.context.parameter_value` instead. Confirmed against gatewayz-backend
+// tests/routes/test_gpu.py: `test_register_node_endpoint_unreachable` (L283) and
+// `test_register_node_models_mismatch` (L295) both assert
+// `response.json()["error"]["context"]["parameter_value"]`, never `["error"]["detail"]`.
+// Read it only as an optional disambiguation hint, never a required one.
+async function readErrorParameterValue(response: Response): Promise<string> {
   try {
-    const body = (await response.json()) as { error?: { detail?: string } } | null;
-    return body?.error?.detail ?? '';
+    const body = (await response.json()) as { error?: { context?: { parameter_value?: string } } } | null;
+    return body?.error?.context?.parameter_value ?? '';
   } catch {
     return '';
   }
@@ -166,8 +176,8 @@ function codeForRegisterStatus(status: number): GpuProviderErrorCode {
   return 'unknown_error';
 }
 
-function codeForCreateNodeStatus(status: number, detail: string): GpuProviderErrorCode {
-  if (status === 400) return detail.includes('models_mismatch') ? 'models_mismatch' : 'endpoint_unreachable';
+function codeForCreateNodeStatus(status: number, parameterValue: string): GpuProviderErrorCode {
+  if (status === 400) return parameterValue === 'models_mismatch' ? 'models_mismatch' : 'endpoint_unreachable';
   if (status === 403) return 'provider_not_approved';
   return 'unknown_error';
 }
@@ -228,8 +238,8 @@ export async function createGpuNode(input: CreateGpuNodeInput): Promise<CreateGp
     body: JSON.stringify(input),
   });
   if (!response.ok) {
-    const detail = await readErrorDetail(response);
-    throw new GpuProviderApiError(response.status, codeForCreateNodeStatus(response.status, detail));
+    const parameterValue = await readErrorParameterValue(response);
+    throw new GpuProviderApiError(response.status, codeForCreateNodeStatus(response.status, parameterValue));
   }
   const body = (await response.json()) as { success: boolean; data: CreateGpuNodeResult };
   return body.data;
@@ -265,20 +275,21 @@ export async function getMyGpuEarnings(): Promise<GpuEarnings> {
   if (!response.ok) {
     throw new GpuProviderApiError(response.status, 'unknown_error');
   }
+  // Totals are nested under `data.totals`, not flat on `data` — confirmed against the real
+  // route (gatewayz-backend `src/routes/gpu_earnings.py`'s `get_my_earnings`, approved
+  // PR #2288): `{success, data: {totals: {accrued_wei, settled_wei, void_wei}, work, settlements}}`.
   const body = (await response.json()) as {
     success: boolean;
     data: {
-      accrued_wei: string;
-      settled_wei: string;
-      void_wei: string;
+      totals: { accrued_wei: string; settled_wei: string; void_wei: string };
       work: GpuWorkRow[];
-      settlements: Array<Omit<GpuSettlementRow, 'amount_wei'> & { amount_wei: string }>;
+      settlements: Array<Omit<GpuSettlementRow, 'amount_wei'> & { amount_wei: string | null }>;
     };
   };
   return {
-    accrued_wei: toBigInt(body.data.accrued_wei),
-    settled_wei: toBigInt(body.data.settled_wei),
-    void_wei: toBigInt(body.data.void_wei),
+    accrued_wei: toBigInt(body.data.totals.accrued_wei),
+    settled_wei: toBigInt(body.data.totals.settled_wei),
+    void_wei: toBigInt(body.data.totals.void_wei),
     work: body.data.work,
     settlements: body.data.settlements.map((row) => ({ ...row, amount_wei: toBigInt(row.amount_wei) })),
   };

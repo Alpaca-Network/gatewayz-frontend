@@ -46,10 +46,12 @@ describe('EarningsSection', () => {
         ],
         settlements: [
           {
+            id: 1,
             period_start: '2026-09-02T00:00:00Z',
             period_end: '2026-09-03T00:00:00Z',
             amount_wei: 456n * 10n ** 18n,
             tx_hash: '0xdeadbeef',
+            tx_url: 'https://testnet.snowtrace.io/tx/0xdeadbeef',
             status: 'sent',
           },
         ],

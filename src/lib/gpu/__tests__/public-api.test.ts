@@ -10,17 +10,19 @@ describe('gpu/public-api', () => {
   });
 
   describe('getGpuPublicSummary', () => {
-    it('GETs /gpu/public/summary (no auth) and returns data as-is', async () => {
-      // Fixture mirrors spec.md §6 byte-for-byte.
+    it('GETs /gpu/public/summary (no auth, no {success,data} envelope) and returns the body as-is', async () => {
+      // Fixture copied from gatewayz-backend tests/routes/test_gpu_public.py's `_SUMMARY`
+      // (L38-45) — `test_summary_returns_data_and_cache_header` asserts
+      // `response.json() == _SUMMARY` directly, confirming there is no envelope.
       const data = {
-        active_nodes: 12,
-        approved_providers: 5,
-        regions: [{ region: 'us-east', nodes: 7 }],
+        active_nodes: 3,
+        approved_providers: 2,
+        regions: [{ region: 'us-east', nodes: 3 }],
         models: [{ id: 'llama-3.1-8b-instruct', nodes: 3 }],
-        last_hour: { requests: 421, tokens: 918234, avg_latency_ms: 812, error_rate: 0.01 },
-        updated_at: '2026-09-03T12:00:00Z',
+        last_hour: { requests: 100, tokens: 5000, avg_latency_ms: 250, error_rate: 0.01 },
+        updated_at: '2026-09-03T18:00:00+00:00',
       };
-      mockFetch.mockResolvedValueOnce(createSuccessResponse({ success: true, data }));
+      mockFetch.mockResolvedValueOnce(createSuccessResponse(data));
 
       const result = await getGpuPublicSummary();
 
@@ -35,19 +37,21 @@ describe('gpu/public-api', () => {
   });
 
   describe('getGpuPublicNodes', () => {
-    it('GETs /gpu/public/nodes and returns the array, never leaking identity fields', async () => {
+    it('GETs /gpu/public/nodes (bare array, no envelope) and never leaks identity fields', async () => {
+      // Fixture copied from gatewayz-backend tests/routes/test_gpu_public.py's `_NODES`
+      // (L47-56) — `test_nodes_returns_bare_array` confirms the response is a plain array.
       const data = [
         {
-          name: 'gpu-node-01',
+          name: 'node-1',
           region: 'us-east',
-          gpu_model: 'RTX 4090',
-          vram_gb: 24,
+          gpu_model: 'A100',
+          vram_gb: 80,
           status: 'active',
-          uptime_24h_pct: 99.2,
+          uptime_24h_pct: 95.5,
           models: ['llama-3.1-8b-instruct'],
         },
       ];
-      mockFetch.mockResolvedValueOnce(createSuccessResponse({ success: true, data }));
+      mockFetch.mockResolvedValueOnce(createSuccessResponse(data));
 
       const result = await getGpuPublicNodes();
 
@@ -60,7 +64,10 @@ describe('gpu/public-api', () => {
   });
 
   describe('getGpuUtilization', () => {
-    it('builds the query string from window + group', async () => {
+    it('builds the query string from window + group, and returns the body as-is (no envelope)', async () => {
+      // Fixture copied from gatewayz-backend tests/routes/test_gpu_public.py's `_UTIL_ROWS`
+      // (L58-67), wrapped in the route's own {window, group, series} shape
+      // (src/routes/gpu_public.py's `public_utilization`).
       const data = {
         window: '24h' as const,
         group: 'region' as const,
@@ -68,16 +75,16 @@ describe('gpu/public-api', () => {
           {
             hour: '2026-09-03T17:00:00+00:00',
             key: 'us-east',
-            requests: 40,
-            prompt_tokens: 12000,
-            completion_tokens: 30000,
-            avg_latency_ms: 780,
+            requests: 10,
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            avg_latency_ms: 200,
             error_rate: 0.0,
-            active_nodes: 4,
+            active_nodes: 1,
           },
         ],
       };
-      mockFetch.mockResolvedValueOnce(createSuccessResponse({ success: true, data }));
+      mockFetch.mockResolvedValueOnce(createSuccessResponse(data));
 
       const result = await getGpuUtilization('24h', 'region');
 
