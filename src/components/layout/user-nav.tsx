@@ -18,6 +18,7 @@ import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { getUserMessage } from "@/lib/errors";
 import { useActiveWallet } from "@/lib/hooks/use-active-wallet";
 import { useLinkAccount } from "@privy-io/react-auth";
+import { describeLinkAccountError } from "@/lib/auth/link-account-error";
 
 interface UserNavProps {
   user: any; // Privy user object
@@ -32,7 +33,13 @@ export function UserNav({ user }: UserNavProps) {
   // login method yet — `linkEmail()` attaches one to the *same* Privy user id (and thus the
   // same backend account, history included) rather than starting a new session.
   const isGuest = Boolean(user?.isGuest);
-  const { linkEmail } = useLinkAccount();
+  const { linkEmail } = useLinkAccount({
+    onError: (error) => {
+      const description = describeLinkAccountError(error);
+      if (!description) return; // user closed the modal themselves — nothing to say
+      toast({ title: "Could not sign in", description, variant: "destructive" });
+    },
+  });
 
   const handleSignOut = async () => {
     try {

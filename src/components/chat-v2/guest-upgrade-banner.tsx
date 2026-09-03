@@ -5,6 +5,8 @@ import { UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePrivy, useLinkAccount } from "@privy-io/react-auth";
 import { AUTH_REFRESH_EVENT } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
+import { describeLinkAccountError } from "@/lib/auth/link-account-error";
 
 /**
  * Guest upgrade nudge (M2 W3b — gatewayz-backend#2253).
@@ -29,6 +31,7 @@ function readDismissed(): boolean {
 export function GuestUpgradeBanner() {
   const { user } = usePrivy();
   const [dismissed, setDismissed] = useState(readDismissed);
+  const { toast } = useToast();
 
   // Same event gatewayz-auth-context.tsx and use-auth-sync.ts already listen for to force a
   // fresh POST /auth — after a link, the backend sees the newly-attached account and the
@@ -39,8 +42,21 @@ export function GuestUpgradeBanner() {
     }
   }, []);
 
+  // A cancelled Privy modal (`error === "exited_link_flow"`) maps to `null` — nothing to tell
+  // the guest, they just changed their mind. Every other failure gets a short toast so the
+  // banner doesn't silently do nothing when e.g. the wallet is already linked elsewhere.
+  const handleLinkError = useCallback(
+    (error: string) => {
+      const description = describeLinkAccountError(error);
+      if (!description) return;
+      toast({ title: "Could not sign in", description, variant: "destructive" });
+    },
+    [toast]
+  );
+
   const { linkEmail, linkGoogle, linkWallet } = useLinkAccount({
     onSuccess: requestResync,
+    onError: handleLinkError,
   });
 
   if (!user?.isGuest || dismissed) {

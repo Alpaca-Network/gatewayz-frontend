@@ -41,8 +41,9 @@ jest.mock('@/lib/hooks/use-active-wallet', () => ({
 
 // Mock useLinkAccount (guest upgrade CTA, M2 W3b)
 const mockLinkEmail = jest.fn();
+const mockUseLinkAccount = jest.fn();
 jest.mock('@privy-io/react-auth', () => ({
-  useLinkAccount: () => ({ linkEmail: mockLinkEmail }),
+  useLinkAccount: (...args: unknown[]) => mockUseLinkAccount(...args),
 }));
 
 // Mock Next.js Link component
@@ -74,6 +75,7 @@ describe('UserNav', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseActiveWallet.mockReturnValue({ address: null, connect: mockConnectWallet });
+    mockUseLinkAccount.mockReturnValue({ linkEmail: mockLinkEmail });
   });
 
   describe('Guest accounts (M2 W3b)', () => {
@@ -98,6 +100,30 @@ describe('UserNav', () => {
       await user.click(upgradeButton);
 
       expect(mockLinkEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows a toast when linkEmail fails with a non-cancel error', () => {
+      render(<UserNav user={guestUser} />);
+
+      const options = mockUseLinkAccount.mock.calls[0]?.[0];
+      options.onError('linked_to_another_user');
+
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Could not sign in',
+          description: expect.stringMatching(/already linked/i),
+          variant: 'destructive',
+        })
+      );
+    });
+
+    it('does not show a toast when the user cancels the link flow', () => {
+      render(<UserNav user={guestUser} />);
+
+      const options = mockUseLinkAccount.mock.calls[0]?.[0];
+      options.onError('exited_link_flow');
+
+      expect(mockToast).not.toHaveBeenCalled();
     });
 
     it('does not show the upgrade CTA for a non-guest account', async () => {

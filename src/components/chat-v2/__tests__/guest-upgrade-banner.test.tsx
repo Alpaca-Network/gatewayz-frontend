@@ -18,6 +18,11 @@ jest.mock("lucide-react", () => ({
   X: () => <span data-testid="x-icon" />,
 }));
 
+const mockToast = jest.fn();
+jest.mock("@/hooks/use-toast", () => ({
+  useToast: () => ({ toast: mockToast }),
+}));
+
 describe("GuestUpgradeBanner", () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -79,6 +84,32 @@ describe("GuestUpgradeBanner", () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     window.removeEventListener(AUTH_REFRESH_EVENT, handler);
+  });
+
+  it("shows a toast when a link attempt fails with a non-cancel error", () => {
+    mockUsePrivy.mockReturnValue({ user: { isGuest: true } });
+    render(<GuestUpgradeBanner />);
+
+    const options = mockUseLinkAccount.mock.calls[0]?.[0];
+    options.onError("linked_to_another_user");
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Could not sign in",
+        description: expect.stringMatching(/already linked/i),
+        variant: "destructive",
+      })
+    );
+  });
+
+  it("does not show a toast when the user just cancels the link modal", () => {
+    mockUsePrivy.mockReturnValue({ user: { isGuest: true } });
+    render(<GuestUpgradeBanner />);
+
+    const options = mockUseLinkAccount.mock.calls[0]?.[0];
+    options.onError("exited_link_flow");
+
+    expect(mockToast).not.toHaveBeenCalled();
   });
 
   it("dismiss hides the banner for the rest of the session", () => {
