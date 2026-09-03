@@ -39,6 +39,12 @@ jest.mock('@/lib/hooks/use-active-wallet', () => ({
   useActiveWallet: () => mockUseActiveWallet(),
 }));
 
+// Mock useLinkAccount (guest upgrade CTA, M2 W3b)
+const mockLinkEmail = jest.fn();
+jest.mock('@privy-io/react-auth', () => ({
+  useLinkAccount: () => ({ linkEmail: mockLinkEmail }),
+}));
+
 // Mock Next.js Link component
 jest.mock('next/link', () => {
   return ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -68,6 +74,42 @@ describe('UserNav', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseActiveWallet.mockReturnValue({ address: null, connect: mockConnectWallet });
+  });
+
+  describe('Guest accounts (M2 W3b)', () => {
+    const guestUser = { isGuest: true, linkedAccounts: [] };
+
+    it('shows "Guest" instead of an email for a guest account', async () => {
+      const user = userEvent.setup();
+      render(<UserNav user={guestUser} />);
+
+      await user.click(screen.getByRole('button'));
+
+      expect(await screen.findByText('Guest')).toBeInTheDocument();
+      expect(screen.queryByText('User')).not.toBeInTheDocument();
+    });
+
+    it('shows the upgrade CTA for a guest account, and it calls linkEmail', async () => {
+      const user = userEvent.setup();
+      render(<UserNav user={guestUser} />);
+
+      await user.click(screen.getByRole('button'));
+      const upgradeButton = await screen.findByRole('menuitem', { name: /sign in to save your account/i });
+      await user.click(upgradeButton);
+
+      expect(mockLinkEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not show the upgrade CTA for a non-guest account', async () => {
+      const user = userEvent.setup();
+      render(<UserNav user={mockUser} />);
+
+      await user.click(screen.getByRole('button'));
+      await screen.findByRole('menu');
+
+      expect(screen.queryByRole('menuitem', { name: /sign in to save your account/i })).not.toBeInTheDocument();
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
   });
 
   describe('Wallet Display', () => {

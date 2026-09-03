@@ -17,6 +17,7 @@ import { useTier } from "@/hooks/use-tier";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import { getUserMessage } from "@/lib/errors";
 import { useActiveWallet } from "@/lib/hooks/use-active-wallet";
+import { useLinkAccount } from "@privy-io/react-auth";
 
 interface UserNavProps {
   user: any; // Privy user object
@@ -27,6 +28,11 @@ export function UserNav({ user }: UserNavProps) {
   const { toast } = useToast();
   const { tier, tierDisplayName } = useTier();
   const { address: activeWalletAddress, connect: connectWallet } = useActiveWallet();
+  // Guest accounts (M2 W3b, gatewayz-backend#2253): a Privy guest has no email/oauth/wallet
+  // login method yet — `linkEmail()` attaches one to the *same* Privy user id (and thus the
+  // same backend account, history included) rather than starting a new session.
+  const isGuest = Boolean(user?.isGuest);
+  const { linkEmail } = useLinkAccount();
 
   const handleSignOut = async () => {
     try {
@@ -104,9 +110,11 @@ export function UserNav({ user }: UserNavProps) {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-baseline gap-2 flex-wrap flex-1">
                 <p className="text-sm font-medium leading-none">
-                  {user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.name || "User"}
+                  {isGuest
+                    ? "Guest"
+                    : user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.name || "User"}
                 </p>
-                {(user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.username) && (
+                {!isGuest && (user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.username) && (
                   <p className="text-xs leading-none text-muted-foreground">
                     ({user?.email?.address || user?.google?.email || user?.github?.email || user?.github?.username})
                   </p>
@@ -144,6 +152,11 @@ export function UserNav({ user }: UserNavProps) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          {isGuest && (
+            <DropdownMenuItem onClick={() => linkEmail()}>
+              Sign in to save your account
+            </DropdownMenuItem>
+          )}
           {activeWalletAddress ? (
             <DropdownMenuItem
               onClick={(e) => {
