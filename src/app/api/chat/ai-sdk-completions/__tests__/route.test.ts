@@ -1,1277 +1,533 @@
 /**
- * Unit tests for AI SDK completions route
- * Tests reasoning detection, provider selection, and error handling
+ * Integration tests for the AI SDK completions API route.
+ *
+ * Replaces a prior 1277-line test suite written against a `streamText`/
+ * `createOpenAI` (Vercel AI SDK) implementation this route no longer has.
+ * The route has been a plain fetch proxy to /v1/chat/completions since the
+ * "remove AI SDK, sandbox, insights, and rankings" rewrite (36e78475) — see
+ * the route's own docstring. This file tests that current behavior instead,
+ * mirroring the pattern already used for the sibling proxy route's tests in
+ * ../../completions/__tests__/route.test.ts (that route has additional
+ * retry/timing-header/rate-limit-response-header behavior this simpler proxy
+ * does not — assertions here match this route's actual response shape, not
+ * the sibling's).
  *
  * @jest-environment node
  */
 
 import { NextRequest } from 'next/server';
+import { POST } from '../route';
+import { ReadableStream } from 'stream/web';
+
+// Polyfill ReadableStream for Node.js test environment
+if (typeof globalThis.ReadableStream === 'undefined') {
+  (globalThis as any).ReadableStream = ReadableStream;
+}
+
 import { clearAllRateLimitsForTesting } from '@/lib/guest-rate-limiter';
 
-// Mock AI SDK - define MockAPICallError inside the factory to avoid hoisting issues
-jest.mock('ai', () => {
-  // Create a mock APICallError class for testing
-  class MockAPICallError extends Error {
-    statusCode?: number;
-    responseHeaders?: Record<string, string>;
-    responseBody?: string;
-    isRetryable: boolean;
+// Mock fetch globally
+global.fetch = jest.fn();
 
-    constructor(options: {
-      message: string;
-      statusCode?: number;
-      responseHeaders?: Record<string, string>;
-      responseBody?: string;
-      isRetryable?: boolean;
-    }) {
-      super(options.message);
-      this.name = 'APICallError';
-      this.statusCode = options.statusCode;
-      this.responseHeaders = options.responseHeaders;
-      this.responseBody = options.responseBody;
-      this.isRetryable = options.isRetryable ?? false;
-    }
-  }
-
-  return {
-    streamText: jest.fn(),
-    convertToCoreMessages: jest.fn((messages: unknown[]) => messages),
-    APICallError: MockAPICallError,
-  };
-});
-
-// Import after mocks are set up
-import { POST } from '../route';
-
-jest.mock('@ai-sdk/openai', () => ({
-  createOpenAI: jest.fn(() => {
-    return (modelId: string) => ({
-      modelId,
-      provider: 'openai',
-    });
-  }),
-}));
-
-describe('AI SDK Completions Route', () => {
+describe('AI SDK Completions Route (plain fetch proxy)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    // Clear guest rate limits between tests
     clearAllRateLimitsForTesting();
   });
 
-  describe('Request Validation', () => {
-    it('should return 400 if messages array is missing', async () => {
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          // messages missing
-        }),
-      });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
 
-      const response = await POST(request);
-      expect(response.status).toBe(400);
+  function createMockStream(chunks: string[]): ReadableStream<Uint8Array> {
+    const encoder = new TextEncoder();
+    let index = 0;
 
-      const data = await response.json();
-      expect(data.error).toContain('messages array is required');
+    return new ReadableStream({
+      async pull(controller) {
+        if (index < chunks.length) {
+          controller.enqueue(encoder.encode(chunks[index]));
+          index++;
+        } else {
+          controller.close();
+        }
+      },
+    }) as ReadableStream<Uint8Array>;
+  }
+
+  function createMockRequest(body: any, apiKey?: string): NextRequest {
+    const headers = new Headers();
+    headers.set('content-type', 'application/json');
+    if (apiKey) {
+      headers.set('authorization', `Bearer ${apiKey}`);
+    }
+
+    return new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
     });
+  }
 
-    it('should return 400 if model is missing', async () => {
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: 'Hello' }],
-          // model missing
-        }),
-      });
+  function createMockRequestWithIP(body: any, ip: string, apiKey?: string): NextRequest {
+    const headers = new Headers();
+    headers.set('content-type', 'application/json');
+    headers.set('x-forwarded-for', ip);
+    if (apiKey) {
+      headers.set('authorization', `Bearer ${apiKey}`);
+    }
 
-      const response = await POST(request);
-      expect(response.status).toBe(400);
-
-      const data = await response.json();
-      expect(data.error).toContain('model is required');
+    return new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
     });
+  }
 
-    it('should return 401 when API key is missing and GUEST_API_KEY not configured', async () => {
-      // Ensure GUEST_API_KEY is not set
-      delete process.env.GUEST_API_KEY;
+  const streamChunks = [
+    'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+    'data: [DONE]\n\n',
+  ];
 
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hello' }],
-          // apiKey missing, no Authorization header
-        }),
-      });
-
-      const response = await POST(request);
-      // Should return 401 with GUEST_NOT_CONFIGURED error
-      expect(response.status).toBe(401);
-
-      const data = await response.json();
-      expect(data.code).toBe('GUEST_NOT_CONFIGURED');
-      expect(data.message).toContain('sign in');
-    });
-
-    it('should accept API key from Authorization header', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer test-api-key',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hello' }],
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-      expect(streamText).toHaveBeenCalled();
-    });
-
-    it('should accept API key from request body', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hello' }],
-          apiKey: 'test-api-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-      expect(streamText).toHaveBeenCalled();
-    });
-
-    it('should use GUEST_API_KEY when explicit guest request and GUEST_API_KEY is configured', async () => {
-      // Set GUEST_API_KEY for this test
-      process.env.GUEST_API_KEY = 'test-guest-key';
-
-      const { streamText, createOpenAI } = require('ai');
-      const { createOpenAI: createOpenAIMock } = require('@ai-sdk/openai');
-
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hello' }],
-          apiKey: 'guest', // Explicit guest request
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      // Verify the guest API key was used
-      expect(createOpenAIMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          apiKey: 'test-guest-key',
-        })
-      );
-
-      // Clean up
-      delete process.env.GUEST_API_KEY;
-    });
-
-    it('should return 401 for explicit guest request when GUEST_API_KEY not configured', async () => {
-      // Ensure GUEST_API_KEY is not set
-      delete process.env.GUEST_API_KEY;
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hello' }],
-          apiKey: 'guest', // Explicit guest request
-        }),
-      });
-
-      const response = await POST(request);
-      // Should return 401 with GUEST_NOT_CONFIGURED error
-      expect(response.status).toBe(401);
-
-      const data = await response.json();
-      expect(data.code).toBe('GUEST_NOT_CONFIGURED');
-      expect(data.message).toContain('sign in');
-    });
-
-    it('should return 429 when guest rate limit is exceeded', async () => {
-      // Set GUEST_API_KEY for this test
-      process.env.GUEST_API_KEY = 'test-guest-key';
-
-      const { streamText, createOpenAI } = require('ai');
-      const { createOpenAI: createOpenAIMock } = require('@ai-sdk/openai');
-
-      // Use mockImplementation to create a fresh generator per call
-      // mockReturnValue with an immediately-invoked generator would create a single shared instance
-      streamText.mockImplementation(() => ({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      }));
-
-      // Make 3 requests (the limit)
-      for (let i = 0; i < 3; i++) {
-        const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-          method: 'POST',
-          body: JSON.stringify({
-            model: 'gpt-4',
-            messages: [{ role: 'user', content: 'Hello' }],
-            apiKey: 'guest',
-          }),
-          headers: {
-            'x-forwarded-for': '192.168.1.100',
-          },
-        });
-        const response = await POST(request);
-        expect(response.status).toBe(200);
-      }
-
-      // 4th request should be rate limited
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hello' }],
-          apiKey: 'guest',
-        }),
-        headers: {
-          'x-forwarded-for': '192.168.1.100',
-        },
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(429);
-
-      const data = await response.json();
-      expect(data.code).toBe('GUEST_RATE_LIMIT_EXCEEDED');
-      expect(data.message).toContain('free chat limit');
-      expect(response.headers.get('X-RateLimit-Remaining')).toBe('0');
-
-      // Clean up
-      delete process.env.GUEST_API_KEY;
-    });
-
-    it('should not consume guest quota when streamText throws pre-stream error', async () => {
-      // Set GUEST_API_KEY for this test
-      process.env.GUEST_API_KEY = 'test-guest-key';
-
-      const { streamText } = require('ai');
-      const { APICallError } = require('ai');
-
-      // First request: streamText throws an error (e.g., invalid model)
-      streamText.mockImplementationOnce(() => {
-        throw new APICallError({
-          message: 'Model not found',
-          statusCode: 404,
-          isRetryable: false,
-        });
-      });
-
-      const failedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'invalid-model',
-          messages: [{ role: 'user', content: 'Hello' }],
-          apiKey: 'guest',
-        }),
-        headers: {
-          'x-forwarded-for': '192.168.1.200',
-        },
-      });
-
-      const failedResponse = await POST(failedRequest);
-      expect(failedResponse.status).toBe(404); // Should fail with model not found
-
-      // Now make 3 successful requests - they should all succeed because the failed one didn't consume quota
-      // Use mockImplementation to create a fresh generator per call
-      streamText.mockImplementation(() => ({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      }));
-
-      for (let i = 0; i < 3; i++) {
-        const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-          method: 'POST',
-          body: JSON.stringify({
-            model: 'gpt-4',
-            messages: [{ role: 'user', content: 'Hello' }],
-            apiKey: 'guest',
-          }),
-          headers: {
-            'x-forwarded-for': '192.168.1.200',
-          },
-        });
-        const response = await POST(request);
-        expect(response.status).toBe(200);
-      }
-
-      // 4th successful request should be rate limited (quota was only consumed by the 3 successful ones)
-      const rateLimitedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Hello' }],
-          apiKey: 'guest',
-        }),
-        headers: {
-          'x-forwarded-for': '192.168.1.200',
-        },
-      });
-
-      const rateLimitedResponse = await POST(rateLimitedRequest);
-      expect(rateLimitedResponse.status).toBe(429);
-
-      // Clean up
-      delete process.env.GUEST_API_KEY;
-    });
-
-    it('should consume guest quota for redirected non-standard model requests', async () => {
-      // Set GUEST_API_KEY for this test
-      process.env.GUEST_API_KEY = 'test-guest-key';
-
-      // Mock global fetch for the redirect
-      const mockFetch = jest.fn().mockResolvedValue({
+  describe('Streaming requests', () => {
+    it('forwards a streaming request to /v1/chat/completions', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        body: new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'));
-            controller.close();
-          },
-        }),
-        headers: new Map([['Content-Type', 'text/event-stream']]),
-      });
-      global.fetch = mockFetch as unknown as typeof fetch;
-
-      // Make 3 requests to a non-standard gateway (deepseek) - should be redirected
-      for (let i = 0; i < 3; i++) {
-        const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-          method: 'POST',
-          body: JSON.stringify({
-            model: 'deepseek/deepseek-r1',
-            messages: [{ role: 'user', content: 'Hello' }],
-            apiKey: 'guest',
-          }),
-          headers: {
-            'x-forwarded-for': '192.168.1.150',
-          },
-        });
-        const response = await POST(request);
-        expect(response.status).toBe(200);
-        expect(response.headers.get('X-Redirected-From')).toBe('ai-sdk-completions');
-      }
-
-      // Verify fetch was called 3 times (for redirects)
-      expect(mockFetch).toHaveBeenCalledTimes(3);
-
-      // 4th request should be rate limited even though it's redirected
-      const rateLimitedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'deepseek/deepseek-r1',
-          messages: [{ role: 'user', content: 'Hello' }],
-          apiKey: 'guest',
-        }),
-        headers: {
-          'x-forwarded-for': '192.168.1.150',
-        },
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: createMockStream(streamChunks),
       });
 
-      const rateLimitedResponse = await POST(rateLimitedRequest);
-      expect(rateLimitedResponse.status).toBe(429);
+      const request = createMockRequest({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'test-api-key',
+      });
+      const response = await POST(request);
 
-      const data = await rateLimitedResponse.json();
-      expect(data.code).toBe('GUEST_RATE_LIMIT_EXCEEDED');
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('text/event-stream');
 
-      // Clean up
-      delete process.env.GUEST_API_KEY;
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[0]).toContain('/v1/chat/completions');
+      expect(fetchCall[1].method).toBe('POST');
+      expect(fetchCall[1].headers['Authorization']).toBe('Bearer test-api-key');
     });
 
-    it('should not consume guest quota when redirected request fails', async () => {
-      // Set GUEST_API_KEY for this test
-      process.env.GUEST_API_KEY = 'test-guest-key';
-
-      // Mock global fetch to return an error response
-      const mockFetch = jest.fn().mockResolvedValue({
+    it('passes through a backend error with its status and classification headers', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 500,
-        body: null,
-        headers: new Map([['Content-Type', 'application/json']]),
-      });
-      global.fetch = mockFetch as unknown as typeof fetch;
-
-      // Make a failed redirected request
-      const failedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'deepseek/deepseek-r1',
-          messages: [{ role: 'user', content: 'Hello' }],
-          apiKey: 'guest',
-        }),
-        headers: {
-          'x-forwarded-for': '192.168.1.160',
-        },
+        headers: new Headers({ 'x-request-id': 'req-123' }),
+        text: async () => JSON.stringify({ detail: 'Internal server error' }),
       });
 
-      const failedResponse = await POST(failedRequest);
-      expect(failedResponse.status).toBe(500);
+      const request = createMockRequest({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'test-api-key',
+      });
+      const response = await POST(request);
 
-      // Now mock successful fetch
-      mockFetch.mockResolvedValue({
+      expect(response.status).toBe(500);
+      expect(response.headers.get('x-request-id')).toBe('req-123');
+      const body = await response.json();
+      expect(body.error).toBe('Backend API Error');
+      expect(body.errorData).toEqual({ detail: 'Internal server error' });
+    });
+
+    it('returns 500 when the backend response has no body', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: true,
         status: 200,
-        body: new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'));
-            controller.close();
-          },
-        }),
-        headers: new Map([['Content-Type', 'text/event-stream']]),
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: null,
       });
 
-      // Make 3 successful redirected requests - they should all succeed because the failed one didn't consume quota
+      const request = createMockRequest({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'test-api-key',
+      });
+      const response = await POST(request);
+
+      expect(response.status).toBe(500);
+      const body = await response.json();
+      expect(body.error).toContain('No response body');
+    });
+  });
+
+  describe('Non-streaming requests', () => {
+    it('forwards a non-streaming request and returns the backend JSON as-is', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({
+          choices: [{ message: { content: 'Response' } }],
+          usage: { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 },
+        }),
+      });
+
+      const request = createMockRequest({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: false,
+        apiKey: 'test-api-key',
+      });
+      const response = await POST(request);
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('application/json');
+      const body = await response.json();
+      expect(body.choices).toBeDefined();
+    });
+  });
+
+  describe('Authentication', () => {
+    it('forwards guest requests anonymously (no Authorization header, no shared key)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: createMockStream(streamChunks),
+      });
+
+      const request = createMockRequest({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        // no apiKey
+      });
+      await POST(request);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[1].headers['Authorization']).toBeUndefined();
+    });
+
+    it('treats the explicit "guest" sentinel the same as a missing API key', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: createMockStream(streamChunks),
+      });
+
+      const request = createMockRequest({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      });
+      await POST(request);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[1].headers['Authorization']).toBeUndefined();
+    });
+
+    it('accepts an API key from the request body over the Authorization header', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: createMockStream(streamChunks),
+      });
+
+      const request = createMockRequest(
+        {
+          model: 'openrouter/auto',
+          messages: [{ role: 'user', content: 'Hello' }],
+          stream: true,
+          apiKey: 'body-api-key',
+        },
+        'header-api-key'
+      );
+      await POST(request);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[1].headers['Authorization']).toBe('Bearer body-api-key');
+    });
+
+    it('falls back to the Authorization header when no body apiKey is set', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: createMockStream(streamChunks),
+      });
+
+      const request = createMockRequest(
+        {
+          model: 'openrouter/auto',
+          messages: [{ role: 'user', content: 'Hello' }],
+          stream: true,
+        },
+        'header-api-key'
+      );
+      await POST(request);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      expect(fetchCall[1].headers['Authorization']).toBe('Bearer header-api-key');
+    });
+
+    it('strips the internal apiKey field from the body forwarded to the backend', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: createMockStream(streamChunks),
+      });
+
+      const request = createMockRequest({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'test-api-key',
+      });
+      await POST(request);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      const sentBody = JSON.parse(fetchCall[1].body);
+      expect(sentBody.apiKey).toBeUndefined();
+    });
+  });
+
+  describe('Model ID normalization', () => {
+    it('normalizes @provider format to provider format before forwarding', async () => {
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: createMockStream(streamChunks),
+      });
+
+      const request = createMockRequest({
+        model: '@google/models/gemini-pro',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'test-api-key',
+      });
+      await POST(request);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      const sentBody = JSON.parse(fetchCall[1].body);
+      expect(sentBody.model).toBe('google/gemini-pro');
+    });
+  });
+
+  describe('Network error handling', () => {
+    it('returns 504 and classifies an aborted/timeout request', async () => {
+      const abortError = new Error('This operation was aborted');
+      abortError.name = 'AbortError';
+      (global.fetch as jest.Mock).mockRejectedValueOnce(abortError);
+
+      const request = createMockRequest({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'test-api-key',
+      });
+      const response = await POST(request);
+
+      // route.ts's isTimeout check matches on error.message.includes('aborted')
+      expect(response.status).toBe(504);
+      const body = await response.json();
+      expect(body.error).toContain('timed out');
+    });
+
+    it('returns 502 and a friendly message for a network/fetch failure', async () => {
+      (global.fetch as jest.Mock).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+      const request = createMockRequest({
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'test-api-key',
+      });
+      const response = await POST(request);
+
+      expect(response.status).toBe(502);
+      const body = await response.json();
+      expect(body.error).toContain('Could not connect');
+    });
+  });
+
+  describe('Guest rate limiting', () => {
+    it('returns 429 with the raw checkGuestRateLimit fields once the daily limit is exceeded', async () => {
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+
       for (let i = 0; i < 3; i++) {
-        const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-          method: 'POST',
-          body: JSON.stringify({
-            model: 'deepseek/deepseek-r1',
-            messages: [{ role: 'user', content: 'Hello' }],
-            apiKey: 'guest',
-          }),
-          headers: {
-            'x-forwarded-for': '192.168.1.160',
-          },
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+          body: createMockStream(streamChunks),
         });
-        const response = await POST(request);
+        const response = await POST(createMockRequestWithIP(requestBody, '192.168.1.50'));
         expect(response.status).toBe(200);
       }
 
-      // 4th request should be rate limited
-      const rateLimitedRequest = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'deepseek/deepseek-r1',
-          messages: [{ role: 'user', content: 'Hello' }],
-          apiKey: 'guest',
-        }),
-        headers: {
-          'x-forwarded-for': '192.168.1.160',
-        },
-      });
+      const response = await POST(createMockRequestWithIP(requestBody, '192.168.1.50'));
 
-      const rateLimitedResponse = await POST(rateLimitedRequest);
-      expect(rateLimitedResponse.status).toBe(429);
-
-      // Clean up
-      delete process.env.GUEST_API_KEY;
-    });
-  });
-
-  describe('Provider Detection', () => {
-    it('should detect Claude models', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'claude-3-7-sonnet-20250219',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.headers.get('X-Provider')).toBe('anthropic');
-      expect(response.headers.get('X-Supports-Thinking')).toBe('true');
+      expect(response.status).toBe(429);
+      const body = await response.json();
+      expect(body.error).toBe('Rate limit exceeded');
+      expect(body.remaining).toBe(0);
+      expect(typeof body.resetTime).toBe('number');
     });
 
-    it('should detect OpenAI models', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
+    it('tracks different IPs separately', async () => {
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
 
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.headers.get('X-Provider')).toBe('openai');
-    });
-
-    it('should detect Google models', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gemini-2.0-flash',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.headers.get('X-Provider')).toBe('google');
-      expect(response.headers.get('X-Supports-Thinking')).toBe('true');
-    });
-
-    it('should detect DeepSeek models', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'deepseek-r1',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.headers.get('X-Provider')).toBe('deepseek');
-      expect(response.headers.get('X-Supports-Thinking')).toBe('true');
-    });
-
-    it('should use gatewayz provider as fallback', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'some-unknown-model',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.headers.get('X-Provider')).toBe('gatewayz');
-    });
-  });
-
-  describe('Reasoning Detection', () => {
-    const reasoningModels = [
-      { model: 'claude-3-7-sonnet-20250219', expectedThinking: true },
-      { model: 'claude-opus-4', expectedThinking: true },
-      { model: 'claude-sonnet-4', expectedThinking: true },
-      { model: 'claude-3.5-sonnet', expectedThinking: false },
-      { model: 'o1-preview', expectedThinking: true },
-      { model: 'o1-mini', expectedThinking: true },
-      { model: 'o3-mini', expectedThinking: true },
-      { model: 'gpt-4', expectedThinking: false },
-      { model: 'gemini-2.0-flash', expectedThinking: true },
-      { model: 'gemini-1.5-pro', expectedThinking: false },
-      { model: 'deepseek-r1', expectedThinking: true },
-      { model: 'deepseek-coder', expectedThinking: false },
-      { model: 'qwen-qwq', expectedThinking: true },
-      { model: 'qwen-2.5', expectedThinking: false },
-      { model: 'llama-3-thinking', expectedThinking: true },
-      { model: 'llama-3', expectedThinking: false },
-    ];
-
-    reasoningModels.forEach(({ model, expectedThinking }) => {
-      it(`should ${expectedThinking ? 'enable' : 'disable'} thinking for ${model}`, async () => {
-        const { streamText } = require('ai');
-        streamText.mockReturnValue({
-          fullStream: (async function* () {
-            yield { type: 'text-delta', text: 'Hello' };
-            yield { type: 'finish', finishReason: 'stop' };
-          })(),
+      for (let i = 0; i < 3; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+          body: createMockStream(streamChunks),
         });
+        const response = await POST(createMockRequestWithIP(requestBody, '10.0.0.1'));
+        expect(response.status).toBe(200);
+      }
 
-        const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-          method: 'POST',
-          body: JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: 'Test' }],
-            apiKey: 'test-key',
-          }),
-        });
-
-        const response = await POST(request);
-        expect(response.headers.get('X-Supports-Thinking')).toBe(expectedThinking ? 'true' : 'false');
+      // A different IP should still have its own full quota.
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: createMockStream(streamChunks),
       });
-    });
-  });
-
-  describe('SSE Stream Formatting', () => {
-    it('should format text as SSE with OpenAI structure', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          // AI SDK fullStream uses 'text-delta' type
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'text-delta', text: ' World' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
+      const response = await POST(createMockRequestWithIP(requestBody, '10.0.0.2'));
       expect(response.status).toBe(200);
-      expect(response.headers.get('Content-Type')).toBe('text/event-stream');
-
-      const text = await response.text();
-      expect(text).toContain('data: ');
-      expect(text).toContain('"choices"');
-      expect(text).toContain('"delta"');
-      expect(text).toContain('"content":"Hello"');
-      expect(text).toContain('data: [DONE]');
     });
 
-    it('should format reasoning as SSE with reasoning_content field', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          // AI SDK fullStream uses 'reasoning-delta' and 'text-delta' types
-          yield { type: 'reasoning-delta', text: 'Thinking...' };
-          yield { type: 'text-delta', text: 'Answer' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
+    it('does not rate limit authenticated requests', async () => {
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'real-user-api-key',
+      };
 
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'claude-3-7-sonnet-20250219',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      const text = await response.text();
-      expect(text).toContain('"reasoning_content":"Thinking..."');
-      expect(text).toContain('"content":"Answer"');
-    });
-
-    it('should include finish_reason in completion message', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      const text = await response.text();
-      expect(text).toContain('"finish_reason":"stop"');
-    });
-  });
-
-  describe('Error Handling', () => {
-    it('should handle streamText errors gracefully', async () => {
-      const { streamText } = require('ai');
-      streamText.mockImplementation(() => {
-        throw new Error('AI SDK Error: Invalid model');
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'invalid-model',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(500);
-
-      const data = await response.json();
-      expect(data.error).toContain('Invalid model');
-    });
-
-    it('should return 401 for API key errors', async () => {
-      const { streamText } = require('ai');
-      streamText.mockImplementation(() => {
-        throw new Error('Invalid API key provided');
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{ role: 'user', content: 'Test' }],
-          apiKey: 'invalid-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(401);
-    });
-  });
-
-  describe('OpenAI Provider Usage', () => {
-    it('should use OpenAI provider for all models', async () => {
-      const { createOpenAI } = require('@ai-sdk/openai');
-      const { streamText } = require('ai');
-
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const models = ['claude-3-7-sonnet', 'gpt-4', 'gemini-2.0-flash', 'deepseek-r1'];
-
-      for (const model of models) {
-        createOpenAI.mockClear();
-
-        const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-          method: 'POST',
-          body: JSON.stringify({
-            model,
-            messages: [{ role: 'user', content: 'Test' }],
-            apiKey: 'test-key',
-          }),
+      for (let i = 0; i < 5; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+          body: createMockStream(streamChunks),
         });
-
-        await POST(request);
-
-        // Verify OpenAI provider was created
-        expect(createOpenAI).toHaveBeenCalled();
-
-        // Verify baseURL points to Gatewayz
-        const callArgs = createOpenAI.mock.calls[0][0];
-        expect(callArgs.baseURL).toContain('/v1');
-        expect(callArgs.apiKey).toBe('test-key');
+        const response = await POST(createMockRequestWithIP(requestBody, '192.168.1.70'));
+        expect(response.status).toBe(200);
       }
     });
-  });
 
-  describe('Message Format Conversion', () => {
-    it('should convert OpenAI format messages with image_url to AI SDK format', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'I see the image' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
+    it('does not consume a guest\'s quota on a failed backend request', async () => {
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+      const ip = '192.168.1.100';
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: new Headers(),
+        text: async () => JSON.stringify({ detail: 'Internal server error' }),
       });
+      const failedResponse = await POST(createMockRequestWithIP(requestBody, ip));
+      expect(failedResponse.status).toBe(500);
 
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: 'What is in this image?' },
-              { type: 'image_url', image_url: { url: 'https://example.com/image.jpg' } }
-            ]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
+      // All 3 successful slots should still be available.
+      for (let i = 0; i < 3; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+          body: createMockStream(streamChunks),
+        });
+        const response = await POST(createMockRequestWithIP(requestBody, ip));
+        expect(response.status).toBe(200);
+      }
 
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      // Verify streamText was called with converted messages
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-      expect(callArgs.messages).toBeDefined();
-      expect(callArgs.messages.length).toBe(1);
-      expect(callArgs.messages[0].role).toBe('user');
-      expect(Array.isArray(callArgs.messages[0].content)).toBe(true);
-
-      const content = callArgs.messages[0].content;
-      expect(content[0].type).toBe('text');
-      expect(content[0].text).toBe('What is in this image?');
-      expect(content[1].type).toBe('image');
-      expect(content[1].image).toBeInstanceOf(URL);
-      expect(content[1].image.toString()).toBe('https://example.com/image.jpg');
+      const rateLimitedResponse = await POST(createMockRequestWithIP(requestBody, ip));
+      expect(rateLimitedResponse.status).toBe(429);
     });
 
-    it('should handle string content without modification', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Hello!' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
+    it('does consume a guest\'s quota when the backend responds ok but with no body', async () => {
+      // Unlike a non-ok backend response, route.ts increments the guest quota
+      // as soon as `response.ok` is true — BEFORE the streaming branch checks
+      // `response.body` and 500s. A guest hitting this edge case still burns
+      // a quota slot.
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+      const ip = '192.168.1.102';
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/event-stream' }),
+        body: null,
       });
+      const failedResponse = await POST(createMockRequestWithIP(requestBody, ip));
+      expect(failedResponse.status).toBe(500);
 
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [
-            { role: 'user', content: 'Hello' },
-            { role: 'assistant', content: 'Hi there!' },
-            { role: 'user', content: 'How are you?' }
-          ],
-          apiKey: 'test-key',
-        }),
-      });
+      // Only 2 successful slots remain after the "ok but no body" request.
+      for (let i = 0; i < 2; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+          body: createMockStream(streamChunks),
+        });
+        const response = await POST(createMockRequestWithIP(requestBody, ip));
+        expect(response.status).toBe(200);
+      }
 
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-      expect(callArgs.messages).toEqual([
-        { role: 'user', content: 'Hello' },
-        { role: 'assistant', content: 'Hi there!' },
-        { role: 'user', content: 'How are you?' }
-      ]);
+      const rateLimitedResponse = await POST(createMockRequestWithIP(requestBody, ip));
+      expect(rateLimitedResponse.status).toBe(429);
     });
 
-    it('should handle system messages with array content', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Response' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
+    it('allows exactly 3 successful requests before rate limiting', async () => {
+      const requestBody = {
+        model: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hello' }],
+        stream: true,
+        apiKey: 'guest',
+      };
+      const ip = '192.168.1.104';
 
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{
-            role: 'system',
-            content: [
-              { type: 'text', text: 'You are a helpful assistant.' },
-              { type: 'text', text: 'Be concise.' }
-            ]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
+      for (let i = 0; i < 3; i++) {
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+          body: createMockStream(streamChunks),
+        });
+        const response = await POST(createMockRequestWithIP(requestBody, ip));
+        expect(response.status).toBe(200);
+      }
 
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-      expect(callArgs.messages[0].role).toBe('system');
-      expect(callArgs.messages[0].content).toBe('You are a helpful assistant.\nBe concise.');
-    });
-
-    it('should convert multiple text parts to single string for simpler format', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Response' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Single text part' }
-            ]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-      // Single text part should be converted to string
-      expect(callArgs.messages[0].content).toBe('Single text part');
-    });
-
-    it('should skip unsupported media types gracefully', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Response' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Check this video' },
-              { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
-              { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
-            ]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-      // Video and audio should be skipped, only text remains
-      expect(callArgs.messages[0].content).toBe('Check this video');
-    });
-
-    it('should handle malformed JSON in tool call arguments gracefully', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Tool call processed' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      // Spy on console.warn to verify warning is logged
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{
-            role: 'assistant',
-            content: 'Using a tool',
-            tool_calls: [{
-              id: 'call_123',
-              type: 'function',
-              function: {
-                name: 'get_weather',
-                arguments: '{invalid json}' // Malformed JSON
-              }
-            }]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-
-      // Tool call should still be included with empty object as fallback
-      const assistantMessage = callArgs.messages[0];
-      expect(assistantMessage.role).toBe('assistant');
-      expect(Array.isArray(assistantMessage.content)).toBe(true);
-
-      const toolCallPart = assistantMessage.content.find((p: { type: string }) => p.type === 'tool-call');
-      expect(toolCallPart).toBeDefined();
-      expect(toolCallPart.toolName).toBe('get_weather');
-      expect(toolCallPart.input).toEqual({}); // Empty object fallback
-
-      // Verify warning was logged
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to parse tool call arguments for get_weather')
-      );
-
-      consoleWarnSpy.mockRestore();
-    });
-
-    it('should log warning when all content parts are filtered out', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Response' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      // Spy on console.warn to verify warning is logged
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{
-            role: 'user',
-            content: [
-              // Only unsupported media types
-              { type: 'video_url', video_url: { url: 'https://example.com/video.mp4' } },
-              { type: 'audio_url', audio_url: { url: 'https://example.com/audio.mp3' } }
-            ]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-
-      // Message should have empty content since all parts were filtered
-      expect(callArgs.messages[0].content).toBe('');
-
-      // Verify warning was logged
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('had all content parts filtered out')
-      );
-
-      consoleWarnSpy.mockRestore();
-    });
-
-    it('should filter out image_url parts from assistant messages', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Response' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      // Spy on console.warn to verify warning is logged
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{
-            role: 'assistant',
-            content: [
-              { type: 'text', text: 'Here is the image' },
-              { type: 'image_url', image_url: { url: 'https://example.com/image.jpg' } }
-            ]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-
-      // Assistant message should only have text content (image filtered out)
-      const assistantMessage = callArgs.messages[0];
-      expect(assistantMessage.role).toBe('assistant');
-      // Since there's only one text part, it should be converted to string
-      expect(assistantMessage.content).toBe('Here is the image');
-
-      // Verify warning was logged for skipped image
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '[AI SDK Route] Skipping image_url in assistant message - not supported by AI SDK'
-      );
-
-      consoleWarnSpy.mockRestore();
-    });
-
-    it('should filter out file_url parts from assistant messages', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Response' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      // Spy on console.warn to verify warning is logged
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{
-            role: 'assistant',
-            content: [
-              { type: 'text', text: 'Here is the file' },
-              { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf', mime_type: 'application/pdf' } }
-            ]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-
-      // Assistant message should only have text content (file filtered out)
-      const assistantMessage = callArgs.messages[0];
-      expect(assistantMessage.role).toBe('assistant');
-      // Since there's only one text part, it should be converted to string
-      expect(assistantMessage.content).toBe('Here is the file');
-
-      // Verify warning was logged for skipped file
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '[AI SDK Route] Skipping file_url in assistant message - not supported by AI SDK'
-      );
-
-      consoleWarnSpy.mockRestore();
-    });
-
-    it('should return empty content for assistant messages with only image/file parts', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'Response' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      // Spy on console.warn to verify warning is logged
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [{
-            role: 'assistant',
-            content: [
-              { type: 'image_url', image_url: { url: 'https://example.com/image.jpg' } },
-              { type: 'file_url', file_url: { url: 'https://example.com/doc.pdf' } }
-            ]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-
-      // Assistant message should have empty content since all parts were filtered
-      const assistantMessage = callArgs.messages[0];
-      expect(assistantMessage.role).toBe('assistant');
-      expect(assistantMessage.content).toBe('');
-
-      consoleWarnSpy.mockRestore();
-    });
-
-    it('should allow image_url parts in user messages', async () => {
-      const { streamText } = require('ai');
-      streamText.mockReturnValue({
-        fullStream: (async function* () {
-          yield { type: 'text-delta', text: 'I see the image' };
-          yield { type: 'finish', finishReason: 'stop' };
-        })(),
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/chat/ai-sdk-completions', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [{
-            role: 'user',
-            content: [
-              { type: 'text', text: 'What is in this image?' },
-              { type: 'image_url', image_url: { url: 'data:image/png;base64,ABC123' } }
-            ]
-          }],
-          apiKey: 'test-key',
-        }),
-      });
-
-      const response = await POST(request);
-      expect(response.status).toBe(200);
-
-      expect(streamText).toHaveBeenCalled();
-      const callArgs = streamText.mock.calls[0][0];
-
-      // User message should include both text and image parts
-      const userMessage = callArgs.messages[0];
-      expect(userMessage.role).toBe('user');
-      expect(Array.isArray(userMessage.content)).toBe(true);
-      expect(userMessage.content.length).toBe(2);
-      expect(userMessage.content[0].type).toBe('text');
-      expect(userMessage.content[1].type).toBe('image');
+      const rateLimitedResponse = await POST(createMockRequestWithIP(requestBody, ip));
+      expect(rateLimitedResponse.status).toBe(429);
     });
   });
 });
