@@ -52,14 +52,13 @@ describe('config', () => {
       expect(getChatApiUrl('/v1/chat/sessions/123/messages')).toBe('/api/chat/sessions/123/messages');
     });
 
-    it('maps /v1/chat/ai-sdk-completions to /api/chat/ai-sdk-completions', () => {
-      expect(getChatApiUrl('/v1/chat/ai-sdk-completions')).toBe('/api/chat/ai-sdk-completions');
-    });
-
-    it('maps /v1/chat/ai-sdk-completions?session_id=123 correctly', () => {
-      // Query params are preserved
-      expect(getChatApiUrl('/v1/chat/ai-sdk-completions')).toBe('/api/chat/ai-sdk-completions');
-    });
+    // Note: getChatApiUrl does NOT map /v1/chat/ai-sdk-completions. That route
+    // is Next.js-only (no backend /v1/chat/ai-sdk-completions counterpart) and
+    // use-chat-stream.ts builds its /api/chat/ai-sdk-completions URL directly
+    // rather than going through this v1-path translator — see the comment
+    // there ("The backend only has /v1/chat/completions, not
+    // /v1/chat/ai-sdk-completions"). It falls through to the "use path as-is"
+    // case below, same as any other unmapped path.
 
     it('passes through already-mapped paths', () => {
       expect(getChatApiUrl('/api/chat/completions')).toBe('/api/chat/completions');
