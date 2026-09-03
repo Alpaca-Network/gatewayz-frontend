@@ -9,6 +9,7 @@ import { ChatSidebar } from "./ChatSidebar";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { ConnectionStatus } from "./ConnectionStatus";
+import { GuestUpgradeBanner } from "./guest-upgrade-banner";
 import {
   ModelSelect,
   isCatalogModelSelectable,
@@ -16,6 +17,7 @@ import {
 } from "@/components/chat-v2/model-select";
 import { useChatUIStore } from "@/lib/store/chat-ui-store";
 import { useAuthSync } from "@/lib/hooks/use-auth-sync";
+import { useEnsureGuestAccount } from "@/lib/auth/guest-account";
 import { useModels } from "@/lib/hooks/use-catalog";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { usePrivy } from "@privy-io/react-auth";
@@ -147,8 +149,12 @@ function WelcomeScreen({ onPromptSelect, onPromptChipSelect, onSurpriseMe, isAut
 
 export function ChatLayout() {
    useAuthSync(); // Trigger auth sync
+   // Silently gives an unauthenticated visitor a persistent Privy guest account (flagged, see
+   // src/lib/auth/guest-account.ts) — mounted alongside useAuthSync() so a newly-created guest
+   // is picked up by the same sync path once Privy flips to `authenticated`.
+   useEnsureGuestAccount();
    const { isAuthenticated, isLoading: storeLoading } = useAuthStore();
-   const { login } = usePrivy();
+   const { login, user: privyUser } = usePrivy();
    const { selectedModel, setSelectedModel, activeSessionId, setActiveSessionId, setInputValue, mobileSidebarOpen, setMobileSidebarOpen, isIncognitoMode, setIncognitoMode, toggleIncognitoMode, syncIncognitoState } = useChatUIStore();
    const searchParams = useSearchParams();
    const queryClient = useQueryClient();
@@ -735,6 +741,9 @@ export function ChatLayout() {
 
               {/* Connection Status - shows when offline or has pending/failed messages */}
               <ConnectionStatus className="mx-auto mt-2" />
+
+              {/* Guest upgrade nudge - only renders for Privy guest accounts (user.isGuest) */}
+              {privyUser?.isGuest && <GuestUpgradeBanner />}
 
               {/* Incognito Mode Banner */}
               {isIncognitoMode && (

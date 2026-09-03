@@ -94,7 +94,64 @@ pattern for authenticated settings calls (`src/app/settings/page.tsx`,
 `src/app/settings/keys/page.tsx` proxies, because that route already existed as
 `/api/user/api-keys`.
 
-## Not in scope for W3a
+## Guest accounts (W3b — gatewayz-backend#2253)
 
-Privy **guest accounts** (W3b, gatewayz-backend#2253) — creating a persistent, upgradeable
-identity for signed-out chat users — ships after this merges. Nothing here depends on it.
+Today, an unauthenticated chat visitor is a hashed-IP daily bucket in Redis
+(`src/lib/guest-chat.ts`, `src/lib/guest-rate-limiter.ts`) with no persistent entity — refresh
+the tab and history is gone. Privy guest accounts give that visitor a real, persistent Privy
+user (with an embedded wallet) with zero login friction, upgradeable in place.
+
+**Feature-flagged and fully killable**: `NEXT_PUBLIC_PRIVY_GUEST_ACCOUNTS=true` (off by
+default — see `.env.example`). With it off, behaviour is unchanged from today's anonymous IP
+bucket. Also requires **"Guest accounts" enabled in the Privy dashboard** (Settings → Guest
+accounts) — this is a manual, per-environment step; the frontend flag alone does nothing if
+the dashboard setting is off. `createGuestAccount()` rejecting (dashboard flag off, Privy rate
+limit, storage blocked) is treated as expected and falls back silently to the existing
+anonymous path — logged once to Sentry at `info` level (`auth_error:
+guest_account_unavailable`), never surfaced to the user.
+
+### How it works
+
+1. `useEnsureGuestAccount()` (`src/lib/auth/guest-account.ts`) is mounted in `ChatLayout`
+   alongside `useAuthSync()` — the one place in the app that hook already runs. When Privy is
+   `ready`, the visitor is `!authenticated`, the flag is on, and we're not on Tauri desktop
+   (Privy is never mounted there), it calls `useGuestAccounts().createGuestAccount()` **once
+   per tab session** (a `sessionStorage` guard prevents a failing Privy from retry-looping on
+   every remount/navigation — an in-memory ref covers the same render's re-runs).
+2. Privy flips to `authenticated` with a guest `User` (`isGuest: true`). The **existing** sync
+   path (`use-auth-sync.ts` → `buildAuthRequestBody`, unchanged by this work) picks it up like
+   any other login and calls `POST /auth` — it already sends `is_guest: privyUser.isGuest`.
+   The backend treats this exactly like any other zero-credit signup (spec.md §5: guests are
+   just accounts with no payment signal) — **no backend change was needed for W3b.**
+3. The account now behaves like any authenticated user with 0 credits: free models work,
+   paid models still 402 (no bypass), and chat history persists across refreshes via the
+   normal backend-backed session/message flow — not the guest-chat.ts localStorage path,
+   which is now unreachable for a guest-account visitor (they have a real `apiKey` +
+   `userData`, so `isAuthenticated` is true).
+
+### Upgrading a guest
+
+`GuestUpgradeBanner` (`src/components/chat-v2/guest-upgrade-banner.tsx`) renders in chat only
+when `privyUser.isGuest === true`: "You're using a guest account — sign in to keep your
+history and unlock paid models," with CTAs to `useLinkAccount().linkEmail()` / `linkGoogle()`
+/ `linkWallet()`. **Linking, not `login()`** — `login()` would start a *different* Privy
+session; `useLinkAccount`'s methods attach a new login method to the *current* (guest) Privy
+user id, so the same backend account (chat history, settings) carries over. A successful link
+dispatches `AUTH_REFRESH_EVENT` (the same event `gatewayz-auth-context.tsx` and
+`use-auth-sync.ts` already listen for) to force an immediate resync, so `is_guest` flips to
+`false` on the next `POST /auth` without waiting for the next natural sync cycle. The banner
+dismisses for the rest of the tab session (`sessionStorage`), independent of
+`free-models-banner.tsx`'s 24-hour localStorage dismissal — the two banners have different
+lifetimes on purpose and weren't merged into one component.
+
+`UserNav` (`src/components/layout/user-nav.tsx`) shows "Guest" instead of falling through to
+the generic "User" placeholder, plus a "Sign in to save your account" menu item wired to the
+same `linkEmail()` flow. Guests never hit the wallets page's `last_auth_method` lockout copy —
+that only fires when `auth_method === 'wallet'`, which a Privy-guest-provisioned account never
+has — so there was no separate footgun to hide there.
+
+### Out of scope for W3b
+
+Backend changes (none needed); giving guests credits; letting guests bypass the free-model
+gate (still 0-credit accounts, paid models still 402); burner keys in localStorage (rejected
+in spec.md as an approach).

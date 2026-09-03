@@ -139,6 +139,18 @@ describe('build-auth-request', () => {
       expect(body.is_new_user).toBe(true);
     });
 
+    it('sends is_guest: true and the token for a Privy guest account (M2 W3b)', () => {
+      // A Privy guest account (created via useGuestAccounts().createGuestAccount(), see
+      // src/lib/auth/guest-account.ts) goes through this exact same builder once Privy flips
+      // to authenticated — no separate guest-specific request path.
+      const guestUser = createMockPrivyUser({ isGuest: true, linkedAccounts: [] });
+      const body = buildAuthRequestBody(guestUser, { token: 'guest-access-token', existingUserData: null });
+
+      expect((body.user as { is_guest?: boolean }).is_guest).toBe(true);
+      expect(body.token).toBe('guest-access-token');
+      expect(body.is_new_user).toBe(true);
+    });
+
     it('sets auto_create_api_key true for a new user, false for an existing user with a stored key', () => {
       const user = createMockPrivyUser();
       const existingUserData: UserData = {

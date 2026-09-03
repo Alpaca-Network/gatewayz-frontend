@@ -39,6 +39,13 @@ jest.mock('@/lib/hooks/use-active-wallet', () => ({
   useActiveWallet: () => mockUseActiveWallet(),
 }));
 
+// Mock useLinkAccount (guest upgrade CTA, M2 W3b)
+const mockLinkEmail = jest.fn();
+const mockUseLinkAccount = jest.fn();
+jest.mock('@privy-io/react-auth', () => ({
+  useLinkAccount: (...args: unknown[]) => mockUseLinkAccount(...args),
+}));
+
 // Mock Next.js Link component
 jest.mock('next/link', () => {
   return ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -68,6 +75,67 @@ describe('UserNav', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseActiveWallet.mockReturnValue({ address: null, connect: mockConnectWallet });
+    mockUseLinkAccount.mockReturnValue({ linkEmail: mockLinkEmail });
+  });
+
+  describe('Guest accounts (M2 W3b)', () => {
+    const guestUser = { isGuest: true, linkedAccounts: [] };
+
+    it('shows "Guest" instead of an email for a guest account', async () => {
+      const user = userEvent.setup();
+      render(<UserNav user={guestUser} />);
+
+      await user.click(screen.getByRole('button'));
+
+      expect(await screen.findByText('Guest')).toBeInTheDocument();
+      expect(screen.queryByText('User')).not.toBeInTheDocument();
+    });
+
+    it('shows the upgrade CTA for a guest account, and it calls linkEmail', async () => {
+      const user = userEvent.setup();
+      render(<UserNav user={guestUser} />);
+
+      await user.click(screen.getByRole('button'));
+      const upgradeButton = await screen.findByRole('menuitem', { name: /sign in to save your account/i });
+      await user.click(upgradeButton);
+
+      expect(mockLinkEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows a toast when linkEmail fails with a non-cancel error', () => {
+      render(<UserNav user={guestUser} />);
+
+      const options = mockUseLinkAccount.mock.calls[0]?.[0];
+      options.onError('linked_to_another_user');
+
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Could not sign in',
+          description: expect.stringMatching(/already linked/i),
+          variant: 'destructive',
+        })
+      );
+    });
+
+    it('does not show a toast when the user cancels the link flow', () => {
+      render(<UserNav user={guestUser} />);
+
+      const options = mockUseLinkAccount.mock.calls[0]?.[0];
+      options.onError('exited_link_flow');
+
+      expect(mockToast).not.toHaveBeenCalled();
+    });
+
+    it('does not show the upgrade CTA for a non-guest account', async () => {
+      const user = userEvent.setup();
+      render(<UserNav user={mockUser} />);
+
+      await user.click(screen.getByRole('button'));
+      await screen.findByRole('menu');
+
+      expect(screen.queryByRole('menuitem', { name: /sign in to save your account/i })).not.toBeInTheDocument();
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
   });
 
   describe('Wallet Display', () => {
