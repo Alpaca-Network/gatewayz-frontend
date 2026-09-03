@@ -39,6 +39,22 @@ jest.mock('@/context/gatewayz-auth-context', () => ({
   }),
 }));
 
+// Mock the "Continue with wallet" button's connect() — not under test here, see
+// use-active-wallet.test.tsx for its own behavior.
+const mockConnectWallet = jest.fn();
+jest.mock('@/lib/hooks/use-active-wallet', () => ({
+  useActiveWallet: () => ({
+    address: null,
+    chainId: null,
+    isConnected: false,
+    isReady: true,
+    walletClientType: null,
+    connect: mockConnectWallet,
+    switchToFuji: jest.fn(),
+    signMessage: jest.fn(),
+  }),
+}));
+
 // Mock Twitter pixel tracking
 const mockTrackTwitterSignupClick = jest.fn();
 jest.mock('@/components/analytics/twitter-pixel', () => ({
@@ -65,15 +81,19 @@ jest.mock('@/components/ui/card', () => ({
 }));
 
 jest.mock('@/components/ui/button', () => ({
-  Button: ({ children, disabled, onClick, size, className }: {
+  // The primary "Sign Up Now" button has no `variant` (defaults to the primary style);
+  // the "Continue with wallet" button below it passes variant="outline" — use that to
+  // give each a distinct testid rather than colliding on "signup-button".
+  Button: ({ children, disabled, onClick, size, className, variant }: {
     children: React.ReactNode;
     disabled?: boolean;
     onClick?: () => void;
     size?: string;
     className?: string;
+    variant?: string;
   }) => (
     <button
-      data-testid="signup-button"
+      data-testid={variant === 'outline' ? 'wallet-signup-button' : 'signup-button'}
       disabled={disabled}
       onClick={onClick}
       data-size={size}
@@ -87,6 +107,7 @@ jest.mock('@/components/ui/button', () => ({
 // Mock lucide-react icons
 jest.mock('lucide-react', () => ({
   Gift: () => <span data-testid="icon-gift">Gift</span>,
+  Wallet: () => <span data-testid="icon-wallet">Wallet</span>,
 }));
 
 // Import after mocks
@@ -333,6 +354,48 @@ describe('SignupPage', () => {
       await user.click(button);
 
       expect(mockTrackTwitterSignupClick).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Continue with wallet button', () => {
+    it('renders on web (not Tauri desktop)', async () => {
+      render(<SignupPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('wallet-signup-button')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Continue with wallet')).toBeInTheDocument();
+    });
+
+    it('calls useActiveWallet().connect() when clicked', async () => {
+      const user = userEvent.setup();
+      render(<SignupPage />);
+
+      const button = await screen.findByTestId('wallet-signup-button');
+      await user.click(button);
+
+      expect(mockConnectWallet).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call the email/social login when clicking the wallet button', async () => {
+      const user = userEvent.setup();
+      render(<SignupPage />);
+
+      await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(1)); // auto-trigger on mount
+      mockLogin.mockClear();
+
+      const button = await screen.findByTestId('wallet-signup-button');
+      await user.click(button);
+
+      expect(mockLogin).not.toHaveBeenCalled();
+    });
+
+    it('is disabled while Privy is not ready', async () => {
+      mockReady = false;
+      render(<SignupPage />);
+
+      const button = await screen.findByTestId('wallet-signup-button');
+      expect(button).toBeDisabled();
     });
   });
 });

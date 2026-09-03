@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, Circle, ArrowRight, Code, MessageSquare, CreditCard, Sparkles, Terminal, Book, Copy, Check, Key, Keyboard } from "lucide-react";
+import { CheckCircle2, Circle, ArrowRight, Code, MessageSquare, CreditCard, Sparkles, Terminal, Book, Copy, Check, Key, Keyboard, Wallet } from "lucide-react";
 import Link from "next/link";
 import { getUserData, getApiKey } from '@/lib/api';
 import { API_BASE_URL } from '@/lib/config';
@@ -38,6 +38,9 @@ export default function OnboardingPage() {
   const [apiKey, setApiKey] = useState<string>('');
   const [copiedKey, setCopiedKey] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  // 'wallet' means the account was created via wallet sign-in (no email/password) — see
+  // src/schemas/auth.py's users.auth_method and the M2 spec §3 wallet-only provisioning.
+  const [isWalletOnlyAccount, setIsWalletOnlyAccount] = useState(false);
 
   const [tasks, setTasks] = useState<OnboardingTask[]>([
     {
@@ -142,6 +145,8 @@ export default function OnboardingPage() {
     if (key) {
       setApiKey(key);
     }
+
+    setIsWalletOnlyAccount(getUserData()?.auth_method === 'wallet');
 
     // Load completed tasks from localStorage
     const savedTasks = safeLocalStorageGet('gatewayz_onboarding_tasks');
@@ -451,6 +456,36 @@ console.log(response.choices[0].message.content);`
               </div>
             </div>
           </div>
+          )}
+
+          {/* Wallet-only account callout — wallets start with 0 credits; free models still
+              work, buying credits unlocks paid models (spec.md §6 W3a). */}
+          {isWalletOnlyAccount && (
+            <div className="max-w-2xl mx-auto mb-6">
+              <div className="bg-blue-50 dark:bg-blue-950/30 border-2 border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center">
+                      <Wallet className="h-5 w-5 text-white" />
+                    </div>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                      You signed in with a wallet
+                    </h3>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      Your account starts with 0 credits, but free models work right away.
+                      Add credits any time to unlock paid models.
+                    </p>
+                  </div>
+                  <Link href="/settings/credits">
+                    <Button size="sm" variant="outline" className="border-blue-300 dark:border-blue-700">
+                      Add Credits
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Copy API Key Button */}

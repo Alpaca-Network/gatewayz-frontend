@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, Suspense, useRef, useMemo, useCallback } from 'react';
+import { useEffect, Suspense, useRef, useState, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
+import { useActiveWallet } from '@/lib/hooks/use-active-wallet';
+import { isTauriDesktop } from '@/lib/browser-detection';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Gift } from 'lucide-react';
+import { Gift, Wallet } from 'lucide-react';
 import { trackTwitterSignupClick } from '@/components/analytics/twitter-pixel';
 
 /**
@@ -16,11 +18,15 @@ import { trackTwitterSignupClick } from '@/components/analytics/twitter-pixel';
 function SignupCardContent({
   ready,
   authStatus,
-  onSignup
+  onSignup,
+  onWalletSignup,
+  showWalletButton,
 }: {
   ready: boolean;
   authStatus: 'idle' | 'unauthenticated' | 'authenticating' | 'authenticated' | 'error';
   onSignup: () => void;
+  onWalletSignup: () => void;
+  showWalletButton: boolean;
 }) {
   // Show loading state when Privy isn't ready or when authentication is in progress
   const isLoading = !ready || authStatus === 'authenticating';
@@ -59,6 +65,30 @@ function SignupCardContent({
             )}
           </Button>
 
+          {showWalletButton && (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">or</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+              <Button
+                onClick={onWalletSignup}
+                disabled={isLoading || isAuthenticated}
+                variant="outline"
+                size="lg"
+                className="w-full"
+              >
+                <Wallet className="h-4 w-4 mr-2" />
+                Continue with wallet
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Wallet accounts start with 0 credits — free models work right away, and you can
+                add credits any time to unlock paid models.
+              </p>
+            </>
+          )}
+
           <div className="bg-muted/50 p-4 rounded-lg space-y-2">
             <h4 className="font-semibold text-sm">What you'll get:</h4>
             <ul className="text-sm text-muted-foreground space-y-1">
@@ -83,6 +113,11 @@ function SignupContent() {
   const router = useRouter();
   const { login, authenticated, ready } = usePrivy();
   const { status: authStatus } = useGatewayzAuth();
+  // useActiveWallet().connect() opens Privy's wallet-only login flow when unauthenticated
+  // (login({ loginMethods: ["wallet"] })) — see src/lib/hooks/use-active-wallet.ts. It
+  // returns a no-op connect() and isReady:true on Tauri (Privy never mounts there), so the
+  // button is hidden separately below rather than relying on this hook to signal that.
+  const { connect: connectWallet } = useActiveWallet();
   const hasAutoTriggeredLogin = useRef(false);
 
   // Track if the user was already authenticated when they landed on this page
@@ -149,6 +184,22 @@ function SignupContent() {
     login();
   }, [ready, authStatus, router, redirectUrl, login]);
 
+  const handleWalletSignup = useCallback(() => {
+    if (!ready || authStatus === 'authenticated') {
+      return;
+    }
+    trackTwitterSignupClick();
+    connectWallet();
+  }, [ready, authStatus, connectWallet]);
+
+  // Hidden on Tauri desktop — Privy (and therefore the wallet connect flow) is never
+  // mounted there. Computed in an effect (not at module scope) so the server-rendered and
+  // first client render both show `false`, avoiding a hydration mismatch.
+  const [showWalletButton, setShowWalletButton] = useState(false);
+  useEffect(() => {
+    setShowWalletButton(!isTauriDesktop());
+  }, []);
+
   // PERFORMANCE OPTIMIZATION: Render the full card UI immediately
   // The button shows loading state while Privy initializes
   // This dramatically improves FCP/LCP by showing meaningful content immediately
@@ -157,6 +208,8 @@ function SignupContent() {
       ready={ready}
       authStatus={authStatus}
       onSignup={handleSignup}
+      onWalletSignup={handleWalletSignup}
+      showWalletButton={showWalletButton}
     />
   );
 }
