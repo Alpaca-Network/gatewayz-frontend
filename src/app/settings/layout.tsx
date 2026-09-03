@@ -12,6 +12,7 @@ const navItems = [
   { href: "/settings/account", label: "Account" },
   { href: "/settings/credits", label: "Credits" },
   { href: "/settings/keys", label: "Keys" },
+  { href: "/settings/wallets", label: "Wallets" },
   { href: "/settings/presets", label: "Presets" },
   { href: "/settings/provisioning", label: "Provisioning Keys" },
   { href: "/settings/integrations", label: "Integrations (BYOK)" },

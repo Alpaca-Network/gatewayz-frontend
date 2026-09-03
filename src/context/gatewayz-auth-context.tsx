@@ -17,7 +17,8 @@ import {
 } from "@/lib/api";
 import { getAdaptiveTimeout } from "@/lib/network-timeouts";
 import { retryFetch } from "@/lib/retry-utils";
-import { usePrivy, type User, type LinkedAccountWithMetadata } from "@privy-io/react-auth";
+import { usePrivy, type User } from "@privy-io/react-auth";
+import { buildAuthRequestBody, getPrivyAccessTokenWithRetry } from "@/lib/auth/build-auth-request";
 import {
   redirectToBetaWithSession,
   getSessionTransferParams,
@@ -101,81 +102,6 @@ const BACKEND_PROXY_MAX_RETRIES = 2; // Reduced from 3 to align with route.ts ch
 const BACKEND_PROXY_SAFETY_BUFFER_MS = 10000; // 10 seconds buffer
 const MIN_AUTH_SYNC_TIMEOUT_MS =
   BACKEND_PROXY_TIMEOUT_MS * (BACKEND_PROXY_MAX_RETRIES + 1) + BACKEND_PROXY_SAFETY_BUFFER_MS; // ~100 seconds total (3 attempts × 30s + buffer)
-
-const stripUndefined = <T,>(value: T): T => {
-  if (Array.isArray(value)) {
-    return value.map(stripUndefined) as unknown as T;
-  }
-
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined && v !== null)
-      .map(([k, v]) => [k, stripUndefined(v)]);
-    return Object.fromEntries(entries) as unknown as T;
-  }
-
-  return value;
-};
-
-const toUnixSeconds = (value: unknown): number | undefined => {
-  if (!value) return undefined;
-
-  if (typeof value === "number") {
-    return Math.floor(value);
-  }
-
-  if (value instanceof Date) {
-    return Math.floor(value.getTime() / 1000);
-  }
-
-  if (typeof value === "string") {
-    const parsed = Date.parse(value);
-    if (!Number.isNaN(parsed)) {
-      return Math.floor(parsed / 1000);
-    }
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric)) {
-      return Math.floor(numeric);
-    }
-  }
-
-  return undefined;
-};
-
-const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
-  // Skip wallet accounts as the backend only expects email/oauth accounts in linked_accounts
-  if (account.type === "wallet" || account.type === "smart_wallet") {
-    return null;
-  }
-
-  const get = (key: string) =>
-    Object.prototype.hasOwnProperty.call(account, key)
-      ? (account as unknown as Record<string, unknown>)[key]
-      : undefined;
-
-  // Normalize account types: Privy uses different naming conventions than our backend
-  const typeNormalization: Record<string, string> = {
-    github_oauth: "github",
-    sms: "phone",  // Privy sends 'sms' but backend expects 'phone'
-    twitter_oauth: "twitter",
-    discord_oauth: "discord",
-  };
-  const normalizedType = typeNormalization[account.type] ?? account.type;
-
-  return stripUndefined({
-    type: normalizedType,
-    subject: get("subject") as string | undefined,
-    email: get("email") as string | undefined,
-    name: get("name") as string | undefined,
-    phone_number: get("phoneNumber") as string | undefined,  // Include phone number for SMS auth
-    chain_type: get("chainType") as string | undefined,
-    wallet_client_type: get("walletClientType") as string | undefined,
-    connector_type: get("connectorType") as string | undefined,
-    verified_at: toUnixSeconds(get("verifiedAt")),
-    first_verified_at: toUnixSeconds(get("firstVerifiedAt")),
-    latest_verified_at: toUnixSeconds(get("latestVerifiedAt")),
-  });
-};
 
 export function GatewayzAuthProvider({
   children,
@@ -725,41 +651,6 @@ export function GatewayzAuthProvider({
     [handleAuthSuccess, upgradeApiKeyIfNeeded, clearStoredCredentials, setAuthStatus, setError]
   );
 
-  const buildAuthRequestBody = useCallback(
-    (privyUser: User, token: string | null, existingUserData: UserData | null) => {
-      const existingGatewayzUser = existingUserData ?? null;
-      const isNewUser = !existingGatewayzUser;
-      const hasStoredApiKey = Boolean(existingGatewayzUser?.api_key);
-
-      const authRequestBody = {
-        user: stripUndefined({
-          id: privyUser.id,
-          created_at: toUnixSeconds(privyUser.createdAt) ?? Math.floor(Date.now() / 1000),
-          linked_accounts: (privyUser.linkedAccounts || []).map(mapLinkedAccount).filter(Boolean),
-          mfa_methods: privyUser.mfaMethods || [],
-          has_accepted_terms: privyUser.hasAcceptedTerms ?? false,
-          is_guest: privyUser.isGuest ?? false,
-        }),
-        token: token ?? "",
-        // Only request API key creation for new users or users without stored keys
-        // Existing users should get their existing key back to avoid replacing live keys with temp keys
-        auto_create_api_key: isNewUser || !hasStoredApiKey,
-        is_new_user: isNewUser,
-        privy_user_id: privyUser.id,
-      };
-
-      if (isNewUser) {
-        return {
-          ...authRequestBody,
-          trial_credits: 3,
-        };
-      }
-
-      return authRequestBody;
-    },
-    []
-  );
-
   const syncWithBackend = useCallback(
     async (options?: { force?: boolean; resetRetryCount?: boolean }) => {
       if (!privyReady) {
@@ -874,60 +765,67 @@ export function GatewayzAuthProvider({
             return;
           }
 
-          // Get token with adaptive timeout to prevent hanging
-          const tokenPromise = getAccessToken();
-          let token: string | null = null;
-
-          try {
-            // Adaptive timeout: 8-15 seconds based on network conditions
-            const tokenTimeoutMs = getAdaptiveTimeout(TOKEN_TIMEOUT_BASE_MS, {
-              maxMs: 15000, // Up to 15 seconds
-              mobileMultiplier: 1.8,
-              slowNetworkMultiplier: 2,
-            });
-
-            console.log(`[Auth] Attempting token retrieval with ${tokenTimeoutMs}ms timeout`);
-
-            token = await Promise.race([
-              tokenPromise,
+          // Get the Privy access token, retrying on a null result (see
+          // getPrivyAccessTokenWithRetry). The backend now requires this token on every
+          // /auth call (W0's server-side verification) — there is no "continue without a
+          // token, let the backend decide" fallback anymore.
+          const tokenTimeoutMs = getAdaptiveTimeout(TOKEN_TIMEOUT_BASE_MS, {
+            maxMs: 15000, // Up to 15 seconds per attempt
+            mobileMultiplier: 1.8,
+            slowNetworkMultiplier: 2,
+          });
+          const getAccessTokenWithTimeout = () =>
+            Promise.race([
+              getAccessToken(),
               new Promise<null>((_, reject) =>
                 setTimeout(() => reject(new Error("Token retrieval timeout")), tokenTimeoutMs)
-              )
+              ),
             ]);
 
-            if (!token) {
-              console.warn("[Auth] Token retrieval returned null/empty token");
-            }
-          } catch (tokenErr) {
-            console.warn("[Auth] Failed to get token:", tokenErr);
+          console.log(`[Auth] Attempting token retrieval (${tokenTimeoutMs}ms timeout per attempt, up to 3 retries)`);
+          const token = await getPrivyAccessTokenWithRetry(getAccessTokenWithTimeout);
 
-            // Capture token retrieval error to Sentry (but as warning since we can continue)
-            const tokenErrMsg = tokenErr instanceof Error ? tokenErr.message : String(tokenErr);
-            if (tokenErrMsg.includes("timeout")) {
-              console.warn("[Auth] Token timeout - proceeding with null token");
-              Sentry.captureMessage("Token retrieval timeout during authentication", {
-                level: 'warning',
-                tags: {
-                  auth_error: 'token_timeout',
-                },
-              });
-            } else {
-              console.warn("[Auth] Token retrieval error:", tokenErrMsg);
-              Sentry.captureException(
-                tokenErr instanceof Error ? tokenErr : new Error(String(tokenErr)),
-                {
-                  tags: {
-                    auth_error: 'token_retrieval_failed',
-                  },
-                  level: 'warning',
-                }
-              );
+          if (!token) {
+            console.error("[Auth] Could not obtain a Privy access token after retries");
+
+            // If we already have a valid cached session, a transient token-fetch failure
+            // (network flake, third-party-cookie issues, etc.) must not flip an
+            // already-authenticated user to an error state — that would block Settings/etc.
+            // for someone with a perfectly usable API key just because this cycle's Privy
+            // resync hiccuped. Only a caller with NO cached credential gets the hard error.
+            const cachedKeyOnTokenFailure = getApiKey();
+            const cachedUserOnTokenFailure = getUserData();
+            const hasValidCachedSession =
+              !!cachedKeyOnTokenFailure &&
+              !!cachedUserOnTokenFailure &&
+              !!cachedUserOnTokenFailure.user_id &&
+              !!cachedUserOnTokenFailure.email;
+
+            Sentry.captureMessage("Privy access token unavailable after retries", {
+              level: hasValidCachedSession ? 'warning' : 'error',
+              tags: {
+                auth_error: 'privy_token_unavailable',
+                had_cached_session: hasValidCachedSession ? 'true' : 'false',
+              },
+            });
+
+            clearAuthTimeout();
+            syncInFlightRef.current = false;
+            syncPromiseRef.current = null;
+
+            if (hasValidCachedSession) {
+              console.warn("[Auth] Token unavailable but valid cached credentials found - keeping session, skipping this resync");
+              setAuthStatus("authenticated", "cached credentials after token unavailable");
+              return;
             }
 
-            token = null; // Continue without token, let backend decide
+            setAuthStatus("error", "privy token unavailable");
+            setError("Could not verify your session — please retry");
+            onAuthError?.({ message: "Could not verify your session — please retry" });
+            return;
           }
 
-          console.log("[Auth] Token retrieved:", token ? `${token.substring(0, 20)}...` : "null");
+          console.log("[Auth] Token retrieved:", `${token.substring(0, 20)}...`);
 
           // Preserve existing live key before auth refresh
           // If backend returns a temp key, we'll restore this
@@ -939,7 +837,7 @@ export function GatewayzAuthProvider({
             console.log("[Auth] Preserving existing live key for potential restore");
           }
 
-          const authBody = buildAuthRequestBody(user, token, userData);
+          const authBody = buildAuthRequestBody(user, { token, existingUserData: userData });
           console.log("[Auth] Sending auth body to backend:", {
             has_privy_user_id: !!authBody.privy_user_id,
             has_token: !!authBody.token,

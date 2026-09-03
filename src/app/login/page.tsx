@@ -5,6 +5,10 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
 import { syncPrivyToGatewayz } from '@/integrations/privy/auth-sync';
 import { getUserMessage } from '@/lib/errors';
+import { useActiveWallet } from '@/lib/hooks/use-active-wallet';
+import { isTauriDesktop } from '@/lib/browser-detection';
+import { Button } from '@/components/ui/button';
+import { Wallet } from 'lucide-react';
 
 /**
  * Build a redirect URL with optional ref code, handling edge cases
@@ -53,10 +57,17 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login, authenticated, ready, user, getAccessToken } = usePrivy();
+  // useActiveWallet().connect() opens Privy's wallet-only login flow when unauthenticated —
+  // see src/lib/hooks/use-active-wallet.ts. Hidden on Tauri desktop below (Privy never mounts
+  // there, per showWalletButton).
+  const { connect: connectWallet } = useActiveWallet();
   const hasAutoTriggeredLogin = useRef(false);
   const hasHandledDesktopAuth = useRef(false);
   const [isProcessingDesktopAuth, setIsProcessingDesktopAuth] = useState(false);
   const [desktopAuthError, setDesktopAuthError] = useState<string | null>(null);
+  // Computed in an effect (not at module scope) so the server-rendered and first client
+  // render both show `false`, avoiding a hydration mismatch.
+  const [showWalletButton, setShowWalletButton] = useState(false);
 
   // Get the return URL from query params (defaults to /chat)
   const returnUrl = searchParams?.get('returnUrl') || '/chat';
@@ -76,11 +87,10 @@ function LoginContent() {
           try {
             console.log('[Login] Desktop auth: syncing with backend...');
 
-            // Get Privy access token
-            const privyAccessToken = await getAccessToken();
-
-            // Sync with Gatewayz backend to get API key
-            const { authResponse } = await syncPrivyToGatewayz(user, privyAccessToken, null);
+            // Sync with Gatewayz backend to get API key. syncPrivyToGatewayz calls
+            // getAccessToken() itself (with retries) — the backend requires a verified
+            // Privy token on every /auth call now (W0).
+            const { authResponse } = await syncPrivyToGatewayz(user, getAccessToken, null);
 
             if (!authResponse.api_key) {
               throw new Error('No API key received from backend');
@@ -149,6 +159,10 @@ function LoginContent() {
     }
   }, [ready, authenticated, login]);
 
+  useEffect(() => {
+    setShowWalletButton(!isTauriDesktop());
+  }, []);
+
   if (!ready) {
     return (
       <div className="flex min-h-[calc(100vh-200px)] items-center justify-center">
@@ -205,8 +219,17 @@ function LoginContent() {
 
   return (
     <div className="flex min-h-[calc(100vh-200px)] items-center justify-center">
-      <div className="text-center">
+      <div className="text-center space-y-4">
         <p className="text-muted-foreground">Redirecting to login...</p>
+        {showWalletButton && (
+          <Button
+            variant="outline"
+            onClick={() => connectWallet()}
+          >
+            <Wallet className="h-4 w-4 mr-2" />
+            Continue with wallet
+          </Button>
+        )}
       </div>
     </div>
   );
