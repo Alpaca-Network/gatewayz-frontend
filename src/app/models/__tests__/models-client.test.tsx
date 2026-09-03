@@ -696,38 +696,43 @@ describe('ModelsClient - Filtering Logic', () => {
     });
 
     it('should format pricing correctly for OpenRouter (per-token format)', () => {
-      // OpenRouter returns per-token prices like $0.00000015/token
-      const promptPrice = '0.00000015'; // $0.15 per million tokens
+      // OpenRouter returns per-token prices like $0.00000015/token. Display
+      // also applies the platform markup (PRICING_MARKUP, 1.25x default) so
+      // shown prices match what the backend actually charges.
+      const promptPrice = '0.00000015'; // $0.15/M raw -> $0.1875/M after markup
       const formatted = formatPricingForDisplay(promptPrice, 'openrouter');
-      expect(formatted).toBe('0.15');
+      expect(formatted).toBe('0.19');
 
       // More expensive model
-      const expensivePrice = '0.000015'; // $15 per million tokens
+      const expensivePrice = '0.000015'; // $15/M raw -> $18.75/M after markup
       const formattedExpensive = formatPricingForDisplay(expensivePrice, 'openrouter');
-      expect(formattedExpensive).toBe('15.00');
+      expect(formattedExpensive).toBe('18.75');
     });
 
-    it('should format pricing correctly for OneRouter (per-token format)', () => {
-      // OneRouter now uses per-token pricing (unified with all gateways)
-      const promptPrice = '0.00000015'; // $0.15 per million tokens (per-token format)
+    it('should format pricing correctly for OneRouter (per-million format)', () => {
+      // Unlike OpenRouter, OneRouter is in PER_MILLION_PRICING_GATEWAYS —
+      // it reports pricing already in per-million-tokens format, so it is
+      // NOT multiplied by 1,000,000. Markup still applies.
+      const promptPrice = '0.15'; // $0.15/M raw -> $0.1875/M after markup
       const formatted = formatPricingForDisplay(promptPrice, 'onerouter');
-      expect(formatted).toBe('0.15');
+      expect(formatted).toBe('0.19');
 
       // More expensive model
-      const expensivePrice = '0.000015'; // $15 per million tokens (per-token format)
+      const expensivePrice = '15'; // $15/M raw -> $18.75/M after markup
       const formattedExpensive = formatPricingForDisplay(expensivePrice, 'onerouter');
-      expect(formattedExpensive).toBe('15.00');
+      expect(formattedExpensive).toBe('18.75');
     });
 
-    it('should display same price for equivalent models from different gateways', () => {
-      // GPT-4o-mini priced at $0.15/M input
-      // OpenRouter: 0.00000015 (per-token)
+    it('should display the same price for equivalent models from different gateways', () => {
+      // GPT-4o-mini priced at $0.15/M input.
+      // OpenRouter reports it per-token (0.00000015); OneRouter reports the
+      // equivalent per-million price (0.15) directly — both should display
+      // the same normalized, post-markup price.
       const openrouterFormatted = formatPricingForDisplay('0.00000015', 'openrouter');
-      // OneRouter: 0.00000015 (per-token - all gateways now unified)
-      const onerouterFormatted = formatPricingForDisplay('0.00000015', 'onerouter');
+      const onerouterFormatted = formatPricingForDisplay('0.15', 'onerouter');
 
-      expect(openrouterFormatted).toBe('0.15');
-      expect(onerouterFormatted).toBe('0.15');
+      expect(openrouterFormatted).toBe('0.19');
+      expect(onerouterFormatted).toBe('0.19');
     });
 
     it('should normalize prices to per-token for consistent filtering', () => {
@@ -874,8 +879,9 @@ describe('ModelsClient - Filtering Logic', () => {
       const inputCost = formatPricingForDisplay(model.pricing?.prompt, sourceGateway);
       const outputCost = formatPricingForDisplay(model.pricing?.completion, sourceGateway);
 
-      expect(inputCost).toBe('0.15');
-      expect(outputCost).toBe('0.60');
+      // $0.15/M and $0.60/M raw, post-markup (1.25x) -> $0.1875/M and $0.75/M
+      expect(inputCost).toBe('0.19');
+      expect(outputCost).toBe('0.75');
     });
 
     it('should handle models without pricing in table view', () => {

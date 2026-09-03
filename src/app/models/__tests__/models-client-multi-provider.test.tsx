@@ -37,14 +37,17 @@ describe('ModelsClient Multi-Provider - Pricing Normalization', () => {
       const inputCost = formatPricingForDisplay(model.pricing?.prompt, sourceGateway);
       const outputCost = formatPricingForDisplay(model.pricing?.completion, sourceGateway);
 
-      expect(inputCost).toBe('0.15');
-      expect(outputCost).toBe('0.60');
+      // $0.15/M and $0.60/M raw, post-markup (1.25x) -> $0.1875/M and $0.75/M
+      expect(inputCost).toBe('0.19');
+      expect(outputCost).toBe('0.75');
     });
 
-    it('should display correct pricing for OneRouter models (per-token format)', () => {
+    it('should display correct pricing for OneRouter models (per-million format)', () => {
       const model = mockModel({
         id: 'openai/gpt-4o-mini',
-        pricing: { prompt: '0.00000015', completion: '0.0000006' }, // Per-token format (unified)
+        // OneRouter is in PER_MILLION_PRICING_GATEWAYS — reports pricing
+        // already per-million-tokens, unlike OpenRouter's per-token format.
+        pricing: { prompt: '0.15', completion: '0.60' },
         source_gateway: 'onerouter',
       });
 
@@ -52,8 +55,8 @@ describe('ModelsClient Multi-Provider - Pricing Normalization', () => {
       const inputCost = formatPricingForDisplay(model.pricing?.prompt, sourceGateway);
       const outputCost = formatPricingForDisplay(model.pricing?.completion, sourceGateway);
 
-      expect(inputCost).toBe('0.15');
-      expect(outputCost).toBe('0.60');
+      expect(inputCost).toBe('0.19');
+      expect(outputCost).toBe('0.75');
     });
 
     it('should detect free models correctly', () => {
@@ -221,7 +224,7 @@ describe('ModelsClient Multi-Provider - Pricing Normalization', () => {
         }),
         mockModel({
           id: 'model-onerouter',
-          pricing: { prompt: '0.00000015', completion: '0.0000006' }, // Per-token format
+          pricing: { prompt: '0.15', completion: '0.60' }, // Equivalent per-million format
           source_gateway: 'onerouter',
         }),
       ];
