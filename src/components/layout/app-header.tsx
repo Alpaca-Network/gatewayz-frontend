@@ -26,9 +26,13 @@ import {useGatewayzAuth} from "@/context/gatewayz-auth-context";
 import {trackTwitterSignupClick} from "@/components/analytics/twitter-pixel";
 import {useIsTauri} from "@/lib/desktop/hooks";
 import {isWayzConfigured} from "@/lib/wayz/addresses";
+import {isGpuMarketplaceEnabled} from "@/lib/gpu/flag";
 
 // Hidden until Fuji contracts are deployed, unless explicitly previewed.
 const SHOW_STAKING_NAV = isWayzConfigured() || process.env.NEXT_PUBLIC_WAYZ_STAKING_PREVIEW === "true";
+
+// Hidden until the backend GPU marketplace routes ship (Milestone 4).
+const SHOW_GPU_NAV = isGpuMarketplaceEnabled();
 
 const getWalletAddress = (user: any) => {
   try {
@@ -282,6 +286,14 @@ export function AppHeader() {
                 Staking
               </Link>
             )}
+            {SHOW_GPU_NAV && (
+              <Link
+                href="/gpu"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                GPU
+              </Link>
+            )}
           </nav>
 
           <div className="lg:hidden shrink-0">
@@ -396,6 +408,15 @@ export function AppHeader() {
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Staking
+                      </Link>
+                    )}
+                    {SHOW_GPU_NAV && (
+                      <Link
+                        href="/gpu"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        GPU
                       </Link>
                     )}
                   </nav>
