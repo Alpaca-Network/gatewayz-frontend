@@ -11,8 +11,10 @@ import { TIMEOUT_CONFIG } from '@/lib/timeout-config';
 
 describe('Chat Loading and Auth Persistence Fixes', () => {
   describe('Timeout Configuration', () => {
-    it('should have increased messagesSave timeout from 5s to 10s', () => {
-      expect(TIMEOUT_CONFIG.chat.messagesSave).toBe(10000);
+    it('should have increased messagesSave timeout to 30s', () => {
+      // Raised again from 10s -> 30s: 3 sequential Supabase queries on cold
+      // connections can exceed 10s (see timeout-config.ts's inline comment).
+      expect(TIMEOUT_CONFIG.chat.messagesSave).toBe(30000);
     });
 
     it('should have increased sessionCreate timeout to 30s', () => {
@@ -38,8 +40,9 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
     });
 
     it('should ensure chat timeouts are reasonable relative to each other', () => {
-      // messagesSave should be shorter than session operations
-      expect(TIMEOUT_CONFIG.chat.messagesSave).toBeLessThan(
+      // messagesSave (raised to 30s for cold-connection Supabase round-trips)
+      // is now equal to sessionCreate, not shorter than it.
+      expect(TIMEOUT_CONFIG.chat.messagesSave).toBeLessThanOrEqual(
         TIMEOUT_CONFIG.chat.sessionCreate
       );
 
@@ -116,7 +119,7 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
 
     it('should eventually timeout if request takes too long', () => {
       const messagesSaveTimeout = TIMEOUT_CONFIG.chat.messagesSave;
-      const verySlowRequest = 12000; // 12 seconds
+      const verySlowRequest = 35000; // 35 seconds — longer than the 30s timeout
 
       expect(verySlowRequest).toBeGreaterThan(messagesSaveTimeout);
     });
@@ -187,10 +190,11 @@ describe('Chat Loading and Auth Persistence Fixes', () => {
   describe('Performance and UX Implications', () => {
     it('should not make timeouts so large that UX suffers', () => {
       // 30 seconds for session creation (with retries it may take longer)
-      // 15 seconds for session updates and message saves
+      // 15 seconds for session updates
+      // 30 seconds for message saves (raised for cold-connection Supabase round-trips)
       expect(TIMEOUT_CONFIG.chat.sessionCreate).toBeLessThanOrEqual(30000);
       expect(TIMEOUT_CONFIG.chat.sessionUpdate).toBeLessThanOrEqual(15000);
-      expect(TIMEOUT_CONFIG.chat.messagesSave).toBeLessThanOrEqual(15000);
+      expect(TIMEOUT_CONFIG.chat.messagesSave).toBeLessThanOrEqual(30000);
     });
 
     it('should not make timeouts so small that valid requests fail', () => {
