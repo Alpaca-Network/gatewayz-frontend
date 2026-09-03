@@ -144,7 +144,11 @@ describe('gateway-registry', () => {
       for (const gateway of GATEWAYS) {
         expect(gateway.logo).toBeDefined();
         expect(typeof gateway.logo).toBe('string');
-        expect(gateway.logo).toMatch(/^\/.*-logo\.svg$/);
+        // Most logo assets follow the `<id>-logo.svg` convention, but this
+        // isn't a hard requirement — the 'meta' gateway legitimately reuses
+        // an existing /Meta_Logo-black.svg asset. Just check it's a real
+        // root-relative .svg path.
+        expect(gateway.logo).toMatch(/^\/.*\.svg$/);
       }
     });
 
