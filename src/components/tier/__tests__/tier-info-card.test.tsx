@@ -46,7 +46,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -81,7 +89,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -121,7 +137,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: true,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -151,7 +175,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -182,7 +214,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -220,7 +260,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -255,7 +303,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -286,7 +342,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -315,7 +379,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -356,12 +428,12 @@ describe('TierInfoCard', () => {
           privy_user_id: 'privy-1',
           display_name: 'Pro User',
           email: 'pro@example.com',
-          credits: 2000,
+          credits: 20,
           tier: 'pro',
           subscription_status: 'active',
-          subscription_allowance: 1500, // $15.00
-          purchased_credits: 500, // $5.00
-          total_credits: 2000, // $20.00
+          subscription_allowance: 15, // $15.00 (1 credit = $1)
+          purchased_credits: 5, // $5.00
+          total_credits: 20, // $20.00
         },
       });
 
@@ -410,12 +482,12 @@ describe('TierInfoCard', () => {
           privy_user_id: 'privy-1',
           display_name: 'Max User',
           email: 'max@example.com',
-          credits: 16000,
+          credits: 160,
           tier: 'max',
           subscription_status: 'active',
-          subscription_allowance: 15000, // $150.00
-          purchased_credits: 1000, // $10.00
-          total_credits: 16000, // $160.00
+          subscription_allowance: 150, // $150.00 (1 credit = $1)
+          purchased_credits: 10, // $10.00
+          total_credits: 160, // $160.00
         },
       });
 
@@ -665,12 +737,12 @@ describe('TierInfoCard', () => {
           privy_user_id: 'privy-1',
           display_name: 'Pro User',
           email: 'pro@example.com',
-          credits: 2000, // This might be different
+          credits: 20, // This might be different
           tier: 'pro',
           subscription_status: 'active',
-          subscription_allowance: 1500,
-          purchased_credits: 500,
-          total_credits: 2500, // total_credits takes precedence
+          subscription_allowance: 15,
+          purchased_credits: 5,
+          total_credits: 25, // total_credits takes precedence
         },
       });
 
@@ -711,11 +783,11 @@ describe('TierInfoCard', () => {
           privy_user_id: 'privy-1',
           display_name: 'Pro User',
           email: 'pro@example.com',
-          credits: 2000, // Fallback to this value
+          credits: 20, // Fallback to this value
           tier: 'pro',
           subscription_status: 'active',
-          subscription_allowance: 1500,
-          purchased_credits: 500,
+          subscription_allowance: 15,
+          purchased_credits: 5,
           // total_credits is undefined
         },
       });
@@ -752,7 +824,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -789,7 +869,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -822,7 +910,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -855,7 +951,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -887,7 +991,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -919,7 +1031,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);
@@ -948,7 +1068,15 @@ describe('TierInfoCard', () => {
         trialExpiringSoon: false,
         isLoading: false,
         error: null,
-        userData: null,
+        userData: {
+          user_id: 1,
+          api_key: 'test-key',
+          auth_method: 'email',
+          privy_user_id: 'test-privy-id',
+          display_name: 'Test User',
+          email: 'test@example.com',
+          credits: 0,
+        },
       });
 
       render(<TierInfoCard />);

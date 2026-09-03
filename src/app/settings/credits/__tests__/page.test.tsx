@@ -16,6 +16,7 @@ jest.mock('@/lib/api', () => ({
 
 // Mock the config
 jest.mock('@/lib/config', () => ({
+  ...jest.requireActual('@/lib/config'),
   API_BASE_URL: 'https://api.example.com',
 }));
 
@@ -80,12 +81,12 @@ describe('CreditsPage', () => {
     privy_user_id: 'test-privy-id',
     display_name: 'Pro User',
     email: 'pro@example.com',
-    credits: 2000, // $20.00 total
+    credits: 20, // $20.00 total (1 credit = $1)
     tier: 'pro',
     subscription_status: 'active',
-    subscription_allowance: 1500, // $15.00 allowance
-    purchased_credits: 500, // $5.00 purchased
-    total_credits: 2000,
+    subscription_allowance: 15, // $15.00 allowance
+    purchased_credits: 5, // $5.00 purchased
+    total_credits: 20,
     subscription_end_date: Math.floor(Date.now() / 1000) + 86400 * 30,
   };
 
@@ -96,12 +97,12 @@ describe('CreditsPage', () => {
     privy_user_id: 'test-privy-id',
     display_name: 'Max User',
     email: 'max@example.com',
-    credits: 16000, // $160.00 total
+    credits: 160, // $160.00 total (1 credit = $1)
     tier: 'max',
     subscription_status: 'active',
-    subscription_allowance: 15000, // $150.00 allowance
-    purchased_credits: 1000, // $10.00 purchased
-    total_credits: 16000,
+    subscription_allowance: 150, // $150.00 allowance
+    purchased_credits: 10, // $10.00 purchased
+    total_credits: 160,
     subscription_end_date: Math.floor(Date.now() / 1000) + 86400 * 30,
   };
 
