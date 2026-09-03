@@ -219,15 +219,41 @@ describe('useAuthSync', () => {
       expect(requestBody).not.toHaveProperty('trial_credits');
     });
 
-    it('throws without calling fetch when the Privy token never resolves', async () => {
+    it('throws without calling fetch when the Privy token never resolves and there is no cached session', async () => {
       mockPrivyUser = makeUser();
       mockGetAccessToken = jest.fn().mockResolvedValue(null);
+      mockGetApiKey.mockReturnValue(null);
+      mockGetUserData.mockReturnValue(null);
 
       renderHook(() => useAuthSync());
       expect(capturedQueryFn).not.toBeNull();
 
       await expect(capturedQueryFn!()).rejects.toThrow('Could not verify your session');
       expect(mockFetch).not.toHaveBeenCalled();
+    }, 10000);
+
+    it('resolves with the cached session (does not throw or call fetch) when a valid cached session exists', async () => {
+      mockPrivyUser = makeUser();
+      mockGetAccessToken = jest.fn().mockResolvedValue(null);
+      const cachedUser = {
+        user_id: 42,
+        api_key: 'gw_live_cached',
+        auth_method: 'email',
+        privy_user_id: 'privy-user-1',
+        display_name: 'Cached User',
+        email: 'cached@example.com',
+        credits: 100,
+      };
+      mockGetApiKey.mockReturnValue('gw_live_cached');
+      mockGetUserData.mockReturnValue(cachedUser);
+
+      renderHook(() => useAuthSync());
+      expect(capturedQueryFn).not.toBeNull();
+
+      const result = await capturedQueryFn!();
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ success: true, ...cachedUser });
     }, 10000);
   });
 });

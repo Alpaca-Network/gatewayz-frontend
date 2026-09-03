@@ -786,18 +786,39 @@ export function GatewayzAuthProvider({
           const token = await getPrivyAccessTokenWithRetry(getAccessTokenWithTimeout);
 
           if (!token) {
-            console.error("[Auth] Could not obtain a Privy access token after retries - aborting sync");
+            console.error("[Auth] Could not obtain a Privy access token after retries");
+
+            // If we already have a valid cached session, a transient token-fetch failure
+            // (network flake, third-party-cookie issues, etc.) must not flip an
+            // already-authenticated user to an error state — that would block Settings/etc.
+            // for someone with a perfectly usable API key just because this cycle's Privy
+            // resync hiccuped. Only a caller with NO cached credential gets the hard error.
+            const cachedKeyOnTokenFailure = getApiKey();
+            const cachedUserOnTokenFailure = getUserData();
+            const hasValidCachedSession =
+              !!cachedKeyOnTokenFailure &&
+              !!cachedUserOnTokenFailure &&
+              !!cachedUserOnTokenFailure.user_id &&
+              !!cachedUserOnTokenFailure.email;
 
             Sentry.captureMessage("Privy access token unavailable after retries", {
-              level: 'error',
+              level: hasValidCachedSession ? 'warning' : 'error',
               tags: {
                 auth_error: 'privy_token_unavailable',
+                had_cached_session: hasValidCachedSession ? 'true' : 'false',
               },
             });
 
             clearAuthTimeout();
             syncInFlightRef.current = false;
             syncPromiseRef.current = null;
+
+            if (hasValidCachedSession) {
+              console.warn("[Auth] Token unavailable but valid cached credentials found - keeping session, skipping this resync");
+              setAuthStatus("authenticated", "cached credentials after token unavailable");
+              return;
+            }
+
             setAuthStatus("error", "privy token unavailable");
             setError("Could not verify your session — please retry");
             onAuthError?.({ message: "Could not verify your session — please retry" });

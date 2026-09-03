@@ -55,9 +55,29 @@ export function useAuthSync() {
 
       // 1. Get Token — retried (see getPrivyAccessTokenWithRetry); the backend requires a
       // verified Privy token on every /auth call now (W0). No "continue with an empty token"
-      // fallback — react-query's own `retry: 2` handles surfacing the failure.
+      // fallback.
       const token = await getPrivyAccessTokenWithRetry(getAccessToken);
       if (!token) {
+        // This query is normally only `enabled` when there's no cached API key (see below),
+        // but another sync path (e.g. gatewayz-auth-context.tsx) can concurrently populate
+        // one while these retries are still in flight — re-check at the moment of failure,
+        // not just at mount, and never hard-fail out from under a session that just became
+        // valid. Only when there's truly no cached credential does this throw.
+        const cachedKey = getApiKey();
+        const cachedUser = getUserData();
+        if (cachedKey && cachedUser && cachedUser.user_id && cachedUser.email) {
+          console.warn('[useAuthSync] Token unavailable but valid cached credentials found - keeping session');
+          // Returning the cached data (rather than throwing) routes through the same
+          // processAuthResponse/setAuth effect below as a normal success — a no-op write
+          // of the same values already in storage.
+          return {
+            success: true,
+            message: 'cached',
+            timestamp: null,
+            is_new_user: false,
+            ...cachedUser,
+          } as AuthResponse;
+        }
         throw new Error('Could not verify your session — please retry');
       }
 
