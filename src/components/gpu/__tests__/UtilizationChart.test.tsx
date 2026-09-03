@@ -48,7 +48,7 @@ describe('UtilizationChart', () => {
       isLoading: false,
       data: {
         series: [
-          { hour: '2026-09-03T10:00:00Z', group: 'us-east', requests: 10, prompt_tokens: 1, completion_tokens: 1, avg_latency_ms: 1, error_rate: 0 },
+          { hour: '2026-09-03T10:00:00+00:00', key: 'us-east', requests: 10, prompt_tokens: 1, completion_tokens: 1, avg_latency_ms: 1, error_rate: 0, active_nodes: 2 },
         ],
       },
     });

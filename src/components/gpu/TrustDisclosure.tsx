@@ -27,7 +27,7 @@ export function TrustDisclosure() {
         </p>
         <p>
           <a
-            href="https://github.com/Alpaca-Network/gatewayz-backend/blob/master/docs/gpu/PROVIDER_ONBOARDING.md"
+            href="https://github.com/Alpaca-Network/gatewayz-backend/blob/main/docs/gpu/PROVIDER_ONBOARDING.md"
             target="_blank"
             rel="noreferrer"
             className="text-primary underline"

@@ -57,7 +57,7 @@ export interface GpuEarningsSummary {
 export interface GpuProviderMe {
   provider: GpuProvider;
   nodes: GpuNode[];
-  earnings_summary: GpuEarningsSummary;
+  earnings: GpuEarningsSummary;
 }
 
 export interface RegisterGpuProviderInput {
@@ -202,7 +202,9 @@ export async function registerGpuProvider(input: RegisterGpuProviderInput): Prom
   return body.data;
 }
 
-/** GET /gpu/providers/me (Bearer) -> {provider, nodes, earnings_summary}. */
+/** GET /gpu/providers/me (Bearer) -> {provider, nodes, earnings}. `earnings.void_wei` is
+ *  optional on the wire (A1 is adding it) — `parseEarningsSummary`/`toBigInt` default a
+ *  missing value to 0n. */
 export async function getMyGpuProvider(): Promise<GpuProviderMe> {
   const response = await makeAuthenticatedRequest(`${API_BASE_URL}/gpu/providers/me`);
   if (!response.ok) {
@@ -210,12 +212,12 @@ export async function getMyGpuProvider(): Promise<GpuProviderMe> {
   }
   const body = (await response.json()) as {
     success: boolean;
-    data: { provider: GpuProvider; nodes: GpuNode[]; earnings_summary: Record<string, unknown> };
+    data: { provider: GpuProvider; nodes: GpuNode[]; earnings: Record<string, unknown> };
   };
   return {
     provider: body.data.provider,
     nodes: body.data.nodes,
-    earnings_summary: parseEarningsSummary(body.data.earnings_summary),
+    earnings: parseEarningsSummary(body.data.earnings),
   };
 }
 

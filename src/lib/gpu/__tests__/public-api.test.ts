@@ -66,13 +66,14 @@ describe('gpu/public-api', () => {
         group: 'region' as const,
         series: [
           {
-            hour: '2026-09-03T11:00:00Z',
-            group: 'us-east',
+            hour: '2026-09-03T17:00:00+00:00',
+            key: 'us-east',
             requests: 40,
             prompt_tokens: 12000,
             completion_tokens: 30000,
             avg_latency_ms: 780,
             error_rate: 0.0,
+            active_nodes: 4,
           },
         ],
       };

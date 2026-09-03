@@ -21,17 +21,18 @@ const WINDOWS: GpuUtilizationWindow[] = ['24h', '7d'];
 const GROUPS: GpuUtilizationGroup[] = ['region', 'model'];
 const LINE_COLORS = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#0ea5e9', '#a855f7'];
 
-/** Pivots the flat {hour, group, requests}[] series into one row per hour with a
- *  column per distinct group value, so recharts can draw one <Line> per group. */
+/** Pivots the flat {hour, key, requests}[] series into one row per hour with a
+ *  column per distinct `key` (region or model id, per the `group` query param), so
+ *  recharts can draw one <Line> per key. */
 function pivotByHour(
-  series: Array<{ hour: string; group: string; requests: number }>
+  series: Array<{ hour: string; key: string; requests: number }>
 ): { rows: Array<Record<string, string | number>>; groupKeys: string[] } {
-  const groupKeys = Array.from(new Set(series.map((point) => point.group))).sort();
+  const groupKeys = Array.from(new Set(series.map((point) => point.key))).sort();
   const byHour = new Map<string, Record<string, string | number>>();
 
   for (const point of series) {
     const row = byHour.get(point.hour) ?? { hour: point.hour };
-    row[point.group] = point.requests;
+    row[point.key] = point.requests;
     byHour.set(point.hour, row);
   }
 

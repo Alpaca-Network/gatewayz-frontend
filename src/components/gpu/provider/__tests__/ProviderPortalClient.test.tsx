@@ -110,7 +110,7 @@ describe('ProviderPortalClient', () => {
           approved_by: 'admin-1',
         },
         nodes: [{ id: 5 }],
-        earnings_summary: { accrued_wei: 0n, settled_wei: 0n, void_wei: 0n },
+        earnings: { accrued_wei: 0n, settled_wei: 0n, void_wei: 0n },
       },
     });
 

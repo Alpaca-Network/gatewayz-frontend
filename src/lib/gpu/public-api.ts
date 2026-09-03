@@ -48,16 +48,15 @@ export type GpuUtilizationGroup = 'region' | 'model';
 
 export interface GpuUtilizationPoint {
   hour: string;
-  /** The region or model id this bucket is grouped by (spec.md §6 leaves the exact
-   *  utilization response shape unspecified beyond "hourly series from the rollup" —
-   *  this mirrors `gpu_utilization_hourly`'s columns; confirm against the real backend
-   *  response before this ships, per the cross-repo-contract rule). */
-  group: string;
+  /** The region or model id this bucket is grouped by. Confirmed against the backend's
+   *  real schema (`src/schemas/gpu_public.py`, W-C) — the field is `key`, not `group`. */
+  key: string;
   requests: number;
   prompt_tokens: number;
   completion_tokens: number;
   avg_latency_ms: number;
   error_rate: number;
+  active_nodes: number;
 }
 
 export interface GpuUtilizationResponse {

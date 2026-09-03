@@ -3,7 +3,7 @@
  * gatewayz-backend#2262 #2266). Wraps the typed client in
  * `@/lib/gpu/provider-api.ts`. Every mutation that can change the caller's
  * provider/node state invalidates the single `gpu-my-provider` query, which
- * bundles provider + nodes + earnings_summary — same "one list, invalidate
+ * bundles provider + nodes + earnings — same "one list, invalidate
  * on write" shape as `use-linked-wallets.ts`.
  */
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';

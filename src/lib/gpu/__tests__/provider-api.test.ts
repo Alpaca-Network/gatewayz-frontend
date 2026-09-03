@@ -90,7 +90,7 @@ describe('gpu/provider-api', () => {
               approved_by: 'admin-1',
             },
             nodes: [],
-            earnings_summary: { accrued_wei: '1000000000000000000', settled_wei: '0', void_wei: '0' },
+            earnings: { accrued_wei: '1000000000000000000', settled_wei: '0', void_wei: '0' },
           },
         })
       );
@@ -102,7 +102,34 @@ describe('gpu/provider-api', () => {
         expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer test-api-key' }) })
       );
       expect(result.provider.status).toBe('approved');
-      expect(result.earnings_summary.accrued_wei).toBe(10n ** 18n);
+      expect(result.earnings.accrued_wei).toBe(10n ** 18n);
+    });
+
+    it('defaults a missing void_wei to 0n (A1 is still adding it)', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createSuccessResponse({
+          success: true,
+          data: {
+            provider: {
+              id: 1,
+              display_name: 'Acme GPUs',
+              payout_wallet_address: '0xabc',
+              contact_email: null,
+              status: 'approved',
+              region_default: 'us-east',
+              created_at: '2026-09-03T00:00:00Z',
+              approved_at: '2026-09-04T00:00:00Z',
+              approved_by: 'admin-1',
+            },
+            nodes: [],
+            earnings: { accrued_wei: '1000000000000000000', settled_wei: '0' },
+          },
+        })
+      );
+
+      const result = await getMyGpuProvider();
+
+      expect(result.earnings.void_wei).toBe(0n);
     });
   });
 
