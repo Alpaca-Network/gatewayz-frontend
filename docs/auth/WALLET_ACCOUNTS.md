@@ -24,6 +24,16 @@ endpoints (W1) and Privy token verification (W0) are documented in the backend r
    verifies the token server-side (W0) and rejects unverified requests once its
    `PRIVY_TOKEN_VERIFICATION` config flips to `enforce`. **This means the frontend must
    deploy no later than that flip**, or every sign-in will fail.
+
+   **Exception**: if the caller already has a valid cached session (`getApiKey()` +
+   stored user data) when the token retries exhaust, the hard failure is skipped — status
+   stays `"authenticated"`, this resync cycle is silently dropped, and Sentry is logged with
+   `had_cached_session: true` at `warning` (not `error`) level. A transient token-fetch
+   hiccup (network flake, third-party-cookie issues on the auth domain, etc.) on an
+   already-signed-in user must not lock them out of pages that gate on
+   `status === "authenticated"` (e.g. Settings) just because one periodic Privy resync
+   failed — it'll succeed on the next one. Implemented in both
+   `gatewayz-auth-context.tsx`'s `syncWithBackend` and `use-auth-sync.ts`'s `queryFn`.
 4. **`trial_credits` is no longer sent.** It was a vestigial field — `PrivyAuthRequest`
    (backend `src/schemas/auth.py`) has no such field, so Pydantic silently dropped it. New
    accounts get 0 credits regardless of what the frontend sends.
@@ -59,6 +69,21 @@ callout when `getUserData()?.auth_method === 'wallet'`.
 The typed client is `src/lib/auth/wallet-auth-api.ts` (`WalletAuthError {status, code}`,
 `describeWalletAuthError()` for the user-facing copy); the react-query hooks are
 `src/lib/hooks/use-linked-wallets.ts` (`useLinkedWallets`, `useLinkWallet`, `useUnlinkWallet`).
+
+**Error mapping is by (endpoint, HTTP status), not by parsed body text.** The backend wraps
+every error this router raises through `detailed_http_exception_handler`
+(`src/utils/error_handlers.py`), whose body is always `{"error": {type, message, detail,
+code, status, context, ...}}` — there is no top-level `detail` field, and `error.code` is a
+generic code (e.g. every 401 here is `INVALID_API_KEY`, regardless of which of the two
+signature-verification failures caused it). 409 in particular carries **no** body signal at
+all (no explicit 409 branch in the backend's mapper, falls through to a generic
+`internal_error`) — status code is the only checked contract there. Each endpoint's status
+codes are otherwise 1:1 with a single meaning (see `wallet-auth-api.ts`'s
+`codeForLinkStatus`/`codeForUnlinkStatus`/`codeForNonceStatus`), verified against
+`gatewayz-backend`'s own `tests/routes/test_wallet_auth.py` and `src/routes/wallet_auth.py`.
+Link's 401 optionally reads a disambiguating hint from `error.detail`'s suffix (where the
+backend's raw `invalid_signature`/`signature_address_mismatch` string does leak through) —
+never required, defaults to `invalid_signature` if absent.
 
 ## Backend base URL
 
