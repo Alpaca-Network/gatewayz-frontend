@@ -71,20 +71,18 @@ describe('AppFooter', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('should not render on sandbox pages', () => {
-    mockPathname.mockReturnValue('/sandbox');
-    const { container } = render(<AppFooter />);
-    expect(container.firstChild).toBeNull();
-  });
+  // Sandbox pages and their app-footer special-case were removed wholesale in
+  // 36e78475 ("remove AI SDK, sandbox, insights, and rankings"); there's no
+  // /sandbox route left to hide the footer on.
 
-  it('should not render on sandbox detail pages', () => {
-    mockPathname.mockReturnValue('/sandbox/campaign-copy-generator');
-    const { container } = render(<AppFooter />);
-    expect(container.firstChild).toBeNull();
-  });
-
-  it('should render on settings pages after initial render', () => {
+  it('should NOT render on settings pages (fixed sidebar layout would overlap it)', () => {
     mockPathname.mockReturnValue('/settings');
+    const { container } = render(<AppFooter />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('should render on other non-homepage routes after initial render', () => {
+    mockPathname.mockReturnValue('/contact');
     render(<AppFooter />);
 
     // Footer shows on non-homepage routes immediately
@@ -115,7 +113,7 @@ describe('AppFooter', () => {
   });
 
   it('should render X (Twitter) link with correct URL', () => {
-    mockPathname.mockReturnValue('/settings');
+    mockPathname.mockReturnValue('/contact');
     render(<AppFooter />);
 
     const xLink = screen.getByRole('link', { name: /X/i });
@@ -126,7 +124,7 @@ describe('AppFooter', () => {
   });
 
   it('should render LinkedIn link with correct URL', () => {
-    mockPathname.mockReturnValue('/settings');
+    mockPathname.mockReturnValue('/contact');
     render(<AppFooter />);
 
     const linkedinLink = screen.getByRole('link', { name: /LinkedIn/i });
