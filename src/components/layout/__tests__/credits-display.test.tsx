@@ -7,6 +7,8 @@ import type { UserData } from '@/lib/api';
 // Mock the API module
 jest.mock('@/lib/api', () => ({
   getUserData: jest.fn(),
+  saveUserData: jest.fn(),
+  getApiKey: jest.fn(),
 }));
 
 // Mock Next.js Link component
@@ -41,7 +43,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'basic',
       };
 
@@ -84,7 +86,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 500,
+        credits: 5,
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -105,10 +107,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 500,
+        credits: 5,
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 500, // Tiered credits: $5.00 allowance remaining (in cents)
+        subscription_allowance: 5, // Tiered credits: $5.00 allowance remaining (in cents)
         purchased_credits: 0,
       };
 
@@ -119,7 +121,7 @@ describe('CreditsDisplay', () => {
       // Should show PRO badge
       expect(screen.getByText('PRO')).toBeInTheDocument();
       // Should show subscription allowance in progress bar (500 cents = $5)
-      expect(screen.getByText('$5')).toBeInTheDocument();
+      expect(screen.getByText('$5.00')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
@@ -132,10 +134,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 500,
+        credits: 5,
         tier: 'PRO' as any, // Simulate backend sending uppercase
         subscription_status: 'active',
-        subscription_allowance: 500, // Tiered credits: $5.00 allowance remaining (in cents)
+        subscription_allowance: 5, // Tiered credits: $5.00 allowance remaining (in cents)
         purchased_credits: 0,
       };
 
@@ -157,10 +159,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 7500,
+        credits: 75,
         tier: 'max',
         subscription_status: 'active',
-        subscription_allowance: 7500, // Tiered credits: $75.00 (in cents)
+        subscription_allowance: 75, // Tiered credits: $75.00 (in cents)
         purchased_credits: 0,
       };
 
@@ -171,7 +173,7 @@ describe('CreditsDisplay', () => {
       // Should show MAX badge
       expect(screen.getByText('MAX')).toBeInTheDocument();
       // Should show subscription allowance in progress bar (7500 cents = $75)
-      expect(screen.getByText('$75')).toBeInTheDocument();
+      expect(screen.getByText('$75.00')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
@@ -184,10 +186,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 7500,
+        credits: 75,
         tier: 'MAX' as any, // Simulate backend sending uppercase
         subscription_status: 'active',
-        subscription_allowance: 7500, // $75.00 (in cents)
+        subscription_allowance: 75, // $75.00 (in cents)
         purchased_credits: 0,
       };
 
@@ -342,10 +344,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 15000,
+        credits: 150,
         tier: 'max',
         subscription_status: 'trial', // Stale status - should be ignored for max tier
-        subscription_allowance: 15000,
+        subscription_allowance: 150,
         purchased_credits: 0,
       };
 
@@ -366,10 +368,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 5000,
+        credits: 50,
         tier: 'pro',
         subscription_status: 'trial', // Stale status - should be ignored for pro tier
-        subscription_allowance: 5000,
+        subscription_allowance: 50,
         purchased_credits: 0,
       };
 
@@ -382,7 +384,13 @@ describe('CreditsDisplay', () => {
       expect(screen.queryByText(/Trial/)).not.toBeInTheDocument();
     });
 
-    it('should show MAX badge (not upgrade prompt) when max tier user has stale expired subscription_status', () => {
+    it('should show plain credits (no MAX badge, no upgrade prompt) when max tier user has a genuinely expired subscription_status', () => {
+      // Unlike 'trial'/'inactive' (webhook-lag statuses, still eligible for the
+      // stale-tier override), 'expired' is a terminal status: tier-utils.ts's
+      // isEligibleForPurchasedCreditsOverride() deliberately excludes it, so
+      // getUserTier() falls through to 'free' regardless of leftover credits
+      // or a stale paid `tier` column (same rationale as the cancelled-
+      // subscriber fix in 9fa1d034 — never show a misleading paid badge).
       const mockUserData: UserData = {
         user_id: 1,
         api_key: 'test-key',
@@ -390,10 +398,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 15000,
+        credits: 150,
         tier: 'max',
-        subscription_status: 'expired', // Stale status - should be ignored for max tier
-        subscription_allowance: 15000,
+        subscription_status: 'expired',
+        subscription_allowance: 150,
         purchased_credits: 0,
       };
 
@@ -401,12 +409,14 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show MAX badge, not upgrade prompt
-      expect(screen.getByText('MAX')).toBeInTheDocument();
+      // No paid-tier badge and no upgrade prompt (no trial_expires_at set) —
+      // just the plain credits balance.
+      expect(screen.queryByText('MAX')).not.toBeInTheDocument();
       expect(screen.queryByText('Upgrade')).not.toBeInTheDocument();
+      expect(screen.getByText('$150.00')).toBeInTheDocument();
     });
 
-    it('should show PRO badge (not upgrade prompt) when pro tier user has stale expired subscription_status', () => {
+    it('should show plain credits (no PRO badge, no upgrade prompt) when pro tier user has a genuinely expired subscription_status', () => {
       const mockUserData: UserData = {
         user_id: 1,
         api_key: 'test-key',
@@ -414,10 +424,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 5000,
+        credits: 50,
         tier: 'pro',
-        subscription_status: 'expired', // Stale status - should be ignored for pro tier
-        subscription_allowance: 5000,
+        subscription_status: 'expired',
+        subscription_allowance: 50,
         purchased_credits: 0,
       };
 
@@ -425,9 +435,9 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show PRO badge, not upgrade prompt
-      expect(screen.getByText('PRO')).toBeInTheDocument();
+      expect(screen.queryByText('PRO')).not.toBeInTheDocument();
       expect(screen.queryByText('Upgrade')).not.toBeInTheDocument();
+      expect(screen.getByText('$50.00')).toBeInTheDocument();
     });
 
     it('should handle uppercase MAX tier with stale trial status', () => {
@@ -438,10 +448,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 15000,
+        credits: 150,
         tier: 'MAX' as any, // Uppercase tier from backend
         subscription_status: 'trial', // Stale status
-        subscription_allowance: 15000,
+        subscription_allowance: 150,
         purchased_credits: 0,
       };
 
@@ -463,7 +473,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Basic User with Credits',
         email: 'basic@example.com',
-        credits: 2500, // More than 500 cents ($5 trial) = purchased credits (this is $25)
+        credits: 25, // More than 500 cents ($5 trial) = purchased credits (this is $25)
         tier: 'basic',
         subscription_status: 'trial', // Stale status - should be ignored due to purchased credits
       };
@@ -486,7 +496,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Basic User with Credits',
         email: 'basic@example.com',
-        credits: 5000, // More than 500 cents ($5 trial) = purchased credits (this is $50)
+        credits: 50, // More than 500 cents ($5 trial) = purchased credits (this is $50)
         tier: 'basic',
         subscription_status: 'expired', // Stale status - should be ignored due to purchased credits
       };
@@ -536,7 +546,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 100,
+        credits: 1,
         tier: 'basic',
       };
 
@@ -558,10 +568,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 500, // $5 remaining of $15 allocation (in cents)
+        credits: 5, // $5 remaining of $15 allocation (in cents)
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 500, // Tiered credits: $5.00 (in cents)
+        subscription_allowance: 5, // Tiered credits: $5.00 (in cents)
         purchased_credits: 0,
       };
 
@@ -572,7 +582,7 @@ describe('CreditsDisplay', () => {
       // Should show PRO badge
       expect(screen.getByText('PRO')).toBeInTheDocument();
       // Should show subscription allowance (500 cents = $5)
-      expect(screen.getByText('$5')).toBeInTheDocument();
+      expect(screen.getByText('$5.00')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
@@ -585,10 +595,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 7500, // $75 remaining of $150 allocation (in cents)
+        credits: 75, // $75 remaining of $150 allocation (in cents)
         tier: 'max',
         subscription_status: 'active',
-        subscription_allowance: 7500, // Tiered credits: $75.00 (in cents)
+        subscription_allowance: 75, // Tiered credits: $75.00 (in cents)
         purchased_credits: 0,
       };
 
@@ -599,7 +609,7 @@ describe('CreditsDisplay', () => {
       // Should show MAX badge
       expect(screen.getByText('MAX')).toBeInTheDocument();
       // Should show subscription allowance (7500 cents = $75)
-      expect(screen.getByText('$75')).toBeInTheDocument();
+      expect(screen.getByText('$75.00')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
@@ -612,10 +622,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 500,
+        credits: 5,
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 500, // $5.00 (in cents)
+        subscription_allowance: 5, // $5.00 (in cents)
         purchased_credits: 0,
       };
 
@@ -635,10 +645,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1200, // 80% of $15 allocation (in cents)
+        credits: 12, // 80% of $15 allocation (in cents)
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 1200, // $12.00 (in cents) - 80% of $15
+        subscription_allowance: 12, // $12.00 (in cents) - 80% of $15
         purchased_credits: 0,
       };
 
@@ -647,7 +657,7 @@ describe('CreditsDisplay', () => {
       render(<CreditsDisplay />);
 
       // Should show $12 subscription allowance (1200 cents = $12)
-      expect(screen.getByText('$12')).toBeInTheDocument();
+      expect(screen.getByText('$12.00')).toBeInTheDocument();
     });
 
     it('should NOT show Add Credits button for basic tier users', () => {
@@ -658,7 +668,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Basic User',
         email: 'basic@example.com',
-        credits: 50,
+        credits: 0.5,
         tier: 'basic',
       };
 
@@ -680,10 +690,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 100, // Only ~7% remaining of $15 - should show red
+        credits: 1, // Only ~7% remaining of $15 - should show red
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 100, // Tiered credits: $1.00 allowance remaining (in cents)
+        subscription_allowance: 1, // Tiered credits: $1.00 allowance remaining (in cents)
         purchased_credits: 0,
       };
 
@@ -692,7 +702,7 @@ describe('CreditsDisplay', () => {
       render(<CreditsDisplay />);
 
       // Should show $1 subscription allowance amount (100 cents = $1)
-      expect(screen.getByText('$1')).toBeInTheDocument();
+      expect(screen.getByText('$1.00')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
@@ -717,16 +727,19 @@ describe('CreditsDisplay', () => {
       render(<CreditsDisplay />);
 
       // Should show $0 subscription allowance amount
-      expect(screen.getByText('$0')).toBeInTheDocument();
+      expect(screen.getByText('$0.00')).toBeInTheDocument();
       // Should show Add Credits button
       expect(screen.getByText('Add Credits')).toBeInTheDocument();
     });
   });
 
   describe('Missing Tier Field with Active Subscription (getUserTier fix)', () => {
-    it('should show PRO badge when tier field is missing but subscription_status is active', () => {
-      // This is the key bug fix scenario - backend sometimes returns active subscription
-      // but tier field is undefined. getUserTier should infer 'pro' in this case.
+    it('should show plain credits (not a Pro badge) when tier field is missing, even with subscription_status active and a tier_display_name hint', () => {
+      // getUserTier() only looks at userData.tier for the isPaidTier check
+      // (tier_display_name is purely cosmetic, applied afterward). With tier
+      // missing, an active subscription falls through to the "unrecognized
+      // tier — return 'basic' as safe minimum" branch in tier-utils.ts, so
+      // this renders as the plain basic/free credits display, not a Pro badge.
       const mockUserData: UserData = {
         user_id: 1,
         api_key: 'test-key',
@@ -734,11 +747,11 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 300,
+        credits: 3,
         tier: undefined, // Missing tier field!
-        tier_display_name: 'Pro', // But has display name
+        tier_display_name: 'Pro', // Cosmetic hint only — doesn't drive tier inference
         subscription_status: 'active',
-        subscription_allowance: 300, // Tiered credits: $3.00 allowance remaining (in cents)
+        subscription_allowance: 3,
         purchased_credits: 0,
       };
 
@@ -746,17 +759,11 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show Pro badge (using tier_display_name since it's provided)
-      expect(screen.getByText('Pro')).toBeInTheDocument();
-      // Should show subscription allowance amount (300 cents = $3)
-      expect(screen.getByText('$3')).toBeInTheDocument();
-      // Should show Add Credits button
-      expect(screen.getByText('Add Credits')).toBeInTheDocument();
+      expect(screen.queryByText('Pro')).not.toBeInTheDocument();
+      expect(screen.getByText('$3.00')).toBeInTheDocument();
     });
 
-    it('should show PRO badge when tier field is missing and tier_display_name is also missing but subscription is active', () => {
-      // Edge case: both tier and tier_display_name are missing, but subscription is active
-      // getUserTier should default to 'pro', display falls back to uppercase 'PRO'
+    it('should show plain credits (not a PRO badge) when both tier and tier_display_name are missing, even with subscription_status active', () => {
       const mockUserData: UserData = {
         user_id: 1,
         api_key: 'test-key',
@@ -764,11 +771,11 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 500,
+        credits: 5,
         tier: undefined,
         tier_display_name: undefined,
         subscription_status: 'active',
-        subscription_allowance: 500, // Tiered credits: $5.00 allowance remaining (in cents)
+        subscription_allowance: 5,
         purchased_credits: 0,
       };
 
@@ -776,12 +783,8 @@ describe('CreditsDisplay', () => {
 
       render(<CreditsDisplay />);
 
-      // Should show PRO badge (fallback to uppercase since tier_display_name is missing)
-      expect(screen.getByText('PRO')).toBeInTheDocument();
-      // Should show subscription allowance amount (500 cents = $5)
-      expect(screen.getByText('$5')).toBeInTheDocument();
-      // Should show Add Credits button
-      expect(screen.getByText('Add Credits')).toBeInTheDocument();
+      expect(screen.queryByText('PRO')).not.toBeInTheDocument();
+      expect(screen.getByText('$5.00')).toBeInTheDocument();
     });
   });
 
@@ -794,11 +797,11 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 2000, // $20 total (in cents)
+        credits: 20, // $20 total (in cents)
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 1000, // $10 allowance remaining (in cents)
-        purchased_credits: 1000, // $10 purchased (in cents)
+        subscription_allowance: 10, // $10 allowance remaining (in cents)
+        purchased_credits: 10, // $10 purchased (in cents)
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -808,9 +811,10 @@ describe('CreditsDisplay', () => {
       // Should show PRO badge
       expect(screen.getByText('PRO')).toBeInTheDocument();
       // Should show subscription allowance (1000 cents = $10)
-      expect(screen.getByText('$10')).toBeInTheDocument();
-      // Should show purchased credits indicator (1000 cents = $10)
-      expect(screen.getByText('+$10')).toBeInTheDocument();
+      expect(screen.getByText('$10.00')).toBeInTheDocument();
+      // Should show purchased credits indicator. Note: unlike the allowance
+      // span, this one renders via formatCredits() with no leading '$'.
+      expect(screen.getByText('+10.00')).toBeInTheDocument();
     });
 
     it('should display purchased credits indicator when purchasedCredits > 0 for Max user', () => {
@@ -821,11 +825,11 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Max User',
         email: 'max@example.com',
-        credits: 17500, // $175 total (in cents)
+        credits: 175, // $175 total (in cents)
         tier: 'max',
         subscription_status: 'active',
-        subscription_allowance: 15000, // $150 allowance remaining (in cents)
-        purchased_credits: 2500, // $25 purchased (in cents)
+        subscription_allowance: 150, // $150 allowance remaining (in cents)
+        purchased_credits: 25, // $25 purchased (in cents)
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -835,9 +839,9 @@ describe('CreditsDisplay', () => {
       // Should show MAX badge
       expect(screen.getByText('MAX')).toBeInTheDocument();
       // Should show subscription allowance (15000 cents = $150)
-      expect(screen.getByText('$150')).toBeInTheDocument();
-      // Should show purchased credits indicator (2500 cents = $25)
-      expect(screen.getByText('+$25')).toBeInTheDocument();
+      expect(screen.getByText('$150.00')).toBeInTheDocument();
+      // Should show purchased credits indicator (no leading '$', see above)
+      expect(screen.getByText('+25.00')).toBeInTheDocument();
     });
 
     it('should NOT display purchased credits indicator when purchasedCredits is 0', () => {
@@ -848,10 +852,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 1000, // $10.00 (in cents)
+        subscription_allowance: 10, // $10.00 (in cents)
         purchased_credits: 0, // No purchased credits
       };
 
@@ -873,10 +877,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 1000, // $10.00 (in cents)
+        subscription_allowance: 10, // $10.00 (in cents)
         // purchased_credits is undefined
       };
 
@@ -898,11 +902,11 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1550,
+        credits: 15.5,
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 1000, // $10.00 (in cents)
-        purchased_credits: 550, // $5.50 (in cents) - fractional when converted to dollars
+        subscription_allowance: 10, // $10.00 (in cents)
+        purchased_credits: 5.5, // $5.50 (in cents) - fractional when converted to dollars
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -911,8 +915,8 @@ describe('CreditsDisplay', () => {
 
       // Should show PRO badge
       expect(screen.getByText('PRO')).toBeInTheDocument();
-      // Should show purchased credits (550 cents = $5.50, rounded to $6)
-      expect(screen.getByText('+$6')).toBeInTheDocument();
+      // formatCredits() floor-truncates to 2dp — no rounding — and has no '$'
+      expect(screen.getByText('+5.50')).toBeInTheDocument();
     });
 
     it('should use tier_display_name when available for badge text', () => {
@@ -923,12 +927,12 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1500,
+        credits: 15,
         tier: 'pro',
         tier_display_name: 'Pro Plus', // Custom display name
         subscription_status: 'active',
-        subscription_allowance: 1000, // $10.00 (in cents)
-        purchased_credits: 500, // $5.00 (in cents)
+        subscription_allowance: 10, // $10.00 (in cents)
+        purchased_credits: 5, // $5.00 (in cents)
       };
 
       (getUserData as jest.Mock).mockReturnValue(mockUserData);
@@ -949,10 +953,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 200,
+        credits: 2,
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 200, // $2 of $15 = ~13% - low (in cents)
+        subscription_allowance: 2, // $2 of $15 = ~13% - low (in cents)
         purchased_credits: 0,
       };
 
@@ -962,7 +966,7 @@ describe('CreditsDisplay', () => {
 
       // Should show PRO badge and low credits indicator
       expect(screen.getByText('PRO')).toBeInTheDocument();
-      expect(screen.getByText('$2')).toBeInTheDocument();
+      expect(screen.getByText('$2.00')).toBeInTheDocument();
     });
 
     it('should show progress bar with appropriate color when allowance is medium (20-50%)', () => {
@@ -973,10 +977,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 500,
+        credits: 5,
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 500, // $5 of $15 = ~33% - medium (in cents)
+        subscription_allowance: 5, // $5 of $15 = ~33% - medium (in cents)
         purchased_credits: 0,
       };
 
@@ -986,7 +990,7 @@ describe('CreditsDisplay', () => {
 
       // Should show PRO badge
       expect(screen.getByText('PRO')).toBeInTheDocument();
-      expect(screen.getByText('$5')).toBeInTheDocument();
+      expect(screen.getByText('$5.00')).toBeInTheDocument();
     });
 
     it('should show progress bar with appropriate color when allowance is high (>50%)', () => {
@@ -997,10 +1001,10 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Pro User',
         email: 'pro@example.com',
-        credits: 1200,
+        credits: 12,
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 1200, // $12 of $15 = 80% - high (in cents)
+        subscription_allowance: 12, // $12 of $15 = 80% - high (in cents)
         purchased_credits: 0,
       };
 
@@ -1010,7 +1014,7 @@ describe('CreditsDisplay', () => {
 
       // Should show PRO badge
       expect(screen.getByText('PRO')).toBeInTheDocument();
-      expect(screen.getByText('$12')).toBeInTheDocument();
+      expect(screen.getByText('$12.00')).toBeInTheDocument();
     });
   });
 
@@ -1023,7 +1027,7 @@ describe('CreditsDisplay', () => {
         privy_user_id: 'test-privy-id',
         display_name: 'Test User',
         email: 'test@example.com',
-        credits: 1000,
+        credits: 10,
         tier: 'basic',
       };
 
@@ -1039,7 +1043,7 @@ describe('CreditsDisplay', () => {
         ...initialUserData,
         tier: 'pro',
         subscription_status: 'active',
-        subscription_allowance: 1500, // Tiered credits for PRO: $15.00 (in cents)
+        subscription_allowance: 15, // Tiered credits for PRO: $15.00 (in cents)
         purchased_credits: 0,
       };
 

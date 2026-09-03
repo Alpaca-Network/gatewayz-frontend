@@ -255,8 +255,7 @@ describe('model-pricing-utils', () => {
   });
 
   describe('isPerMillionPricingGateway', () => {
-    it('should return true for known per-million gateways', () => {
-      // Backend normalizes ALL gateway pricing to per-million in merged responses
+    it('should return true for gateways that report pricing per-million-tokens', () => {
       const perMillionGateways = [
         'onerouter', 'groq', 'deepinfra', 'featherless',
         'chutes', 'together', 'near', 'fireworks', 'cerebras', 'novita',
@@ -265,12 +264,24 @@ describe('model-pricing-utils', () => {
         'simplismart', 'akash', 'cloudflare-workers-ai', 'alpaca-network',
         'alpaca', 'aimo', 'fal', 'canopywave', 'sybil', 'anannas',
         'morpheus', 'nosana',
-        'openai', 'anthropic', 'openrouter', 'aihubmix', 'modelz',
-        'huggingface', 'cohere', 'zai',
       ];
 
       perMillionGateways.forEach((gateway) => {
         expect(isPerMillionPricingGateway(gateway)).toBe(true);
+      });
+    });
+
+    it('should return false for gateways that report pricing per-token (default path)', () => {
+      // openrouter, openai, anthropic, and similar gateways return per-token
+      // pricing and are deliberately NOT in PER_MILLION_PRICING_GATEWAYS — the
+      // default per-token path (x 1,000,000) handles them.
+      const perTokenGateways = [
+        'openai', 'anthropic', 'openrouter', 'aihubmix', 'modelz',
+        'huggingface', 'cohere', 'zai',
+      ];
+
+      perTokenGateways.forEach((gateway) => {
+        expect(isPerMillionPricingGateway(gateway)).toBe(false);
       });
     });
 
@@ -281,6 +292,8 @@ describe('model-pricing-utils', () => {
 
   describe('isPerBillionPricingGateway', () => {
     it('should return false for all known gateways', () => {
+      // Backend normalizes ALL gateway pricing to per-token or per-million
+      // before returning to the frontend — no gateway needs per-billion handling.
       const allGateways = [
         'openrouter', 'onerouter', 'groq', 'deepinfra',
         'openai', 'anthropic', 'huggingface',
@@ -293,33 +306,43 @@ describe('model-pricing-utils', () => {
   });
 
   describe('formatPricingForDisplay', () => {
-    it('should display per-million pricing as-is for all gateways', () => {
-      // Backend normalizes ALL pricing to per-million format
-      // All gateways are treated as per-million
+    it('should normalize per-token gateway pricing to per-million and apply the platform markup', () => {
+      // openrouter/openai/anthropic report pricing per-token (e.g. 0.00000015
+      // for $0.15/MTok). formatPricingForDisplay multiplies by 1,000,000 to get
+      // per-million, then applies PRICING_MARKUP (1.25x default) so the
+      // displayed price matches what the backend actually charges.
 
-      // OpenRouter: 0.15 = $0.15/MTok
-      expect(formatPricingForDisplay('0.15', 'openrouter')).toBe('0.15');
-      expect(formatPricingForDisplay('0.60', 'openrouter')).toBe('0.60');
+      // OpenRouter: $0.15/MTok raw -> $0.1875/MTok after 1.25x markup
+      expect(formatPricingForDisplay('0.00000015', 'openrouter')).toBe('0.19');
+      // OpenRouter: $0.60/MTok raw -> $0.75/MTok after markup
+      expect(formatPricingForDisplay('0.0000006', 'openrouter')).toBe('0.75');
 
-      // Groq: 0.05 = $0.05/MTok
-      expect(formatPricingForDisplay('0.05', 'groq')).toBe('0.05');
+      // OpenAI: $2.50/MTok raw -> $3.13/MTok after markup
+      expect(formatPricingForDisplay('0.0000025', 'openai')).toBe('3.13');
+      // OpenAI: $10.00/MTok raw -> $12.50/MTok after markup
+      expect(formatPricingForDisplay('0.00001', 'openai')).toBe('12.50');
 
-      // DeepInfra: 0.35 = $0.35/MTok
-      expect(formatPricingForDisplay('0.35', 'deepinfra')).toBe('0.35');
+      // Anthropic: $3.00/MTok raw -> $3.75/MTok after markup
+      expect(formatPricingForDisplay('0.000003', 'anthropic')).toBe('3.75');
+      // Anthropic: $15.00/MTok raw -> $18.75/MTok after markup
+      expect(formatPricingForDisplay('0.000015', 'anthropic')).toBe('18.75');
+    });
 
-      // OneRouter: 0.15 = $0.15/MTok
-      expect(formatPricingForDisplay('0.15', 'onerouter')).toBe('0.15');
+    it('should display per-million gateway pricing as-is, still with markup applied', () => {
+      // Groq: $0.05/MTok raw -> $0.0625/MTok after markup (displays as 0.06)
+      expect(formatPricingForDisplay('0.05', 'groq')).toBe('0.06');
 
-      // Google Vertex: 0.075 = $0.075/MTok
-      expect(formatPricingForDisplay('0.075', 'google-vertex')).toBe('0.07');
+      // DeepInfra: $0.35/MTok raw -> $0.4375/MTok after markup
+      expect(formatPricingForDisplay('0.35', 'deepinfra')).toBe('0.44');
 
-      // OpenAI: 2.50 = $2.50/MTok
-      expect(formatPricingForDisplay('2.50', 'openai')).toBe('2.50');
-      expect(formatPricingForDisplay('10.00', 'openai')).toBe('10.00');
+      // OneRouter: $0.15/MTok raw -> $0.1875/MTok after markup
+      expect(formatPricingForDisplay('0.15', 'onerouter')).toBe('0.19');
 
-      // Anthropic: 3.00 = $3.00/MTok
-      expect(formatPricingForDisplay('3.00', 'anthropic')).toBe('3.00');
-      expect(formatPricingForDisplay('15.00', 'anthropic')).toBe('15.00');
+      // Google Vertex: $0.075/MTok raw -> $0.09375/MTok after markup
+      expect(formatPricingForDisplay('0.075', 'google-vertex')).toBe('0.09');
+
+      // Fireworks: $15.00/MTok raw -> $18.75/MTok after markup
+      expect(formatPricingForDisplay('15.00', 'fireworks')).toBe('18.75');
     });
 
     it('should return null for undefined or empty price', () => {
@@ -332,7 +355,7 @@ describe('model-pricing-utils', () => {
       expect(formatPricingForDisplay('free', 'openrouter')).toBeNull();
     });
 
-    it('should handle zero pricing', () => {
+    it('should handle zero pricing (markup is skipped for free models)', () => {
       expect(formatPricingForDisplay('0', 'openrouter')).toBe('0.00');
       expect(formatPricingForDisplay('0', 'onerouter')).toBe('0.00');
       expect(formatPricingForDisplay('0', 'groq')).toBe('0.00');
@@ -340,23 +363,21 @@ describe('model-pricing-utils', () => {
   });
 
   describe('getNormalizedPerTokenPrice', () => {
-    it('should convert per-million pricing to per-token for all gateways', () => {
-      // All gateways return per-million from the backend
+    it('should convert to a per-token price (post-markup) regardless of gateway pricing convention', () => {
+      // OpenRouter: 0.00000015 (=$0.15/M raw) -> $0.1875/M post-markup -> 1.875e-7 per-token
+      expect(getNormalizedPerTokenPrice('0.00000015', 'openrouter')).toBeCloseTo(1.875e-7, 12);
 
-      // OpenRouter: 0.15 per-million → 0.15/1M = 1.5e-7 per-token
-      expect(getNormalizedPerTokenPrice('0.15', 'openrouter')).toBeCloseTo(0.00000015, 12);
+      // Groq: 0.05 (=$0.05/M raw) -> $0.0625/M post-markup -> 6.25e-8 per-token
+      expect(getNormalizedPerTokenPrice('0.05', 'groq')).toBeCloseTo(6.25e-8, 12);
 
-      // Groq: 0.05 per-million → 0.05/1M = 5e-8 per-token
-      expect(getNormalizedPerTokenPrice('0.05', 'groq')).toBeCloseTo(0.00000005, 12);
+      // DeepInfra: 0.35 -> $0.4375/M post-markup -> 4.375e-7 per-token
+      expect(getNormalizedPerTokenPrice('0.35', 'deepinfra')).toBeCloseTo(4.375e-7, 12);
 
-      // DeepInfra: 0.35 per-million → 0.35/1M = 3.5e-7 per-token
-      expect(getNormalizedPerTokenPrice('0.35', 'deepinfra')).toBeCloseTo(0.00000035, 12);
+      // OneRouter: 1.00 -> $1.25/M post-markup -> 1.25e-6 per-token
+      expect(getNormalizedPerTokenPrice('1.00', 'onerouter')).toBe(0.00000125);
 
-      // OneRouter: 1.00 per-million → 1.00/1M = 1e-6 per-token
-      expect(getNormalizedPerTokenPrice('1.00', 'onerouter')).toBe(0.000001);
-
-      // OpenAI: 2.50 per-million → 2.50/1M = 2.5e-6 per-token
-      expect(getNormalizedPerTokenPrice('2.50', 'openai')).toBeCloseTo(0.0000025, 12);
+      // OpenAI: 0.0000025 (=$2.50/M raw) -> $3.125/M post-markup -> 3.125e-6 per-token
+      expect(getNormalizedPerTokenPrice('0.0000025', 'openai')).toBeCloseTo(0.000003125, 12);
     });
 
     it('should return null for undefined or empty price', () => {
@@ -372,18 +393,19 @@ describe('model-pricing-utils', () => {
       // $100/M = $0.0001/token is the cap
       const maxPerToken = MAX_PRICE_PER_MILLION / 1000000; // 0.0001
 
-      // Per-million: $200/M, capped at $100/M
-      expect(getNormalizedPerTokenPrice('200', 'openrouter')).toBe(maxPerToken);
+      // OpenRouter per-token input equivalent to $200/M raw, capped at $100/M
+      expect(getNormalizedPerTokenPrice('0.0002', 'openrouter')).toBe(maxPerToken);
+      // Groq per-million input of $200/M raw, capped at $100/M
       expect(getNormalizedPerTokenPrice('200', 'groq')).toBe(maxPerToken);
     });
 
     it('should be consistent with formatPricingForDisplay', () => {
       const testCases = [
-        { price: '0.15', gateway: 'openrouter' },
+        { price: '0.00000015', gateway: 'openrouter' },
         { price: '0.15', gateway: 'onerouter' },
         { price: '0.05', gateway: 'groq' },
-        { price: '200', gateway: 'openrouter' },          // exceeds cap
-        { price: '200', gateway: 'groq' },                 // exceeds cap
+        { price: '0.0002', gateway: 'openrouter' },  // exceeds cap
+        { price: '200', gateway: 'groq' },             // exceeds cap
       ];
 
       testCases.forEach(({ price, gateway }) => {
@@ -397,40 +419,37 @@ describe('model-pricing-utils', () => {
   });
 
   describe('pricing normalization integration', () => {
-    it('should display consistent pricing for same model from different gateways', () => {
-      // GPT-4o-mini costs $0.15/MTok
-      // All gateways return per-million: 0.15
-
-      const openrouterPrice = formatPricingForDisplay('0.15', 'openrouter');
+    it('should display the same $/M price for equivalent per-token and per-million inputs', () => {
+      // GPT-4o-mini costs $0.15/MTok. openrouter reports it as a per-token
+      // price (0.00000015); groq/deepinfra report the equivalent per-million
+      // price (0.15) directly. Both normalize to the same displayed price
+      // once markup is applied.
+      const openrouterPrice = formatPricingForDisplay('0.00000015', 'openrouter');
       const groqPrice = formatPricingForDisplay('0.15', 'groq');
       const deepinfraPrice = formatPricingForDisplay('0.15', 'deepinfra');
-      const openaiPrice = formatPricingForDisplay('0.15', 'openai');
 
-      // All should display as $0.15/M
-      expect(openrouterPrice).toBe('0.15');
-      expect(groqPrice).toBe('0.15');
-      expect(deepinfraPrice).toBe('0.15');
-      expect(openaiPrice).toBe('0.15');
+      expect(openrouterPrice).toBe('0.19');
+      expect(groqPrice).toBe('0.19');
+      expect(deepinfraPrice).toBe('0.19');
     });
 
-    it('should filter models consistently regardless of gateway', () => {
+    it('should filter models consistently regardless of gateway pricing convention', () => {
       // Filter range: models costing less than $1/M input
       const maxPerTokenPrice = 1 / 1000000; // $1/M = $0.000001/token
 
-      // All gateways return per-million
-      const cheapOpenRouter = getNormalizedPerTokenPrice('0.15', 'openrouter');
-      expect(cheapOpenRouter).toBeLessThan(maxPerTokenPrice); // $0.15/M < $1/M
+      const cheapOpenRouter = getNormalizedPerTokenPrice('0.00000015', 'openrouter'); // $0.15/M raw
+      expect(cheapOpenRouter).toBeLessThan(maxPerTokenPrice);
 
-      const cheapGroq = getNormalizedPerTokenPrice('0.05', 'groq');
-      expect(cheapGroq).toBeLessThan(maxPerTokenPrice); // $0.05/M < $1/M
+      const cheapGroq = getNormalizedPerTokenPrice('0.05', 'groq'); // $0.05/M raw
+      expect(cheapGroq).toBeLessThan(maxPerTokenPrice);
 
       // Expensive models within the cap ($100)
-      const expensiveModel = getNormalizedPerTokenPrice('15.00', 'openrouter');
-      expect(expensiveModel).toBeGreaterThan(maxPerTokenPrice); // $15/M > $1/M
+      const expensiveModel = getNormalizedPerTokenPrice('0.000015', 'openrouter'); // $15/M raw
+      expect(expensiveModel).toBeGreaterThan(maxPerTokenPrice);
 
       // Verify that capped prices still filter correctly
       const cappedPerToken = MAX_PRICE_PER_MILLION / 1000000; // $100/M = $0.0001/token
-      const cappedOpenrouter = getNormalizedPerTokenPrice('500', 'openrouter'); // $500/M, capped to $100/M
+      const cappedOpenrouter = getNormalizedPerTokenPrice('0.0005', 'openrouter'); // $500/M raw, capped to $100/M
       expect(cappedOpenrouter).toBe(cappedPerToken);
     });
 
@@ -440,18 +459,17 @@ describe('model-pricing-utils', () => {
     });
 
     it('should cap prices at $100/M regardless of gateway', () => {
-      // All per-million: $200/M, capped at $100
-      expect(formatPricingForDisplay('200', 'openrouter')).toBe('100.00');
-      expect(formatPricingForDisplay('200', 'groq')).toBe('100.00');
-      expect(formatPricingForDisplay('200', 'deepinfra')).toBe('100.00');
+      expect(formatPricingForDisplay('0.0002', 'openrouter')).toBe('100.00'); // per-token $200/M raw
+      expect(formatPricingForDisplay('200', 'groq')).toBe('100.00');           // per-million $200/M raw
+      expect(formatPricingForDisplay('200', 'deepinfra')).toBe('100.00');      // per-million $200/M raw
     });
 
     it('should never return a price higher than $100', () => {
       const testPrices = [
-        { price: '500', gateway: 'openrouter' },      // per-million: $500/M, capped
-        { price: '500', gateway: 'groq' },             // per-million: $500/M, capped
-        { price: '500', gateway: 'deepinfra' },        // per-million: $500/M, capped
-        { price: '500', gateway: 'onerouter' },        // per-million: $500/M, capped
+        { price: '0.0005', gateway: 'openrouter' },   // per-token: $500/M raw, capped
+        { price: '500', gateway: 'groq' },              // per-million: $500/M raw, capped
+        { price: '500', gateway: 'deepinfra' },         // per-million: $500/M raw, capped
+        { price: '500', gateway: 'onerouter' },         // per-million: $500/M raw, capped
       ];
 
       testPrices.forEach(({ price, gateway }) => {
@@ -463,16 +481,12 @@ describe('model-pricing-utils', () => {
       });
     });
 
-    it('should allow prices at or below $100/M', () => {
-      // All gateways return per-million
-      expect(formatPricingForDisplay('0.15', 'openrouter')).toBe('0.15');
-      expect(formatPricingForDisplay('10.00', 'openrouter')).toBe('10.00');
-      expect(formatPricingForDisplay('100.00', 'openrouter')).toBe('100.00'); // Exactly $100
-
-      expect(formatPricingForDisplay('0.05', 'groq')).toBe('0.05');
-      expect(formatPricingForDisplay('0.35', 'deepinfra')).toBe('0.35');
-      expect(formatPricingForDisplay('15.00', 'fireworks')).toBe('15.00');
-      expect(formatPricingForDisplay('3.00', 'anthropic')).toBe('3.00');
+    it('should allow prices comfortably under the $100/M cap', () => {
+      expect(formatPricingForDisplay('0.00001', 'openrouter')).toBe('12.50');  // per-token $10/M raw
+      expect(formatPricingForDisplay('0.05', 'groq')).toBe('0.06');
+      expect(formatPricingForDisplay('0.35', 'deepinfra')).toBe('0.44');
+      expect(formatPricingForDisplay('15.00', 'fireworks')).toBe('18.75');
+      expect(formatPricingForDisplay('0.000003', 'anthropic')).toBe('3.75');
     });
   });
 });

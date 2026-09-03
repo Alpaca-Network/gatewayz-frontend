@@ -37,6 +37,14 @@ jest.mock('lucide-react', () => ({
   ArrowRight: () => <span>→</span>,
 }));
 
+// OnboardingBanner reads useAuth() (which wraps GatewayzAuthContext) to gate
+// visibility for guest users. Mock it directly rather than the underlying
+// context provider tree; individual tests override isAuthenticated as needed.
+const mockUseAuth = jest.fn();
+jest.mock('@/hooks/use-auth', () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
 const mockGetUserData = getUserData as jest.MockedFunction<typeof getUserData>;
 const mockSafeSessionStorage = safeSessionStorage as jest.Mocked<typeof safeSessionStorage>;
 
@@ -74,6 +82,15 @@ describe('OnboardingBanner Hydration Fix', () => {
       display_name: 'Test User',
       email: 'test@example.com',
       credits: 100,
+    });
+
+    // Default to an authenticated user; the guest-user test overrides this.
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      user: null,
+      loading: false,
+      privyReady: true,
+      login: jest.fn(),
     });
 
     // Clear document.documentElement classes
@@ -161,6 +178,13 @@ describe('OnboardingBanner Hydration Fix', () => {
     it('should not cause hydration mismatch when guest user', () => {
       // Guest users (unauthenticated) should not trigger DOM manipulation during render
       mockGetUserData.mockReturnValue(null);
+      mockUseAuth.mockReturnValue({
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+        privyReady: true,
+        login: jest.fn(),
+      });
 
       const { container } = render(<OnboardingBanner />);
 

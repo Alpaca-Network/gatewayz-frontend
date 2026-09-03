@@ -41,7 +41,11 @@ describe('useTier', () => {
   });
 
   describe('Basic Tier Users', () => {
-    it('should return basic tier for user without subscription', () => {
+    it('should return free tier for user without subscription or purchased credits', () => {
+      // No tier field, no subscription_status, and credits below the trial
+      // threshold — getUserTier() falls through to 'free' (a brand-new-user
+      // 'basic' default only applies once they've actually paid or topped up
+      // past the trial amount; see the "not allow access" test below).
       const mockUserData: UserData = {
         user_id: 123,
         api_key: 'test-key',
@@ -56,19 +60,19 @@ describe('useTier', () => {
 
       const { result } = renderHook(() => useTier());
 
-      expect(result.current.tier).toBe('basic');
+      expect(result.current.tier).toBe('free');
       expect(result.current.hasSubscription).toBe(false);
-      expect(result.current.tierConfig.name).toBe('Basic');
-      expect(result.current.tierConfig.monthlyPrice).toBeNull();
+      expect(result.current.tierConfig.name).toBe('Free');
+      expect(result.current.tierConfig.monthlyPrice).toBe(0);
       expect(result.current.tierConfig.isSubscription).toBe(false);
     });
 
-    it('should return basic tier for null userData', () => {
+    it('should return free tier for null userData', () => {
       mockUseGatewayzAuth.mockReturnValue({ userData: null });
 
       const { result } = renderHook(() => useTier());
 
-      expect(result.current.tier).toBe('basic');
+      expect(result.current.tier).toBe('free');
       expect(result.current.hasSubscription).toBe(false);
       expect(result.current.renewalDate).toBeNull();
     });
@@ -112,10 +116,10 @@ describe('useTier', () => {
       const { result } = renderHook(() => useTier());
 
       expect(result.current.tierInfo).toEqual({
-        displayName: 'Basic',
-        description: 'Pay-per-use credits',
-        monthlyPrice: 'Pay-per-use',
-        isSubscription: false,
+        displayName: 'Starter',
+        description: '$35/month - $35 in credits (20% savings vs pay-as-you-go)',
+        monthlyPrice: '$35.00',
+        isSubscription: true,
       });
     });
   });
@@ -142,7 +146,7 @@ describe('useTier', () => {
       expect(result.current.tier).toBe('pro');
       expect(result.current.hasSubscription).toBe(true);
       expect(result.current.tierConfig.name).toBe('Pro');
-      expect(result.current.tierConfig.monthlyPrice).toBe(800);
+      expect(result.current.tierConfig.monthlyPrice).toBe(120);
       expect(result.current.tierConfig.isSubscription).toBe(true);
     });
 
@@ -188,8 +192,8 @@ describe('useTier', () => {
 
       expect(result.current.tierInfo).toEqual({
         displayName: 'Pro',
-        description: '$8/month subscription',
-        monthlyPrice: '$8.00',
+        description: '$120/month - $130 in credits (27% savings vs pay-as-you-go)',
+        monthlyPrice: '$120.00',
         isSubscription: true,
       });
     });
@@ -263,8 +267,8 @@ describe('useTier', () => {
       expect(result.current.tier).toBe('max');
       expect(result.current.hasSubscription).toBe(true);
       expect(result.current.tierConfig.name).toBe('Max');
-      expect(result.current.tierConfig.monthlyPrice).toBe(7500);
-      expect(result.current.tierConfig.creditAllocation).toBe(15000);
+      expect(result.current.tierConfig.monthlyPrice).toBe(350);
+      expect(result.current.tierConfig.creditAllocation).toBe(400);
     });
 
     it('should allow access to all tier models', () => {
@@ -309,8 +313,8 @@ describe('useTier', () => {
 
       expect(result.current.tierInfo).toEqual({
         displayName: 'Max',
-        description: '$75/month subscription',
-        monthlyPrice: '$75.00',
+        description: '$350/month - $400 in credits (30% savings vs pay-as-you-go)',
+        monthlyPrice: '$350.00',
         isSubscription: true,
       });
     });
@@ -724,7 +728,7 @@ describe('useTier', () => {
       expect(result.current.tier).toBe('pro');
       expect(result.current.hasSubscription).toBe(true);
       expect(result.current.canAccessModel('pro')).toBe(true);
-      expect(result.current.tierInfo.monthlyPrice).toBe('$8.00');
+      expect(result.current.tierInfo.monthlyPrice).toBe('$120.00');
     });
 
     it('should support downgrade from max to basic (cancelled subscription shows free)', () => {

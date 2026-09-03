@@ -17,6 +17,7 @@ jest.mock('lucide-react', () => ({
   Globe: () => <span data-testid="globe-icon">Globe</span>,
   Search: () => <span data-testid="search-icon">Search</span>,
   Loader2: () => <span data-testid="loader-icon">Loader</span>,
+  CreditCard: () => <span data-testid="credit-card-icon">CreditCard</span>,
 }));
 
 // Mock the UI components
@@ -177,12 +178,26 @@ jest.mock('@/hooks/use-toast', () => ({
 
 // Mock auth store - configurable for tests
 let mockIsAuthenticated = true;
-jest.mock('@/lib/store/auth-store', () => ({
-  useAuthStore: () => ({
+// Mock userData for useAuthStore.getState() - mutable reference for the
+// "insufficient credits" gate in ChatInput's send handler
+const mockAuthStoreUserData = {
+  total_credits: 1000,
+  subscription_allowance: 0,
+  purchased_credits: 0,
+  credits: 1000,
+};
+
+jest.mock('@/lib/store/auth-store', () => {
+  const useAuthStore = () => ({
     isAuthenticated: mockIsAuthenticated,
     isLoading: false,
-  }),
-}));
+  });
+
+  // Add getState method to the function (Zustand's static store accessor)
+  useAuthStore.getState = () => ({ userData: mockAuthStoreUserData });
+
+  return { useAuthStore };
+});
 
 // Mock Privy
 jest.mock('@privy-io/react-auth', () => ({

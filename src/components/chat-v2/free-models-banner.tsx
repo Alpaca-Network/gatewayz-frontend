@@ -38,9 +38,9 @@ export function FreeModelsBanner() {
       return;
     }
 
-    // Show banner if user has $5 or fewer credits (low/expired trial)
-    // Credits are stored in cents, so 500 cents = $5
-    if (userData.credits <= 500) {
+    // Show banner if user has $5 or fewer credits (low/expired trial).
+    // 1 credit = $1 (see format-credits.ts) — no cents conversion.
+    if (userData.credits <= 5) {
       setCredits(userData.credits); // Raw credit value from DB
       setShowBanner(true);
     }

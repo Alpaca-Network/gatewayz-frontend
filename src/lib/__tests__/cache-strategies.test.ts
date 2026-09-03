@@ -623,7 +623,8 @@ describe('cache-strategies', () => {
     it('should define user data TTLs', () => {
       expect(TTL.USER_PROFILE).toBe(600);
       expect(TTL.USER_TIER).toBe(600);
-      expect(TTL.USER_CREDITS).toBe(300);
+      // Shortened from 300s so a user's balance doesn't look stale after spending.
+      expect(TTL.USER_CREDITS).toBe(30);
     });
   });
 

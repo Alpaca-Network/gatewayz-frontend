@@ -444,7 +444,10 @@ describe('api utilities', () => {
       });
     });
 
-    it('should convert decimal credits to integer', () => {
+    it('should preserve fractional credits as-is', () => {
+      // processAuthResponse deliberately stores the raw credit value —
+      // fractional credits are allowed (1 credit = $1, see format-credits.ts),
+      // so no flooring/rounding happens here.
       const authResponse: AuthResponse = {
         success: true,
         message: 'Login successful',
@@ -465,7 +468,7 @@ describe('api utilities', () => {
         localStorage.getItem('gatewayz_user_data')!
       );
 
-      expect(storedUserData.credits).toBe(150); // Floored
+      expect(storedUserData.credits).toBe(150.75);
     });
 
     it('should handle undefined credits', () => {
