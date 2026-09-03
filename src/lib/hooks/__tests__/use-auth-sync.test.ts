@@ -51,21 +51,34 @@ jest.mock('@/lib/api', () => ({
   AUTH_REFRESH_EVENT: 'gatewayz:refresh-auth',
 }));
 
+// Mutable so individual tests can supply a Privy user + getAccessToken for the
+// queryFn-building tests below.
+let mockPrivyUser: unknown = null;
+let mockGetAccessToken = jest.fn();
+
 jest.mock('@privy-io/react-auth', () => ({
   usePrivy: () => ({
-    user: null,
+    user: mockPrivyUser,
     ready: true,
     authenticated: false,
-    getAccessToken: jest.fn(),
+    getAccessToken: mockGetAccessToken,
   }),
 }));
 
+// Captures the `queryFn` passed to useQuery so the queryFn-building tests below (which
+// exercise the shared build-auth-request logic) can invoke it directly, without needing a
+// real QueryClient.
+let capturedQueryFn: (() => Promise<unknown>) | null = null;
+
 jest.mock('@tanstack/react-query', () => ({
-  useQuery: jest.fn(() => ({
-    data: undefined,
-    isLoading: false,
-    error: null,
-  })),
+  useQuery: jest.fn((options: { queryFn?: () => Promise<unknown> }) => {
+    capturedQueryFn = options.queryFn ?? null;
+    return {
+      data: undefined,
+      isLoading: false,
+      error: null,
+    };
+  }),
   useQueryClient: () => ({
     invalidateQueries: jest.fn(),
     clear: jest.fn(),
@@ -74,6 +87,7 @@ jest.mock('@tanstack/react-query', () => ({
 
 // Import after mocks
 import { useAuthSync } from '../use-auth-sync';
+import type { User } from '@privy-io/react-auth';
 
 describe('useAuthSync', () => {
   beforeEach(() => {
@@ -81,6 +95,9 @@ describe('useAuthSync', () => {
     mockGetApiKey.mockReturnValue(null);
     mockGetUserData.mockReturnValue(null);
     mockIsAuthenticated = false;
+    mockPrivyUser = null;
+    mockGetAccessToken = jest.fn();
+    capturedQueryFn = null;
   });
 
   describe('initialization behavior', () => {
@@ -149,5 +166,68 @@ describe('useAuthSync', () => {
       // Assert
       expect(result.current.isAuthenticated).toBe(true);
     });
+  });
+
+  describe('queryFn (shared auth-request builder)', () => {
+    // useAuthSync backs the chat-v2 auth path (ChatLayout.tsx) — it used to carry its own
+    // copy of the /auth request-body logic (which filtered out wallet accounts and never
+    // retried a null Privy token). It now delegates to build-auth-request.ts, same as
+    // gatewayz-auth-context.tsx and integrations/privy/auth-sync.ts.
+    const makeUser = (overrides?: Partial<User>): User =>
+      ({
+        id: 'privy-user-1',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        linkedAccounts: [
+          { type: 'email', email: 'test@example.com' } as any,
+          {
+            type: 'wallet',
+            address: '0xabc0000000000000000000000000000000abcd',
+            chainType: 'ethereum',
+            walletClientType: 'metamask',
+          } as any,
+        ],
+        mfaMethods: [],
+        hasAcceptedTerms: true,
+        isGuest: false,
+        ...overrides,
+      }) as User;
+
+    let mockFetch: jest.Mock;
+
+    beforeEach(() => {
+      mockFetch = jest.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+    });
+
+    it('includes wallet accounts in the request body it POSTs to /api/auth', async () => {
+      mockPrivyUser = makeUser();
+      mockGetAccessToken = jest.fn().mockResolvedValue('tok');
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, api_key: 'gw_live_x', user_id: 1 }),
+      });
+
+      renderHook(() => useAuthSync());
+      expect(capturedQueryFn).not.toBeNull();
+
+      await capturedQueryFn!();
+
+      const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(requestBody.user.linked_accounts).toContainEqual(
+        expect.objectContaining({ type: 'wallet', address: '0xabc0000000000000000000000000000000abcd' })
+      );
+      expect(requestBody).not.toHaveProperty('trial_credits');
+    });
+
+    it('throws without calling fetch when the Privy token never resolves', async () => {
+      mockPrivyUser = makeUser();
+      mockGetAccessToken = jest.fn().mockResolvedValue(null);
+
+      renderHook(() => useAuthSync());
+      expect(capturedQueryFn).not.toBeNull();
+
+      await expect(capturedQueryFn!()).rejects.toThrow('Could not verify your session');
+      expect(mockFetch).not.toHaveBeenCalled();
+    }, 10000);
   });
 });

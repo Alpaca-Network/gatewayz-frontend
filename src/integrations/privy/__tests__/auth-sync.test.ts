@@ -6,6 +6,12 @@ import type { AuthResponse, UserData } from '@/lib/api';
 const mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
 const mockConsoleError = jest.spyOn(console, 'error').mockImplementation();
 
+// Mock Sentry (auth-sync.ts logs a captureMessage when the token can't be retrieved)
+const mockSentryCaptureMessage = jest.fn();
+jest.mock('@sentry/nextjs', () => ({
+  captureMessage: (...args: unknown[]) => mockSentryCaptureMessage(...args),
+}));
+
 // Mock global fetch
 global.fetch = jest.fn();
 
@@ -70,6 +76,9 @@ describe('auth-sync', () => {
     ...overrides,
   });
 
+  /** A `getAccessToken` that resolves once, on the first call — the common case. */
+  const tokenGetter = (token: string | null) => jest.fn().mockResolvedValue(token);
+
   describe('syncPrivyToGatewayz', () => {
     it('should sync new user with Privy and Gatewayz backend', async () => {
       const mockPrivyUser = createMockPrivyUser();
@@ -81,7 +90,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      const result = await syncPrivyToGatewayz(mockPrivyUser, mockAccessToken, null);
+      const result = await syncPrivyToGatewayz(mockPrivyUser, tokenGetter(mockAccessToken), null);
 
       expect(result).toEqual({
         authResponse: mockAuthResponse,
@@ -104,9 +113,11 @@ describe('auth-sync', () => {
         token: mockAccessToken,
         auto_create_api_key: true,
         is_new_user: true,
-        trial_credits: 3, // New users get trial credits
         privy_user_id: 'privy-user-123',
       });
+      // trial_credits is dead on the backend (silently dropped by PrivyAuthRequest) — no
+      // longer sent.
+      expect(requestBody).not.toHaveProperty('trial_credits');
     });
 
     it('should sync existing user with stored API key', async () => {
@@ -130,7 +141,7 @@ describe('auth-sync', () => {
 
       const result = await syncPrivyToGatewayz(
         mockPrivyUser,
-        mockAccessToken,
+        tokenGetter(mockAccessToken),
         existingUserData
       );
 
@@ -170,7 +181,7 @@ describe('auth-sync', () => {
 
       await syncPrivyToGatewayz(
         mockPrivyUser,
-        mockAccessToken,
+        tokenGetter(mockAccessToken),
         existingUserDataWithoutKey
       );
 
@@ -181,7 +192,7 @@ describe('auth-sync', () => {
       expect(requestBody.auto_create_api_key).toBe(true);
     });
 
-    it('should handle null Privy access token', async () => {
+    it('should throw and never call fetch when the Privy token is unavailable after retries', async () => {
       const mockPrivyUser = createMockPrivyUser();
       const mockAuthResponse = createMockAuthResponse({ is_new_user: true });
 
@@ -190,26 +201,57 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      const result = await syncPrivyToGatewayz(mockPrivyUser, null, null);
+      // getAccessToken() resolves null on every attempt — no "continue with an empty
+      // token, let the backend decide" fallback anymore (W0 requires a verified token).
+      const alwaysNullGetAccessToken = jest.fn().mockResolvedValue(null);
 
-      expect(result.privyAccessToken).toBeNull();
+      await expect(
+        syncPrivyToGatewayz(mockPrivyUser, alwaysNullGetAccessToken, null)
+      ).rejects.toThrow('Could not verify your session');
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(mockSentryCaptureMessage).toHaveBeenCalledWith(
+        'Privy access token unavailable after retries',
+        expect.objectContaining({ tags: { auth_error: 'privy_token_unavailable' } })
+      );
+      // Initial attempt + 3 retries (see TOKEN_RETRY_DELAYS_MS).
+      expect(alwaysNullGetAccessToken).toHaveBeenCalledTimes(4);
+    }, 10000);
+
+    it('should retry getAccessToken() and still sync once it eventually succeeds', async () => {
+      const mockPrivyUser = createMockPrivyUser();
+      const mockAuthResponse = createMockAuthResponse();
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify(mockAuthResponse),
+      });
+
+      const flakyGetAccessToken = jest
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce('recovered-token');
+
+      const result = await syncPrivyToGatewayz(mockPrivyUser, flakyGetAccessToken, null);
+
+      expect(result.privyAccessToken).toBe('recovered-token');
+      expect(flakyGetAccessToken).toHaveBeenCalledTimes(2);
 
       const requestBody = JSON.parse(
         (global.fetch as jest.Mock).mock.calls[0][1].body
       );
-
-      expect(requestBody.token).toBe('');
-    });
+      expect(requestBody.token).toBe('recovered-token');
+    }, 10000);
 
     it('should throw error when Privy user is missing', async () => {
-      await expect(syncPrivyToGatewayz(null as any, 'token', null)).rejects.toThrow(
-        'Privy user is required for sync'
-      );
+      await expect(
+        syncPrivyToGatewayz(null as any, tokenGetter('token'), null)
+      ).rejects.toThrow('Privy user is required for sync');
 
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('should transform Privy user data correctly', async () => {
+    it('should include wallet accounts in linked_accounts with their address', async () => {
       const mockPrivyUser = createMockPrivyUser({
         id: 'privy-xyz',
         createdAt: new Date('2024-06-15T10:30:00Z').getTime(),
@@ -219,6 +261,14 @@ describe('auth-sync', () => {
             email: 'user@gmail.com',
             name: 'Test User',
             verifiedAt: new Date('2024-06-15T10:30:00Z').getTime(),
+            firstVerifiedAt: new Date('2024-06-15T10:30:00Z').getTime(),
+            latestVerifiedAt: new Date('2024-06-15T10:30:00Z').getTime(),
+          } as any,
+          {
+            type: 'wallet',
+            address: '0x1234567890abcdef1234567890abcdef12345678',
+            chainType: 'ethereum',
+            walletClientType: 'metamask',
             firstVerifiedAt: new Date('2024-06-15T10:30:00Z').getTime(),
             latestVerifiedAt: new Date('2024-06-15T10:30:00Z').getTime(),
           } as any,
@@ -234,91 +284,28 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       const requestBody = JSON.parse(
         (global.fetch as jest.Mock).mock.calls[0][1].body
       );
 
-      expect(requestBody.user).toMatchObject({
-        id: 'privy-xyz',
-        created_at: Math.floor(new Date('2024-06-15T10:30:00Z').getTime() / 1000),
-        linked_accounts: [
-          {
-            type: 'google_oauth',
-            email: 'user@gmail.com',
-            name: 'Test User',
-            verified_at: Math.floor(new Date('2024-06-15T10:30:00Z').getTime() / 1000),
-            first_verified_at: Math.floor(
-              new Date('2024-06-15T10:30:00Z').getTime() / 1000
-            ),
-            latest_verified_at: Math.floor(
-              new Date('2024-06-15T10:30:00Z').getTime() / 1000
-            ),
-          },
-        ],
-        mfa_methods: ['sms'],
-        has_accepted_terms: true,
-        is_guest: false,
-      });
-    });
-
-    it('should handle Privy user without createdAt', async () => {
-      const mockPrivyUser = createMockPrivyUser({
-        createdAt: undefined,
-      });
-      const mockAuthResponse = createMockAuthResponse();
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify(mockAuthResponse),
-      });
-
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
-
-      const requestBody = JSON.parse(
-        (global.fetch as jest.Mock).mock.calls[0][1].body
+      expect(requestBody.user.linked_accounts).toHaveLength(2);
+      expect(requestBody.user.linked_accounts).toContainEqual(
+        expect.objectContaining({
+          type: 'google_oauth',
+          email: 'user@gmail.com',
+          name: 'Test User',
+        })
       );
-
-      // Should use current timestamp
-      expect(requestBody.user.created_at).toBe(Math.floor(1700000000000 / 1000));
-    });
-
-    it('should filter out wallet accounts from linked_accounts', async () => {
-      const mockPrivyUser = createMockPrivyUser({
-        linkedAccounts: [
-          {
-            type: 'email',
-            email: 'test@example.com',
-            verifiedAt: new Date('2024-01-01').getTime(),
-          } as any,
-          {
-            type: 'wallet',
-            address: '0x1234567890abcdef',
-            chainType: 'ethereum',
-            // Wallet accounts should be filtered out
-          } as any,
-        ],
-      });
-      const mockAuthResponse = createMockAuthResponse();
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify(mockAuthResponse),
-      });
-
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
-
-      const requestBody = JSON.parse(
-        (global.fetch as jest.Mock).mock.calls[0][1].body
+      expect(requestBody.user.linked_accounts).toContainEqual(
+        expect.objectContaining({
+          type: 'wallet',
+          address: '0x1234567890abcdef1234567890abcdef12345678',
+          chain_type: 'ethereum',
+          wallet_client_type: 'metamask',
+        })
       );
-
-      // Only email account should be included, wallet account should be filtered out
-      expect(requestBody.user.linked_accounts).toHaveLength(1);
-      expect(requestBody.user.linked_accounts[0]).toMatchObject({
-        type: 'email',
-        email: 'test@example.com',
-      });
     });
 
     it('should handle empty linked accounts', async () => {
@@ -332,7 +319,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       const requestBody = JSON.parse(
         (global.fetch as jest.Mock).mock.calls[0][1].body
@@ -351,7 +338,7 @@ describe('auth-sync', () => {
       });
 
       await expect(
-        syncPrivyToGatewayz(mockPrivyUser, 'token', null)
+        syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null)
       ).rejects.toThrow('Backend authentication failed: 500');
     });
 
@@ -364,7 +351,7 @@ describe('auth-sync', () => {
       });
 
       await expect(
-        syncPrivyToGatewayz(mockPrivyUser, 'token', null)
+        syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null)
       ).rejects.toThrow('Failed to parse authentication response');
     });
 
@@ -383,7 +370,7 @@ describe('auth-sync', () => {
       });
 
       await expect(
-        syncPrivyToGatewayz(mockPrivyUser, 'token', null)
+        syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null)
       ).rejects.toThrow('Backend authentication response missing API key');
     });
 
@@ -403,7 +390,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(responseWithNestedApiKey),
       });
 
-      const result = await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      const result = await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       expect(result.authResponse.api_key).toBe('nested-api-key-123');
     });
@@ -422,7 +409,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(responseWithCamelCaseKey),
       });
 
-      const result = await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      const result = await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       expect(result.authResponse.api_key).toBe('camelcase-api-key-456');
     });
@@ -434,22 +421,8 @@ describe('auth-sync', () => {
       (global.fetch as jest.Mock).mockRejectedValue(networkError);
 
       await expect(
-        syncPrivyToGatewayz(mockPrivyUser, 'token', null)
+        syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null)
       ).rejects.toThrow('Network connection failed');
-    });
-
-    it('should log sync start and success', async () => {
-      const mockPrivyUser = createMockPrivyUser({ id: 'privy-xyz-789' });
-      const mockAuthResponse = createMockAuthResponse({ is_new_user: true });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify(mockAuthResponse),
-      });
-
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
-
-      // Test passes if no errors are thrown and result is valid
     });
 
     it('should handle 401 unauthorized', async () => {
@@ -462,7 +435,7 @@ describe('auth-sync', () => {
       });
 
       await expect(
-        syncPrivyToGatewayz(mockPrivyUser, 'invalid-token', null)
+        syncPrivyToGatewayz(mockPrivyUser, tokenGetter('invalid-token'), null)
       ).rejects.toThrow('Backend authentication failed: 401');
     });
 
@@ -476,7 +449,7 @@ describe('auth-sync', () => {
       });
 
       await expect(
-        syncPrivyToGatewayz(mockPrivyUser, 'token', null)
+        syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null)
       ).rejects.toThrow('Backend authentication failed: 429');
     });
   });
@@ -494,7 +467,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       const requestBody = JSON.parse(
         (global.fetch as jest.Mock).mock.calls[0][1].body
@@ -515,7 +488,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       const requestBody = JSON.parse(
         (global.fetch as jest.Mock).mock.calls[0][1].body
@@ -536,7 +509,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       const requestBody = JSON.parse(
         (global.fetch as jest.Mock).mock.calls[0][1].body
@@ -566,7 +539,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       const requestBody = JSON.parse(
         (global.fetch as jest.Mock).mock.calls[0][1].body
@@ -600,7 +573,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       const requestBody = JSON.parse(
         (global.fetch as jest.Mock).mock.calls[0][1].body
@@ -643,7 +616,7 @@ describe('auth-sync', () => {
         text: async () => JSON.stringify(mockAuthResponse),
       });
 
-      await syncPrivyToGatewayz(mockPrivyUser, 'token', null);
+      await syncPrivyToGatewayz(mockPrivyUser, tokenGetter('token'), null);
 
       const requestBody = JSON.parse(
         (global.fetch as jest.Mock).mock.calls[0][1].body

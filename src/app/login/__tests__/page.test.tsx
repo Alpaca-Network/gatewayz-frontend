@@ -45,6 +45,28 @@ jest.mock('@/integrations/privy/auth-sync', () => ({
   }),
 }));
 
+// Mock the "Continue with wallet" button's connect() — not under test here, see
+// use-active-wallet.test.tsx for its own behavior.
+const mockConnectWallet = jest.fn();
+jest.mock('@/lib/hooks/use-active-wallet', () => ({
+  useActiveWallet: () => ({
+    address: null,
+    chainId: null,
+    isConnected: false,
+    isReady: true,
+    walletClientType: null,
+    connect: mockConnectWallet,
+    switchToFuji: jest.fn(),
+    signMessage: jest.fn(),
+  }),
+}));
+
+// Overrides jest.setup.js's global lucide-react mock (Coins/Crown/Menu/Copy only) with the
+// icon this page actually renders.
+jest.mock('lucide-react', () => ({
+  Wallet: () => <span data-testid="icon-wallet">Wallet</span>,
+}));
+
 // Import after mocks
 import LoginPage from '../page';
 
@@ -183,6 +205,28 @@ describe('LoginPage', () => {
     });
   });
 
+  describe('Continue with wallet button', () => {
+    it('renders on web (not Tauri desktop)', async () => {
+      render(<LoginPage />);
+
+      expect(await screen.findByRole('button', { name: /continue with wallet/i })).toBeInTheDocument();
+    });
+
+    it('calls useActiveWallet().connect() when clicked, not the Privy login()', async () => {
+      const user = userEvent.setup();
+      render(<LoginPage />);
+
+      await waitFor(() => expect(mockLogin).toHaveBeenCalledTimes(1)); // auto-trigger on mount
+      mockLogin.mockClear();
+
+      const button = await screen.findByRole('button', { name: /continue with wallet/i });
+      await user.click(button);
+
+      expect(mockConnectWallet).toHaveBeenCalledTimes(1);
+      expect(mockLogin).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Desktop auth flow', () => {
     const mockUserObj = {
       id: 'privy-user-123',
@@ -224,9 +268,12 @@ describe('LoginPage', () => {
       render(<LoginPage />);
 
       await waitFor(() => {
+        // syncPrivyToGatewayz now takes Privy's getAccessToken function itself (it retries
+        // internally — see getPrivyAccessTokenWithRetry) rather than an already-resolved
+        // token string.
         expect(syncPrivyToGatewayz).toHaveBeenCalledWith(
           mockUserObj,
-          'mock-access-token',
+          mockGetAccessToken,
           null
         );
       });

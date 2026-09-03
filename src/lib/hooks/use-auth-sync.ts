@@ -1,64 +1,11 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { usePrivy, User, LinkedAccountWithMetadata } from '@privy-io/react-auth';
+import { usePrivy } from '@privy-io/react-auth';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useChatUIStore } from '@/lib/store/chat-ui-store';
 import { processAuthResponse, AuthResponse, getApiKey, getUserData, saveApiKey, saveUserData, AUTH_REFRESH_COMPLETE_EVENT, AUTH_REFRESH_EVENT } from '@/lib/api';
 import { getUserMessage } from '@/lib/errors';
-
-// Helper to strip undefined values (copied from original context)
-const stripUndefined = <T>(value: T): T => {
-  if (Array.isArray(value)) {
-    return value.map(stripUndefined) as unknown as T;
-  }
-
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined && v !== null)
-      .map(([k, v]) => [k, stripUndefined(v)]);
-    return Object.fromEntries(entries) as unknown as T;
-  }
-
-  return value;
-};
-
-const toUnixSeconds = (value: unknown): number | undefined => {
-  if (!value) return undefined;
-  if (typeof value === "number") return Math.floor(value);
-  if (value instanceof Date) return Math.floor(value.getTime() / 1000);
-  if (typeof value === "string") {
-    const parsed = Date.parse(value);
-    if (!Number.isNaN(parsed)) return Math.floor(parsed / 1000);
-    const numeric = Number(value);
-    if (!Number.isNaN(numeric)) return Math.floor(numeric);
-  }
-  return undefined;
-};
-
-const mapLinkedAccount = (account: LinkedAccountWithMetadata) => {
-  if (account.type === "wallet") return null;
-
-  const get = (key: string) =>
-    Object.prototype.hasOwnProperty.call(account, key)
-      ? (account as unknown as Record<string, unknown>)[key]
-      : undefined;
-
-  let normalizedType = account.type as string | undefined;
-  if (normalizedType === "github_oauth") normalizedType = "github";
-
-  return stripUndefined({
-    type: normalizedType,
-    subject: get("subject") as string | undefined,
-    email: get("email") as string | undefined,
-    name: get("name") as string | undefined,
-    chain_type: get("chainType") as string | undefined,
-    wallet_client_type: get("walletClientType") as string | undefined,
-    connector_type: get("connectorType") as string | undefined,
-    verified_at: toUnixSeconds(get("verifiedAt")),
-    first_verified_at: toUnixSeconds(get("firstVerifiedAt")),
-    latest_verified_at: toUnixSeconds(get("latestVerifiedAt")),
-  });
-};
+import { buildAuthRequestBody, getPrivyAccessTokenWithRetry } from '@/lib/auth/build-auth-request';
 
 export function useAuthSync() {
   const { user, ready, authenticated, getAccessToken } = usePrivy();
@@ -106,31 +53,19 @@ export function useAuthSync() {
     queryFn: async () => {
       if (!user) throw new Error("No user");
 
-      // 1. Get Token
-      const token = await getAccessToken();
+      // 1. Get Token — retried (see getPrivyAccessTokenWithRetry); the backend requires a
+      // verified Privy token on every /auth call now (W0). No "continue with an empty token"
+      // fallback — react-query's own `retry: 2` handles surfacing the failure.
+      const token = await getPrivyAccessTokenWithRetry(getAccessToken);
+      if (!token) {
+        throw new Error('Could not verify your session — please retry');
+      }
 
-      // 2. Prepare Body
+      // 2. Prepare Body — shared with gatewayz-auth-context.tsx and integrations/privy/auth-sync.ts
+      // (src/lib/auth/build-auth-request.ts) so wallet linked-accounts and auto_create_api_key
+      // behave identically across every sync path.
       const existingUserData = getUserData();
-      const isNewUser = !existingUserData;
-      const hasStoredApiKey = Boolean(existingUserData?.api_key);
-
-      const authRequestBody = {
-        user: stripUndefined({
-          id: user.id,
-          created_at: toUnixSeconds(user.createdAt) ?? Math.floor(Date.now() / 1000),
-          linked_accounts: (user.linkedAccounts || []).map(mapLinkedAccount).filter(Boolean),
-          mfa_methods: user.mfaMethods || [],
-          has_accepted_terms: user.hasAcceptedTerms ?? false,
-          is_guest: user.isGuest ?? false,
-        }),
-        token: token ?? "",
-        // ALWAYS request API key creation to avoid temp keys
-        auto_create_api_key: true,
-        is_new_user: isNewUser,
-        privy_user_id: user.id,
-        // Add trial credits if new
-        ...(isNewUser ? { trial_credits: 3 } : {})
-      };
+      const authRequestBody = buildAuthRequestBody(user, { token, existingUserData });
 
       // 3. Fetch
       const response = await fetch("/api/auth", {
