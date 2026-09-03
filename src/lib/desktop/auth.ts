@@ -72,23 +72,6 @@ export async function getDesktopAuthHeaders(): Promise<Record<string, string>> {
 }
 
 /**
- * Open OAuth flow in external browser for desktop
- */
-export async function initiateDesktopOAuth(provider: string): Promise<void> {
-  if (!isTauri()) {
-    // Fallback to web OAuth
-    window.location.href = `/api/auth/${provider}`;
-    return;
-  }
-
-  const url = generateDesktopOAuthUrl(provider);
-
-  // Open in external browser
-  const { openExternalUrl } = await import("./tauri");
-  await openExternalUrl(url);
-}
-
-/**
  * Desktop auth state interface
  */
 export interface DesktopAuthState {
