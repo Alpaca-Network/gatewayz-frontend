@@ -1,0 +1,385 @@
+#!/usr/bin/env node
+// check-bundle-secrets.mjs
+//
+// Zero-dependency (Node >= 18) CI gate that scans (a) application source and
+// (b) the compiled Next.js build output for accidentally-committed or
+// accidentally-bundled secrets, plus an allow-list audit of every
+// NEXT_PUBLIC_* name referenced in source.
+//
+// Why this exists: on 2026-09-09/10 the admin panel shipped a live admin API
+// key across 89 files and the production Supabase service-role JWT in a
+// public JS chunk, and nothing in CI looked. This is that look.
+//
+// Usage:
+//   node scripts/check-bundle-secrets.mjs                # source + .next output
+//   node scripts/check-bundle-secrets.mjs --source-only   # pre-build gate
+//
+// Exit code is 1 if anything is found, 0 otherwise. Findings are reported as
+// pattern name + file + line + a masked 6-char prefix of the match — never
+// the full match, and matched values are never written anywhere else.
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+const ROOT = process.cwd();
+const args = process.argv.slice(2);
+const sourceOnly = args.includes('--source-only');
+
+// ---------------------------------------------------------------------------
+// Secret-shape patterns
+// ---------------------------------------------------------------------------
+// These match literal secret *values*, not env var names, so they're safe to
+// run against build output (including server chunks) without tripping on a
+// legitimate `process.env.SOME_SECRET` reference.
+const VALUE_PATTERNS = [
+  { name: 'jwt', re: /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g },
+  { name: 'gatewayz-key', re: /gw_(live|test|dev|staging|admin|node)_[A-Za-z0-9_-]{16,}/g },
+  { name: 'resend-key', re: /re_[A-Za-z0-9]{20,}/g },
+  { name: 'supabase-pat', re: /sbp_[a-f0-9]{30,}/g },
+  { name: 'stripe-secret-key', re: /sk_(live|test)_[A-Za-z0-9]{20,}/g },
+  { name: 'stripe-restricted-key', re: /rk_live_[A-Za-z0-9]{20,}/g },
+  { name: 'stripe-webhook-secret', re: /whsec_[A-Za-z0-9]{20,}/g },
+  // The lookbehind keeps this from matching mid-word inside minified CSS
+  // utility class names shipped by every Tailwind build (e.g. Tailwind's
+  // `mask-image-linear-*` utilities contain the literal substring
+  // "sk-image-linear-...", which is 20+ chars of [A-Za-z0-9_-]).
+  { name: 'openai-style-key', re: /(?<![A-Za-z0-9_])sk-[A-Za-z0-9_-]{20,}/g },
+  // Same lookbehind, plus a digit requirement below — the Privy SDK's own
+  // wallet JSON-RPC namespace uses "privy_" as a method-name prefix
+  // (privy_signSmartAccountTransaction, privy_signTypedData, ...), which
+  // would otherwise trip this on every app that bundles @privy-io/*.
+  { name: 'privy-secret', re: /(?<![A-Za-z0-9_])privy_[A-Za-z0-9]{20,}/g },
+  { name: 'aws-access-key-id', re: /AKIA[0-9A-Z]{16}/g },
+  { name: 'private-key-block', re: /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/g },
+  {
+    name: 'hex-secret-assignment',
+    re: /(PRIVATE_KEY|SECRET|TOKEN)\s*[:=]\s*["']?(0x)?[a-fA-F0-9]{40,}/g,
+  },
+];
+
+// Only meaningful in a *client* chunk — server code legitimately holds the
+// project URL to talk to Supabase, so this is excluded from server output.
+const CLIENT_ONLY_PATTERNS = [
+  { name: 'supabase-project-url', re: /https:\/\/[a-z]{20}\.supabase\.co/g },
+];
+
+const NEXT_PUBLIC_NAME_RE = /NEXT_PUBLIC_[A-Z0-9_]+/g;
+// TOKEN is excluded when it's immediately followed by `_ADDRESS` — a common,
+// benign Web3 naming pattern (an ERC-20/contract "token address" is a public
+// identifier, not a bearer credential) that would otherwise false-positive
+// on every crypto-adjacent NEXT_PUBLIC_* name. AUTH_TOKEN, API_TOKEN,
+// SESSION_TOKEN, etc. are still caught.
+const REJECTED_NAME_RE = /(SECRET|SERVICE_ROLE|PRIVATE|PASSWORD|TOKEN(?!_ADDRESS))/;
+
+// A handful of matched "secrets" in this codebase are actually human-readable
+// placeholder strings shown in UI copy or default form values (e.g.
+// `gw_live_YOUR_API_KEY_HERE`). Real leaked keys are near-random and never
+// contain readable English placeholder words, so this is a safe, narrow
+// exclusion rather than a general escape hatch.
+const PLACEHOLDER_RE = /YOUR_API_KEY|YOUR-API-KEY|PLACEHOLDER|_HERE\b|EXAMPLE_KEY|CHANGE_?ME|X{8,}/i;
+
+// A random secret of 20+ chars drawn from an alphanumeric alphabet has only
+// a ~3% chance of containing zero digits; a hand-written JS identifier
+// (RPC method name, CSS-in-JS utility name, etc.) very often does. For the
+// two patterns most prone to colliding with real SDK/library identifiers,
+// require at least one digit to reduce false positives.
+const DIGIT_RE = /[0-9]/;
+const IDENTIFIER_COLLISION_PRONE = new Set(['openai-style-key', 'privy-secret']);
+
+// Exported for the self-test (scripts/check-bundle-secrets.test.mjs) so it
+// can exercise the actual pattern objects rather than duplicating them.
+export {
+  VALUE_PATTERNS,
+  CLIENT_ONLY_PATTERNS,
+  NEXT_PUBLIC_NAME_RE,
+  REJECTED_NAME_RE,
+  PLACEHOLDER_RE,
+  DIGIT_RE,
+  IDENTIFIER_COLLISION_PRONE,
+};
+
+// ---------------------------------------------------------------------------
+// File collection
+// ---------------------------------------------------------------------------
+const SOURCE_DIRS = ['src', 'app', 'pages', 'lib'];
+const SOURCE_ROOT_FILE_RE = /^middleware\.(m|c)?[jt]sx?$/;
+const NEXT_CONFIG_RE = /^next\.config\.(m|c)?[jt]s$/;
+
+const SKIP_DIR_NAMES = new Set(['node_modules', '.next', '.git', 'dist', 'build', 'coverage']);
+
+// Test files intentionally hold secret-shaped strings (regex fixtures,
+// history comments) as part of *this repo's own* regression tests, e.g.
+// src/__tests__/security/*. They aren't part of what ships, so they're
+// excluded here the same way the repo's own regression tests exempt
+// themselves — this also keeps the NEXT_PUBLIC_* audit from tripping on
+// names mentioned only in test comments/regex fixtures, not real usage.
+const TEST_FILE_RE = /\.(test|spec)\.[jt]sx?$/;
+function isTestPath(relPath) {
+  return relPath.split(path.sep).includes('__tests__') || TEST_FILE_RE.test(path.basename(relPath));
+}
+
+// This scanner's own self-test builds fixtures by string concatenation so
+// it never trips these patterns, but it's excluded defensively anyway.
+const HARD_EXEMPT_RELATIVE = new Set([path.join('scripts', 'check-bundle-secrets.test.mjs')]);
+
+function loadIgnoreGlobs() {
+  const p = path.join(ROOT, 'scripts', 'bundle-scan-ignore.json');
+  if (!fs.existsSync(p)) return [];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// Minimal glob matcher: `*` matches any run of characters except `/`, `**`
+// matches across `/`. No other glob syntax is supported.
+const REGEXP_SPECIAL_CHARS = '.+^${}()|[]\\';
+function globToRegExp(glob) {
+  let pattern = '';
+  for (let i = 0; i < glob.length; i++) {
+    const ch = glob[i];
+    if (ch === '*') {
+      if (glob[i + 1] === '*') {
+        pattern += '.*';
+        i++; // consume both '*' of '**'
+      } else {
+        pattern += '[^/]*';
+      }
+    } else if (REGEXP_SPECIAL_CHARS.includes(ch)) {
+      pattern += `\\${ch}`;
+    } else {
+      pattern += ch;
+    }
+  }
+  return new RegExp(`^${pattern}$`);
+}
+export { globToRegExp };
+
+function isIgnored(relPath, ignoreGlobs) {
+  const posixRel = relPath.split(path.sep).join('/');
+  return ignoreGlobs.some((glob) => globToRegExp(glob).test(posixRel));
+}
+
+function walk(dir, out) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (SKIP_DIR_NAMES.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walk(full, out);
+    } else if (entry.isFile()) {
+      out.push(full);
+    }
+  }
+}
+
+function collectSourceFiles() {
+  const files = [];
+  for (const dir of SOURCE_DIRS) {
+    const abs = path.join(ROOT, dir);
+    if (fs.existsSync(abs)) walk(abs, files);
+  }
+  // Root-level middleware.ts / next.config.* aren't under any of the dirs
+  // above unless the project keeps them at the repo root.
+  for (const entry of fs.readdirSync(ROOT, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    if (SOURCE_ROOT_FILE_RE.test(entry.name) || NEXT_CONFIG_RE.test(entry.name)) {
+      files.push(path.join(ROOT, entry.name));
+    }
+  }
+
+  const ignoreGlobs = loadIgnoreGlobs();
+  return files.filter((abs) => {
+    const rel = path.relative(ROOT, abs);
+    if (HARD_EXEMPT_RELATIVE.has(rel)) return false;
+    if (rel.endsWith('.env.example')) return false;
+    if (isTestPath(rel)) return false;
+    if (isIgnored(rel, ignoreGlobs)) return false;
+    return true;
+  });
+}
+
+function collectBuildOutputFiles() {
+  const client = [];
+  const clientDir = path.join(ROOT, '.next', 'static');
+  if (fs.existsSync(clientDir)) walk(clientDir, client);
+
+  const server = [];
+  const serverAppDir = path.join(ROOT, '.next', 'server', 'app');
+  if (fs.existsSync(serverAppDir)) walk(serverAppDir, server);
+
+  return {
+    client: client.filter((f) => /\.(js|mjs|cjs|map)$/.test(f)),
+    server: server.filter((f) => f.endsWith('.js')),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Scanning
+// ---------------------------------------------------------------------------
+function mask(match) {
+  // Never print the full match — a fixed-width 6-char prefix plus an
+  // ellipsis, so the report doesn't even reveal the secret's length.
+  return `${match.slice(0, 6)}…`;
+}
+
+function lineAndColumnAt(content, index) {
+  const upTo = content.slice(0, index);
+  const line = upTo.split('\n').length;
+  const lastNewline = upTo.lastIndexOf('\n');
+  const column = index - lastNewline;
+  return { line, column };
+}
+
+function scanFileForPatterns(absPath, patterns, findings) {
+  let content;
+  try {
+    content = fs.readFileSync(absPath, 'utf8');
+  } catch {
+    return; // binary or unreadable — skip
+  }
+  const rel = path.relative(ROOT, absPath);
+  for (const { name, re } of patterns) {
+    re.lastIndex = 0;
+    let match;
+    while ((match = re.exec(content)) !== null) {
+      const noDigitFalsePositive = IDENTIFIER_COLLISION_PRONE.has(name) && !DIGIT_RE.test(match[0]);
+      if (!PLACEHOLDER_RE.test(match[0]) && !noDigitFalsePositive) {
+        const { line, column } = lineAndColumnAt(content, match.index);
+        findings.push({
+          pattern: name,
+          file: rel,
+          line,
+          column,
+          masked: mask(match[0]),
+        });
+      }
+      if (match[0].length === 0) re.lastIndex++; // guard against zero-width matches
+    }
+  }
+}
+
+function auditNextPublicNames(sourceFiles, findings) {
+  let allowlist = [];
+  const allowlistPath = path.join(ROOT, 'scripts', 'public-env-allowlist.json');
+  if (fs.existsSync(allowlistPath)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(allowlistPath, 'utf8'));
+      if (Array.isArray(parsed)) {
+        allowlist = parsed;
+      } else if (parsed && Array.isArray(parsed.allowlist)) {
+        // Object form: { "allowlist": [...], "knownPublicKeys": { "NAME": "human-readable note" } }.
+        // knownPublicKeys is documentation only — a flag for human review on
+        // names that pass the allow-list but are worth a second look (e.g.
+        // they contain "API_KEY", which isn't itself a rejected substring)
+        // — it does not affect which names are treated as allowed.
+        allowlist = parsed.allowlist;
+      }
+    } catch {
+      findings.push({
+        pattern: 'next-public-allowlist-invalid',
+        file: path.relative(ROOT, allowlistPath),
+        line: 0,
+        column: 0,
+        masked: 'unparseable JSON',
+      });
+    }
+  } else {
+    findings.push({
+      pattern: 'next-public-allowlist-missing',
+      file: path.relative(ROOT, allowlistPath),
+      line: 0,
+      column: 0,
+      masked: 'file not found',
+    });
+  }
+  const allowSet = new Set(allowlist);
+  const seen = new Map(); // name -> first location
+
+  for (const absPath of sourceFiles) {
+    let content;
+    try {
+      content = fs.readFileSync(absPath, 'utf8');
+    } catch {
+      continue;
+    }
+    NEXT_PUBLIC_NAME_RE.lastIndex = 0;
+    let match;
+    while ((match = NEXT_PUBLIC_NAME_RE.exec(content)) !== null) {
+      const name = match[0];
+      if (!seen.has(name)) {
+        seen.set(name, { file: path.relative(ROOT, absPath), index: match.index, content });
+      }
+    }
+  }
+
+  for (const [name, loc] of seen) {
+    const rejectedByName = REJECTED_NAME_RE.test(name);
+    const missingFromAllowlist = !allowSet.has(name);
+    if (rejectedByName || missingFromAllowlist) {
+      const { line, column } = lineAndColumnAt(loc.content, loc.index);
+      findings.push({
+        pattern: rejectedByName ? 'next-public-rejected-name' : 'next-public-not-allowlisted',
+        file: loc.file,
+        line,
+        column,
+        masked: name,
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+function main() {
+  const findings = [];
+
+  const sourceFiles = collectSourceFiles();
+  for (const f of sourceFiles) scanFileForPatterns(f, VALUE_PATTERNS, findings);
+  auditNextPublicNames(sourceFiles, findings);
+
+  if (!sourceOnly) {
+    const hasNextDir = fs.existsSync(path.join(ROOT, '.next'));
+    if (!hasNextDir) {
+      console.error('check-bundle-secrets: .next/ not found — run `next build` first, or pass --source-only.');
+      process.exit(1);
+    }
+    const { client, server } = collectBuildOutputFiles();
+    for (const f of client) {
+      scanFileForPatterns(f, VALUE_PATTERNS, findings);
+      scanFileForPatterns(f, CLIENT_ONLY_PATTERNS, findings);
+    }
+    for (const f of server) {
+      scanFileForPatterns(f, VALUE_PATTERNS, findings);
+    }
+  }
+
+  if (findings.length === 0) {
+    console.log(`check-bundle-secrets: clean (${sourceOnly ? 'source-only' : 'source + build output'}).`);
+    process.exit(0);
+  }
+
+  console.error(`check-bundle-secrets: ${findings.length} finding(s)\n`);
+  const rows = findings.map((f) => [f.pattern, `${f.file}:${f.line}:${f.column}`, f.masked]);
+  const widths = [0, 1, 2].map((i) => Math.max('PATTERN'.length, ...rows.map((r) => r[i].length)));
+  const header = ['PATTERN', 'LOCATION', 'MASKED'];
+  const fmt = (r) => r.map((c, i) => c.padEnd(widths[i])).join('  ');
+  console.error(fmt(header));
+  console.error(widths.map((w) => '-'.repeat(w)).join('  '));
+  for (const r of rows) console.error(fmt(r));
+  process.exit(1);
+}
+
+// Only run when invoked directly (`node scripts/check-bundle-secrets.mjs`),
+// not when imported by the self-test.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}

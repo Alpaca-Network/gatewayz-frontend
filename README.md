@@ -172,6 +172,7 @@ The application will be available at `http://localhost:3000`
 - `pnpm typecheck` - Run TypeScript type checking
 - `pnpm genkit:dev` - Start Genkit AI development server
 - `pnpm genkit:watch` - Start Genkit with file watching
+- `pnpm scan:secrets` - Scan source and the built `.next/` output for accidentally-committed or accidentally-bundled secrets (JWTs, provider API keys, private keys) and audit every `NEXT_PUBLIC_*` name referenced in source against `scripts/public-env-allowlist.json`; also runs in CI (`.github/workflows/bundle-secret-scan.yml`) as a pre-build source check and a post-build check of the client/server chunks
 
 ## 🎯 Key Features Deep Dive
 
