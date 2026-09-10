@@ -15,6 +15,7 @@ import {
   PLACEHOLDER_RE,
   DIGIT_RE,
   IDENTIFIER_COLLISION_PRONE,
+  globToRegExp,
 } from './check-bundle-secrets.mjs';
 
 function findPattern(name) {
@@ -106,6 +107,24 @@ test('NEXT_PUBLIC_ name extraction picks up referenced names', () => {
   NEXT_PUBLIC_NAME_RE.lastIndex = 0;
   const names = [...src.matchAll(NEXT_PUBLIC_NAME_RE)].map((m) => m[0]);
   assert.deepEqual(names, ['NEXT_PUBLIC_API_BASE_URL', 'NEXT_PUBLIC_APP_URL']);
+});
+
+test('globToRegExp: "*" matches within a path segment but not across "/"', () => {
+  const re = globToRegExp('src/__fixtures__/*.ts');
+  assert.ok(re.test('src/__fixtures__/fake-key.ts'));
+  assert.equal(re.test('src/__fixtures__/nested/fake-key.ts'), false);
+});
+
+test('globToRegExp: "**" matches across "/"', () => {
+  const re = globToRegExp('src/**/fixtures/*.ts');
+  assert.ok(re.test('src/a/b/fixtures/fake-key.ts'));
+  assert.equal(re.test('src/a/b/fixtures/nested/fake-key.ts'), false);
+});
+
+test('globToRegExp: regex metacharacters in a glob are matched literally', () => {
+  const re = globToRegExp('src/lib/[legacy].ts');
+  assert.ok(re.test('src/lib/[legacy].ts'));
+  assert.equal(re.test('src/lib/Xlegacy.ts'), false); // not treated as a char class
 });
 
 test('rejected-name pattern flags SECRET/SERVICE_ROLE/PRIVATE/TOKEN/PASSWORD regardless of allow-list', () => {
