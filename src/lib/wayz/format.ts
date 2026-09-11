@@ -13,6 +13,15 @@ export function formatWayz(wei: bigint, maxDecimals = 4): string {
   return trimmed ? `${whole}.${trimmed}` : whole;
 }
 
+/** Formats a USD-denominated inference-credits amount to a fixed 4 decimal places
+ *  (staking rewards spec, 2026-09-11 §API — these are small `numeric(18,6)` credit
+ *  amounts, not wei, so no bigint/formatUnits here — pair with `tabular-nums` in
+ *  the caller's className so a column of these lines up). */
+export function formatCredits(value: number): string {
+  if (!Number.isFinite(value)) return '0.0000';
+  return value.toFixed(4);
+}
+
 /** "synced 3 minutes ago" copy for the indexer's last_synced_at. */
 export function formatSyncedAt(iso: string | null): string {
   if (!iso) return 'never synced';

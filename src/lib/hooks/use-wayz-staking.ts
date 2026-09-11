@@ -40,15 +40,24 @@ import {
   type FaucetStatus,
   type FaucetClaimResult,
 } from '@/lib/wayz/staking-api';
+import {
+  getStakingRewards,
+  getWalletRewardsEstimate,
+  type StakingRewards,
+  type WalletRewardsEstimate,
+} from '@/lib/wayz/rewards-api';
 
 const STALE_TIME = 30_000;
 const FAUCET_STALE_TIME = 15_000;
+const REWARDS_STALE_TIME = 60_000;
 
 export const wayzQueryKeys = {
   summary: ['wayz', 'summary'] as const,
   wallet: (address: string | null) => ['wayz', 'wallet', address] as const,
   onchain: (address: string | null) => ['wayz', 'onchain', address] as const,
   faucet: (address: string | null) => ['wayz', 'faucet', address] as const,
+  rewards: ['wayz', 'rewards'] as const,
+  walletRewardsEstimate: (address: string | null) => ['wayz', 'rewards-estimate', address] as const,
 };
 
 /** GET /staking/summary — protocol-wide totals shown in `StakingHeader`. */
@@ -194,6 +203,38 @@ export function useWithdraw(address: Address | null) {
       return withdrawWrite(ctx, { stakingAddress: staking });
     },
     onSuccess: invalidate,
+  });
+}
+
+/**
+ * GET /staking/rewards (Bearer) — the caller's personalized rewards view (rate table,
+ * per-wallet estimates, totals, history). Only meaningful for a linked wallet; the caller
+ * passes `enabled` to gate this off both while the connected wallet's link status is still
+ * loading and once it's known to be unlinked (see `useWalletRewardsEstimate` for that case).
+ */
+export function useStakingRewards(options: { enabled?: boolean } = {}): UseQueryResult<StakingRewards> {
+  return useQuery({
+    queryKey: wayzQueryKeys.rewards,
+    queryFn: getStakingRewards,
+    enabled: options.enabled ?? true,
+    staleTime: REWARDS_STALE_TIME,
+    retry: false,
+  });
+}
+
+/**
+ * GET /staking/wallets/{address}'s `rewards` field (public) — an unauthenticated/unlinked
+ * estimate of what a connected wallet would earn at its current stake.
+ */
+export function useWalletRewardsEstimate(
+  address: string | null,
+  options: { enabled?: boolean } = {}
+): UseQueryResult<WalletRewardsEstimate> {
+  return useQuery({
+    queryKey: wayzQueryKeys.walletRewardsEstimate(address),
+    queryFn: () => getWalletRewardsEstimate(address as string),
+    enabled: Boolean(address) && (options.enabled ?? true),
+    staleTime: REWARDS_STALE_TIME,
   });
 }
 

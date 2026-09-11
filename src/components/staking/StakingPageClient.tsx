@@ -7,6 +7,7 @@ import { BalancesCard } from './BalancesCard';
 import { StakeForm } from './StakeForm';
 import { UnstakeCard } from './UnstakeCard';
 import { FaucetCard } from './FaucetCard';
+import { EarningsCard } from './EarningsCard';
 
 export function StakingPageClient() {
   const wallet = useActiveWallet();
@@ -23,6 +24,7 @@ export function StakingPageClient() {
               <UnstakeCard address={wallet.address} />
             </div>
             <FaucetCard address={wallet.address} />
+            <EarningsCard address={wallet.address} />
           </div>
         )}
       </WalletGate>
