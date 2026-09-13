@@ -12,6 +12,7 @@ import { GpuProviderApiError } from '@/lib/gpu/provider-api';
 import { RegisterProviderForm } from './RegisterProviderForm';
 import { NodesList } from './NodesList';
 import { EarningsSection } from './EarningsSection';
+import { ProviderScoreCard } from './ProviderScoreCard';
 
 const STATUS_COPY: Record<string, string> = {
   pending: 'Pending admin approval',
@@ -91,6 +92,8 @@ export function ProviderPortalClient() {
       </Card>
 
       <NodesList nodes={nodes} />
+
+      <ProviderScoreCard />
 
       <EarningsSection />
     </div>
