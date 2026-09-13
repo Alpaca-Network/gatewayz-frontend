@@ -31,6 +31,17 @@ export interface GpuPublicLastHour {
   error_rate: number;
 }
 
+/** The Chutes-style emission split (scratchpad/emission/spec.md §API) — present only once
+ *  `REWARDS_MODE=emission` and at least one epoch has run. Absent under today's `per_unit`
+ *  mode; callers must render unchanged (hide the strip) when this is undefined. */
+export interface GpuPublicEmission {
+  daily_emission_wayz: number;
+  providers_bps: number;
+  stakers_bps: number;
+  treasury_bps: number;
+  last_epoch: string | null;
+}
+
 export interface GpuPublicSummary {
   active_nodes: number;
   approved_providers: number;
@@ -38,6 +49,7 @@ export interface GpuPublicSummary {
   models: GpuPublicModel[];
   last_hour: GpuPublicLastHour;
   updated_at: string;
+  emission?: GpuPublicEmission;
 }
 
 export interface GpuPublicNode {

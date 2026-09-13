@@ -113,12 +113,38 @@ export interface GpuSettlementRow {
   status: GpuSettlementStatus;
 }
 
+/** Per-epoch score breakdown behind a provider's emission-mode allocation share (weights are
+ *  fixed config, not on the wire — see ProviderScoreCard.tsx's `METRIC_WEIGHTS`). Metrics and
+ *  `share` are 0..1 fractions; `raw`/`adjusted` are the weighted-then-exponentiated composite
+ *  (scratchpad/emission/spec.md §Design step 3). */
+export interface GpuEmissionScore {
+  compute: number;
+  speed: number;
+  availability: number;
+  unique_models: number;
+  raw: number;
+  adjusted: number;
+  share: number;
+}
+
+/** The `emission` block `GET /gpu/providers/me/earnings` gains (scratchpad/emission/spec.md
+ *  §API) — present only once `REWARDS_MODE=emission` has scored at least one epoch for this
+ *  provider. Absent under today's `per_unit` mode. */
+export interface GpuEarningsEmission {
+  last_epoch: string | null;
+  score: GpuEmissionScore;
+  allocation_wayz: number;
+  rank: number;
+  providers_scored: number;
+}
+
 export interface GpuEarnings {
   accrued_wei: bigint;
   settled_wei: bigint;
   void_wei: bigint;
   work: GpuWorkRow[];
   settlements: GpuSettlementRow[];
+  emission?: GpuEarningsEmission;
 }
 
 /** Machine-readable error codes this client distinguishes, per WD-frontend.md's contract summary. */
@@ -150,6 +176,40 @@ function toBigInt(value: string | number | null | undefined): bigint {
     return BigInt(0);
   }
   return BigInt(value);
+}
+
+/** Parses a decimal number that may arrive as a string or number (numeric(18,8) score/share
+ *  columns) — mirrors rewards-api.ts's `toNumber`. NaN/empty -> 0. */
+function toNumber(value: string | number | null | undefined): number {
+  if (value === null || value === undefined || value === '') return 0;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseEmissionScore(data: Record<string, unknown>): GpuEmissionScore {
+  return {
+    compute: toNumber(data.compute as string | number),
+    speed: toNumber(data.speed as string | number),
+    availability: toNumber(data.availability as string | number),
+    unique_models: toNumber(data.unique_models as string | number),
+    raw: toNumber(data.raw as string | number),
+    adjusted: toNumber(data.adjusted as string | number),
+    share: toNumber(data.share as string | number),
+  };
+}
+
+/** Parses the optional `emission` block. Missing/non-object -> undefined, so callers can
+ *  gate rendering on `Boolean(emission)` without a separate "is emission mode" flag. */
+function parseEmission(value: unknown): GpuEarningsEmission | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const r = value as Record<string, unknown>;
+  return {
+    last_epoch: (r.last_epoch as string | null | undefined) ?? null,
+    score: parseEmissionScore((r.score as Record<string, unknown>) ?? {}),
+    allocation_wayz: toNumber(r.allocation_wayz as string | number),
+    rank: toNumber(r.rank as string | number),
+    providers_scored: toNumber(r.providers_scored as string | number),
+  };
 }
 
 // `error.detail` on a 400 here is NOT the raw reason string ("models_mismatch",
@@ -284,6 +344,7 @@ export async function getMyGpuEarnings(): Promise<GpuEarnings> {
       totals: { accrued_wei: string; settled_wei: string; void_wei: string };
       work: GpuWorkRow[];
       settlements: Array<Omit<GpuSettlementRow, 'amount_wei'> & { amount_wei: string | null }>;
+      emission?: unknown;
     };
   };
   return {
@@ -292,6 +353,7 @@ export async function getMyGpuEarnings(): Promise<GpuEarnings> {
     void_wei: toBigInt(body.data.totals.void_wei),
     work: body.data.work,
     settlements: body.data.settlements.map((row) => ({ ...row, amount_wei: toBigInt(row.amount_wei) })),
+    emission: parseEmission(body.data.emission),
   };
 }
 

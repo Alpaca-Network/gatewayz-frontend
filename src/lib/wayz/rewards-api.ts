@@ -10,6 +10,11 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewa
 
 export type RewardAccrualStatus = 'paid' | 'pending' | 'skipped';
 
+/** `per_unit` = today's rate-table behaviour (default, ships dark); `emission` = the
+ *  Chutes-style split where stakers earn pro-rata to stake out of the daily WAYZ emission
+ *  (scratchpad/emission/spec.md §Design's `REWARDS_MODE`). */
+export type RewardsMode = 'per_unit' | 'emission';
+
 export interface RewardRateTier {
   min_stake_wayz: number;
   credits_per_1k_wayz_per_day: number;
@@ -35,12 +40,27 @@ export interface RewardHistoryRow {
   status: RewardAccrualStatus;
 }
 
+/** The `emission` block `GET /staking/rewards` gains under `mode: 'emission'`
+ *  (scratchpad/emission/spec.md §API). `stakers_share_bps` and `your_share` are the protocol
+ *  split and this wallet's pro-rata fraction of it, respectively — both 0..1/0..10000
+ *  fractions, not credits. Absent under today's `per_unit` mode. */
+export interface StakingRewardsEmission {
+  daily_emission_wayz: number;
+  stakers_share_bps: number;
+  your_share: number;
+  estimated_credits_per_day: number;
+}
+
 export interface StakingRewards {
   enabled: boolean;
+  /** Absent under today's `per_unit` rollout — treat as `'per_unit'`, i.e. keep the
+   *  rate-table rendering, whenever this is undefined. */
+  mode?: RewardsMode;
   rate_table: RewardRateTier[];
   wallets: RewardWalletEntry[];
   totals: RewardTotals;
   history: RewardHistoryRow[];
+  emission?: StakingRewardsEmission;
 }
 
 /** The `rewards` sub-object `GET /staking/wallets/{address}` gains — no auth, no user data. */
@@ -92,6 +112,19 @@ function parseWallets(rows: unknown): RewardWalletEntry[] {
   });
 }
 
+/** Parses the optional `emission` block. Missing/non-object -> undefined, matching
+ *  provider-api.ts's `parseEmission`. */
+function parseEmission(value: unknown): StakingRewardsEmission | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const r = value as Record<string, unknown>;
+  return {
+    daily_emission_wayz: toNumber(r.daily_emission_wayz as string | number),
+    stakers_share_bps: toNumber(r.stakers_share_bps as string | number),
+    your_share: toNumber(r.your_share as string | number),
+    estimated_credits_per_day: toNumber(r.estimated_credits_per_day as string | number),
+  };
+}
+
 function parseHistory(rows: unknown): RewardHistoryRow[] {
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => {
@@ -134,6 +167,7 @@ export async function getStakingRewards(): Promise<StakingRewards> {
   const data = body.data;
   return {
     enabled: Boolean(data.enabled),
+    mode: (data.mode as RewardsMode | undefined) ?? undefined,
     rate_table: parseRateTable(data.rate_table),
     wallets: parseWallets(data.wallets),
     totals: {
@@ -142,6 +176,7 @@ export async function getStakingRewards(): Promise<StakingRewards> {
       pending_credits: toNumber((data.totals as Record<string, unknown> | undefined)?.pending_credits as string),
     },
     history: parseHistory(data.history),
+    emission: parseEmission(data.emission),
   };
 }
 
