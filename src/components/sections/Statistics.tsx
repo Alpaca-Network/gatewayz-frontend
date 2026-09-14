@@ -16,7 +16,11 @@ export default function Statistics() {
     },
     {
       icon: Users,
-      value: "10,000+",
+      // Live catalog count (GET /v1/models), verified 2026-09-14. This is a
+      // real figure and it drifts -- it was "10,000+" here, ~150x the truth.
+      // Better fetched than hardcoded; kept static only to avoid a network
+      // call in a marketing section.
+      value: "68",
       label: "AI Models Available",
       description: "Access every major model through one API"
     },

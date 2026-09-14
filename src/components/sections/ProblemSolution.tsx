@@ -40,7 +40,7 @@ export default function ProblemSolution() {
               <h3 className="text-2xl font-bold text-foreground mt-1">The Solution</h3>
             </div>
             <p className="text-foreground text-base mb-5 leading-relaxed">
-              <strong className="text-primary font-semibold">Gatewayz</strong> unifies 10,000+ models into one API—smart routing, transparent pricing, single invoice.
+              <strong className="text-primary font-semibold">Gatewayz</strong> unifies every major model into one API—smart routing, transparent pricing, single invoice.
             </p>
             <ul className="space-y-3">
               {["One API for all providers", "Single bill, simplified tracking", "Auto-optimized for cost & speed"].map((item) => (

@@ -9,7 +9,7 @@ export default function FAQ() {
   const faqs = [
     {
       question: "What is an AI inference gateway?",
-      answer: "An AI inference gateway is a unified API layer that routes requests to multiple AI model providers. Instead of integrating with dozens of different APIs, you connect to one gateway that handles routing, load balancing, and failover across all providers. Gatewayz acts as this universal gateway for 10,000+ AI models."
+      answer: "An AI inference gateway is a unified API layer that routes requests to multiple AI model providers. Instead of integrating with dozens of different APIs, you connect to one gateway that handles routing, load balancing, and failover across all providers. Gatewayz acts as this universal gateway for every major AI model."
     },
     {
       question: "How does Gatewayz reduce latency and cost?",
@@ -21,7 +21,7 @@ export default function FAQ() {
     },
     {
       question: "What is Gatewayz?",
-      answer: "Gatewayz is a universal AI inference API that provides unified access to 10,000+ AI models including GPT-4, Claude, Gemini, and more through a single API endpoint. We offer smart routing, transparent pricing, and the lowest latency for AI inference."
+      answer: "Gatewayz is a universal AI inference API that provides unified access to every major AI model including GPT-4, Claude, Gemini, and more through a single API endpoint. We offer smart routing and transparent pricing."
     },
     {
       question: "How does Gatewayz compare to OpenRouter?",
