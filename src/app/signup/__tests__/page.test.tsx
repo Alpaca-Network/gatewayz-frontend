@@ -282,7 +282,7 @@ describe('SignupPage', () => {
       // Core card elements should always be visible
       expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
       expect(screen.getByText("What you'll get:")).toBeInTheDocument();
-      expect(screen.getByText('Access to 10,000+ AI models')).toBeInTheDocument();
+      expect(screen.getByText('Access to every major AI model')).toBeInTheDocument();
     });
   });
 
@@ -302,7 +302,7 @@ describe('SignupPage', () => {
     it('should render benefits list', () => {
       render(<SignupPage />);
 
-      expect(screen.getByText('Access to 10,000+ AI models')).toBeInTheDocument();
+      expect(screen.getByText('Access to every major AI model')).toBeInTheDocument();
       expect(screen.getByText('Advanced AI routing & analytics')).toBeInTheDocument();
     });
   });

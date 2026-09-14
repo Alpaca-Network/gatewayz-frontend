@@ -15,7 +15,7 @@ export function CTASection() {
             </div>
             <h2 className="text-2xl md:text-3xl font-bold text-foreground">Get Started Today</h2>
             <p className="text-base text-foreground max-w-xl mx-auto leading-relaxed">
-              Join our beta program to explore 10,000+ AI models, and get <strong className="text-primary">$5 in bonus credits</strong> on your first top-up of $5 or more.
+              Join our beta program to explore the full model catalog, and get <strong className="text-primary">$5 in bonus credits</strong> on your first top-up of $5 or more.
             </p>
 
             <div className="max-w-md mx-auto pt-1">
@@ -45,7 +45,7 @@ export function CTASection() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span>10,000+ Models</span>
+                <span>Every major model</span>
               </div>
             </div>
           </div>

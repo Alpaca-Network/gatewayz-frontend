@@ -94,7 +94,7 @@ function SignupCardContent({
             <ul className="text-sm text-muted-foreground space-y-1">
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
-                Access to 10,000+ AI models
+                Access to every major AI model
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
@@ -250,7 +250,7 @@ function SignupCardSkeleton() {
             <ul className="text-sm text-muted-foreground space-y-1">
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
-                Access to 10,000+ AI models
+                Access to every major AI model
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>

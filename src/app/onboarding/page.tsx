@@ -46,7 +46,7 @@ export default function OnboardingPage() {
     {
       id: "welcome",
       title: "Welcome to Gatewayz",
-      description: "You're all set! Explore 10,000+ AI models and start building.",
+      description: "You're all set! Explore the model catalog and start building.",
       icon: <Sparkles className="h-5 w-5" />,
       completed: true,
     },
@@ -70,7 +70,7 @@ export default function OnboardingPage() {
     },
     {
       id: "explore",
-      title: "Explore 10,000+ AI Models",
+      title: "Explore the Model Catalog",
       description: "Browse our model catalog and see integration examples below.",
       icon: <Book className="h-5 w-5" />,
       completed: false,

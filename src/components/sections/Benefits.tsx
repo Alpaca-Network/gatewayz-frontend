@@ -3,7 +3,7 @@ import { Zap, Shield, DollarSign } from "lucide-react";
 const items = [
   {
     title: "Unified API",
-    desc: "Access 10,000+ models through one simple interface",
+    desc: "Access every major model through one simple interface",
     Icon: Zap,
   },
   {
