@@ -16,7 +16,7 @@ import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { useLinkedWallets } from '@/lib/hooks/use-linked-wallets';
 import { useStakingRewards, useWalletRewardsEstimate } from '@/lib/hooks/use-wayz-staking';
 import { RewardsApiError, type RewardAccrualStatus, type RewardRateTier } from '@/lib/wayz/rewards-api';
-import { formatCredits } from '@/lib/wayz/format';
+import { formatCredits, formatFractionPercent, formatWayzAmount } from '@/lib/wayz/format';
 
 /** Truncates a 0x-address to `0x1234...abcd` (mirrors settings/wallets/page.tsx and
  *  RegisterProviderForm.tsx's copy of the same helper). */
@@ -154,10 +154,31 @@ export function EarningsCard({ address }: { address: Address }) {
             </div>
           </div>
 
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">Reward tiers</h3>
-            <RateTierTable tiers={data.rate_table} />
-          </div>
+          {data.mode === 'emission' && data.emission ? (
+            <div>
+              <h3 className="mb-2 text-sm font-semibold">Emission</h3>
+              <p className="text-sm text-muted-foreground">
+                Stakers share{' '}
+                <span className="font-medium text-foreground tabular-nums">
+                  {formatWayzAmount(data.emission.daily_emission_wayz)} WAYZ
+                </span>
+                /day; your share{' '}
+                <span className="font-medium text-foreground tabular-nums">
+                  {formatFractionPercent(data.emission.your_share)}
+                </span>{' '}
+                → ≈{' '}
+                <span className="font-medium text-foreground tabular-nums">
+                  {formatCredits(data.emission.estimated_credits_per_day)} credits
+                </span>
+                /day.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <h3 className="mb-2 text-sm font-semibold">Reward tiers</h3>
+              <RateTierTable tiers={data.rate_table} />
+            </div>
+          )}
 
           <div>
             <h3 className="mb-2 text-sm font-semibold">History</h3>

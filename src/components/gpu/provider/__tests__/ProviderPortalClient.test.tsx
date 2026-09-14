@@ -23,6 +23,9 @@ jest.mock('../NodesList', () => ({
 jest.mock('../EarningsSection', () => ({
   EarningsSection: () => <div data-testid="earnings-section" />,
 }));
+jest.mock('../ProviderScoreCard', () => ({
+  ProviderScoreCard: () => <div data-testid="provider-score-card" />,
+}));
 
 const mockUseGatewayzAuth = useGatewayzAuth as jest.Mock;
 const mockUseMyGpuProvider = useMyGpuProvider as jest.Mock;
@@ -118,6 +121,7 @@ describe('ProviderPortalClient', () => {
     expect(screen.getByText('Acme GPUs')).toBeInTheDocument();
     expect(screen.getByText('Approved')).toBeInTheDocument();
     expect(screen.getByTestId('nodes-list')).toHaveTextContent('1 nodes');
+    expect(screen.getByTestId('provider-score-card')).toBeInTheDocument();
     expect(screen.getByTestId('earnings-section')).toBeInTheDocument();
   });
 });

@@ -141,6 +141,60 @@ describe('EarningsCard', () => {
     expect(screen.getByText(/no reward history yet/i)).toBeInTheDocument();
   });
 
+  it('emission mode: shows the stakers-share sentence instead of the rate table', () => {
+    mockUseGatewayzAuth.mockReturnValue({ status: 'authenticated' });
+    mockUseLinkedWallets.mockReturnValue({ isLoading: false, data: [{ wallet_address: ADDRESS }] });
+    mockUseStakingRewards.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        enabled: true,
+        mode: 'emission',
+        rate_table: [{ min_stake_wayz: 0, credits_per_1k_wayz_per_day: 0.01 }],
+        wallets: [{ address: ADDRESS, staked_wayz: 5000, estimated_credits_per_day: 0.05 }],
+        totals: { credits_paid_30d: 1.5, credits_paid_all: 9.9999, pending_credits: 0.01 },
+        history: [],
+        emission: {
+          daily_emission_wayz: 41000,
+          stakers_share_bps: 4100,
+          your_share: 0.0123,
+          estimated_credits_per_day: 0.05,
+        },
+      },
+    });
+    mockUseWalletRewardsEstimate.mockReturnValue({ isLoading: false, data: undefined });
+
+    render(<EarningsCard address={ADDRESS as never} />);
+
+    expect(screen.getByText(/stakers share/i)).toBeInTheDocument();
+    expect(screen.getByText('41000.0000 WAYZ')).toBeInTheDocument();
+    expect(screen.getByText('1.23%')).toBeInTheDocument();
+    expect(screen.getByText('0.0500 credits')).toBeInTheDocument();
+    expect(screen.queryByText(/reward tiers/i)).not.toBeInTheDocument();
+  });
+
+  it('per_unit mode (mode undefined): still shows the rate table, not the emission sentence', () => {
+    mockUseGatewayzAuth.mockReturnValue({ status: 'authenticated' });
+    mockUseLinkedWallets.mockReturnValue({ isLoading: false, data: [{ wallet_address: ADDRESS }] });
+    mockUseStakingRewards.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        enabled: true,
+        rate_table: [{ min_stake_wayz: 0, credits_per_1k_wayz_per_day: 0.01 }],
+        wallets: [{ address: ADDRESS, staked_wayz: 5000, estimated_credits_per_day: 0.05 }],
+        totals: { credits_paid_30d: 1.5, credits_paid_all: 9.9999, pending_credits: 0.01 },
+        history: [],
+      },
+    });
+    mockUseWalletRewardsEstimate.mockReturnValue({ isLoading: false, data: undefined });
+
+    render(<EarningsCard address={ADDRESS as never} />);
+
+    expect(screen.getByText('Reward tiers')).toBeInTheDocument();
+    expect(screen.queryByText(/stakers share/i)).not.toBeInTheDocument();
+  });
+
   it('shows an error message when the personalized rewards call fails', () => {
     mockUseGatewayzAuth.mockReturnValue({ status: 'authenticated' });
     mockUseLinkedWallets.mockReturnValue({ isLoading: false, data: [{ wallet_address: ADDRESS }] });

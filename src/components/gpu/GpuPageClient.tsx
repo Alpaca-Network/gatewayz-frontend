@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { isGpuMarketplaceEnabled } from '@/lib/gpu/flag';
 import { useGpuPublicSummary, useGpuPublicNodes } from '@/lib/hooks/use-gpu-public';
 import { SummaryCards } from './SummaryCards';
+import { EmissionStrip } from './EmissionStrip';
 import { UtilizationChart } from './UtilizationChart';
 import { NodesTable } from './NodesTable';
 import { ModelMapping } from './ModelMapping';
@@ -34,6 +35,8 @@ export function GpuPageClient() {
           Live utilization for the community GPU nodes serving open-weight models on Gatewayz.
         </p>
       </div>
+
+      <EmissionStrip emission={summaryQuery.data?.emission} loading={summaryQuery.isLoading} />
 
       <SummaryCards data={summaryQuery.data} loading={summaryQuery.isLoading} />
 
