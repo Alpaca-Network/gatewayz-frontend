@@ -93,7 +93,7 @@ export function ProviderScoreCard() {
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Rank</p>
             <p className="text-lg font-semibold tabular-nums">
-              {emission.rank} of {emission.providers_scored}
+              {emission.rank === null ? '—' : `${emission.rank} of ${emission.providers_scored}`}
             </p>
           </div>
           <div>

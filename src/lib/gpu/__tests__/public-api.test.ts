@@ -34,6 +34,58 @@ describe('gpu/public-api', () => {
       mockFetch.mockResolvedValueOnce(createErrorResponse({ error: 'rate limited' }, 429));
       await expect(getGpuPublicSummary()).rejects.toBeInstanceOf(GpuPublicApiError);
     });
+
+    it('coerces the emission block\'s numeric fields regardless of wire type (Fix round 1)', async () => {
+      // Fixture copied from `get_public_emission_summary` (gatewayz-backend
+      // src/services/emission/epoch.py): `daily_emission_wayz` is
+      // `str(Config.WAYZ_DAILY_EMISSION)` (a STRING, since it's an env-derived Decimal),
+      // while the `*_bps` fields are plain `int(...)`s. Fix round 1 caught this rendering
+      // as "0.0000 WAYZ" because the old code cast the whole payload straight through
+      // with no coercion.
+      const data = {
+        active_nodes: 3,
+        approved_providers: 2,
+        regions: [],
+        models: [],
+        last_hour: { requests: 0, tokens: 0, avg_latency_ms: 0, error_rate: 0 },
+        updated_at: '2026-09-13T00:00:00+00:00',
+        emission: {
+          mode: 'emission',
+          daily_emission_wayz: '100000',
+          providers_bps: 4100,
+          stakers_bps: 4100,
+          treasury_bps: 1800,
+          last_epoch: '2026-09-12',
+        },
+      };
+      mockFetch.mockResolvedValueOnce(createSuccessResponse(data));
+
+      const result = await getGpuPublicSummary();
+
+      expect(result.emission).toEqual({
+        daily_emission_wayz: 100000,
+        providers_bps: 4100,
+        stakers_bps: 4100,
+        treasury_bps: 1800,
+        last_epoch: '2026-09-12',
+      });
+    });
+
+    it('leaves emission undefined when the field is absent (per_unit mode)', async () => {
+      const data = {
+        active_nodes: 3,
+        approved_providers: 2,
+        regions: [],
+        models: [],
+        last_hour: { requests: 0, tokens: 0, avg_latency_ms: 0, error_rate: 0 },
+        updated_at: '2026-09-13T00:00:00+00:00',
+      };
+      mockFetch.mockResolvedValueOnce(createSuccessResponse(data));
+
+      const result = await getGpuPublicSummary();
+
+      expect(result.emission).toBeUndefined();
+    });
   });
 
   describe('getGpuPublicNodes', () => {

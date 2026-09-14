@@ -91,7 +91,7 @@ describe('ProviderScoreCard', () => {
           last_epoch: null,
           score: { compute: 0, speed: 0, availability: 0, unique_models: 0, raw: 0, adjusted: 0, share: 0 },
           allocation_wayz: 0,
-          rank: 0,
+          rank: null,
           providers_scored: 0,
         },
       },
@@ -99,5 +99,32 @@ describe('ProviderScoreCard', () => {
 
     render(<ProviderScoreCard />);
     expect(screen.getByText(/no epoch has run yet/i)).toBeInTheDocument();
+  });
+
+  it('renders "—" for rank when null (Fix round 1) — provider wasn\'t scored in the latest epoch', () => {
+    // `rank` is nullable on the wire (get_provider_emission_view in gatewayz-backend
+    // src/services/emission/epoch.py returns None when this provider isn't in
+    // epoch_scores) — must not render as "0 of N".
+    mockUseMyGpuEarnings.mockReturnValue({
+      isLoading: false,
+      data: {
+        accrued_wei: 0n,
+        settled_wei: 0n,
+        void_wei: 0n,
+        work: [],
+        settlements: [],
+        emission: {
+          last_epoch: '2026-09-12',
+          score: { compute: 0.1, speed: 0.1, availability: 0.1, unique_models: 0.1, raw: 0.1, adjusted: 0.1, share: 0 },
+          allocation_wayz: 0,
+          rank: null,
+          providers_scored: 40,
+        },
+      },
+    });
+
+    render(<ProviderScoreCard />);
+    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.queryByText(/of 40/)).not.toBeInTheDocument();
   });
 });

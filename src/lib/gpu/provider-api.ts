@@ -129,12 +129,18 @@ export interface GpuEmissionScore {
 
 /** The `emission` block `GET /gpu/providers/me/earnings` gains (scratchpad/emission/spec.md
  *  §API) — present only once `REWARDS_MODE=emission` has scored at least one epoch for this
- *  provider. Absent under today's `per_unit` mode. */
+ *  provider. Absent under today's `per_unit` mode.
+ *
+ *  `rank` is nullable on the wire — confirmed against `get_provider_emission_view`
+ *  (gatewayz-backend `src/services/emission/epoch.py`), which sets it via
+ *  `next((i + 1 for i, row in enumerate(epoch_scores) if row["provider_id"] == provider_id),
+ *  None)`, i.e. `None` whenever this provider wasn't scored in the latest epoch. Render "—",
+ *  not "0 of N", when null. */
 export interface GpuEarningsEmission {
   last_epoch: string | null;
   score: GpuEmissionScore;
   allocation_wayz: number;
-  rank: number;
+  rank: number | null;
   providers_scored: number;
 }
 
@@ -207,7 +213,9 @@ function parseEmission(value: unknown): GpuEarningsEmission | undefined {
     last_epoch: (r.last_epoch as string | null | undefined) ?? null,
     score: parseEmissionScore((r.score as Record<string, unknown>) ?? {}),
     allocation_wayz: toNumber(r.allocation_wayz as string | number),
-    rank: toNumber(r.rank as string | number),
+    // Nullable on the wire (see GpuEarningsEmission's header comment) — preserve null rather
+    // than coercing it to 0 via toNumber, so callers can render "—" instead of "0 of N".
+    rank: r.rank === null || r.rank === undefined ? null : toNumber(r.rank as string | number),
     providers_scored: toNumber(r.providers_scored as string | number),
   };
 }
