@@ -32,7 +32,7 @@ export default function FAQ() {
     },
     {
       question: "How much does Gatewayz cost?",
-      answer: "Pay-as-you-go, with no subscription requirement. Prices are cost-plus — a markup over what the provider charges — and published per model in the catalog, not as a blanket discount. Your first top-up of $5 or more earns $5 in bonus credits."
+      answer: "Pay-as-you-go, with no subscription requirement. Prices are cost-plus: you pay the provider's list price plus a routing fee, rather than a blanket discount claim. Your first top-up of $5 or more earns $5 in bonus credits."
     },
     {
       question: "Is Gatewayz compatible with the OpenAI SDK?",
