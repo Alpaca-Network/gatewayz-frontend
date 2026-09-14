@@ -87,7 +87,7 @@ export default function StartChatPage() {
         <div className="text-center mb-12">
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">Start Chatting with AI</h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Ask anything. We'll automatically route your question to the best model for the job.
+            Ask anything, or start from a preset below — each preset names the model it uses.
           </p>
         </div>
 
@@ -116,7 +116,7 @@ export default function StartChatPage() {
               </button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              💡 We automatically pick the best model based on your question
+              💡 Your question opens in the full chat, where you can switch models any time
             </p>
           </div>
         </div>
@@ -161,7 +161,7 @@ export default function StartChatPage() {
 
         {/* How It Works */}
         <div className="bg-muted/50 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4 text-center">How Smart Routing Works</h3>
+          <h3 className="text-lg font-semibold mb-4 text-center">How Quick Start Works</h3>
           <div className="grid sm:grid-cols-3 gap-6 text-center">
             <div>
               <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 font-bold text-xl">
@@ -175,14 +175,14 @@ export default function StartChatPage() {
                 2
               </div>
               <p className="text-sm font-medium mb-1">We Route</p>
-              <p className="text-xs text-muted-foreground">AI picks the best model</p>
+              <p className="text-xs text-muted-foreground">Each preset uses the model named on its card</p>
             </div>
             <div>
               <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3 font-bold text-xl">
                 3
               </div>
               <p className="text-sm font-medium mb-1">You Get Results</p>
-              <p className="text-xs text-muted-foreground">Optimal answer, every time</p>
+              <p className="text-xs text-muted-foreground">Switch models any time in the full chat</p>
             </div>
           </div>
         </div>

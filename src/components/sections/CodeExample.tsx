@@ -4,13 +4,14 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { Copy, Check, Maximize2, Minimize2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
-// Popular models to cycle through
+// Models to cycle through. Every id here must be in the live catalog
+// (GET /v1/models) -- an example we do not serve is a claim that we do.
 const popularModels = [
-  "gemini-2.5-pro",
-  "gpt-4o",
-  "claude-sonnet-4",
-  "deepseek-v3",
-  "llama-4-maverick",
+  "openai/gpt-5",
+  "anthropic/claude-sonnet-4-6",
+  "grok-4",
+  "moonshot/kimi-k3",
+  "meta/muse-spark-1.3",
 ];
 
 // Base code templates with MODEL_PLACEHOLDER to be replaced

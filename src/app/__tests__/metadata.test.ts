@@ -3,19 +3,19 @@ import { metadata } from '../metadata';
 describe('App Metadata Configuration', () => {
   describe('Basic metadata', () => {
     it('should have correct title', () => {
-      expect(metadata.title).toBe('Gatewayz - One Interface To Work With Any LLM');
+      expect(metadata.title).toBe('Gatewayz - The inference layer for the agentic economy');
     });
 
     it('should have correct description', () => {
       expect(metadata.description).toBe(
-        'From Idea To Production, Gatewayz Gives AI Teams The Toolkit, Savings, And Reliability They Need.'
+        'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.'
       );
     });
 
     it('should have relevant keywords', () => {
-      expect(metadata.keywords).toContain('AI');
-      expect(metadata.keywords).toContain('LLM');
-      expect(metadata.keywords).toContain('API Gateway');
+      expect(metadata.keywords).toContain('AI inference');
+      expect(metadata.keywords).toContain('LLM API');
+      expect(metadata.keywords).toContain('AI agents');
     });
 
     it('should have author information', () => {
@@ -53,10 +53,10 @@ describe('App Metadata Configuration', () => {
 
     it('should have Open Graph title and description', () => {
       expect((metadata.openGraph as any).title).toBe(
-        'Gatewayz - One Interface To Work With Any LLM'
+        'Gatewayz - The inference layer for the agentic economy'
       );
       expect((metadata.openGraph as any).description).toBe(
-        'From Idea To Production, Gatewayz Gives AI Teams The Toolkit, Savings, And Reliability They Need.'
+        'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.'
       );
     });
 
@@ -72,7 +72,7 @@ describe('App Metadata Configuration', () => {
       expect(image.url).toBe('/og-image.png');
       expect(image.width).toBe(1200);
       expect(image.height).toBe(630);
-      expect(image.alt).toBe('Gatewayz - One Interface To Work With Any LLM');
+      expect(image.alt).toBe('Gatewayz - The inference layer for the agentic economy');
       expect(image.type).toBe('image/png');
     });
 
@@ -96,10 +96,10 @@ describe('App Metadata Configuration', () => {
 
     it('should have Twitter title and description', () => {
       expect((metadata.twitter as any).title).toBe(
-        'Gatewayz - One Interface To Work With Any LLM'
+        'Gatewayz - The inference layer for the agentic economy'
       );
       expect((metadata.twitter as any).description).toBe(
-        'From Idea To Production, Gatewayz Gives AI Teams The Toolkit, Savings, And Reliability They Need.'
+        'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.'
       );
     });
 

@@ -127,7 +127,7 @@ export default function StartOpencodePage() {
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">Setup OpenCode with Gatewayz</h1>
           <p className="text-lg text-muted-foreground">
-            One command. Access to 1000+ AI models in your terminal.
+            One command. Every model in the Gatewayz catalog, in your terminal.
           </p>
         </div>
 
@@ -395,33 +395,33 @@ export default function StartOpencodePage() {
             <div className="bg-slate-950/80 p-6 space-y-3">
               <div className="flex items-center justify-between">
                 <pre className="text-sm leading-relaxed font-mono text-green-400 flex-1">
-                  anthropic/claude-sonnet-4.5
+                  anthropic/claude-sonnet-4-6
                 </pre>
-                <span className="text-xs text-slate-500 ml-4">Fast & capable</span>
+                <span className="text-xs text-slate-500 ml-4">Anthropic</span>
               </div>
               <div className="flex items-center justify-between">
                 <pre className="text-sm leading-relaxed font-mono text-green-400 flex-1">
                   openai/gpt-5
                 </pre>
-                <span className="text-xs text-slate-500 ml-4">Latest GPT</span>
+                <span className="text-xs text-slate-500 ml-4">OpenAI</span>
               </div>
               <div className="flex items-center justify-between">
                 <pre className="text-sm leading-relaxed font-mono text-green-400 flex-1">
-                  google/gemini-2.5-pro
+                  moonshot/kimi-k2.7-code
                 </pre>
-                <span className="text-xs text-slate-500 ml-4">Long context</span>
+                <span className="text-xs text-slate-500 ml-4">Moonshot</span>
               </div>
               <div className="flex items-center justify-between">
                 <pre className="text-sm leading-relaxed font-mono text-green-400 flex-1">
-                  x-ai/grok-3-turbo-preview
+                  grok-code-fast-1
                 </pre>
-                <span className="text-xs text-slate-500 ml-4">Fast reasoning</span>
+                <span className="text-xs text-slate-500 ml-4">xAI</span>
               </div>
               <div className="flex items-center justify-between">
                 <pre className="text-sm leading-relaxed font-mono text-green-400 flex-1">
-                  deepseek/deepseek-v3.1
+                  meta/muse-spark-1.3
                 </pre>
-                <span className="text-xs text-slate-500 ml-4">Cost effective</span>
+                <span className="text-xs text-slate-500 ml-4">Meta</span>
               </div>
             </div>
             {/* Bottom gradient */}
@@ -464,7 +464,7 @@ export default function StartOpencodePage() {
         <div className="bg-muted/50 rounded-lg p-6 text-center">
           <h3 className="text-lg font-semibold mb-2">What&apos;s Next?</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Explore 1000+ models, switch providers on the fly, and build faster with Gatewayz.
+            Browse the model catalog, switch models on the fly, and build with Gatewayz.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
             <Link href="/models">

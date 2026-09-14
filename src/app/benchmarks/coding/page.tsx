@@ -19,7 +19,7 @@ import path from 'node:path';
 export const metadata: Metadata = {
   title: 'Coding-agent benchmark: latency and cost | Gatewayz',
   description:
-    'Measured time-to-first-token, throughput and cost for coding-agent workloads through Gatewayz versus calling providers directly. Methodology and raw samples included.',
+    'Time-to-first-token, throughput and cost for coding-agent workloads through Gatewayz versus calling providers directly. Published only from measured runs, with the methodology.',
   keywords: [
     'llm latency benchmark',
     'coding agent benchmark',

@@ -130,7 +130,7 @@ export function PathChooserModal({ open, onOpenChange }: PathChooserModalProps) 
             </div>
             <h3 className="text-lg font-bold mb-2">Open Chat</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Start chatting → we pick the best model for you
+              Start chatting with any model in the catalog
             </p>
             <div className="mt-auto">
               <Button variant="outline" size="sm" className="group-hover:bg-green-500 group-hover:text-white group-hover:border-green-500">

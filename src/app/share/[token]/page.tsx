@@ -262,7 +262,7 @@ export default function SharedChatPage() {
           <Card className="p-8 bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
             <h2 className="text-2xl font-bold mb-2">Try Gatewayz</h2>
             <p className="text-muted-foreground mb-6">
-              Access 200+ AI models through a single API
+              One key and one neutral endpoint for every agent you run
             </p>
             <Button asChild size="lg">
               <Link href="/chat">Start Chatting</Link>

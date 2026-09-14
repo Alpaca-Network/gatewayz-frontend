@@ -43,18 +43,18 @@ export function WelcomeDialog() {
             Welcome to Gatewayz!
           </DialogTitle>
           <DialogDescription className="text-center">
-            Your account is ready. Explore 300+ AI models with pay-as-you-go pricing.
+            Your account is ready. One key for every model in the catalog, with pay-as-you-go pricing.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-4">
           <div className="pt-2 space-y-2 text-sm text-left">
             <div className="flex items-start gap-2">
               <span className="text-primary">✓</span>
-              <span>Access to 300+ AI models</span>
+              <span>Models from OpenAI, Anthropic, xAI, Moonshot and Meta</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-primary">✓</span>
-              <span>Intelligent model routing</span>
+              <span>OpenAI-compatible, with native Anthropic Messages</span>
             </div>
             <div className="flex items-start gap-2">
               <span className="text-primary">✓</span>

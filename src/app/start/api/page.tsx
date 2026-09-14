@@ -486,7 +486,7 @@ console.log(completion.choices[0].message.content);`
 
           <div className="bg-card border rounded-lg p-6 shadow-sm">
             <p className="text-muted-foreground mb-4">
-              Want to try other models? We support 1000+ models from OpenAI, Anthropic, Google, Meta, and more using the <code className="bg-muted px-2 py-1 rounded">researcher/model</code> format.
+              Want to try other models? The catalog has models from OpenAI, Anthropic, xAI, Moonshot and Meta. Use the id shown in the catalog, for example <code className="bg-muted px-2 py-1 rounded">openai/gpt-5</code>.
             </p>
             <p className="text-sm text-muted-foreground mb-4">
               💰 <strong>Add $3 in credits and get a bonus $3 on your first top-up</strong>

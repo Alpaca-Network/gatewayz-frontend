@@ -8,9 +8,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Gatewayz - One Interface To Work With Any LLM',
-  description: 'From Idea To Production, Gatewayz Gives AI Teams The Toolkit, Savings, And Reliability They Need.',
-  keywords: ['AI', 'LLM', 'GPT', 'Claude', 'Gemini', 'API Gateway', 'AI Router', 'Model Routing'],
+  title: 'Gatewayz - The inference layer for the agentic economy',
+  description: 'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.',
+  keywords: ['AI inference', 'LLM API', 'AI agents', 'OpenAI-compatible API', 'Anthropic Messages API', 'Claude Code', 'GPT', 'Claude', 'Grok', 'Kimi'],
   authors: [{ name: 'Gatewayz' }],
   robots: {
     index: true,
@@ -39,22 +39,22 @@ export const metadata: Metadata = {
     locale: 'en_US',
     url: 'https://beta.gatewayz.ai',
     siteName: 'Gatewayz',
-    title: 'Gatewayz - One Interface To Work With Any LLM',
-    description: 'From Idea To Production, Gatewayz Gives AI Teams The Toolkit, Savings, And Reliability They Need.',
+    title: 'Gatewayz - The inference layer for the agentic economy',
+    description: 'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.',
     images: [
       {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'Gatewayz - One Interface To Work With Any LLM',
+        alt: 'Gatewayz - The inference layer for the agentic economy',
         type: 'image/png',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Gatewayz - One Interface To Work With Any LLM',
-    description: 'From Idea To Production, Gatewayz Gives AI Teams The Toolkit, Savings, And Reliability They Need.',
+    title: 'Gatewayz - The inference layer for the agentic economy',
+    description: 'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.',
     images: ['/og-image.png'],
     creator: '@gatewayz_ai',
   },

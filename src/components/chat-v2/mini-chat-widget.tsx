@@ -210,7 +210,7 @@ export function MiniChatWidget({ className = '' }: MiniChatWidgetProps) {
 
       {/* Helper text */}
       <p className="mt-2.5 xs:mt-3 sm:mt-4 text-center text-xs text-muted-foreground animate-fade-in-up opacity-0 delay-300">
-        Powered by every major AI model • Try it for free
+        Models from OpenAI, Anthropic, xAI, Moonshot and Meta • Try it for free
       </p>
     </div>
   );

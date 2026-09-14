@@ -6,54 +6,57 @@ import {
 } from "@/components/ui/accordion";
 
 export default function FAQ() {
+  // Every answer describes what the API does today. No model counts, SLAs,
+  // latency or cost-reduction figures: a number we cannot source is removed,
+  // never restated.
   const faqs = [
     {
-      question: "What is an AI inference gateway?",
-      answer: "An AI inference gateway is a unified API layer that routes requests to multiple AI model providers. Instead of integrating with dozens of different APIs, you connect to one gateway that handles routing, load balancing, and failover across all providers. Gatewayz acts as this universal gateway for every major AI model."
-    },
-    {
-      question: "How does Gatewayz reduce latency and cost?",
-      answer: "Gatewayz reduces latency through smart geographic routing to the nearest available model endpoint, reducing round-trip time by up to 70%. We reduce costs by automatically selecting the most cost-efficient model that meets your quality requirements, pooling quotas across providers to avoid premium pricing tiers, and eliminating the need for multiple API subscriptions."
-    },
-    {
-      question: "How can developers monetize inference usage?",
-      answer: "Developers can earn revenue through our Build-to-Earn program. When you build integrations, custom routing logic, or specialized endpoints on Gatewayz, you earn a share of the inference revenue generated through your builds. It's a decentralized approach to AI infrastructure where contributors are rewarded."
-    },
-    {
       question: "What is Gatewayz?",
-      answer: "Gatewayz is a universal AI inference API that provides unified access to every major AI model including GPT-4, Claude, Gemini, and more through a single API endpoint. We offer smart routing and transparent pricing."
+      answer: "Gatewayz is the inference layer for the agentic economy: one key and one neutral endpoint for every agent you run. It is OpenAI-compatible, with native Anthropic Messages at /v1/messages."
     },
     {
-      question: "How does Gatewayz compare to OpenRouter?",
-      answer: "Gatewayz offers similar unified API access to multiple AI models but with enhanced features including smart routing, quota pooling, unified billing, and optimized latency. We provide comprehensive monitoring to ensure reliable AI inference at scale."
+      question: "What is an AI inference gateway?",
+      answer: "A single API between your software and the model providers. You integrate once, with one key, and the gateway handles authentication, request translation and billing for each provider behind it."
     },
     {
       question: "Which AI models does Gatewayz support?",
-      answer: "Gatewayz supports 10,000+ AI models including OpenAI's GPT-4, Anthropic's Claude, Google's Gemini, Meta's LLaMA, Mistral AI, and many more. We continuously add new models to ensure you have access to the latest AI capabilities."
+      answer: "Models from five providers: OpenAI, Anthropic, xAI, Moonshot and Meta. We do not currently serve Google Gemini, Mistral, Llama, DeepSeek or Qwen. The live list, with per-model prices, is in the model catalog and at GET https://api.gatewayz.ai/v1/models."
+    },
+    {
+      question: "What does \"neutral\" mean?",
+      answer: "We have no model of our own, so nothing is steered toward one. Resolution, never substitution: the model id you send is the model you get, and an unknown id returns a 400 with model_not_found rather than a swap to the nearest model."
+    },
+    {
+      question: "How does Gatewayz report errors?",
+      answer: "With status codes and error codes software can act on. An unknown model returns 400 model_not_found. A key that has spent its cap returns 402 request_cap_exhausted. An account with no credits returns 402 insufficient_credits. A stream that fails upstream ends with an explicit error event, so a truncated response is never mistaken for a complete one."
     },
     {
       question: "How much does Gatewayz cost?",
-      answer: "Gatewayz uses transparent, pay-as-you-go pricing with unified billing across all models — you only pay for the inference you use. As a bonus, you get $5 extra on your first top-up of $5 or more. No hidden fees and no subscription requirements."
+      answer: "Pay-as-you-go, with no subscription requirement. Prices are cost-plus — a markup over what the provider charges — and published per model in the catalog, not as a blanket discount. Your first top-up of $5 or more earns $5 in bonus credits."
     },
     {
-      question: "Is Gatewayz compatible with OpenAI SDK?",
-      answer: "Yes! Gatewayz is fully compatible with the OpenAI SDK. Simply change the base URL to https://api.gatewayz.ai/v1 and use your Gatewayz API key. Your existing code works without any modifications."
+      question: "Is Gatewayz compatible with the OpenAI SDK?",
+      answer: "Yes. Set the base URL to https://api.gatewayz.ai/v1 and use your Gatewayz API key; the rest of your OpenAI client code stays the same. For Claude Code and Anthropic SDKs, set ANTHROPIC_BASE_URL=https://api.gatewayz.ai."
     },
     {
-      question: "What are the benefits of using Gatewayz API?",
-      answer: "Gatewayz provides unified access to multiple AI models, smart routing for optimal performance, quota pooling to prevent rate limits, unified billing for simplified cost management, and the lowest latency through our optimized infrastructure. Perfect for developers, SaaS teams, and AI agent platforms."
+      question: "Does Gatewayz store my prompts?",
+      answer: "Plain API calls store no prompt or completion content."
+    },
+    {
+      question: "How does Gatewayz compare to OpenRouter?",
+      answer: "Both give you one key for many models. OpenRouter has the larger catalog and the longer track record. Gatewayz is narrower on purpose: native Anthropic Messages, exact model resolution, and errors your code can branch on. Our comparison page at /compare/gatewayz-vs-openrouter lays out where each one wins."
     },
     {
       question: "How do I get started with Gatewayz?",
-      answer: "Join our closed beta by signing up on our website. You'll get immediate API access, and your first top-up of $5 or more earns you $5 in bonus credits. Integration takes less than 5 minutes with our OpenAI-compatible API and comprehensive documentation."
+      answer: "Sign up, add credits and create an API key. Then point any OpenAI client at https://api.gatewayz.ai/v1, or set ANTHROPIC_BASE_URL=https://api.gatewayz.ai for Claude Code."
     },
     {
       question: "Is Gatewayz suitable for production use?",
-      answer: "Absolutely. While we're in closed beta, Gatewayz is built on enterprise-grade infrastructure with 99.9% uptime, comprehensive monitoring, and scalable architecture. Thousands of developers already rely on Gatewayz for their production AI workloads."
+      answer: "Gatewayz is a newer service run by a small team, and we do not offer an uptime SLA. What we do offer is behaviour you can build on: exact model resolution, stable error codes, and streams that end with an explicit error event when an upstream fails. Weigh that honestly if it sits on a critical path today."
     },
     {
       question: "What kind of support does Gatewayz provide?",
-      answer: "During the closed beta, all users receive priority support including dedicated onboarding, technical documentation, code examples, and direct access to our engineering team for integration assistance."
+      answer: "Email the team or join the community on Discord — the support page has both, along with the documentation and per-agent setup guides."
     }
   ];
 
@@ -65,7 +68,7 @@ export default function FAQ() {
             Frequently Asked Questions
           </h2>
           <p className="text-base text-muted-foreground">
-            Everything you need to know about Gatewayz AI API
+            Everything you need to know about Gatewayz
           </p>
         </div>
 

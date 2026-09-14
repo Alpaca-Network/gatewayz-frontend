@@ -4,23 +4,23 @@ import { Zap, Shield, Globe, Code } from "lucide-react";
 const features = [
   {
     icon: Zap,
-    title: "Smart Routing",
-    description: "Automatically selects the fastest and most cost-efficient model for your request",
+    title: "One key, one endpoint",
+    description: "OpenAI-compatible chat completions and native Anthropic Messages. Claude Code works with ANTHROPIC_BASE_URL=https://api.gatewayz.ai.",
   },
   {
     icon: Shield,
-    title: "Enterprise Security",
-    description: "Bank-grade encryption with SOC 2 compliance and dedicated infrastructure",
+    title: "No stored content",
+    description: "Plain API calls store no prompt or completion content.",
   },
   {
     icon: Globe,
-    title: "Global Scale",
-    description: "Worldwide infrastructure with 99.9% uptime SLA and sub-100ms latency",
+    title: "Five providers, one catalog",
+    description: "Models from OpenAI, Anthropic, xAI, Moonshot and Meta. The live list, with per-model prices, is in the catalog and at GET /v1/models.",
   },
   {
     icon: Code,
     title: "Developer First",
-    description: "Comprehensive SDKs, detailed docs, and responsive support for your team",
+    description: "Docs, setup guides for Claude Code, Cline, Aider, OpenCode and Continue, and a catalog that lists each model's supported parameters.",
   },
 ];
 
@@ -29,9 +29,9 @@ export function FeaturesModern() {
     <section id="features" className="py-12 md:py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-background to-muted/30">
       <div className="container mx-auto max-w-6xl">
         <div className="text-center mb-12">
-          <h2 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">Decentralized Infrastructure for AI</h2>
+          <h2 className="text-4xl md:text-5xl font-bold mb-4 text-foreground">One endpoint for every agent you run</h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Everything you need to build and scale AI-powered applications with superior developer experience
+            What you get when you point an agent at Gatewayz
           </p>
         </div>
 

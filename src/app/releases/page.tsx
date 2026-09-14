@@ -318,7 +318,7 @@ const releaseNotes: ReleaseWeek[] = [
           "Fixed Privy passwordless network errors with graceful handling",
           "Fixed PostHog provider loading issues",
           "Fixed message format conversion",
-          "Updated chat dropdown to show \"Load all 10,000+ models\"",
+          "Updated chat dropdown to show a \"Load all models\" option",
           "Fixed Invalid hook call error in PrivyProviderWrapper",
           "Fixed crypto.randomUUID compatibility issues",
           "Fixed Google gateway ID mismatch",

@@ -48,7 +48,7 @@ export const DOC_PAGES: DocPage[] = [
   -H "Authorization: Bearer $GATEWAYZ_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "anthropic/claude-sonnet-4",
+    "model": "anthropic/claude-sonnet-4-6",
     "messages": [{"role": "user", "content": "Hello"}]
   }'`,
         },
@@ -66,7 +66,7 @@ client = OpenAI(
 )
 
 response = client.chat.completions.create(
-    model="anthropic/claude-sonnet-4",
+    model="anthropic/claude-sonnet-4-6",
     messages=[{"role": "user", "content": "Hello"}],
 )`,
         },
@@ -119,7 +119,7 @@ response = client.chat.completions.create(
         code: {
           language: 'json',
           content: `{
-  "model": "anthropic/claude-sonnet-4",
+  "model": "anthropic/claude-sonnet-4-6",
   "messages": [
     {
       "role": "system",
@@ -213,11 +213,11 @@ response = client.chat.completions.create(
     sections: [
       {
         heading: '400 — invalid request',
-        body: 'Malformed body, or a model that cannot be routed. Embedding models must be namespaced; the error names the supported prefixes.',
+        body: 'Malformed body, or a model that cannot be routed. An unknown model id returns `model_not_found` — the gateway never swaps in the nearest model. Embedding models must be namespaced; the error names the supported prefixes. Retrying the same request will not help.',
       },
       {
         heading: '402 — payment required',
-        body: 'You asked for a live API key without credits on the account, or your balance is exhausted. The response body names the free alternative.',
+        body: 'Retrying will not help until something changes on the account. `insufficient_credits`: no credits on the account, or you asked for a live key without them — the response body names the free alternative. `request_cap_exhausted`: the key has spent the cap set on it; raise the cap or use another key.',
       },
       {
         heading: '429 — rate limited',
@@ -225,7 +225,11 @@ response = client.chat.completions.create(
       },
       {
         heading: '502 / 503 — provider trouble',
-        body: 'The gateway failed over across healthy providers and none succeeded. Circuit breakers open after repeated failures; check /health for current provider status.',
+        body: 'The upstream provider failed or is unavailable. These are retryable — back off and try again. Check /health for current provider status.',
+      },
+      {
+        heading: 'Errors inside a stream',
+        body: 'If an upstream fails after a stream has started, the stream ends with an explicit error event rather than simply stopping — so a truncated response is never mistaken for a complete one. Treat a stream that closes without a finish reason or an error event as a client-side problem.',
       },
     ],
   },

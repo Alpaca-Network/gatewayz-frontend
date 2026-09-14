@@ -45,7 +45,7 @@ export function CTASection() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span>Every major model</span>
+                <span>One key, every model we serve</span>
               </div>
             </div>
           </div>

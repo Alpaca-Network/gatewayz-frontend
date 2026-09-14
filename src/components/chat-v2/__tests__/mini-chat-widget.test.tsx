@@ -106,7 +106,7 @@ describe('MiniChatWidget', () => {
     it('should render helper text', () => {
       render(<MiniChatWidget />);
 
-      expect(screen.getByText(/Powered by every major AI model • Try it for free/)).toBeInTheDocument();
+      expect(screen.getByText(/Models from OpenAI, Anthropic, xAI, Moonshot and Meta • Try it for free/)).toBeInTheDocument();
     });
   });
 

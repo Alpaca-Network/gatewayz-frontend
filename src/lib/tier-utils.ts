@@ -47,7 +47,7 @@ export const TIER_CONFIG = {
   },
   basic: {
     name: 'Starter',
-    description: '$35/month - $35 in credits (20% savings vs pay-as-you-go)',
+    description: '$35/month - $35 in credits',
     monthlyPrice: 35, // $35.00
     creditAllocation: 35, // $35 in credits
     monthlyAllowance: 35, // $35.00 — 1 credit = $1
@@ -55,7 +55,7 @@ export const TIER_CONFIG = {
   },
   pro: {
     name: 'Pro',
-    description: '$120/month - $130 in credits (27% savings vs pay-as-you-go)',
+    description: '$120/month - $130 in credits',
     monthlyPrice: 120, // $120.00
     creditAllocation: 130, // $130 in credits
     monthlyAllowance: 130, // $130.00 — 1 credit = $1
@@ -63,7 +63,7 @@ export const TIER_CONFIG = {
   },
   max: {
     name: 'Max',
-    description: '$350/month - $400 in credits (30% savings vs pay-as-you-go)',
+    description: '$350/month - $400 in credits',
     monthlyPrice: 350, // $350.00
     creditAllocation: 400, // $400 in credits
     monthlyAllowance: 400, // $400.00 — 1 credit = $1

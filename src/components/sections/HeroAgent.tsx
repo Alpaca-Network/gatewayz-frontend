@@ -20,8 +20,8 @@ export default function HeroAgent() {
                   <Typewriter 
                     texts={[
                       "One API.",
-                      "500+ models.",
-                      "Infinite flexibility."
+                      "One key.",
+                      "One neutral endpoint."
                     ]} 
                     className="inline-block"
                     typingSpeed={80}
@@ -34,7 +34,7 @@ export default function HeroAgent() {
               </div>
             </h1>
             <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-xl leading-relaxed">
-              Unified API access to GPT-4o, Claude 3.7, Mistral, LLaMA, and hundreds of OSS models — perfect for multi-model agent frameworks.
+              The inference layer for the agentic economy — models from OpenAI, Anthropic, xAI, Moonshot and Meta behind one OpenAI-compatible endpoint, with native Anthropic Messages.
             </p>
 
             <div className="mt-10 p-8 border border-primary/30 rounded-lg bg-card shadow-subtle glow-pulse floating">

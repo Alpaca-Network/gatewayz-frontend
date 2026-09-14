@@ -197,19 +197,19 @@ export default function ContactPage() {
                 <ul className="text-sm text-muted-foreground space-y-2">
                   <li className="flex items-center gap-2">
                     <span className="text-green-600">&#10003;</span>
-                    Access to 300+ AI models
+                    Models from OpenAI, Anthropic, xAI, Moonshot and Meta
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-green-600">&#10003;</span>
-                    Unified API for all providers
+                    One key and one neutral endpoint
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-green-600">&#10003;</span>
-                    Cost optimization & analytics
+                    Per-model, cost-plus pricing
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-green-600">&#10003;</span>
-                    Enterprise-grade reliability
+                    Errors your software can act on
                   </li>
                 </ul>
               </CardContent>

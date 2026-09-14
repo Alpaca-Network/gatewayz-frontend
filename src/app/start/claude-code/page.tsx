@@ -111,7 +111,7 @@ export default function StartClaudeCodePage() {
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">Setup Claude Code with Gatewayz</h1>
           <p className="text-lg text-muted-foreground">
-            One command. Access to 1000+ AI models in your IDE.
+            One command. Every model in the Gatewayz catalog, in your IDE.
           </p>
         </div>
 
@@ -418,7 +418,7 @@ export default function StartClaudeCodePage() {
         <div className="bg-muted/50 rounded-lg p-6 text-center">
           <h3 className="text-lg font-semibold mb-2">What's Next?</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Explore 1000+ models, switch providers on the fly, and build faster with Gatewayz.
+            Browse the model catalog, switch models on the fly, and build with Gatewayz.
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
             <Link href="/models">

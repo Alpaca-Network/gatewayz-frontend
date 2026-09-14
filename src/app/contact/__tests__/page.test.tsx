@@ -112,10 +112,10 @@ describe('ContactPage', () => {
       render(<ContactPage />);
 
       expect(screen.getByText('Why Gatewayz?')).toBeInTheDocument();
-      expect(screen.getByText('Access to 300+ AI models')).toBeInTheDocument();
-      expect(screen.getByText('Unified API for all providers')).toBeInTheDocument();
-      expect(screen.getByText('Cost optimization & analytics')).toBeInTheDocument();
-      expect(screen.getByText('Enterprise-grade reliability')).toBeInTheDocument();
+      expect(screen.getByText('Models from OpenAI, Anthropic, xAI, Moonshot and Meta')).toBeInTheDocument();
+      expect(screen.getByText('One key and one neutral endpoint')).toBeInTheDocument();
+      expect(screen.getByText('Per-model, cost-plus pricing')).toBeInTheDocument();
+      expect(screen.getByText('Errors your software can act on')).toBeInTheDocument();
     });
 
     it('should render the contact form', () => {

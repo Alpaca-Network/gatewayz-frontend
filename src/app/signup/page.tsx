@@ -94,11 +94,11 @@ function SignupCardContent({
             <ul className="text-sm text-muted-foreground space-y-1">
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
-                Access to every major AI model
+                One key for models from OpenAI, Anthropic, xAI, Moonshot and Meta
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
-                Advanced AI routing & analytics
+                OpenAI-compatible, with native Anthropic Messages
               </li>
             </ul>
           </div>
@@ -250,11 +250,11 @@ function SignupCardSkeleton() {
             <ul className="text-sm text-muted-foreground space-y-1">
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
-                Access to every major AI model
+                One key for models from OpenAI, Anthropic, xAI, Moonshot and Meta
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-green-600">✓</span>
-                Advanced AI routing & analytics
+                OpenAI-compatible, with native Anthropic Messages
               </li>
             </ul>
           </div>
