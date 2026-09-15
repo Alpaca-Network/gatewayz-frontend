@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import ReleasesPage from '../page';
+import ReleasesPage, { metadata } from '../page';
 
 // Mock the Card components
 jest.mock('@/components/ui/card', () => ({
@@ -12,177 +12,99 @@ jest.mock('@/components/ui/card', () => ({
 
 describe('ReleasesPage', () => {
   describe('Page structure', () => {
-    it('should render the page header', () => {
+    it('should render the changelog header', () => {
       render(<ReleasesPage />);
 
-      expect(screen.getByText('Release Notes')).toBeInTheDocument();
-      expect(screen.getByText('Weekly updates and changes to GatewayZ')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Changelog' })).toBeInTheDocument();
     });
 
-    it('should render at least one release card', () => {
+    it('should render one card per dated release, newest first', () => {
       render(<ReleasesPage />);
 
-      const cards = screen.getAllByTestId('card');
-      expect(cards.length).toBeGreaterThanOrEqual(1);
+      const dates = screen.getAllByTestId('card-title').map((el) => el.textContent ?? '');
+      expect(dates.length).toBeGreaterThanOrEqual(5);
+      expect(dates[0]).toBe('September 15, 2026');
+
+      const asTime = dates.map((d) => new Date(d).getTime());
+      expect(asTime.every((t) => Number.isFinite(t))).toBe(true);
+      const sortedDesc = [...asTime].sort((a, b) => b - a);
+      expect(asTime).toEqual(sortedDesc);
     });
 
-    it('should render release date in card header', () => {
+    it('should tag every entry', () => {
       render(<ReleasesPage />);
 
-      // Check for December 5, 2025 date
-      expect(screen.getByText('December 5, 2025')).toBeInTheDocument();
+      // Each entry heading is an h3 preceded by a tag badge.
+      const entryHeadings = screen.getAllByRole('heading', { level: 3 });
+      expect(entryHeadings.length).toBeGreaterThanOrEqual(10);
     });
   });
 
-  describe('Release sections', () => {
-    it('should render Features section', () => {
+  describe('Content', () => {
+    it('should document the machine-readable error contract', () => {
       render(<ReleasesPage />);
 
-      const featuresHeadings = screen.getAllByText('Features');
-      expect(featuresHeadings.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/400 model_not_found/)).toBeInTheDocument();
+      expect(screen.getByText(/402 request_cap_exhausted/)).toBeInTheDocument();
     });
 
-    it('should render Bug Fixes section', () => {
+    it('should record the streaming error event', () => {
       render(<ReleasesPage />);
 
-      const bugFixesHeadings = screen.getAllByText('Bug Fixes');
-      expect(bugFixesHeadings.length).toBeGreaterThanOrEqual(1);
+      expect(
+        screen.getByText(/A stream that fails upstream ends with an error event/)
+      ).toBeInTheDocument();
     });
 
-    it('should render Infrastructure section', () => {
+    it('should record resolution without substitution', () => {
       render(<ReleasesPage />);
 
-      const infrastructureHeadings = screen.getAllByText('Infrastructure');
-      expect(infrastructureHeadings.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText(/never quietly swapped for a nearby model/)).toBeInTheDocument();
     });
 
-    it('should render Documentation section', () => {
+    it('should link to the Learn hub', () => {
       render(<ReleasesPage />);
 
-      const documentationHeadings = screen.getAllByText('Documentation');
-      expect(documentationHeadings.length).toBeGreaterThanOrEqual(1);
+      const learnLink = screen.getByRole('link', { name: /Open the Learn hub/ });
+      expect(learnLink).toHaveAttribute('href', 'https://www.gatewayz.ai/learn');
     });
   });
 
-  describe('Content display', () => {
-    it('should render feature items', () => {
-      render(<ReleasesPage />);
+  describe('Public-safe copy', () => {
+    // The changelog is public. These are the classes of detail that must never
+    // reach it, whoever adds the next entry.
+    const FORBIDDEN = [
+      /\bPR\s*#?\d+/i,
+      /#\d{2,}/,
+      /\bSOC\s*2\b/i,
+      /\bSLA\b/i,
+      /\b\d+(\.\d+)?\s*%/,
+      /\buptime\b/i,
+      /\bvulnerabilit/i,
+      /\bexploit/i,
+      /\bCVE-/i,
+      /\bsrc\//,
+      /\.tsx?\b/,
+      /\bcheaper\b/i,
+      /\bbank-grade\b/i,
+      /\bevery major (model|provider)\b/i,
+    ];
 
-      // Check for a specific feature
-      expect(screen.getByText(/Streaming Standardization/)).toBeInTheDocument();
-    });
+    it('should not contain internal or unsourced detail', () => {
+      const { container } = render(<ReleasesPage />);
+      const text = container.textContent ?? '';
 
-    it('should render bug fix categories', () => {
-      render(<ReleasesPage />);
-
-      // Check for bug fix categories (there may be multiple across different releases)
-      expect(screen.getAllByText('Streaming Fixes').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('UI/UX Fixes').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('Backend Fixes').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('CI Fixes').length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('should render specific bug fix items', () => {
-      render(<ReleasesPage />);
-
-      // Check for specific bug fix items
-      expect(screen.getByText(/Fixed 429 rate limit errors/)).toBeInTheDocument();
-      expect(screen.getByText(/Fixed double scrollbar issues/)).toBeInTheDocument();
-    });
-
-    it('should render infrastructure items', () => {
-      render(<ReleasesPage />);
-
-      // Check for infrastructure item
-      expect(screen.getByText(/Initial setup with frontend and backend as git submodules/)).toBeInTheDocument();
-    });
-
-    it('should render documentation items', () => {
-      render(<ReleasesPage />);
-
-      // Check for documentation item
-      expect(screen.getByText(/Added streaming standardization plan documentation/)).toBeInTheDocument();
+      for (const pattern of FORBIDDEN) {
+        expect(text).not.toMatch(pattern);
+      }
     });
   });
 
-  describe('Section markers', () => {
-    it('should render feature markers (+)', () => {
-      const { container } = render(<ReleasesPage />);
-
-      // Features section has "+" markers
-      const featureMarkers = container.querySelectorAll('.text-green-600, .text-green-400');
-      expect(featureMarkers.length).toBeGreaterThan(0);
+  describe('Metadata', () => {
+    it('should describe the changelog', () => {
+      expect(metadata.title).toBe('Changelog | Gatewayz');
+      expect(metadata.description).toEqual(expect.stringContaining('newest first'));
+      expect(metadata.alternates?.canonical).toBe('https://beta.gatewayz.ai/releases');
     });
-
-    it('should render bug fix markers (-)', () => {
-      const { container } = render(<ReleasesPage />);
-
-      // Bug fixes section has "-" markers
-      const bugFixMarkers = container.querySelectorAll('.text-blue-600, .text-blue-400');
-      expect(bugFixMarkers.length).toBeGreaterThan(0);
-    });
-
-    it('should render infrastructure markers (*)', () => {
-      const { container } = render(<ReleasesPage />);
-
-      // Infrastructure section has "*" markers
-      const infraMarkers = container.querySelectorAll('.text-purple-600, .text-purple-400');
-      expect(infraMarkers.length).toBeGreaterThan(0);
-    });
-
-    it('should render documentation markers (#)', () => {
-      const { container } = render(<ReleasesPage />);
-
-      // Documentation section has "#" markers
-      const docMarkers = container.querySelectorAll('.text-orange-600, .text-orange-400');
-      expect(docMarkers.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('Styling', () => {
-    it('should have proper page background', () => {
-      const { container } = render(<ReleasesPage />);
-
-      expect(container.querySelector('.min-h-screen')).toBeInTheDocument();
-      expect(container.querySelector('.bg-background')).toBeInTheDocument();
-    });
-
-    it('should have responsive container width', () => {
-      const { container } = render(<ReleasesPage />);
-
-      expect(container.querySelector('.max-w-screen-xl')).toBeInTheDocument();
-    });
-
-    it('should have card header with muted background', () => {
-      render(<ReleasesPage />);
-
-      const cardHeaders = screen.getAllByTestId('card-header');
-      expect(cardHeaders.length).toBeGreaterThan(0);
-    });
-  });
-});
-
-describe('ReleaseWeek interface structure', () => {
-  // Type-only test to ensure the interface is correct
-  test('should have correct release note structure', () => {
-    const releaseWeek = {
-      date: 'December 5, 2025',
-      features: ['Feature 1', 'Feature 2'],
-      bugFixes: [
-        {
-          category: 'Category 1',
-          items: ['Bug fix 1', 'Bug fix 2'],
-        },
-      ],
-      infrastructure: ['Infra item 1'],
-      documentation: ['Doc item 1'],
-    };
-
-    expect(releaseWeek.date).toBe('December 5, 2025');
-    expect(releaseWeek.features).toHaveLength(2);
-    expect(releaseWeek.bugFixes[0].category).toBe('Category 1');
-    expect(releaseWeek.bugFixes[0].items).toHaveLength(2);
-    expect(releaseWeek.infrastructure).toHaveLength(1);
-    expect(releaseWeek.documentation).toHaveLength(1);
   });
 });

@@ -201,7 +201,7 @@ export default function ContactPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-green-600">&#10003;</span>
-                    One key and one neutral endpoint
+                    One key and one model-agnostic endpoint
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="text-green-600">&#10003;</span>

@@ -16,7 +16,7 @@ export default function ProblemSolutionSaas() {
           </article>
 
           <article className="rounded-xl border border-border bg-card/40 p-6">
-            <h2 className="text-2xl md:text-3xl font-semibold">Gatewayz = one integration, one neutral endpoint</h2>
+            <h2 className="text-2xl md:text-3xl font-semibold">Gatewayz = one integration, one model-agnostic endpoint</h2>
             <p className="mt-3 text-muted-foreground">
               One balance, consistent APIs, and per-key spend caps make AI integration predictable for SaaS teams.
             </p>

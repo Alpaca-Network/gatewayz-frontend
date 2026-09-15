@@ -20,7 +20,7 @@ export default function DocsIndexPage() {
         <header className="mb-12">
           <h1 className="text-4xl font-bold tracking-tight">Documentation</h1>
           <p className="mt-3 max-w-2xl text-lg text-muted-foreground">
-            The inference layer for the agentic economy: one key and one neutral endpoint for
+            The inference layer for the agentic economy: one key and one model-agnostic endpoint for
             every agent you run — OpenAI-compatible, with native Anthropic Messages and prompt
             caching passed through.
           </p>

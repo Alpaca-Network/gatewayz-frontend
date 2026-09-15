@@ -7,7 +7,7 @@ export default function HowItWorks() {
   const steps = [
     {
       icon: Scale,
-      title: "Neutral by construction",
+      title: "Model agnostic",
       description: "We have no model of our own to steer you toward. Resolution, never substitution: an unknown model id returns a 400, never a quiet swap to the nearest model."
     },
     {

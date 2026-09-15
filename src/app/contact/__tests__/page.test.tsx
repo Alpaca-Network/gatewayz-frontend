@@ -113,7 +113,7 @@ describe('ContactPage', () => {
 
       expect(screen.getByText('Why Gatewayz?')).toBeInTheDocument();
       expect(screen.getByText('Models from OpenAI, Anthropic, xAI, Moonshot and Meta')).toBeInTheDocument();
-      expect(screen.getByText('One key and one neutral endpoint')).toBeInTheDocument();
+      expect(screen.getByText('One key and one model-agnostic endpoint')).toBeInTheDocument();
       expect(screen.getByText('Per-model, cost-plus pricing')).toBeInTheDocument();
       expect(screen.getByText('Errors your software can act on')).toBeInTheDocument();
     });

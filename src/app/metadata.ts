@@ -9,7 +9,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: 'Gatewayz - The inference layer for the agentic economy',
-  description: 'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.',
+  description: 'One key and one model-agnostic endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.',
   keywords: ['AI inference', 'LLM API', 'AI agents', 'OpenAI-compatible API', 'Anthropic Messages API', 'Claude Code', 'GPT', 'Claude', 'Grok', 'Kimi'],
   authors: [{ name: 'Gatewayz' }],
   robots: {
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     url: 'https://beta.gatewayz.ai',
     siteName: 'Gatewayz',
     title: 'Gatewayz - The inference layer for the agentic economy',
-    description: 'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.',
+    description: 'One key and one model-agnostic endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.',
     images: [
       {
         url: '/og-image.png',
@@ -54,7 +54,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Gatewayz - The inference layer for the agentic economy',
-    description: 'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.',
+    description: 'One key and one model-agnostic endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.',
     images: ['/og-image.png'],
     creator: '@gatewayz_ai',
   },

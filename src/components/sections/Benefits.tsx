@@ -7,7 +7,7 @@ const items = [
     Icon: Zap,
   },
   {
-    title: "Neutral Resolution",
+    title: "Model-Agnostic Resolution",
     desc: "The model you name, or a 400 — never a nearest-model swap",
     Icon: DollarSign,
   },
