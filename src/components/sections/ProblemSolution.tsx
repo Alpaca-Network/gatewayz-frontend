@@ -40,7 +40,7 @@ export default function ProblemSolution() {
               <h3 className="text-2xl font-bold text-foreground mt-1">The Solution</h3>
             </div>
             <p className="text-foreground text-base mb-5 leading-relaxed">
-              <strong className="text-primary font-semibold">Gatewayz</strong> puts every model it serves behind one neutral endpoint — one key, per-model prices, one balance.
+              <strong className="text-primary font-semibold">Gatewayz</strong> puts every model it serves behind one model-agnostic endpoint — one key, per-model prices, one balance.
             </p>
             <ul className="space-y-3">
               {["One key across OpenAI, Anthropic, xAI, Moonshot and Meta", "One credit balance, per-model prices in the catalog", "Errors with stable codes your software can act on"].map((item) => (

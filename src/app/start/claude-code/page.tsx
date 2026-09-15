@@ -279,7 +279,7 @@ export default function StartClaudeCodePage() {
             )}
 
             <p className="text-sm text-muted-foreground">
-              💡 <strong>Tip:</strong> Configure the base URL as <code className="bg-muted px-2 py-1 rounded">https://api.gatewayz.ai/v1</code> to use Gatewayz's unified API.
+              💡 <strong>Tip:</strong> Set <code className="bg-muted px-2 py-1 rounded">ANTHROPIC_BASE_URL=https://api.gatewayz.ai</code> — no <code className="bg-muted px-2 py-1 rounded">/v1</code> suffix, the client appends it — and <code className="bg-muted px-2 py-1 rounded">ANTHROPIC_AUTH_TOKEN</code> to the key above.
             </p>
           </div>
         </div>

@@ -6,7 +6,7 @@ import { AGENT_TOOLS } from '@/lib/agent-tools';
 export const metadata: Metadata = {
   title: 'Run your coding agent on Gatewayz | Gatewayz',
   description:
-    'Setup guides for Claude Code, Cline, Aider, OpenCode and Continue. One key and one neutral endpoint for every agent you run, prompt caching passed through.',
+    'Setup guides for Claude Code, Cline, Aider, OpenCode and Continue. One key and one model-agnostic endpoint for every agent you run, prompt caching passed through.',
   keywords: [
     'coding agent api',
     'claude code',
@@ -28,7 +28,7 @@ export default function UseIndexPage() {
             Run your coding agent on Gatewayz
           </h1>
           <p className="mt-3 max-w-2xl text-lg text-muted-foreground">
-            One key and one neutral endpoint for every agent you run. Prompt caching is passed
+            One key and one model-agnostic endpoint for every agent you run. Prompt caching is passed
             through and billed at the cache rate, so replaying a large static prefix every turn
             costs what it should.
           </p>

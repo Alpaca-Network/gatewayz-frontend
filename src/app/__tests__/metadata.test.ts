@@ -8,7 +8,7 @@ describe('App Metadata Configuration', () => {
 
     it('should have correct description', () => {
       expect(metadata.description).toBe(
-        'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.'
+        'One key and one model-agnostic endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.'
       );
     });
 
@@ -56,7 +56,7 @@ describe('App Metadata Configuration', () => {
         'Gatewayz - The inference layer for the agentic economy'
       );
       expect((metadata.openGraph as any).description).toBe(
-        'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.'
+        'One key and one model-agnostic endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.'
       );
     });
 
@@ -99,7 +99,7 @@ describe('App Metadata Configuration', () => {
         'Gatewayz - The inference layer for the agentic economy'
       );
       expect((metadata.twitter as any).description).toBe(
-        'One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.'
+        'One key and one model-agnostic endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.'
       );
     });
 

@@ -21,7 +21,7 @@ export default function HeroAgent() {
                     texts={[
                       "One API.",
                       "One key.",
-                      "One neutral endpoint."
+                      "One model-agnostic endpoint."
                     ]} 
                     className="inline-block"
                     typingSpeed={80}

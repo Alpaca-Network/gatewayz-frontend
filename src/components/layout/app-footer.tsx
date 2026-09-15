@@ -139,7 +139,7 @@ export function AppFooter() {
           </div>
 
           <div>
-            <h3 className="font-semibold mb-4 text-foreground">Legal</h3>
+            <h3 className="font-semibold mb-4 text-foreground">Terms</h3>
             <ul className="space-y-2">
               <li>
                 <Link href="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">

@@ -12,7 +12,7 @@ export default function FAQ() {
   const faqs = [
     {
       question: "What is Gatewayz?",
-      answer: "Gatewayz is the inference layer for the agentic economy: one key and one neutral endpoint for every agent you run. It is OpenAI-compatible, with native Anthropic Messages at /v1/messages."
+      answer: "Gatewayz is the inference layer for the agentic economy: one key and one model-agnostic endpoint for every agent you run. It is OpenAI-compatible, with native Anthropic Messages at /v1/messages."
     },
     {
       question: "What is an AI inference gateway?",
@@ -23,7 +23,7 @@ export default function FAQ() {
       answer: "Models from five providers: OpenAI, Anthropic, xAI, Moonshot and Meta. We do not currently serve Google Gemini, Mistral, Llama, DeepSeek or Qwen. The live list, with per-model prices, is in the model catalog and at GET https://api.gatewayz.ai/v1/models."
     },
     {
-      question: "What does \"neutral\" mean?",
+      question: "What does \"model agnostic\" mean?",
       answer: "We have no model of our own, so nothing is steered toward one. Resolution, never substitution: the model id you send is the model you get, and an unknown id returns a 400 with model_not_found rather than a swap to the nearest model."
     },
     {

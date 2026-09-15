@@ -105,7 +105,7 @@ export const COMPARISONS: Comparison[] = [
     competitorName: 'Anthropic direct',
     headline: 'Gatewayz vs going direct to Anthropic',
     summary:
-      'Anthropic direct gives you the shortest path to Claude. Gatewayz adds one key and one neutral endpoint across providers, at the cost of one extra hop.',
+      'Anthropic direct gives you the shortest path to Claude. Gatewayz adds one key and one model-agnostic endpoint across providers, at the cost of one extra hop.',
     verdict:
       'If Claude is the only model you will ever use and you never want another vendor in the path, go direct — it is one fewer dependency and the lowest possible latency. Gatewayz makes sense when you run agents across several providers and want to switch models without changing code, with one key and one balance. On cached workloads the per-token economics are close enough that convenience, not price, should decide it.',
     rows: [

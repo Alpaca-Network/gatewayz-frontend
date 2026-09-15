@@ -16,7 +16,7 @@ export default function TitleSection() {
 
             {/* Subheadline */}
             <p className="text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto text-balance leading-relaxed animate-fade-in-up opacity-0 delay-200 px-2 sm:px-3">
-              One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.
+              One key and one model-agnostic endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.
             </p>
 
             {/* Chat Widget */}

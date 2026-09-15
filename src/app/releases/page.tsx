@@ -1,590 +1,185 @@
-"use client";
+import type { Metadata } from 'next';
+import Link from 'next/link';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-interface ReleaseWeek {
-  date: string;
-  features: string[];
-  bugFixes: {
-    category: string;
-    items: string[];
-  }[];
-  infrastructure: string[];
-  documentation: string[];
+export const metadata: Metadata = {
+  title: 'Changelog | Gatewayz',
+  description:
+    'What shipped on Gatewayz, newest first — the error contract agents can act on, streaming that fails loudly, exact model resolution, build transparency, and the Learn hub.',
+  keywords: ['gatewayz changelog', 'release notes', 'llm api changelog', 'inference gateway updates'],
+  alternates: { canonical: 'https://beta.gatewayz.ai/releases' },
+  openGraph: {
+    type: 'website',
+    url: 'https://beta.gatewayz.ai/releases',
+    siteName: 'Gatewayz',
+    title: 'Gatewayz Changelog',
+    description:
+      'What shipped on Gatewayz, newest first — the error contract agents can act on, streaming that fails loudly, exact model resolution, build transparency, and the Learn hub.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Gatewayz Changelog',
+    description:
+      'What shipped on Gatewayz, newest first — the error contract agents can act on, streaming that fails loudly, exact model resolution, build transparency, and the Learn hub.',
+  },
+};
+
+// The public changelog. Everything here is user-visible behaviour that has
+// shipped. Deliberately excluded, and to be kept excluded: internal ticket or
+// branch references, file paths, vendor and tooling names, unreleased plans,
+// partner traffic, and any figure we cannot source (model counts, uptime or
+// SLA percentages, savings claims). Honest wording only -- "corrected",
+// "clarified", "hardened" -- never a retroactive confession.
+type ChangeTag = 'API' | 'Reliability' | 'Transparency' | 'App' | 'Docs' | 'Pricing' | 'Learn';
+
+interface ChangeEntry {
+  tag: ChangeTag;
+  title: string;
+  body: string;
+  href?: string;
+  hrefLabel?: string;
 }
 
-const releaseNotes: ReleaseWeek[] = [
+interface ChangelogRelease {
+  date: string;
+  summary: string;
+  entries: ChangeEntry[];
+}
+
+const TAG_CLASSES: Record<ChangeTag, string> = {
+  API: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20',
+  Reliability: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
+  Transparency: 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/20',
+  App: 'bg-orange-500/10 text-orange-700 dark:text-orange-300 border-orange-500/20',
+  Docs: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/20',
+  Pricing: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
+  Learn: 'bg-pink-500/10 text-pink-700 dark:text-pink-300 border-pink-500/20',
+};
+
+const CHANGELOG: ChangelogRelease[] = [
   {
-    date: "February 11, 2026",
-    features: [
-      "Per-Million Token Pricing Display: All model prices now display as 'per million tokens' with a 1,000,000x multiplier for clearer pricing comparison across providers",
-      "Updated Provider Interface: Backend API format updated for improved provider data structure and model routing",
-      "Terragon Auth Bridge Improvements: Enhanced redirect flow with support for redirect_uri parameter and multi-layer error handling for Inbox iframe",
-      "Faster Conversation Loading: Sync auth initialization and memory caching significantly speed up conversation load times",
-      "SampleApp SDK 1.0.47: Updated SampleApp SDK with new error UI for missing API key scenarios",
-    ],
-    bugFixes: [
+    date: 'September 15, 2026',
+    summary: 'Navigation cleanup.',
+    entries: [
       {
-        category: "Authentication & Redirects",
-        items: [
-          "Fixed Terragon auth bridge redirect flow for seamless cross-domain authentication",
-          "Added redirect tests for /inbox and /code routes to Terragon",
-          "Fixed request body structure and account type normalization in auth flow",
-          "Removed host restriction from redirect routes for improved flexibility",
-        ],
+        tag: 'App',
+        title: 'Navigation links all resolve again',
+        body: 'Several links in the header and footer pointed at destinations that no longer existed and returned a not-found page. Every navigation entry now goes where its label says it goes.',
       },
-      {
-        category: "Credits & Pricing",
-        items: [
-          "Fixed currency display by properly dividing amounts by 100 for correct dollar values",
-          "Hidden discount section when no discount is available for cleaner checkout UI",
-          "Updated Enterprise pricing to $350/10 users/month",
-        ],
-      },
-      {
-        category: "Error Handling & Monitoring",
-        items: [
-          "Reduced Sentry noise with improved error filters",
-          "Fixed ChatHistoryAPI timeout configuration mismatch",
-          "Improved auth API error handling for non-JSON backend responses",
-          "Integrated Sentry filters into runtime for consistent error tracking",
-        ],
-      },
-      {
-        category: "Testing & CI",
-        items: [
-          "Fixed TerragonAuthPage test failing with Jest 30 + jsdom 26",
-          "Fixed CSP connect-src to allow SampleApp API endpoints",
-        ],
-      },
-    ],
-    infrastructure: [
-      "Backend API format changes for Provider interface alignment",
-      "SampleApp SDK upgrade to version 1.0.47",
-      "Enhanced Terragon iframe integration with improved error handling",
-    ],
-    documentation: [
-      "Added NEXT_PUBLIC_SAMPLEAPP_API_KEY to .env.example",
     ],
   },
   {
-    date: "February 1, 2026",
-    features: [
-      "Many-to-Many Provider Support: Models page now shows all providers offering each model with per-provider pricing",
-      "Kanban Column Toggle: Inbox now supports customizable Kanban column visibility with persistent state and iframe synchronization",
-      "Terragon Inbox Integration: New /inbox and /code routes with custom OG images, auth bridge, and seamless iframe embedding",
-      "Rybbit Analytics: Added Rybbit analytics tracking script for beta.gatewayz.ai",
-      "Checkout Optimization: Improved checkout rendering speed with new plan and quantity controls",
-      "Prompt Cache Settings: New dedicated Prompt Cache page in settings for better cache management",
-      "Auto Top-Up Repositioned: Auto top-up section moved to top of credits page for better visibility",
-      "Custom Credit Amounts: Users can now enter custom amounts when purchasing credits",
-      "Subscription Plan Indicators: Upgrade/downgrade buttons now show based on user's current plan",
-      "Tiered Subscription Credits Display: Updated UI to properly display tiered subscription credit allocations",
-      "OpenCode Integration Page: Replaced PostHog snippet with comprehensive OpenCode overview in integrations",
-      "Butter.dev Caching Toggle: New response caching toggle for Butter.dev integration in settings",
-    ],
-    bugFixes: [
+    date: 'September 14, 2026',
+    summary: 'A Learn hub, a complete error reference, and a site that only says what it can source.',
+    entries: [
       {
-        category: "Models & Pricing",
-        items: [
-          "Fixed provider-specific pricing display across all model components",
-          "Removed OpenAI/Anthropic from per-million pricing gateways for accurate pricing display",
-          "Fixed CI build timeouts with static fallback for models page",
-          "Fixed models SSR fetching that was blocked by CI environment check",
-          "Reduced excessive console logs and removed setInterval polling from models page",
-          "Increased models 'all' gateway timeout from 10s to 180s for reliability",
-        ],
+        tag: 'Learn',
+        title: 'Learn hub',
+        body: 'A new Learn hub is live: a Start here path that takes you from an API key to a first working request, ten foundation guides on inference and agents, longer in-depth articles, and a glossary for the vocabulary the docs assume.',
+        href: 'https://www.gatewayz.ai/learn',
+        hrefLabel: 'Open the Learn hub',
       },
       {
-        category: "Authentication & Security",
-        items: [
-          "Increased auth timeout and aligned retry configuration for better reliability",
-          "Added Railway domain to Terragon callback allowlist",
-          "Added multiple CSP fixes: Cloudflare Turnstile, hCaptcha, Statsig SDK, Reddit, PostHog, Google Ads domains",
-          "Fixed iframe security for /inbox page with proper sandbox attributes",
-          "Disabled login button while Privy SDK initializes to prevent premature clicks",
-          "Preserved tiered credit fields when upgrading API key",
-        ],
+        tag: 'Docs',
+        title: 'The full error contract is documented',
+        body: 'The error reference now lists every status and error code the API returns, what causes each one, and whether retrying can help. You can write your handling against the reference instead of discovering codes in production.',
       },
       {
-        category: "Credits & Billing",
-        items: [
-          "Fixed credits display to convert from cents to dollars correctly",
-          "Fixed tier detection using proper getUserTier function",
-          "Saved tiered credit fields to localStorage on profile fetch",
-        ],
+        tag: 'Docs',
+        title: 'Unsourced claims removed',
+        body: 'Figures we could not stand behind — model counts, availability and service-level numbers, and savings comparisons — are gone from the site. Automated checks now run on every change to keep them from creeping back in.',
       },
       {
-        category: "Mobile & UI",
-        items: [
-          "Fixed mobile hamburger menu visibility and conditional Get Credits button",
-          "Fixed background color in PricingSection component",
-          "Added mobile-friendly responsive layout for models page",
-          "Expanded all model rows by default with toggle button",
-          "Added compact mobile banner view for free models credit info",
-          "Fixed iframe navigation with allow-top-navigation-by-user-activation",
-          "Fixed GitHub link CSP errors with allow-popups-to-escape-sandbox",
-        ],
+        tag: 'Pricing',
+        title: 'Pricing described plainly',
+        body: 'Pricing is now described as what it is: the provider’s list price for the model you called, plus a routing fee. Per-model prices stay in the catalog, so you can compare before you send traffic.',
       },
       {
-        category: "Infrastructure",
-        items: [
-          "Deferred PHProvider render until PostHog is fully initialized",
-          "Pre-configured window.ethereum as configurable to prevent wallet extension conflicts",
-          "Filtered AbortError from Sentry network request cancellations",
-        ],
+        tag: 'App',
+        title: 'Claude Code setup corrected',
+        body: 'The Claude Code setup guide gave a base URL with a path suffix that the Anthropic client appends itself, and named the wrong environment variable for the key. The guide now shows the base URL and the auth-token variable that actually work.',
       },
-    ],
-    infrastructure: [
-      "Frontend pagination updated to support new backend metadata",
-      "Dynamic API URLs for desktop vs web environments",
-      "Unified provider dropdown configurations across the codebase",
-    ],
-    documentation: [
-      "Added NEXT_PUBLIC_TERRAGON_URL and GATEWAYZ_AUTH_BRIDGE_SECRET to environment documentation",
     ],
   },
   {
-    date: "January 25, 2026",
-    features: [
-      "Credit Usage Progress Bar: Visual indicator in the header showing remaining credits with color-coded status (green/yellow/red) and quick-access \"Add Credits\" button",
-      "Models Table View: New OpenRouter-style table view for the Models page with improved data density, provider column, and formatted context lengths",
-      "Interactive 404 Page: Conway's Game of Life themed 404 page with play/pause controls, speed adjustment, and auto-starting \"404\" pattern",
-      "Smart Auto-Router: New prompt-level router (auto, auto:price, auto:quality, auto:fast) that intelligently selects models optimized for price/performance with fail-open design",
-      "New Providers: Added Nosana GPU provider, Sybil provider, and Canopy Wave provider integrations",
-      "Infron AI Rebrand: OneRouter provider rebranded to Infron AI with updated endpoints and improved model routing",
-    ],
-    bugFixes: [
+    date: 'September 11, 2026',
+    summary: 'The status view stops guessing.',
+    entries: [
       {
-        category: "Gatewayz Chat",
-        items: [
-          "Fixed tiered credits authentication and localStorage issues with proper legacy fallback support",
-          "Fixed PostHog initialization configuration errors",
-          "Fixed wallet extension conflicts with pre-configured ethereum property",
-        ],
+        tag: 'Transparency',
+        title: 'Status reports only what it measures',
+        body: 'The public status endpoint now reports measured signals from the live catalog and nothing else. A model that has not been measured is shown as unmonitored rather than being reported as down, so an absence of data no longer reads as an outage.',
       },
-      {
-        category: "Gatewayz API",
-        items: [
-          "OpenAI and Anthropic models now prioritize native provider connections for improved reliability",
-          "Fixed Windows installer freeze issue when run via irm | iex for OpenCode",
-          "Improved Claude Code model ID aliases for better compatibility",
-          "Fixed Next.js security vulnerabilities (updated to 15.5.9)",
-        ],
-      },
-    ],
-    infrastructure: [],
-    documentation: [],
-  },
-  {
-    date: "January 18, 2026",
-    features: [
-      "Automatic Web Search: Chat now automatically searches the web for queries that benefit from real-time information (travel questions, current prices, news) without any manual toggle needed",
-      "Desktop App Improvements: Beta testing Desktop apps for MacOS, Windows and Linux. Improved overall desktop stability",
-      "New Provider - Morpheus API: Added Morpheus as a new model provider with optimized inference capabilities",
-      "FAL Models Integration: Dynamic FAL model fetching from REST API for up-to-date model availability",
-    ],
-    bugFixes: [
-      {
-        category: "Gatewayz Chat",
-        items: [
-          "Credits now properly removed after trial expiration without payment",
-        ],
-      },
-      {
-        category: "Gatewayz API",
-        items: [
-          "Fixed pricing normalization to consistently display $/million tokens across all providers",
-          "Fixed Statsig 401 errors when client key is missing or disabled",
-          "Fixed CORS for Tauri desktop application requests",
-        ],
-      },
-    ],
-    infrastructure: [],
-    documentation: [],
-  },
-  {
-    date: "January 11, 2026",
-    features: [
-      "Discounted Credit Packages: New discounted credit package options are now available",
-    ],
-    bugFixes: [
-      {
-        category: "Gatewayz Chat",
-        items: [
-          "Fixed duplicate words appearing in voice transcription results",
-          "Fixed issue where account tier wasn't updating immediately after upgrading to PRO/MAX",
-        ],
-      },
-      {
-        category: "Gatewayz API",
-        items: [
-          "Added support for AiHubMix and Simplismart with highly optimized text, image, and voice models",
-          "Added developer role for enhanced API access control",
-          "Better HTTP/2 error handling and automatic retry logic for more reliable API calls",
-          "Enhanced provider failover when encountering payment-related errors (402)",
-          "Fixed issue where paid API users were incorrectly marked as trial users",
-        ],
-      },
-    ],
-    infrastructure: [],
-    documentation: [],
-  },
-  {
-    date: "January 4, 2026",
-    features: [
-      "OpenAI & Anthropic Direct Providers: Added direct API access to OpenAI (GPT models) and Anthropic (Claude models) with connection pool clients, pre-warming support, and manual pricing data",
-      "Surprise Me Feature: Added \"Surprise me\" button that generates and sends random interesting prompts from a curated list of fun questions",
-      "Image Model Auto-Switch: Automatically switches to image generation model when \"Create Image\" chip is clicked in chat",
-      "OpenCode & Claude Code Setup: Added multi-platform setup scripts and READMEs for OpenCode and Claude Code development environments",
-    ],
-    bugFixes: [
-      {
-        category: "Backend Fixes",
-        items: [
-          "Fixed streaming middleware \"No response returned\" issue with pure ASGI middleware conversion",
-          "Added AIMO circuit breaker to handle API fetch errors gracefully",
-          "Fixed Braintrust NoneType content error with deep sanitization",
-          "Fixed Vertex AI streaming issues after submodule bump",
-          "Fixed health-service column name mismatches (current_status -> last_status, last_check_at -> last_called_at)",
-        ],
-      },
-      {
-        category: "Frontend Fixes",
-        items: [
-          "Fixed max plan display error",
-          "Added provider configs for OpenAI and Anthropic in model detail page",
-          "Added provider names and logos for new AI providers",
-          "Extracted modelIdFormat functions to testable utility module",
-          "Fixed duplicate model definition in use-auto-model-switch.ts",
-        ],
-      },
-      {
-        category: "CI/CD Fixes",
-        items: [
-          "Fixed PR comment step in auto-merge workflow to be non-fatal",
-          "Fixed PR lookup for forked PRs with correct head_repository.owner.login",
-          "Added null check for headBranch to prevent posting to unrelated PRs",
-          "Fixed workflow names in workflow-notification.yml",
-          "Improved unknown submodule handling in subrepo-ci-notification workflow",
-        ],
-      },
-    ],
-    infrastructure: [
-      "Multiple submodule updates to keep frontend and backend in sync",
-      "Added comprehensive error reporting documentation for backend monitoring",
-      "Added CI notification workflows for enhanced visibility and automated alerting",
-      "Gateway pricing cross-reference from OpenRouter to prevent credit drain",
-    ],
-    documentation: [
-      "Added Backend Error Review documentation for January 2-4, 2026",
-      "Added ERROR_REPORT_2026-01-04 with streaming middleware analysis and fix tracking",
     ],
   },
   {
-    date: "December 28, 2025",
-    features: [
-      "Web Search Integration: Added real-time web search capability to chat with Tavily API integration, search results UI component, and toggle control",
-      "ChatGPT History Import: Import your ChatGPT conversations with drag-and-drop file upload, supporting both .zip and .json export formats with automatic memory extraction",
-      "AI Memory System: Added cross-session AI memory that learns user preferences from conversations, with a dedicated settings page to view and manage memories",
-      "Camera & Audio Recording: Camera button now opens device camera directly on mobile; audio button triggers live microphone recording with visual feedback",
-      "Attachment UI Redesign: Updated chat input with [+] button, larger input area, and prompt chips for improved UX",
-      "Image/Video Model Category: Added dedicated Image/Video section in model dropdown for easy multimodal model discovery",
-      "Auto-Switch to Multimodal: Automatically switches to a multimodal model when users upload images, videos, audio, or documents",
-      "Free Models List: Display all free models for users with updated backend and frontend support",
-      "Trial Credit System Overhaul: Restructured trial credits to $1/day with $5 total cap (3-day trial period)",
-    ],
-    bugFixes: [
+    date: 'September 10, 2026',
+    summary: 'Traceability for anything you need to report.',
+    entries: [
       {
-        category: "Backend Fixes",
-        items: [
-          "Fixed share chat API endpoints returning 404 errors",
-          "Added HTTP/2 retry logic and Featherless message sanitization",
-          "Restored 402 failover code and improved c10x model routing to Featherless",
-          "Fixed handling of missing rate_limit tables with improved error handling",
-          "Fixed gateway pricing issues in backend",
-          "Fixed Google Vertex model loading",
-          "Fixed DeepSeek model mapping",
-          "Fixed Privy email handling",
-          "Fixed Fireworks model ID fallback",
-          "Resolved composite key deduplication issues",
-          "Added 402 to failover codes for better provider switching",
-        ],
+        tag: 'Transparency',
+        title: 'Responses are traceable to the exact build',
+        body: 'Every response can now be tied back to the precise build that served it. When something looks wrong, a report names a specific release instead of a rough window.',
       },
       {
-        category: "Frontend Fixes",
-        items: [
-          "Eliminated N+1 API calls when fetching models for better performance",
-          "Fixed Privy passwordless network errors with graceful handling",
-          "Fixed PostHog provider loading issues",
-          "Fixed message format conversion",
-          "Updated chat dropdown to show a \"Load all models\" option",
-          "Fixed Invalid hook call error in PrivyProviderWrapper",
-          "Fixed crypto.randomUUID compatibility issues",
-          "Fixed Google gateway ID mismatch",
-        ],
+        tag: 'API',
+        title: 'Check how a model id resolves before you send traffic',
+        body: 'A diagnostic now reports how a given model id resolves against the live index — which exact model it lands on, or that it does not resolve at all. Useful when pinning a snapshot for a long-running agent.',
       },
-      {
-        category: "CI/CD Fixes",
-        items: [
-          "Added permissions and handling for null head_commit in workflows",
-          "Fixed SUBREPO_DISPATCH_TOKEN usage for submodule checkout",
-          "Added GitHub Actions workflow to auto-sync PR branches with main",
-          "Verified token access and refactored PR search in auto-merge",
-          "Sped up test-subrepos workflow",
-        ],
-      },
-    ],
-    infrastructure: [
-      "Multiple submodule updates to keep frontend and backend in sync",
-      "Added server-side tools documentation (TOOLS.md, TOOLS_IMPLEMENTATION.md)",
-      "LinkedIn Insight Tag integration",
-      "Improved API alignment with OpenAI docs for /messages and /responses endpoints",
-      "Added Statsig integration for frontend",
-    ],
-    documentation: [
-      "Added Visual Regression Testing guide with baseline steps",
-      "Added pending migrations documentation for missing rate limit tables",
     ],
   },
   {
-    date: "December 21, 2025",
-    features: [
-      "Share Chat with Unique URLs: Added ability to share chat conversations via unique URLs for easy collaboration and sharing",
-      "Floating New Chat Button (Mobile): Added floating New Chat button for mobile users, hidden on /chat page for cleaner UX",
-      "Checkout & Confirmation Pages: Added checkout and confirmation pages for improved conversion tracking",
-      "Cerebras Model Support: Added complete Cerebras model support including Qwen-3-32b",
-      "Provider Pricing Audit System: Implemented dynamic provider pricing with 4-layer fallback across 4 providers, including standardized pricing registry",
-      "Privy User Reconciliation: Added scheduled user reconciliation tooling between Privy and Supabase with bulk API key regeneration support",
-      "Credit Package Updates: Updated credit page to three monthly tiers, removed Starter tier",
-    ],
-    bugFixes: [
+    date: 'September 9, 2026',
+    summary: 'Streams fail loudly; aliases resolve exactly.',
+    entries: [
       {
-        category: "Mobile & Responsiveness",
-        items: [
-          "Fixed mobile chat responsiveness improvements",
-          "Fixed table scrolling improvements in frontend",
-          "Improved floating button visibility and z-index handling",
-        ],
+        tag: 'Reliability',
+        title: 'A stream that fails upstream ends with an error event',
+        body: 'If an upstream failure interrupts a response part-way through, the stream now ends with an explicit error event instead of simply stopping. A truncated answer can no longer be mistaken for a complete one.',
       },
       {
-        category: "Model & Provider Fixes",
-        items: [
-          "Fixed Cerebras Qwen-3-32b chat functionality",
-          "Fixed Gemini model configuration (2.1-pro -> 2.5-pro)",
-          "Fixed Google Vertex AI model initialization at startup",
-          "Fixed OneRouter models display with authenticated /v1/models endpoint",
-          "Removed Kimi-K2-Thinking from NEAR AI model lists",
-          "Fixed context_length default detection for 4096 token models",
-          "Preserved multimodal info and fixed context_length defaults",
-        ],
+        tag: 'API',
+        title: 'Undated aliases resolve to their exact dated snapshot',
+        body: 'An undated model alias now resolves to the exact dated snapshot behind it, and the response tells you which one you got. Resolution only: an id is never quietly swapped for a nearby model.',
       },
       {
-        category: "Security Fixes",
-        items: [
-          "Fixed command injection vulnerability in validation scripts",
-          "Removed wildcard CORS configuration from OTEL collector",
-          "Improved wildcard detection and fixed false positives in validation",
-        ],
+        tag: 'API',
+        title: 'Unknown model ids return a clear 400',
+        body: 'An id that does not exist now returns 400 model_not_found instead of a retryable status. An agent stops retrying a request that can never succeed and surfaces the typo instead.',
       },
-      {
-        category: "API & Backend Fixes",
-        items: [
-          "Fixed API key generation to remove special characters for compatibility",
-          "Improved forbidden error messages in chat",
-          "Set default gateway to 'all' for /models endpoint",
-          "Fixed API key verification improvements",
-          "Fixed SQL query to return both users in verification",
-        ],
-      },
-      {
-        category: "Frontend Fixes",
-        items: [
-          "Fixed referred user chat send issue",
-          "Eliminated N+1 API calls when fetching models",
-          "Improved Sentry error visibility with balanced rate limits",
-          "Added early error suppressor for Ethereum property conflicts",
-          "Fixed JSX structure issues",
-        ],
-      },
-      {
-        category: "CI/CD Fixes",
-        items: [
-          "Increased Node.js memory limit in Vercel build steps",
-          "Added write permissions for submodule update job",
-          "Fixed Jest mock hoisting for FloatingNewChatButton tests",
-        ],
-      },
-    ],
-    infrastructure: [
-      "Release email notification system with Resend API integration",
-      "Provider pricing audit implementation with comprehensive documentation",
-      "Multiple submodule updates to keep frontend and backend in sync",
-      "Improved pricing enrichment validation and logging",
-    ],
-    documentation: [
-      "Added visibility debugging guide for FloatingNewChatButton",
-      "Added comprehensive pricing audit documentation",
-      "Fixed documentation paths and removed time-based estimates",
     ],
   },
   {
-    date: "December 14, 2025",
-    features: [
-      "Incognito Mode: Added incognito mode with NEAR models (GLM-4.6 by default)",
-      "Visual Regression Testing: Added Playwright-based visual regression testing",
-      "Model Dropdown Virtualization: Optimized model dropdown with virtualization for better performance",
-      "Rate Limit Retry Button: Added retry button UI when users encounter rate limit (429) errors",
-      "Test Coverage Integration: Added Codecov integration for frontend and backend test coverage",
-    ],
-    bugFixes: [
+    date: 'September 8, 2026',
+    summary: 'Errors an agent can act on.',
+    entries: [
       {
-        category: "Streaming Fixes",
-        items: [
-          "Fixed SSE streaming buffering issues",
-          "Fixed StopIteration error in streaming (PEP 479 compliance)",
-          "Reduced streaming timeout from 10 minutes to 1 minute max",
-        ],
+        tag: 'API',
+        title: 'Vendor-native model ids are accepted as written',
+        body: 'Model ids in the form the provider publishes are accepted directly, so code that already names a model does not need a Gatewayz-specific spelling.',
       },
       {
-        category: "Model & Routing Fixes",
-        items: [
-          "Fixed NEAR model routing and improved OpenRouter error logging",
-          "Fixed auto-router bad request issues",
-          "Fixed trial validation in backend",
-        ],
+        tag: 'API',
+        title: 'Spend ceilings return 402 with a machine-readable code',
+        body: 'A key that has spent its request cap returns 402 request_cap_exhausted, and an account with no balance returns 402 insufficient_credits. Both are terminal: a caller can top up or raise the cap rather than retry into the same wall.',
       },
       {
-        category: "Frontend Fixes",
-        items: [
-          "Fixed pricing/contact links",
-          "Fixed speech recognition error handling and cleanup",
-        ],
+        tag: 'API',
+        title: 'An invalid key is rejected, not demoted',
+        body: 'A request that supplies a key which does not validate is now rejected outright. Previously such a request could fall through to the anonymous path, which made a bad key look like a working one with surprising limits.',
       },
     ],
-    infrastructure: [],
-    documentation: [],
   },
   {
-    date: "December 7, 2025",
-    features: [
-      "Auto-Merge Workflow: Added GitHub Actions workflow to automatically merge subrepo PRs when the corresponding monorepo PR is merged",
-      "New Chat Button Styling: Updated New Chat button styling in the sidebar for improved UX",
-      "PR Preview Deployments: Added GitHub Actions workflow for automated PR preview deployments with Vercel and Railway integration",
-      "Document Upload: Added document upload feature to chat interface",
-      "Voice Transcription: Added voice transcription feature to frontend",
-    ],
-    bugFixes: [
+    date: 'August 18, 2026',
+    summary: 'Account and billing surfaces hardened.',
+    entries: [
       {
-        category: "Security Fixes",
-        items: [
-          "Addressed security vulnerabilities in auto-merge workflow",
-          "Fixed CVE-2025-55182 in frontend dependencies",
-          "Fixed chat failure for unauthenticated users with invalid API key header",
-        ],
+        tag: 'App',
+        title: 'Sign-in hardened',
+        body: 'Sign-in and account linking were hardened, and the billing surfaces now check that the account asking for a record is the account that owns it. No action is needed on your side.',
       },
-      {
-        category: "Image Handling",
-        items: [
-          "Fixed image compression improvements in frontend",
-          "Fixed image load failure handling and multimodal chat content",
-          "Fixed image attachment errors",
-        ],
-      },
-      {
-        category: "Streaming Improvements",
-        items: [
-          "Optimized streaming startup time",
-          "Fixed anonymous user streaming errors",
-          "Added adaptive timeouts for mobile network support",
-          "Fixed chat streaming optimizations",
-        ],
-      },
-      {
-        category: "Provider & Model Fixes",
-        items: [
-          "Fixed Google, Nebius, and Alpaca model listings in backend",
-          "Fixed Alibaba models loading",
-          "Fixed gateway model counts showing zero",
-          "Fixed INVALID_API_KEY error handling",
-        ],
-      },
-      {
-        category: "CI/CD Fixes",
-        items: [
-          "Improved change detection for PR merge commits in deploy workflow",
-          "Fixed npm ci failures with package-lock.json updates",
-          "Added checks to detect dirty git submodules in workflows",
-          "Fixed Node.js heap memory limits for frontend preview builds",
-          "Added pnpm setup for frontend preview deployment",
-        ],
-      },
-      {
-        category: "Frontend Fixes",
-        items: [
-          "Fixed bullet alignment in UI components",
-          "Fixed Redis graceful degradation",
-          "Fixed PostHog SDK v6.x compatibility",
-        ],
-      },
-    ],
-    infrastructure: [
-      "Multiple submodule updates to keep frontend and backend in sync",
-      "Improved submodule consistency and conflict resolution",
-      "Enhanced deployment workflow reliability with symmetric empty checks and push retry logic",
-    ],
-    documentation: [],
-  },
-  {
-    date: "December 5, 2025",
-    features: [
-      "Streaming Standardization: Implemented unified streaming response format across the backend with stream_normalizer to standardize all provider responses",
-      "CI/CD Pipeline: Added GitHub Actions workflow and scripts to test subrepos",
-      "Superpowers Sync: Added script to sync .claude folder from superpowers repository",
-    ],
-    bugFixes: [
-      {
-        category: "Streaming Fixes",
-        items: [
-          "Fixed 429 rate limit errors in /chat streaming endpoint",
-          "Fixed streaming errors for non-authenticated chat sessions",
-          "Fixed streaming and reasoning format issues",
-          "Fixed frontend streaming debugging issues",
-        ],
-      },
-      {
-        category: "UI/UX Fixes",
-        items: [
-          "Fixed double scrollbar issues in settings page",
-          "Fixed double scroll on referrals page",
-          "Fixed copy button functionality",
-          "Fixed provider naming inconsistencies",
-        ],
-      },
-      {
-        category: "Backend Fixes",
-        items: [
-          "Fixed Alibaba Cloud API key error with region failover support",
-          "Fixed temporary API key warning in auth flow",
-          "Handled 429 Too Many Requests errors gracefully",
-        ],
-      },
-      {
-        category: "CI Fixes",
-        items: [
-          "Excluded documentation files from merge conflict checks",
-          "Used non-recursive submodule init to avoid nested submodule issues",
-        ],
-      },
-    ],
-    infrastructure: [
-      "Initial setup with frontend and backend as git submodules",
-      "Multiple submodule updates to keep frontend and backend in sync",
-      "Reasoning persistence improvements in frontend",
-    ],
-    documentation: [
-      "Added streaming standardization plan documentation",
-      "Addressed review feedback in streaming-standardization-plan",
     ],
   },
 ];
@@ -592,105 +187,66 @@ const releaseNotes: ReleaseWeek[] = [
 export default function ReleasesPage() {
   return (
     <div className="min-h-screen bg-background" style={{ marginTop: '-65px' }}>
-      <div data-page-content className="mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-8 py-8 pt-32 has-onboarding-banner:pt-40" style={{ transition: 'padding-top 0.3s ease' }}>
+      <div
+        data-page-content
+        className="mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-8 py-8 pt-32 has-onboarding-banner:pt-40"
+        style={{ transition: 'padding-top 0.3s ease' }}
+      >
         {/* Header */}
-        <header className="text-center mb-12">
-          <h1 className="text-2xl lg:text-4xl font-bold tracking-tight">Release Notes</h1>
-          <p className="mt-2 text-sm lg:text-lg text-muted-foreground">
-            Weekly updates and changes to GatewayZ
+        <header className="mb-12 text-center">
+          <h1 className="text-2xl lg:text-4xl font-bold tracking-tight">Changelog</h1>
+          <p className="mx-auto mt-3 max-w-2xl text-sm lg:text-lg text-muted-foreground">
+            What shipped on Gatewayz, newest first. Behaviour you can see from the outside — the
+            error contract, model resolution, streaming, the app and the docs.
           </p>
         </header>
 
-        {/* Release Notes */}
+        {/* Releases */}
         <div className="space-y-8">
-          {releaseNotes.map((release, index) => (
-            <Card key={index} className="overflow-hidden">
+          {CHANGELOG.map((release) => (
+            <Card key={release.date} className="overflow-hidden">
               <CardHeader className="bg-muted/50">
-                <CardTitle className="text-xl lg:text-2xl">
-                  {release.date}
-                </CardTitle>
+                <CardTitle className="text-xl lg:text-2xl">{release.date}</CardTitle>
+                <p className="text-sm text-muted-foreground">{release.summary}</p>
               </CardHeader>
-              <CardContent className="pt-6 space-y-6">
-                {/* Features */}
-                {release.features.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 text-green-600 dark:text-green-400">
-                      Features
-                    </h3>
-                    <ul className="space-y-2">
-                      {release.features.map((feature, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <span className="text-green-600 dark:text-green-400 text-sm">+</span>
-                          <span className="text-sm">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Bug Fixes */}
-                {release.bugFixes.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 text-blue-600 dark:text-blue-400">
-                      Bug Fixes
-                    </h3>
-                    <div className="space-y-4">
-                      {release.bugFixes.map((category, i) => (
-                        <div key={i}>
-                          <h4 className="text-sm font-medium text-muted-foreground mb-2">
-                            {category.category}
-                          </h4>
-                          <ul className="space-y-1">
-                            {category.items.map((item, j) => (
-                              <li key={j} className="flex items-start gap-2">
-                                <span className="text-blue-600 dark:text-blue-400 text-sm">-</span>
-                                <span className="text-sm">{item}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Infrastructure */}
-                {release.infrastructure.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 text-purple-600 dark:text-purple-400">
-                      Infrastructure
-                    </h3>
-                    <ul className="space-y-2">
-                      {release.infrastructure.map((item, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <span className="text-purple-600 dark:text-purple-400 text-sm">*</span>
-                          <span className="text-sm">{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Documentation */}
-                {release.documentation.length > 0 && (
-                  <div>
-                    <h3 className="text-lg font-semibold mb-3 text-orange-600 dark:text-orange-400">
-                      Documentation
-                    </h3>
-                    <ul className="space-y-2">
-                      {release.documentation.map((item, i) => (
-                        <li key={i} className="flex items-start gap-2">
-                          <span className="text-orange-600 dark:text-orange-400 text-sm">#</span>
-                          <span className="text-sm">{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+              <CardContent className="pt-6">
+                <ul className="space-y-6">
+                  {release.entries.map((entry) => (
+                    <li key={entry.title} className="border-l-2 border-border pl-4">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${TAG_CLASSES[entry.tag]}`}
+                        >
+                          {entry.tag}
+                        </span>
+                        <h3 className="text-base font-semibold text-foreground">{entry.title}</h3>
+                      </div>
+                      <p className="text-sm leading-relaxed text-muted-foreground">{entry.body}</p>
+                      {entry.href && (
+                        <a
+                          href={entry.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
+                        >
+                          {entry.hrefLabel ?? 'Read more'} →
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </CardContent>
             </Card>
           ))}
         </div>
+
+        <p className="mt-12 text-center text-sm text-muted-foreground">
+          Looking for the contract behind these changes? It is written out in the{' '}
+          <Link href="/docs" className="font-medium text-primary hover:underline">
+            documentation
+          </Link>
+          .
+        </p>
       </div>
     </div>
   );
