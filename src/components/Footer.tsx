@@ -50,7 +50,7 @@ export function Footer() {
             <h3 className="font-semibold mb-4 text-gray-900">Company</h3>
             <ul className="space-y-2">
               <li>
-                <Link href="/about" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                <Link href="https://www.gatewayz.ai/about" target="_blank" rel="noopener noreferrer" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
                   About
                 </Link>
               </li>
