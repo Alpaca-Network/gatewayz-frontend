@@ -101,12 +101,12 @@ export function AppFooter() {
             <ul className="space-y-2">
               <li>
                 <Link
-                  href="https://blog.gatewayz.ai"
+                  href="https://www.gatewayz.ai/learn"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Blog
+                  Learn
                 </Link>
               </li>
               <li>

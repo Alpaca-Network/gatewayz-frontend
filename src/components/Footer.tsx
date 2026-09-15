@@ -35,12 +35,12 @@ export function Footer() {
             <ul className="space-y-2">
               <li>
                 <a 
-                  href="https://blog.gatewayz.ai" 
+                  href="https://www.gatewayz.ai/learn" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
                 >
-                  Blog
+                  Learn
                 </a>
               </li>
             </ul>

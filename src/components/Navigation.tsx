@@ -14,7 +14,7 @@ const Navigation = () => {
     { name: "About", path: "/about" },
     { name: "Pricing", path: "/pricing" },
     { name: "Documentation", path: "https://docs.gatewayz.ai/", external: true },
-    { name: "Blog", path: "https://blog.gatewayz.ai", external: true },
+    { name: "Learn", path: "https://www.gatewayz.ai/learn", external: true },
     { name: "Contact", path: "/contact" },
   ];
 
@@ -68,12 +68,12 @@ const Navigation = () => {
                   Documentation
                 </a>
                 <a
-                  href="https://blog.gatewayz.ai"
+                  href="https://www.gatewayz.ai/learn"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
                 >
-                  Blog
+                  Learn
                 </a>
                 <Link
                   href="/contact"
