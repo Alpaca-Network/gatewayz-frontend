@@ -98,7 +98,7 @@ export function OnboardingBanner() {
       },
       {
         id: 'explore',
-        title: 'Explore 10,000+ AI Models',
+        title: 'Explore the Model Catalog',
         path: '/models',
         completed: taskState.explore || false,
       },

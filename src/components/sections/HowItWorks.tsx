@@ -1,21 +1,24 @@
-import { Zap, DollarSign, TrendingUp } from "lucide-react";
+import { Scale, Braces, Ruler } from "lucide-react";
 
+// The three pillars. Every sentence here describes behaviour the API has
+// today -- no latency figures, cost-reduction percentages or SLAs. A number we
+// cannot source is removed, never restated.
 export default function HowItWorks() {
   const steps = [
     {
-      icon: Zap,
-      title: "Faster",
-      description: "Sub-100ms routing with global edge network and intelligent caching for lightning-fast AI inference latency"
+      icon: Scale,
+      title: "Neutral by construction",
+      description: "We have no model of our own to steer you toward. Resolution, never substitution: an unknown model id returns a 400, never a quiet swap to the nearest model."
     },
     {
-      icon: DollarSign,
-      title: "Cheaper",
-      description: "Smart model selection and quota pooling reduces inference costs by 60% on average"
+      icon: Braces,
+      title: "Machine-legible",
+      description: "Errors software can act on: unknown model → 400 model_not_found, spent key cap → 402 request_cap_exhausted, no credits → 402 insufficient_credits. A stream that fails upstream ends with an explicit error event."
     },
     {
-      icon: TrendingUp,
-      title: "Revenue-Shared",
-      description: "Earn when others use your builds through our decentralized infrastructure model"
+      icon: Ruler,
+      title: "Measured, not claimed",
+      description: "We publish only what we measure. Prices are per model in the catalog — cost-plus over what the provider charges — not a blanket discount."
     }
   ];
 
@@ -27,12 +30,12 @@ export default function HowItWorks() {
             How Gatewayz Works
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Three key benefits that make Gatewayz the universal gateway for AI inference
+            Three commitments that make Gatewayz an inference layer you can put under an agent
           </p>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
-          {steps.map((step, index) => (
+          {steps.map((step) => (
             <div
               key={step.title}
               className="relative bg-card rounded-2xl p-8 border border-border hover:border-primary/30 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1"

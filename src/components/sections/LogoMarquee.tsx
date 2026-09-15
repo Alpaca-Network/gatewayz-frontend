@@ -10,10 +10,8 @@ interface LogoMarqueeProps {
 export default function LogoMarquee({ compact = false, className = "" }: LogoMarqueeProps) {
   const logos = [
     { original: "/OpenAI_Logo-black.svg", name: "OpenAI" },
-    { original: "/Google_Logo-black.svg", name: "Google" },
     { original: "/anthropic-logo.svg", name: "Anthropic" },
     { original: "/Meta_Logo-black.svg", name: "Meta" },
-    { original: "/deepseek-icon.svg", name: "DeepSeek" },
     { original: "/xai-logo.svg", name: "xAI" },
   ] as const;
 

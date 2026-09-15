@@ -17,11 +17,10 @@ export default function SocialProof({ compact = false, className = "", showText 
   const stats = [
     {
       icon: Users,
-      // Live catalog count (GET /v1/models), verified 2026-09-14. A hardcoded
-      // number drifts -- this said "10,000+" and the truth was 68. Fetch it
-      // if this section ever becomes load-bearing.
-      value: "68",
-      label: "Models Available",
+      // No hardcoded model count: it drifts (this once said "10,000+" against
+      // a real 68). Name the providers; the catalog carries the live list.
+      value: "5",
+      label: "Model Providers",
       description: "OpenAI, Anthropic, Meta, Moonshot and xAI through one catalog"
     },
     {

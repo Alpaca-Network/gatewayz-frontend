@@ -93,7 +93,7 @@ describe('StartOpencodePage', () => {
       render(<StartOpencodePage />);
 
       expect(screen.getByText('Setup OpenCode with Gatewayz')).toBeInTheDocument();
-      expect(screen.getByText(/One command\. Access to 1000\+ AI models/)).toBeInTheDocument();
+      expect(screen.getByText(/One command\. Every model in the Gatewayz catalog/)).toBeInTheDocument();
     });
 
     it('should render all three setup steps', () => {
@@ -250,11 +250,11 @@ describe('StartOpencodePage', () => {
     it('should display available models', () => {
       render(<StartOpencodePage />);
 
-      expect(screen.getByText('anthropic/claude-sonnet-4.5')).toBeInTheDocument();
+      expect(screen.getByText('anthropic/claude-sonnet-4-6')).toBeInTheDocument();
       expect(screen.getByText('openai/gpt-5')).toBeInTheDocument();
-      expect(screen.getByText('google/gemini-2.5-pro')).toBeInTheDocument();
-      expect(screen.getByText('x-ai/grok-3-turbo-preview')).toBeInTheDocument();
-      expect(screen.getByText('deepseek/deepseek-v3.1')).toBeInTheDocument();
+      expect(screen.getByText('moonshot/kimi-k2.7-code')).toBeInTheDocument();
+      expect(screen.getByText('grok-code-fast-1')).toBeInTheDocument();
+      expect(screen.getByText('meta/muse-spark-1.3')).toBeInTheDocument();
     });
   });
 

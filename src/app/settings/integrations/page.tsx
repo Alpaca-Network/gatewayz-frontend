@@ -225,7 +225,7 @@ const OpenCodeCard = () => {
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">
-            OpenCode is an open-source AI coding assistant that runs in your terminal. Connect it to GatewayZ for access to 1000+ models.
+            OpenCode is an open-source AI coding assistant that runs in your terminal. Connect it to GatewayZ for access to every model in the catalog.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
@@ -239,8 +239,8 @@ const OpenCodeCard = () => {
             <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/30">
               <Terminal className="h-4 w-4 text-emerald-500 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium">1000+ Models</p>
-                <p className="text-xs text-muted-foreground">Claude, GPT, Gemini, Grok, DeepSeek</p>
+                <p className="text-sm font-medium">One Catalog</p>
+                <p className="text-xs text-muted-foreground">Claude, GPT, Grok, Kimi</p>
               </div>
             </div>
             <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/30">
@@ -390,22 +390,22 @@ export default function IntegrationsPage() {
               <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/30">
                 <Zap className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium">Smart Routing</p>
-                  <p className="text-xs text-muted-foreground">Auto-select best model for each task</p>
+                  <p className="text-sm font-medium">Native Messages API</p>
+                  <p className="text-xs text-muted-foreground">Point ANTHROPIC_BASE_URL at Gatewayz</p>
                 </div>
               </div>
               <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/30">
                 <Terminal className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium">10+ Models</p>
-                  <p className="text-xs text-muted-foreground">Claude, GPT-4, Gemini, DeepSeek</p>
+                  <p className="text-sm font-medium">One Catalog</p>
+                  <p className="text-xs text-muted-foreground">Claude, GPT, Grok, Kimi</p>
                 </div>
               </div>
               <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/30">
                 <Code2 className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium">Cost Optimized</p>
-                  <p className="text-xs text-muted-foreground">Route to cost-effective models</p>
+                  <p className="text-sm font-medium">Per-Model Pricing</p>
+                  <p className="text-xs text-muted-foreground">Cost-plus prices listed in the catalog</p>
                 </div>
               </div>
             </div>

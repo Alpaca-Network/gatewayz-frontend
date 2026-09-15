@@ -93,10 +93,10 @@ export default function OnboardingPage() {
   const [copiedCode, setCopiedCode] = useState(false);
   const [models, setModels] = useState<Array<{ id: string; name: string }>>([
     { id: 'openai/gpt-4', name: 'GPT-4' },
-    { id: 'anthropic/claude-3-opus', name: 'Claude 3 Opus' },
-    { id: 'google/gemini-pro', name: 'Gemini Pro' },
-    { id: 'meta-llama/llama-3-70b', name: 'Llama 3 70B' },
-    { id: 'mistralai/mistral-large', name: 'Mistral Large' },
+    { id: 'anthropic/claude-sonnet-4-6', name: 'Claude Sonnet 4.6' },
+    { id: 'grok-4', name: 'Grok 4' },
+    { id: 'moonshot/kimi-k3', name: 'Kimi K3' },
+    { id: 'meta/muse-spark-1.3', name: 'Muse Spark 1.3' },
   ]);
 
   // Check if running in desktop mode

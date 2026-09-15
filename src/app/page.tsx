@@ -527,7 +527,7 @@ console.log(response.choices[0].message.content);`,
 
                 {/* Description - hidden on mobile, visible on larger screens */}
                 <p className="hidden sm:block text-sm text-muted-foreground mb-4 mt-4 flex-grow leading-relaxed">
-                  Start chatting → we pick the best model for you
+                  Start chatting with any model in the catalog
                 </p>
 
                 {/* Get Started - only visible on larger screens */}

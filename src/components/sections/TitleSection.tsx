@@ -11,12 +11,12 @@ export default function TitleSection() {
                 <span className="bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent">
                     Gatewayz:
                 </span>
-                <span className="text-gray-900 dark:text-white"> One API for Any AI Model</span>
+                <span className="text-gray-900 dark:text-white"> The inference layer for the agentic economy</span>
             </h1>
 
             {/* Subheadline */}
             <p className="text-xs xs:text-sm sm:text-base md:text-lg lg:text-xl text-gray-600 dark:text-gray-300 max-w-3xl mx-auto text-balance leading-relaxed animate-fade-in-up opacity-0 delay-200 px-2 sm:px-3">
-              Access every major AI model through one OpenAI-compatible API — one key, competitive routing prices, and models you can swap without re-configuring.
+              One key and one neutral endpoint for every agent you run — OpenAI-compatible, with native Anthropic Messages.
             </p>
 
             {/* Chat Widget */}

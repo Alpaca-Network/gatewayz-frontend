@@ -6,7 +6,7 @@ export default function ProblemSolution() {
       <div className="container mx-auto max-w-5xl">
         <div className="text-center mb-10">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-3">The AI Inference Challenge</h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">Managing AI inference costs and latency shouldn't be this complicated</p>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">Every agent you run shouldn't need its own integration</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
@@ -19,10 +19,10 @@ export default function ProblemSolution() {
               <h3 className="text-2xl font-bold text-foreground mt-1">The Problem</h3>
             </div>
             <p className="text-muted-foreground text-base mb-5 leading-relaxed">
-              Managing multiple AI providers means dealing with fragmented APIs, scattered billing, and unpredictable costs.
+              Running agents across several model providers means fragmented APIs, scattered billing, and errors every provider shapes differently.
             </p>
             <ul className="space-y-3">
-              {["Different APIs for each provider", "Multiple dashboards & invoices", "No cost optimization"].map((item) => (
+              {["Different APIs for each provider", "Multiple dashboards & invoices", "Errors your code cannot branch on"].map((item) => (
                 <li key={item} className="flex items-start gap-3 text-sm text-muted-foreground">
                   <span className="w-2 h-2 rounded-full bg-red-500/60 mt-1.5 flex-shrink-0" />
                   <span>{item}</span>
@@ -40,10 +40,10 @@ export default function ProblemSolution() {
               <h3 className="text-2xl font-bold text-foreground mt-1">The Solution</h3>
             </div>
             <p className="text-foreground text-base mb-5 leading-relaxed">
-              <strong className="text-primary font-semibold">Gatewayz</strong> unifies every major model into one API—smart routing, transparent pricing, single invoice.
+              <strong className="text-primary font-semibold">Gatewayz</strong> puts every model it serves behind one neutral endpoint — one key, per-model prices, one balance.
             </p>
             <ul className="space-y-3">
-              {["One API for all providers", "Single bill, simplified tracking", "Auto-optimized for cost & speed"].map((item) => (
+              {["One key across OpenAI, Anthropic, xAI, Moonshot and Meta", "One credit balance, per-model prices in the catalog", "Errors with stable codes your software can act on"].map((item) => (
                 <li key={item} className="flex items-start gap-3 text-sm text-foreground">
                   <CheckCircle className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
                   <span>{item}</span>

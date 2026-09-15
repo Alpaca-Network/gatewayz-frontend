@@ -117,7 +117,7 @@ describe('useTier', () => {
 
       expect(result.current.tierInfo).toEqual({
         displayName: 'Starter',
-        description: '$35/month - $35 in credits (20% savings vs pay-as-you-go)',
+        description: '$35/month - $35 in credits',
         monthlyPrice: '$35.00',
         isSubscription: true,
       });
@@ -192,7 +192,7 @@ describe('useTier', () => {
 
       expect(result.current.tierInfo).toEqual({
         displayName: 'Pro',
-        description: '$120/month - $130 in credits (27% savings vs pay-as-you-go)',
+        description: '$120/month - $130 in credits',
         monthlyPrice: '$120.00',
         isSubscription: true,
       });
@@ -313,7 +313,7 @@ describe('useTier', () => {
 
       expect(result.current.tierInfo).toEqual({
         displayName: 'Max',
-        description: '$350/month - $400 in credits (30% savings vs pay-as-you-go)',
+        description: '$350/month - $400 in credits',
         monthlyPrice: '$350.00',
         isSubscription: true,
       });

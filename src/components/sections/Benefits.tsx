@@ -3,17 +3,17 @@ import { Zap, Shield, DollarSign } from "lucide-react";
 const items = [
   {
     title: "Unified API",
-    desc: "Access every major model through one simple interface",
+    desc: "One key and one endpoint for every model in the catalog",
     Icon: Zap,
   },
   {
-    title: "Smart Routing",
-    desc: "Auto-select the best model for cost and performance",
+    title: "Neutral Resolution",
+    desc: "The model you name, or a 400 — never a nearest-model swap",
     Icon: DollarSign,
   },
   {
-    title: "Secure & Reliable",
-    desc: "Enterprise-grade security with 99.9% uptime",
+    title: "Machine-Legible Errors",
+    desc: "Stable error codes your software can act on",
     Icon: Shield,
   },
 ];

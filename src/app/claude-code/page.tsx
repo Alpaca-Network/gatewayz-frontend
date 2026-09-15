@@ -120,7 +120,7 @@ export default function ClaudeCodePage() {
           <h1 className="text-4xl font-bold">Claude Code + GatewayZ</h1>
         </div>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Use Claude Code with GatewayZ for smart AI routing, cost optimization, and access to 10+ models
+          Use Claude Code with GatewayZ on one key — native Anthropic Messages, plus models from OpenAI, xAI, Moonshot and Meta
         </p>
       </div>
 
@@ -131,9 +131,9 @@ export default function ClaudeCodePage() {
             <div className="flex items-start gap-3">
               <Zap className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold mb-1">Smart Routing</h3>
+                <h3 className="font-semibold mb-1">Native Messages API</h3>
                 <p className="text-sm text-muted-foreground">
-                  Automatically route to the best model for each task
+                  Set ANTHROPIC_BASE_URL=https://api.gatewayz.ai — no translation proxy
                 </p>
               </div>
             </div>
@@ -144,9 +144,9 @@ export default function ClaudeCodePage() {
             <div className="flex items-start gap-3">
               <Code2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold mb-1">10+ Models</h3>
+                <h3 className="font-semibold mb-1">One Catalog</h3>
                 <p className="text-sm text-muted-foreground">
-                  Claude, GPT-4, Gemini, DeepSeek, and more
+                  Claude, GPT, Grok, Kimi and Muse Spark
                 </p>
               </div>
             </div>
@@ -157,9 +157,9 @@ export default function ClaudeCodePage() {
             <div className="flex items-start gap-3">
               <Terminal className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold mb-1">Cost Optimized</h3>
+                <h3 className="font-semibold mb-1">Per-Model Pricing</h3>
                 <p className="text-sm text-muted-foreground">
-                  Save money with intelligent model selection
+                  Cost-plus prices, listed per model in the catalog
                 </p>
               </div>
             </div>
@@ -230,7 +230,7 @@ export default function ClaudeCodePage() {
             <ul className="text-sm text-blue-900 dark:text-blue-100 list-disc ml-5 space-y-1">
               <li>Install Claude Code Router</li>
               <li>Configure your GatewayZ API key</li>
-              <li>Set up smart model routing</li>
+              <li>Configure Claude Code Router&apos;s model settings</li>
               <li>Test the connection</li>
             </ul>
           </div>
@@ -321,22 +321,22 @@ export default function ClaudeCodePage() {
         <CardHeader>
           <CardTitle>Available Models</CardTitle>
           <CardDescription>
-            Access these models through GatewayZ with smart routing
+            A few of the models in the GatewayZ catalog — the full list is on the models page
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {[
               { name: 'GPT-5', provider: 'OpenAI' },
-              { name: 'Gemini 2.5 Pro', provider: 'Google' },
-              { name: 'Grok Code Fast 1', provider: 'x.ai' },
-              { name: 'GPT-OSS-20B', provider: 'OpenAI' },
-              { name: 'DeepSeek V3.1', provider: 'DeepSeek' },
-              { name: 'Gemini 2.5 Flash', provider: 'Google' },
-              { name: 'Claude Sonnet 4.5', provider: 'Anthropic' },
-              { name: 'Claude Sonnet 4', provider: 'Anthropic' },
-              { name: 'Gemma 3 12B', provider: 'Google' },
-              { name: 'Gemini 2.0 Flash', provider: 'Google' },
+              { name: 'GPT-5.1 Codex', provider: 'OpenAI' },
+              { name: 'Claude Sonnet 4.6', provider: 'Anthropic' },
+              { name: 'Claude Haiku 4.5', provider: 'Anthropic' },
+              { name: 'Grok Code Fast 1', provider: 'xAI' },
+              { name: 'Grok 4', provider: 'xAI' },
+              { name: 'Kimi K2.7 Code', provider: 'Moonshot' },
+              { name: 'Kimi K3', provider: 'Moonshot' },
+              { name: 'Muse Spark 1.3', provider: 'Meta' },
+              { name: 'GPT-4.1', provider: 'OpenAI' },
             ].map((model, i) => (
               <div key={i} className="p-3 rounded-lg border bg-card">
                 <div className="font-medium text-sm">{model.name}</div>

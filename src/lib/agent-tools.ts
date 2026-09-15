@@ -43,7 +43,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   {
     slug: 'claude-code',
     name: 'Claude Code',
-    tagline: "Anthropic's terminal coding agent, running on any model through one key.",
+    tagline: "Anthropic's terminal coding agent, pointed at Gatewayz with two environment variables.",
     protocol: 'anthropic-messages',
     repoUrl: 'https://github.com/anthropics/claude-code',
     install: {
@@ -73,7 +73,7 @@ export ANTHROPIC_AUTH_TOKEN={{API_KEY}}`,
     seo: {
       title: 'Run Claude Code on Gatewayz — setup guide',
       description:
-        'Point Claude Code at Gatewayz with two environment variables. Native Anthropic Messages API support, prompt caching passed through, any model on one key.',
+        'Point Claude Code at Gatewayz with two environment variables. Native Anthropic Messages API support, prompt caching passed through, one key.',
       keywords: [
         'claude code',
         'claude code cheaper',
@@ -116,7 +116,7 @@ Model ID:       anthropic/claude-sonnet-4-5-20250929`,
     seo: {
       title: 'Run Cline on Gatewayz — setup guide',
       description:
-        'Configure Cline to use Gatewayz as an OpenAI-compatible provider. One key, every model, tool calling and prompt caching supported.',
+        'Configure Cline to use Gatewayz as an OpenAI-compatible provider. One key for every model in the catalog, tool calling and prompt caching supported.',
       keywords: ['cline', 'cline vscode', 'cline api provider', 'cline cheaper models'],
     },
   },

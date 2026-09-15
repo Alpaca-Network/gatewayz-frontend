@@ -282,7 +282,7 @@ describe('SignupPage', () => {
       // Core card elements should always be visible
       expect(screen.getByText('Welcome to Gatewayz!')).toBeInTheDocument();
       expect(screen.getByText("What you'll get:")).toBeInTheDocument();
-      expect(screen.getByText('Access to every major AI model')).toBeInTheDocument();
+      expect(screen.getByText('One key for models from OpenAI, Anthropic, xAI, Moonshot and Meta')).toBeInTheDocument();
     });
   });
 
@@ -302,8 +302,8 @@ describe('SignupPage', () => {
     it('should render benefits list', () => {
       render(<SignupPage />);
 
-      expect(screen.getByText('Access to every major AI model')).toBeInTheDocument();
-      expect(screen.getByText('Advanced AI routing & analytics')).toBeInTheDocument();
+      expect(screen.getByText('One key for models from OpenAI, Anthropic, xAI, Moonshot and Meta')).toBeInTheDocument();
+      expect(screen.getByText('OpenAI-compatible, with native Anthropic Messages')).toBeInTheDocument();
     });
   });
 
