@@ -48,8 +48,8 @@ describe('Footer', () => {
   it('should render Resources section with Blog link', () => {
     render(<Footer />);
     expect(screen.getByText('Resources')).toBeInTheDocument();
-    const blogLink = screen.getByRole('link', { name: 'Blog' });
-    expect(blogLink).toHaveAttribute('href', 'https://blog.gatewayz.ai');
+    const learnLink = screen.getByRole('link', { name: 'Learn' });
+    expect(learnLink).toHaveAttribute('href', 'https://www.gatewayz.ai/learn');
   });
 
   it('should render Company section links', () => {
