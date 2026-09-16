@@ -18,37 +18,24 @@ export const TERRAGON_DASHBOARD_URL = 'https://terragon-www-production.up.railwa
  * These redirects are applied at the Next.js routing level,
  * before any page components are rendered.
  */
-/**
- * Mirrors isWayzConfigured() in src/lib/wayz/addresses.ts.
- *
- * Deliberately duplicated rather than imported: this module is pulled in by
- * next.config.ts, which Next compiles on its own without the "@/" path alias,
- * so importing from src/lib there fails to resolve at config-compile time.
- * Two lines of duplication beats a build that breaks in a way jest can't see.
- */
-function wayzIsConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_WAYZ_TOKEN_ADDRESS?.trim() &&
-      process.env.NEXT_PUBLIC_WAYZ_STAKING_ADDRESS?.trim()
-  );
-}
-
 export function getRedirects(): Redirect[] {
   return [
-    // Staking is gated on the WAYZ contract addresses (src/lib/wayz/addresses.ts).
-    // The page itself already calls notFound() when unconfigured, but as a
-    // statically generated route that serves the not-found body with HTTP 200 —
-    // a soft 404, which crawlers read as a live page. A redirect is evaluated
-    // before rendering, so it is not subject to that, and it gives a real 3xx.
-    ...(wayzIsConfigured()
-      ? []
-      : [
-          {
-            source: '/staking',
-            destination: '/',
-            permanent: false,
-          },
-        ]),
+    // Staking is out of the product for now (WAYZ is hidden), so this is
+    // unconditional rather than gated on the contract addresses.
+    //
+    // The conditional version did not work: next.config.ts evaluates these
+    // rules at BUILD time, while the page's own gate evaluates at REQUEST
+    // time, and the two disagreed about whether WAYZ was configured — so no
+    // rule was emitted and /staking kept answering 200. Verified against the
+    // unconditional /deck rule in this same file, which returns 307 correctly.
+    //
+    // To bring staking back: delete this entry. The page's own gate and the
+    // header nav link both still key off the contract addresses.
+    {
+      source: '/staking',
+      destination: '/',
+      permanent: false,
+    },
     // Deck presentation redirect
     {
       source: '/deck',
