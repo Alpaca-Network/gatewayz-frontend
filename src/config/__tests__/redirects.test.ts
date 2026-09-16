@@ -1,39 +1,30 @@
 /**
- * /staking must be unreachable while WAYZ is unconfigured.
+ * /staking must be unreachable while WAYZ is out of the product.
  *
- * The page calls notFound(), but as a statically generated route it serves the
- * not-found body with HTTP 200 — a soft 404 crawlers read as a live page. A
- * redirect is evaluated before rendering, so it yields a real 3xx regardless.
+ * Three earlier attempts failed. notFound() on a statically generated route
+ * serves the not-found body with HTTP 200 (a soft 404 crawlers read as live),
+ * force-dynamic did not change that, and a redirect gated on the contract
+ * addresses emitted no rule at all — next.config.ts evaluates these at BUILD
+ * time while the page gate evaluates at REQUEST time, and the two disagreed.
+ * Unconditional is the version that works, matching the /deck rule beside it.
  */
 import { getRedirects } from '../redirects';
 
-const withEnv = (token?: string, staking?: string) => {
-  process.env.NEXT_PUBLIC_WAYZ_TOKEN_ADDRESS = token ?? '';
-  process.env.NEXT_PUBLIC_WAYZ_STAKING_ADDRESS = staking ?? '';
-  return getRedirects();
-};
-
 describe('staking redirect', () => {
-  const env = { ...process.env };
-  afterEach(() => { process.env = { ...env }; });
-
-  it('redirects /staking away when WAYZ is unconfigured', () => {
-    const staking = withEnv().find((r) => r.source === '/staking');
+  it('redirects /staking regardless of environment', () => {
+    const staking = getRedirects().find((r) => r.source === '/staking');
     expect(staking).toBeDefined();
     expect(staking?.destination).toBe('/');
     expect(staking?.permanent).toBe(false);
   });
 
-  it('leaves /staking reachable once both addresses are set', () => {
-    const rules = withEnv('0xToken', '0xStaking');
-    expect(rules.find((r) => r.source === '/staking')).toBeUndefined();
+  it('is not conditional on the WAYZ addresses', () => {
+    process.env.NEXT_PUBLIC_WAYZ_TOKEN_ADDRESS = '0xToken';
+    process.env.NEXT_PUBLIC_WAYZ_STAKING_ADDRESS = '0xStaking';
+    expect(getRedirects().find((r) => r.source === '/staking')).toBeDefined();
   });
 
-  it('treats a half-configured pair as unconfigured', () => {
-    expect(withEnv('0xToken', '').find((r) => r.source === '/staking')).toBeDefined();
-  });
-
-  it('does not disturb the existing redirects', () => {
-    expect(withEnv().some((r) => r.source === '/deck')).toBe(true);
+  it('leaves the existing redirects alone', () => {
+    expect(getRedirects().some((r) => r.source === '/deck')).toBe(true);
   });
 });
