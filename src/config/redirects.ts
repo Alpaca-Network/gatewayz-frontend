@@ -18,8 +18,37 @@ export const TERRAGON_DASHBOARD_URL = 'https://terragon-www-production.up.railwa
  * These redirects are applied at the Next.js routing level,
  * before any page components are rendered.
  */
+/**
+ * Mirrors isWayzConfigured() in src/lib/wayz/addresses.ts.
+ *
+ * Deliberately duplicated rather than imported: this module is pulled in by
+ * next.config.ts, which Next compiles on its own without the "@/" path alias,
+ * so importing from src/lib there fails to resolve at config-compile time.
+ * Two lines of duplication beats a build that breaks in a way jest can't see.
+ */
+function wayzIsConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_WAYZ_TOKEN_ADDRESS?.trim() &&
+      process.env.NEXT_PUBLIC_WAYZ_STAKING_ADDRESS?.trim()
+  );
+}
+
 export function getRedirects(): Redirect[] {
   return [
+    // Staking is gated on the WAYZ contract addresses (src/lib/wayz/addresses.ts).
+    // The page itself already calls notFound() when unconfigured, but as a
+    // statically generated route that serves the not-found body with HTTP 200 —
+    // a soft 404, which crawlers read as a live page. A redirect is evaluated
+    // before rendering, so it is not subject to that, and it gives a real 3xx.
+    ...(wayzIsConfigured()
+      ? []
+      : [
+          {
+            source: '/staking',
+            destination: '/',
+            permanent: false,
+          },
+        ]),
     // Deck presentation redirect
     {
       source: '/deck',
