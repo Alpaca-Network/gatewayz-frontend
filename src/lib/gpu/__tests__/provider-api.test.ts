@@ -280,6 +280,88 @@ describe('gpu/provider-api', () => {
   });
 
   describe('getMyGpuEarnings', () => {
+    // gatewayz-backend PR #2364: USD earnings paid in ETH on Base. Shape copied from
+    // src/services/gpu/payout_views.py::usd_totals_view and gpu_earnings.py::_settlement_view.
+    it('parses USD totals, ETH settlements, and the USD emission allocation', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createSuccessResponse({
+          success: true,
+          data: {
+            totals: {
+              payout_asset: 'ETH',
+              payout_chain: 'base',
+              eth_usd_price: '3000',
+              accrued_usd: '1.5',
+              accrued_usd_micros: 1500000,
+              accrued_wei: '500000000000000',
+              settled_usd: '30',
+              settled_usd_micros: 30000000,
+              settled_wei: '10000000000000000',
+              void_usd: '0',
+              void_usd_micros: 0,
+              void_wei: null,
+            },
+            work: [],
+            settlements: [
+              {
+                id: 7,
+                period_start: '2026-09-22T00:00:00Z',
+                period_end: '2026-09-23T00:00:00Z',
+                asset: 'ETH',
+                chain: 'base',
+                amount_wei: '10000000000000000',
+                amount_usd: '30',
+                amount_eth: '0.01',
+                eth_usd_price: '3000.00000000',
+                confirmed: true,
+                status: 'sent',
+                tx_hash: '0xbeef',
+                tx_url: 'https://basescan.org/tx/0xbeef',
+                error: null,
+              },
+              {
+                id: 1,
+                period_start: '2026-09-02T00:00:00Z',
+                period_end: '2026-09-03T00:00:00Z',
+                amount_wei: '456000000000000000000',
+                status: 'sent',
+                tx_hash: '0xdead',
+                tx_url: 'https://testnet.snowtrace.io/tx/0xdead',
+              },
+            ],
+            emission: {
+              last_epoch: '2026-09-22',
+              score: { compute: '1', speed: '1', availability: '1', unique_models: '1', raw: '1', adjusted: '1', share: '1' },
+              allocation_usd: '55.8',
+              allocation_eth: '0.0186',
+              allocation_wayz: '0.0186',
+              rank: 1,
+              providers_scored: 3,
+            },
+          },
+        })
+      );
+
+      const result = await getMyGpuEarnings();
+
+      expect(result.accrued_usd).toBe(1.5);
+      expect(result.settled_usd).toBe(30);
+      expect(result.settled_wei).toBe(10n ** 16n);
+      expect(result.accrued_wei).toBe(5n * 10n ** 14n);
+      expect(result.void_wei).toBe(0n); // null on the wire -> 0n
+      expect(result.eth_usd_price).toBe(3000);
+      expect(result.settlements[0]).toMatchObject({
+        asset: 'ETH',
+        amount_wei: 10n ** 16n,
+        amount_usd: 30,
+        eth_usd_price: 3000,
+        confirmed: true,
+      });
+      // No `asset` on the wire -> a legacy WAYZ row.
+      expect(result.settlements[1]).toMatchObject({ asset: 'WAYZ', amount_usd: null, confirmed: true });
+      expect(result.emission).toMatchObject({ allocation_usd: 55.8, allocation_eth: 0.0186 });
+    });
+
     // Response shape (`data.totals.{accrued_wei,settled_wei,void_wei}` + `data.work` +
     // `data.settlements` with `id`/`tx_url`) copied from gatewayz-backend
     // tests/routes/test_gpu_earnings.py::test_earnings_returns_totals_work_and_settlements

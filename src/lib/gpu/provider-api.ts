@@ -48,10 +48,21 @@ export interface GpuNode {
   created_at: string;
 }
 
+/** Provider earnings are denominated in USD and paid in native ETH on Base (gatewayz-backend
+ *  PR #2364, 2026-09-22 — WAYZ is not going public for now). USD is the source of truth:
+ *  - `*_usd`: USD earned, per status.
+ *  - `settled_wei`: ETH actually paid on Base (confirmed settlements).
+ *  - `accrued_wei` / `void_wei`: the USD balance converted at the current ETH/USD price — an
+ *    estimate, `0n` when the backend has no trusted price (`eth_usd_price === null`). */
 export interface GpuEarningsSummary {
   accrued_wei: bigint;
   settled_wei: bigint;
   void_wei: bigint;
+  accrued_usd: number;
+  settled_usd: number;
+  void_usd: number;
+  /** USD per ETH used for the `accrued_wei`/`void_wei` estimates; null when unavailable. */
+  eth_usd_price: number | null;
 }
 
 export interface GpuProviderMe {
@@ -100,15 +111,26 @@ export interface GpuWorkRow {
   created_at: string;
 }
 
+/** `ETH` (on Base) for every settlement since 2026-09-22; `WAYZ` (Avalanche Fuji testnet)
+ *  only for legacy pre-switch rows. */
+export type GpuSettlementAsset = 'ETH' | 'WAYZ';
+
 export interface GpuSettlementRow {
   id: number;
   period_start: string;
   period_end: string;
+  /** Amount in the settlement's own asset's smallest unit (wei for both ETH and WAYZ). */
   amount_wei: bigint;
+  asset: GpuSettlementAsset;
+  /** USD value paid (null for legacy WAYZ rows). */
+  amount_usd: number | null;
+  /** USD per ETH used to convert this settlement (null for legacy WAYZ rows). */
+  eth_usd_price: number | null;
+  /** True only once the transfer has an on-chain receipt with status 1. */
+  confirmed: boolean;
   tx_hash: string | null;
-  /** Backend-computed Snowtrace URL (`_settlement_view` in gpu_earnings.py) — use this
-   *  rather than reconstructing one from `tx_hash`, so a network change on the backend
-   *  side doesn't silently desync this client's hardcoded testnet host. */
+  /** Backend-computed explorer URL (`_settlement_view` in gpu_earnings.py: Basescan for ETH,
+   *  Snowtrace for legacy WAYZ) — use this rather than reconstructing one from `tx_hash`. */
   tx_url: string | null;
   status: GpuSettlementStatus;
 }
@@ -139,15 +161,18 @@ export interface GpuEmissionScore {
 export interface GpuEarningsEmission {
   last_epoch: string | null;
   score: GpuEmissionScore;
+  /** USD allocated to this provider for the epoch (paid in ETH). Null for legacy WAYZ epochs. */
+  allocation_usd: number | null;
+  /** ETH equivalent of `allocation_usd` at the current price; null when unavailable. */
+  allocation_eth: number | null;
+  /** Deprecated backend alias — ETH equivalent for USD epochs, WAYZ for legacy epochs. Only
+   *  read as the legacy-epoch fallback when `allocation_usd` is null. */
   allocation_wayz: number;
   rank: number | null;
   providers_scored: number;
 }
 
-export interface GpuEarnings {
-  accrued_wei: bigint;
-  settled_wei: bigint;
-  void_wei: bigint;
+export interface GpuEarnings extends GpuEarningsSummary {
   work: GpuWorkRow[];
   settlements: GpuSettlementRow[];
   emission?: GpuEarningsEmission;
@@ -184,6 +209,13 @@ function toBigInt(value: string | number | null | undefined): bigint {
   return BigInt(value);
 }
 
+/** Like `toNumber`, but keeps "unknown" distinct from 0: null/undefined/'' -> null. */
+function toNumberOrNull(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Parses a decimal number that may arrive as a string or number (numeric(18,8) score/share
  *  columns) — mirrors rewards-api.ts's `toNumber`. NaN/empty -> 0. */
 function toNumber(value: string | number | null | undefined): number {
@@ -212,6 +244,8 @@ function parseEmission(value: unknown): GpuEarningsEmission | undefined {
   return {
     last_epoch: (r.last_epoch as string | null | undefined) ?? null,
     score: parseEmissionScore((r.score as Record<string, unknown>) ?? {}),
+    allocation_usd: toNumberOrNull(r.allocation_usd as string | number | null),
+    allocation_eth: toNumberOrNull(r.allocation_eth as string | number | null),
     allocation_wayz: toNumber(r.allocation_wayz as string | number),
     // Nullable on the wire (see GpuEarningsEmission's header comment) — preserve null rather
     // than coercing it to 0 via toNumber, so callers can render "—" instead of "0 of N".
@@ -261,9 +295,30 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
 
 function parseEarningsSummary(data: Record<string, unknown>): GpuEarningsSummary {
   return {
-    accrued_wei: toBigInt(data.accrued_wei as string),
-    settled_wei: toBigInt(data.settled_wei as string),
-    void_wei: toBigInt(data.void_wei as string),
+    accrued_wei: toBigInt(data.accrued_wei as string | null),
+    settled_wei: toBigInt(data.settled_wei as string | null),
+    void_wei: toBigInt(data.void_wei as string | null),
+    accrued_usd: toNumber(data.accrued_usd as string | number),
+    settled_usd: toNumber(data.settled_usd as string | number),
+    void_usd: toNumber(data.void_usd as string | number),
+    eth_usd_price: toNumberOrNull(data.eth_usd_price as string | number | null),
+  };
+}
+
+function parseSettlement(row: Record<string, unknown>): GpuSettlementRow {
+  return {
+    id: row.id as number,
+    period_start: row.period_start as string,
+    period_end: row.period_end as string,
+    amount_wei: toBigInt(row.amount_wei as string | null),
+    // Rows without an `asset` predate the ETH switch -> legacy WAYZ.
+    asset: row.asset === 'ETH' ? 'ETH' : 'WAYZ',
+    amount_usd: toNumberOrNull(row.amount_usd as string | number | null),
+    eth_usd_price: toNumberOrNull(row.eth_usd_price as string | number | null),
+    confirmed: row.confirmed === true || (row.confirmed === undefined && row.status === 'sent'),
+    tx_hash: (row.tx_hash as string | null | undefined) ?? null,
+    tx_url: (row.tx_url as string | null | undefined) ?? null,
+    status: row.status as GpuSettlementStatus,
   };
 }
 
@@ -344,23 +399,21 @@ export async function getMyGpuEarnings(): Promise<GpuEarnings> {
     throw new GpuProviderApiError(response.status, 'unknown_error');
   }
   // Totals are nested under `data.totals`, not flat on `data` — confirmed against the real
-  // route (gatewayz-backend `src/routes/gpu_earnings.py`'s `get_my_earnings`, approved
-  // PR #2288): `{success, data: {totals: {accrued_wei, settled_wei, void_wei}, work, settlements}}`.
+  // route (gatewayz-backend `src/routes/gpu_earnings.py`'s `get_my_earnings`):
+  // `{success, data: {totals: {accrued_usd, settled_usd, ..., settled_wei, ...}, work, settlements}}`.
   const body = (await response.json()) as {
     success: boolean;
     data: {
-      totals: { accrued_wei: string; settled_wei: string; void_wei: string };
+      totals: Record<string, unknown>;
       work: GpuWorkRow[];
-      settlements: Array<Omit<GpuSettlementRow, 'amount_wei'> & { amount_wei: string | null }>;
+      settlements: Array<Record<string, unknown>>;
       emission?: unknown;
     };
   };
   return {
-    accrued_wei: toBigInt(body.data.totals.accrued_wei),
-    settled_wei: toBigInt(body.data.totals.settled_wei),
-    void_wei: toBigInt(body.data.totals.void_wei),
+    ...parseEarningsSummary(body.data.totals),
     work: body.data.work,
-    settlements: body.data.settlements.map((row) => ({ ...row, amount_wei: toBigInt(row.amount_wei) })),
+    settlements: body.data.settlements.map(parseSettlement),
     emission: parseEmission(body.data.emission),
   };
 }

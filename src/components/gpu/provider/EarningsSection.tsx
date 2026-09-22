@@ -4,8 +4,25 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { formatEthWei, formatUsd } from '@/lib/gpu/format';
+import type { GpuSettlementRow } from '@/lib/gpu/provider-api';
 import { formatWayz } from '@/lib/wayz/format';
 import { useMyGpuEarnings } from '@/lib/hooks/use-gpu-provider';
+
+/** Settlement amount in the asset it was actually paid in: ETH on Base (with the USD it
+ *  settled), or WAYZ for legacy pre-2026-09-22 testnet rows. Never labels ETH as WAYZ. */
+function settlementAmount(settlement: GpuSettlementRow): string {
+  if (settlement.asset === 'ETH') {
+    const eth = `${formatEthWei(settlement.amount_wei)} ETH`;
+    return settlement.amount_usd === null ? eth : `${eth} (${formatUsd(settlement.amount_usd)})`;
+  }
+  return `${formatWayz(settlement.amount_wei)} WAYZ`;
+}
+
+function settlementStatus(settlement: GpuSettlementRow): string {
+  if (settlement.status === 'pending' && settlement.tx_hash) return 'confirming';
+  return settlement.status;
+}
 
 export function EarningsSection() {
   const earningsQuery = useMyGpuEarnings();
@@ -17,21 +34,38 @@ export function EarningsSection() {
         <CardTitle>Earnings</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
+        <p className="text-sm text-muted-foreground">
+          Earnings are counted in USD and paid out daily in ETH on Base, at the ETH/USD price when paid.
+        </p>
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Accrued</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Earned, unpaid</p>
             {earningsQuery.isLoading ? (
               <Skeleton className="h-6 w-20" />
             ) : (
-              <p className="text-lg font-semibold">{data ? `${formatWayz(data.accrued_wei)} WAYZ` : '—'}</p>
+              <>
+                <p className="text-lg font-semibold tabular-nums">{data ? formatUsd(data.accrued_usd) : '—'}</p>
+                {data && data.eth_usd_price !== null && data.accrued_usd > 0 ? (
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    ≈ {formatEthWei(data.accrued_wei)} ETH at today&apos;s price
+                  </p>
+                ) : null}
+              </>
             )}
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Settled</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Paid</p>
             {earningsQuery.isLoading ? (
               <Skeleton className="h-6 w-20" />
             ) : (
-              <p className="text-lg font-semibold">{data ? `${formatWayz(data.settled_wei)} WAYZ` : '—'}</p>
+              <>
+                <p className="text-lg font-semibold tabular-nums">
+                  {data ? `${formatEthWei(data.settled_wei)} ETH` : '—'}
+                </p>
+                {data ? (
+                  <p className="text-xs text-muted-foreground tabular-nums">{formatUsd(data.settled_usd)} earned</p>
+                ) : null}
+              </>
             )}
           </div>
           <div>
@@ -39,7 +73,7 @@ export function EarningsSection() {
             {earningsQuery.isLoading ? (
               <Skeleton className="h-6 w-20" />
             ) : (
-              <p className="text-lg font-semibold">{data ? `${formatWayz(data.void_wei)} WAYZ` : '—'}</p>
+              <p className="text-lg font-semibold tabular-nums">{data ? formatUsd(data.void_usd) : '—'}</p>
             )}
           </div>
         </div>
@@ -102,14 +136,14 @@ export function EarningsSection() {
                         {new Date(settlement.period_start).toLocaleDateString()} –{' '}
                         {new Date(settlement.period_end).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="text-right">{formatWayz(settlement.amount_wei)} WAYZ</TableCell>
+                      <TableCell className="text-right tabular-nums">{settlementAmount(settlement)}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{settlement.status}</Badge>
+                        <Badge variant="outline">{settlementStatus(settlement)}</Badge>
                       </TableCell>
                       <TableCell>
                         {settlement.tx_url ? (
                           <a className="text-primary underline" href={settlement.tx_url} target="_blank" rel="noreferrer">
-                            View on Snowtrace
+                            {settlement.asset === 'ETH' ? 'View on Basescan' : 'View on Snowtrace'}
                           </a>
                         ) : (
                           '—'

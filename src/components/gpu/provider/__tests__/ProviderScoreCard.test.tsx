@@ -75,7 +75,35 @@ describe('ProviderScoreCard', () => {
     expect(screen.getByText('0.7123')).toBeInTheDocument();
     expect(screen.getByText('4.56%')).toBeInTheDocument();
     expect(screen.getByText('3 of 40')).toBeInTheDocument();
+    // No allocation_usd on this epoch -> a legacy WAYZ epoch keeps its WAYZ label.
     expect(screen.getByText('123.4567 WAYZ')).toBeInTheDocument();
+  });
+
+  it('shows the next-epoch estimate in USD with its ETH equivalent, never as WAYZ', () => {
+    mockUseMyGpuEarnings.mockReturnValue({
+      isLoading: false,
+      data: {
+        accrued_wei: 0n,
+        settled_wei: 0n,
+        void_wei: 0n,
+        work: [],
+        settlements: [],
+        emission: {
+          last_epoch: '2026-09-22',
+          score: { compute: 0.5, speed: 0.5, availability: 0.5, unique_models: 0.5, raw: 0.5, adjusted: 0.5, share: 0.5 },
+          allocation_usd: 55.8,
+          allocation_eth: 0.0186,
+          allocation_wayz: 0.0186,
+          rank: 1,
+          providers_scored: 3,
+        },
+      },
+    });
+
+    render(<ProviderScoreCard />);
+    expect(screen.getByText('$55.80')).toBeInTheDocument();
+    expect(screen.getByText('≈ 0.0186 ETH')).toBeInTheDocument();
+    expect(screen.queryByText(/WAYZ/)).not.toBeInTheDocument();
   });
 
   it('falls back to "no epoch has run yet" when last_epoch is null', () => {
@@ -124,7 +152,8 @@ describe('ProviderScoreCard', () => {
     });
 
     render(<ProviderScoreCard />);
-    expect(screen.getByText('—')).toBeInTheDocument();
+    const rankValue = screen.getByText('Rank').nextElementSibling;
+    expect(rankValue).toHaveTextContent('—');
     expect(screen.queryByText(/of 40/)).not.toBeInTheDocument();
   });
 });
