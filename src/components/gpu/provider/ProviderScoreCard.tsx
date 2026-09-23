@@ -9,7 +9,21 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMyGpuEarnings } from '@/lib/hooks/use-gpu-provider';
 import type { GpuEmissionScore } from '@/lib/gpu/provider-api';
+import { formatEth, formatUsd } from '@/lib/gpu/format';
+import type { GpuEarningsEmission } from '@/lib/gpu/provider-api';
 import { formatFractionPercent, formatWayzAmount } from '@/lib/wayz/format';
+
+/** Epoch allocation: USD (paid in ETH on Base) with its ETH equivalent; legacy pre-2026-09-22
+ *  epochs were allocated in WAYZ and keep that label. */
+function allocationLabel(emission: GpuEarningsEmission): { main: string; sub: string | null } {
+  if (emission.allocation_usd != null) {
+    return {
+      main: formatUsd(emission.allocation_usd),
+      sub: emission.allocation_eth != null ? `≈ ${formatEth(emission.allocation_eth)} ETH` : null,
+    };
+  }
+  return { main: `${formatWayzAmount(emission.allocation_wayz)} WAYZ`, sub: null };
+}
 
 // Fixed weights from `PROVIDER_SCORE_WEIGHTS_BPS` (scratchpad/emission/spec.md §Design) — not
 // part of the API payload (only the resulting per-provider metrics are), so hardcoded here
@@ -98,7 +112,10 @@ export function ProviderScoreCard() {
           </div>
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Next epoch (est.)</p>
-            <p className="text-lg font-semibold tabular-nums">{formatWayzAmount(emission.allocation_wayz)} WAYZ</p>
+            <p className="text-lg font-semibold tabular-nums">{allocationLabel(emission).main}</p>
+            {allocationLabel(emission).sub ? (
+              <p className="text-xs text-muted-foreground tabular-nums">{allocationLabel(emission).sub}</p>
+            ) : null}
           </div>
         </div>
       </CardContent>
