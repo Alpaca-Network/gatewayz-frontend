@@ -7,6 +7,12 @@
 
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useSearchAugmentation } from '@/lib/hooks/use-search-augmentation';
+import { getApiKey } from '@/lib/api';
+
+jest.mock('@/lib/api', () => ({
+  getApiKey: jest.fn(),
+}));
+const mockGetApiKey = getApiKey as jest.Mock;
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -16,6 +22,7 @@ describe('useSearchAugmentation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockFetch.mockReset();
+    mockGetApiKey.mockReturnValue('test-key');
   });
 
   describe('augmentWithSearch', () => {
@@ -63,6 +70,7 @@ describe('useSearchAugmentation', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: 'Bearer test-key',
         },
         body: JSON.stringify({
           query: 'test query',
@@ -70,6 +78,22 @@ describe('useSearchAugmentation', () => {
           include_answer: true,
         }),
       });
+    });
+
+    it('should omit Authorization header when no API key', async () => {
+      mockGetApiKey.mockReturnValue(null);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true, context: 'c', results_count: 1 }),
+      });
+
+      const { result } = renderHook(() => useSearchAugmentation());
+      await act(async () => {
+        await result.current.augmentWithSearch('test query');
+      });
+
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers).toEqual({ 'Content-Type': 'application/json' });
     });
 
     it('should return context on successful response', async () => {

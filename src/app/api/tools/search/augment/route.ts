@@ -18,11 +18,17 @@ export async function POST(request: NextRequest) {
     const url = `${API_BASE_URL}/v1/tools/search/augment`;
     console.log('[Search Augment API] Forwarding to:', url);
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    const authorization = request.headers.get('authorization');
+    if (authorization) {
+      headers['Authorization'] = authorization;
+    }
+
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(body),
     });
 
