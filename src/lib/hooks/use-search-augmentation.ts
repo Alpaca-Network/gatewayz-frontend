@@ -7,6 +7,7 @@
  */
 
 import { useCallback, useState } from 'react';
+import { getApiKey } from '@/lib/api';
 
 interface SearchAugmentResponse {
   success: boolean;
@@ -45,11 +46,17 @@ export function useSearchAugmentation(): UseSearchAugmentationReturn {
     setLastError(null);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      const apiKey = getApiKey();
+      if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+
       const response = await fetch('/api/tools/search/augment', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           query: query.trim(),
           max_results: 5,
