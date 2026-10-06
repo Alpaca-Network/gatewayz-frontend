@@ -29,6 +29,7 @@ const DIRS_TO_EXCLUDE = [
   'organizations/[name]',   // Dynamic organization pages
   'sandbox/[sandboxId]',    // Dynamic sandbox pages
   'share/[token]',          // Dynamic share pages
+  'staking',                // force-dynamic (real 404 status for its gate); web-only
 ];
 
 function moveExcludedDirs() {
