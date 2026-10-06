@@ -27,3 +27,27 @@ export function isWayzConfigured(): boolean {
   const { token, staking } = getWayzAddresses();
   return Boolean(token && staking);
 }
+
+/**
+ * True when this build allows the /staking route at all: Vercel preview and
+ * development deployments, and `next dev`. `STAKING_ROUTE_HIDDEN` is inlined
+ * by next.config.ts from the same function that emits the production-only
+ * /staking redirect (src/config/redirects.ts), so the redirect, this page gate
+ * and the header link cannot disagree. Fails closed: anything but an explicit
+ * 'false' (e.g. the value was never inlined) keeps staking hidden.
+ */
+export function isStakingRouteAllowed(): boolean {
+  return process.env.STAKING_ROUTE_HIDDEN === 'false';
+}
+
+/**
+ * The single "show staking" condition shared by the /staking page and the
+ * header nav link: the build must allow the route, and WAYZ must be
+ * configured or explicitly previewed.
+ */
+export function shouldShowStaking(): boolean {
+  return (
+    isStakingRouteAllowed() &&
+    (isWayzConfigured() || process.env.NEXT_PUBLIC_WAYZ_STAKING_PREVIEW === 'true')
+  );
+}

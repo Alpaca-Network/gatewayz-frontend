@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { StakingPageClient } from '@/components/staking/StakingPageClient';
-import { isWayzConfigured } from '@/lib/wayz/addresses';
+import { shouldShowStaking } from '@/lib/wayz/addresses';
 
 // Same gate the header nav uses (src/components/layout/app-header.tsx). The nav
 // link was hidden when the token addresses were unset, but the route itself
@@ -15,8 +15,9 @@ import { isWayzConfigured } from '@/lib/wayz/addresses';
 // makes "is the gate deployed?" impossible to answer from the status code.
 export const dynamic = 'force-dynamic';
 
-const SHOW_STAKING =
-  isWayzConfigured() || process.env.NEXT_PUBLIC_WAYZ_STAKING_PREVIEW === 'true';
+// Also false on production builds (STAKING_ROUTE_HIDDEN), as a second line
+// behind the production-only /staking redirect in src/config/redirects.ts.
+const SHOW_STAKING = shouldShowStaking();
 
 export const metadata: Metadata = {
   title: 'Staking | Gatewayz',

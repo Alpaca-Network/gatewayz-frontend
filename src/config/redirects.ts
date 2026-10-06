@@ -13,6 +13,38 @@ import type { Redirect } from 'next/dist/lib/load-custom-routes';
 export const TERRAGON_DASHBOARD_URL = 'https://terragon-www-production.up.railway.app/dashboard';
 
 /**
+ * Whether this BUILD hides /staking (WAYZ is out of the product on production).
+ *
+ * True on a Vercel production deployment, false on Vercel preview/development
+ * deployments so the owner can exercise the flow on a preview URL. Off Vercel
+ * (no VERCEL_ENV) it fails closed: any `next build` hides staking, only
+ * `next dev` shows it — a production build that somehow lost VERCEL_ENV must
+ * not un-hide the page.
+ *
+ * Why this works where the address-gated rule of #1025 did not: VERCEL_ENV is
+ * a Vercel system variable present during the build, and both consumers read
+ * it at build time — next.config.ts evaluates redirects() into the routes
+ * manifest, and inlines this same result as STAKING_ROUTE_HIDDEN (its `env`
+ * block) for the page gate and header link. One value, one moment, no
+ * build-vs-request disagreement. (#1025's rule emitted nothing for a simpler
+ * reason: NEXT_PUBLIC_WAYZ_TOKEN_ADDRESS / _STAKING_ADDRESS ARE set in the
+ * Production environment, so "configured" was true and no rule was due.)
+ *
+ * Caveat: a deployment's manifest is fixed at build. Promoting a preview
+ * deployment to production rebuilds it with production env on Vercel, so the
+ * rule comes back; serving an old preview build as production would not.
+ *
+ * Kept free of "@/" imports: next.config.ts compiles this module without the
+ * path alias.
+ */
+export function isStakingHiddenForBuild(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.VERCEL_ENV) {
+    return env.VERCEL_ENV === 'production';
+  }
+  return env.NODE_ENV === 'production';
+}
+
+/**
  * Redirect rules for the application
  *
  * These redirects are applied at the Next.js routing level,
@@ -20,22 +52,21 @@ export const TERRAGON_DASHBOARD_URL = 'https://terragon-www-production.up.railwa
  */
 export function getRedirects(): Redirect[] {
   return [
-    // Staking is out of the product for now (WAYZ is hidden), so this is
-    // unconditional rather than gated on the contract addresses.
+    // Staking is out of the product on production (WAYZ is hidden, #1021,
+    // #1025, #1026) but reachable on preview deployments for testing. See
+    // isStakingHiddenForBuild above for why a build-time env gate is sound.
     //
-    // The conditional version did not work: next.config.ts evaluates these
-    // rules at BUILD time, while the page's own gate evaluates at REQUEST
-    // time, and the two disagreed about whether WAYZ was configured — so no
-    // rule was emitted and /staking kept answering 200. Verified against the
-    // unconditional /deck rule in this same file, which returns 307 correctly.
-    //
-    // To bring staking back: delete this entry. The page's own gate and the
-    // header nav link both still key off the contract addresses.
-    {
-      source: '/staking',
-      destination: '/',
-      permanent: false,
-    },
+    // To bring staking back everywhere: delete this entry and the
+    // STAKING_ROUTE_HIDDEN gate in src/lib/wayz/addresses.ts.
+    ...(isStakingHiddenForBuild()
+      ? [
+          {
+            source: '/staking',
+            destination: '/',
+            permanent: false,
+          },
+        ]
+      : []),
     // Deck presentation redirect
     {
       source: '/deck',

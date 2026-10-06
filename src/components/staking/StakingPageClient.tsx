@@ -8,6 +8,7 @@ import { StakeForm } from './StakeForm';
 import { UnstakeCard } from './UnstakeCard';
 import { FaucetCard } from './FaucetCard';
 import { EarningsCard } from './EarningsCard';
+import { HoldingsRewardsCard } from '@/components/holdings/HoldingsRewardsCard';
 
 export function StakingPageClient() {
   const wallet = useActiveWallet();
@@ -28,6 +29,9 @@ export function StakingPageClient() {
           </div>
         )}
       </WalletGate>
+      {/* Account-scoped (linked wallets, Gatewayz sign-in), so it sits outside
+          WalletGate and renders with or without a connected wallet. */}
+      <HoldingsRewardsCard />
     </div>
   );
 }

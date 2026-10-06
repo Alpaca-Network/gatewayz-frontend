@@ -26,8 +26,12 @@ import {useGatewayzAuth} from "@/context/gatewayz-auth-context";
 import {trackTwitterSignupClick} from "@/components/analytics/twitter-pixel";
 import {useIsTauri} from "@/lib/desktop/hooks";
 import {isGpuMarketplaceEnabled} from "@/lib/gpu/flag";
+import {shouldShowStaking} from "@/lib/wayz/addresses";
 
-// Hidden until Fuji contracts are deployed, unless explicitly previewed.
+// Never on production builds (WAYZ is out of the product there; /staking
+// redirects to /). On preview deployments, shown once WAYZ is configured or
+// NEXT_PUBLIC_WAYZ_STAKING_PREVIEW=true — the same gate as the page itself.
+const SHOW_STAKING_NAV = shouldShowStaking();
 
 // Hidden until the backend GPU marketplace routes ship (Milestone 4).
 const SHOW_GPU_NAV = isGpuMarketplaceEnabled();
@@ -276,6 +280,14 @@ export function AppHeader() {
                 Account
               </Link>
             )}
+            {SHOW_STAKING_NAV && (
+              <Link
+                href="/staking"
+                className="transition-colors hover:text-foreground/80 "
+              >
+                Staking
+              </Link>
+            )}
             {SHOW_GPU_NAV && (
               <Link
                 href="/gpu"
@@ -389,6 +401,15 @@ export function AppHeader() {
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         Account
+                      </Link>
+                    )}
+                    {SHOW_STAKING_NAV && (
+                      <Link
+                        href="/staking"
+                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        Staking
                       </Link>
                     )}
                     {SHOW_GPU_NAV && (
