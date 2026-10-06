@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { TOKENS, TIERS, discountBudget, bySymbol } from "@/lib/staking/tokens";
+import { TOKENS, TIERS, discountBudget, bySymbol, offeredRate, feeFor } from "@/lib/staking/tokens";
 import QuoteWidget from "@/components/staking/QuoteWidget";
 
 export const metadata: Metadata = {
@@ -47,14 +47,14 @@ export default function StakingPage() {
           <span className="text-sm text-muted-foreground">Cardano</span>
         </div>
         <div className="mt-1 font-mono text-3xl text-emerald-500 tabular-nums">
-          {(ada.offered * 100).toFixed(2)}%
+          {(offeredRate(ada, 12) * 100).toFixed(2)}%
         </div>
         <div className="text-sm text-muted-foreground">
           ${adaBudget.budgetUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr
           of discount per $10,000
         </div>
         <p className="mt-3 max-w-prose text-sm">
-          <b>The only one where we never touch your asset.</b> Cardano delegation is
+          <b>You keep 95% of what it earns</b> — the lowest fee we charge, because non-custodial costs us less to run: no custody, no insurance, no idle buffer. And it is the only asset we never touch. Cardano delegation is
           non-custodial by protocol design: your ADA stays in your wallet, is never
           locked, and leaves whenever you choose. There is nothing to lose to a hack
           here, because we never hold it.
@@ -79,7 +79,7 @@ export default function StakingPage() {
                 <span className="text-xs text-muted-foreground">{t.name}</span>
               </div>
               <div className="mt-1 font-mono text-2xl tabular-nums">
-                {(t.offered * 100).toFixed(2)}%
+                {(offeredRate(t, 12) * 100).toFixed(2)}%
               </div>
               <div className="text-xs text-muted-foreground">
                 ${d.budgetUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}/yr
@@ -124,7 +124,7 @@ export default function StakingPage() {
         <thead>
           <tr className="text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
             <th className="border-b py-2">Commitment</th>
-            <th className="border-b py-2 text-right">Our fee</th>
+            <th className="border-b py-2 text-right">Our fee — ADA / other</th>
             <th className="border-b py-2">Why it can be lower</th>
           </tr>
         </thead>
@@ -133,10 +133,10 @@ export default function StakingPage() {
             <tr key={t.label}>
               <td className="border-b py-2">{t.label}</td>
               <td className="border-b py-2 text-right font-mono tabular-nums">
-                {(t.fee * 100).toFixed(0)}%
+                {(t.ada * 100).toFixed(0)}% / {(t.other * 100).toFixed(0)}%
               </td>
               <td className="border-b py-2 text-muted-foreground">
-                {t.fee < 0.15
+                {t.other < 0.20
                   ? "a smaller idle buffer is needed, so more of the capital earns"
                   : "baseline"}
               </td>

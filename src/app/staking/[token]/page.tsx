@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { TOKENS, TIERS, bySymbol, discountBudget } from "@/lib/staking/tokens";
+import { TOKENS, TIERS, bySymbol, discountBudget, offeredRate, feeFor } from "@/lib/staking/tokens";
 
 export function generateStaticParams() {
   return TOKENS.map((t) => ({ token: t.symbol.toLowerCase() }));
@@ -37,7 +37,7 @@ export default async function TokenPage(
       <div className="mt-4 flex flex-wrap gap-2 font-mono text-[11px]">
         <span className="rounded border px-2 py-1">{t.chain}</span>
         <span className="rounded border px-2 py-1">
-          we offer {(t.offered * 100).toFixed(2)}%
+          we offer {(offeredRate(t, 12) * 100).toFixed(2)}%
         </span>
         <span className={`rounded border px-2 py-1 ${t.yieldVerified
           ? "border-emerald-500/50 text-emerald-500"
@@ -92,7 +92,7 @@ export default async function TokenPage(
         <thead>
           <tr className="text-left font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
             <th className="border-b py-2">Commitment</th>
-            <th className="border-b py-2 text-right">Our fee</th>
+            <th className="border-b py-2 text-right">Our fee — ADA / other</th>
             <th className="border-b py-2 text-right">Discount / yr</th>
             <th className="border-b py-2 text-right">per month</th>
           </tr>
@@ -104,7 +104,7 @@ export default async function TokenPage(
               <tr key={tier.label}>
                 <td className="border-b py-2">{tier.label}</td>
                 <td className="border-b py-2 text-right font-mono tabular-nums">
-                  {(tier.fee * 100).toFixed(0)}%
+                  {(feeFor(t, tier.months) * 100).toFixed(0)}%
                 </td>
                 <td className="border-b py-2 text-right font-mono tabular-nums">
                   ${d.budgetUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
