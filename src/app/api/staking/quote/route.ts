@@ -17,6 +17,22 @@ import { NextRequest, NextResponse } from 'next/server';
  *     KEPT in the average, because the delegator genuinely received nothing.
  */
 const KOIOS = 'https://api.koios.rest/api/v1';
+
+/**
+ * Short per-address cache.
+ *
+ * Retrying each epoch heals the indexer's NULLs most of the time, but not
+ * always — observed roughly one run in six still losing an epoch, which moved
+ * the headline from $83.87 to $60.44 for the same delegation. The epoch list is
+ * on screen so neither figure is dishonest, but a number that changes when you
+ * reload is a bad number. Caching a good answer briefly makes it stable, and
+ * incidentally spares the public indexer.
+ */
+const CACHE_MS = 10 * 60 * 1000;
+const cacheStore = globalThis as unknown as {
+  __stakingQuoteCache?: Map<string, { at: number; payload: unknown; epochs: number }>;
+};
+cacheStore.__stakingQuoteCache ??= new Map();
 const EPOCHS_PER_YEAR = 73;
 const ADA_USD = Number(process.env.STAKING_ADA_USD ?? '0.207');
 
@@ -48,6 +64,11 @@ export async function POST(request: NextRequest) {
   }
   if (!/^stake1[0-9a-z]{40,}$/.test(stakeAddress)) {
     return NextResponse.json({ error: 'Enter a Cardano stake address (stake1…).' });
+  }
+
+  const cached = cacheStore.__stakingQuoteCache!.get(stakeAddress);
+  if (cached && Date.now() - cached.at < CACHE_MS) {
+    return NextResponse.json(cached.payload as Record<string, unknown>);
   }
 
   try {
@@ -88,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     const avg = Math.floor(shares.reduce((a, b) => a + b, 0) / shares.length);
     const adaPerEpoch = avg / 1e6;
-    return NextResponse.json({
+    const payload = {
       pool,
       stakeAda: stake / 1e6,
       epochs,
@@ -101,7 +122,19 @@ export async function POST(request: NextRequest) {
       usdPerMonth: (adaPerEpoch * ADA_USD * EPOCHS_PER_YEAR) / 12,
       usdPerYear: adaPerEpoch * ADA_USD * EPOCHS_PER_YEAR,
       adaPrice: ADA_USD,
-    });
+    };
+
+    // Keep the answer built from the MOST epochs. A later run that healed fewer
+    // NULLs should not replace a more complete one inside the window.
+    const prev = cacheStore.__stakingQuoteCache!.get(stakeAddress);
+    if (!prev || epochs.length >= prev.epochs || Date.now() - prev.at >= CACHE_MS) {
+      cacheStore.__stakingQuoteCache!.set(stakeAddress, {
+        at: Date.now(), payload, epochs: epochs.length,
+      });
+    }
+    return NextResponse.json(
+      cacheStore.__stakingQuoteCache!.get(stakeAddress)!.payload as Record<string, unknown>,
+    );
   } catch (e) {
     return NextResponse.json({ error: `Could not read the chain: ${(e as Error).message}` });
   }

@@ -3,6 +3,11 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { TOKENS, TIERS, bySymbol, discountBudget, offeredRate, feeFor } from "@/lib/staking/tokens";
 
+// Only the eight known assets exist. Without this, an unknown slug renders on
+// demand and Next serves the not-found page with HTTP 200 — a soft 404, which
+// matters now these pages are indexable.
+export const dynamicParams = false;
+
 export function generateStaticParams() {
   return TOKENS.map((t) => ({ token: t.symbol.toLowerCase() }));
 }
