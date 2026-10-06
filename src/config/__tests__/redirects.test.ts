@@ -1,17 +1,11 @@
 /**
- * /staking must be unreachable on production while WAYZ is out of the product,
- * and reachable on Vercel preview deployments so the flow can be tested there.
- *
- * Earlier attempts: notFound() on a statically generated route served the
- * not-found body with HTTP 200 (#1023/#1024), and a redirect gated on the WAYZ
- * contract addresses emitted no rule (#1025) because those addresses are set in
- * the Production environment. VERCEL_ENV is a Vercel system variable available
- * at build time, which is when next.config.ts evaluates redirects(), so gating
- * on it is sound. Off Vercel it fails closed: any production build hides it.
+ * /staking is unlisted on production (reachable, no nav link, noindex) and
+ * listed on Vercel preview/development deployments. No redirect hides it.
+ * Off Vercel the nav flag fails closed: any production build hides the link.
  */
-import { getRedirects, isStakingHiddenForBuild } from '../redirects';
+import { getRedirects, isStakingNavHiddenForBuild } from '../redirects';
 
-describe('staking redirect', () => {
+describe('staking nav listing', () => {
   const env = process.env;
   beforeEach(() => {
     process.env = { ...env };
@@ -24,49 +18,35 @@ describe('staking redirect', () => {
   const setNodeEnv = (value: string) => {
     (process.env as Record<string, string>).NODE_ENV = value;
   };
-  const stakingRule = () => getRedirects().find((r) => r.source === '/staking');
 
-  it('redirects /staking on a Vercel production deployment', () => {
+  it('never redirects /staking, even on production', () => {
     process.env.VERCEL_ENV = 'production';
-    const staking = stakingRule();
-    expect(staking).toBeDefined();
-    expect(staking?.destination).toBe('/');
-    expect(staking?.permanent).toBe(false);
+    expect(getRedirects().find((r) => r.source === '/staking')).toBeUndefined();
   });
 
-  it('still redirects on production even when the WAYZ addresses are set', () => {
-    process.env.VERCEL_ENV = 'production';
-    process.env.NEXT_PUBLIC_WAYZ_TOKEN_ADDRESS = '0xToken';
-    process.env.NEXT_PUBLIC_WAYZ_STAKING_ADDRESS = '0xStaking';
-    process.env.NEXT_PUBLIC_WAYZ_STAKING_PREVIEW = 'true';
-    expect(stakingRule()).toBeDefined();
+  it('hides the nav link on a Vercel production deployment', () => {
+    expect(isStakingNavHiddenForBuild({ VERCEL_ENV: 'production' } as NodeJS.ProcessEnv)).toBe(true);
   });
 
-  it('does not redirect on a Vercel preview deployment', () => {
+  it('lists it on Vercel preview and development deployments', () => {
+    setNodeEnv('production');
     process.env.VERCEL_ENV = 'preview';
-    setNodeEnv('production');
-    expect(stakingRule()).toBeUndefined();
-  });
-
-  it('does not redirect on a Vercel development deployment', () => {
+    expect(isStakingNavHiddenForBuild()).toBe(false);
     process.env.VERCEL_ENV = 'development';
-    expect(stakingRule()).toBeUndefined();
+    expect(isStakingNavHiddenForBuild()).toBe(false);
   });
 
-  it('fails closed off Vercel: a production build hides staking', () => {
+  it('fails closed off Vercel: a production build hides the link', () => {
     setNodeEnv('production');
-    expect(isStakingHiddenForBuild()).toBe(true);
-    expect(stakingRule()).toBeDefined();
+    expect(isStakingNavHiddenForBuild()).toBe(true);
   });
 
-  it('leaves staking reachable under next dev off Vercel', () => {
+  it('lists it under next dev off Vercel', () => {
     setNodeEnv('development');
-    expect(isStakingHiddenForBuild()).toBe(false);
-    expect(stakingRule()).toBeUndefined();
+    expect(isStakingNavHiddenForBuild()).toBe(false);
   });
 
   it('leaves the existing redirects alone', () => {
-    process.env.VERCEL_ENV = 'preview';
     expect(getRedirects().some((r) => r.source === '/deck')).toBe(true);
   });
 });

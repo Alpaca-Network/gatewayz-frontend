@@ -26,12 +26,11 @@ import {useGatewayzAuth} from "@/context/gatewayz-auth-context";
 import {trackTwitterSignupClick} from "@/components/analytics/twitter-pixel";
 import {useIsTauri} from "@/lib/desktop/hooks";
 import {isGpuMarketplaceEnabled} from "@/lib/gpu/flag";
-import {shouldShowStaking} from "@/lib/wayz/addresses";
+import {shouldShowStakingNav} from "@/lib/wayz/addresses";
 
-// Never on production builds (WAYZ is out of the product there; /staking
-// redirects to /). On preview deployments, shown once WAYZ is configured or
-// NEXT_PUBLIC_WAYZ_STAKING_PREVIEW=true — the same gate as the page itself.
-const SHOW_STAKING_NAV = shouldShowStaking();
+// Never on production builds: /staking is unlisted there (reachable by URL,
+// no link, noindex). Shown on preview deployments once WAYZ is configured.
+const SHOW_STAKING_NAV = shouldShowStakingNav();
 
 // Hidden until the backend GPU marketplace routes ship (Milestone 4).
 const SHOW_GPU_NAV = isGpuMarketplaceEnabled();
