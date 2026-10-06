@@ -27,3 +27,18 @@ export function isWayzConfigured(): boolean {
   const { token, staking } = getWayzAddresses();
   return Boolean(token && staking);
 }
+
+/** The /staking page gate: WAYZ is configured or explicitly previewed. */
+export function isStakingEnabled(): boolean {
+  return isWayzConfigured() || process.env.NEXT_PUBLIC_WAYZ_STAKING_PREVIEW === 'true';
+}
+
+/**
+ * The header nav link: staking is enabled AND this build lists it.
+ * STAKING_NAV_HIDDEN is inlined by next.config.ts (isStakingNavHiddenForBuild);
+ * anything but an explicit 'false' keeps the link hidden, so production —
+ * where /staking is unlisted — never shows it.
+ */
+export function shouldShowStakingNav(): boolean {
+  return process.env.STAKING_NAV_HIDDEN === 'false' && isStakingEnabled();
+}

@@ -1,6 +1,6 @@
 import type {NextConfig} from 'next';
 import {withSentryConfig} from '@sentry/nextjs';
-import {getRedirects} from './src/config/redirects';
+import {getRedirects, isStakingNavHiddenForBuild} from './src/config/redirects';
 
 // Bundle analyzer for identifying heavy dependencies (optional)
 // Install with: npm install --save-dev @next/bundle-analyzer
@@ -22,6 +22,11 @@ const isStaticExport = process.env.NEXT_STATIC_EXPORT === 'true';
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Inlined at build: /staking is unlisted on production (no header link) —
+  // see isStakingNavHiddenForBuild in src/config/redirects.ts.
+  env: {
+    STAKING_NAV_HIDDEN: String(isStakingNavHiddenForBuild()),
+  },
   // Enable static export for desktop builds
   ...(isStaticExport && { output: 'export' }),
   typescript: {

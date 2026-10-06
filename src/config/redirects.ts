@@ -13,6 +13,28 @@ import type { Redirect } from 'next/dist/lib/load-custom-routes';
 export const TERRAGON_DASHBOARD_URL = 'https://terragon-www-production.up.railway.app/dashboard';
 
 /**
+ * Whether this BUILD lists /staking in the header nav.
+ *
+ * Staking is UNLISTED on production: the page is reachable at /staking (so the
+ * owner can test it end to end on beta.gatewayz.ai, which Privy already allows)
+ * but nothing links to it, and the page is noindex. Preview/development
+ * deployments and `next dev` show the nav link.
+ *
+ * Read at build time by next.config.ts, which inlines the result as
+ * STAKING_NAV_HIDDEN for the header. Off Vercel it fails closed: any
+ * `next build` hides the link, only `next dev` shows it.
+ *
+ * Kept free of "@/" imports: next.config.ts compiles this module without the
+ * path alias.
+ */
+export function isStakingNavHiddenForBuild(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.VERCEL_ENV) {
+    return env.VERCEL_ENV === 'production';
+  }
+  return env.NODE_ENV === 'production';
+}
+
+/**
  * Redirect rules for the application
  *
  * These redirects are applied at the Next.js routing level,
@@ -20,22 +42,6 @@ export const TERRAGON_DASHBOARD_URL = 'https://terragon-www-production.up.railwa
  */
 export function getRedirects(): Redirect[] {
   return [
-    // Staking is out of the product for now (WAYZ is hidden), so this is
-    // unconditional rather than gated on the contract addresses.
-    //
-    // The conditional version did not work: next.config.ts evaluates these
-    // rules at BUILD time, while the page's own gate evaluates at REQUEST
-    // time, and the two disagreed about whether WAYZ was configured — so no
-    // rule was emitted and /staking kept answering 200. Verified against the
-    // unconditional /deck rule in this same file, which returns 307 correctly.
-    //
-    // To bring staking back: delete this entry. The page's own gate and the
-    // header nav link both still key off the contract addresses.
-    {
-      source: '/staking',
-      destination: '/',
-      permanent: false,
-    },
     // Deck presentation redirect
     {
       source: '/deck',
