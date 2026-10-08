@@ -143,6 +143,30 @@ export async function requestWalletLinkNonce(
   return body.data;
 }
 
+/**
+ * `requestWalletLinkNonce` for flows where the wallet may be on any network.
+ *
+ * The chain id only labels the SIWE message — the backend verifies the
+ * signature, not the network — but it rejects ids outside
+ * `SIWE_ALLOWED_CHAIN_IDS` (default 43113,43114) with 422. A wallet on
+ * Ethereum, Base, Arbitrum, BNB Chain or Polygon would otherwise be unable to
+ * link at all, so on that 422 this retries without a chain id and lets the
+ * backend use its default. Signing still needs no network switch.
+ */
+export async function requestWalletLinkNonceForAnyChain(
+  walletAddress: string,
+  chainId?: number
+): Promise<WalletLinkNonce> {
+  try {
+    return await requestWalletLinkNonce(walletAddress, chainId);
+  } catch (error) {
+    if (chainId && error instanceof WalletAuthError && error.code === 'chain_id_not_allowed') {
+      return requestWalletLinkNonce(walletAddress);
+    }
+    throw error;
+  }
+}
+
 /** POST /auth/wallet/link (Bearer) — links the signed wallet to the caller's account. */
 export async function linkWallet(
   walletAddress: string,

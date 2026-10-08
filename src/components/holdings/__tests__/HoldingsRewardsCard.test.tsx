@@ -118,6 +118,6 @@ describe('HoldingsRewardsCard', () => {
     const alert = screen.getByRole('alert', { name: /why holdings rewards are not paying/i });
     expect(within(alert).getByText(/holdings rewards are switched off/i)).toBeInTheDocument();
     expect(within(alert).getByText(/no linked wallets/i)).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /link a wallet/i })[0]).toHaveAttribute('href', '/settings/wallets');
+    expect(screen.getAllByRole('link', { name: /link a wallet/i })[0]).toHaveAttribute('href', '/rewards#link-wallet');
   });
 });

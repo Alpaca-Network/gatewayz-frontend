@@ -61,6 +61,9 @@ jest.mock('lucide-react', () => ({
 jest.mock('@/components/tier/tier-info-card', () => ({
   TierInfoCard: () => <div data-testid="tier-info-card">TierInfoCard</div>,
 }));
+jest.mock('@/components/holdings/HoldingsRewardsSummaryCard', () => ({
+  HoldingsRewardsSummaryCard: () => <div data-testid="holdings-rewards-summary-card" />,
+}));
 
 describe('CreditsPage', () => {
   const mockBasicUserData: UserData = {

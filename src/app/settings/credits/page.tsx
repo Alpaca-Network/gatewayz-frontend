@@ -27,6 +27,7 @@ import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData
 import { formatCredits, formatCreditsDollar } from '@/lib/format-credits';
 import { API_BASE_URL, CREDIT_TOPUP_FEE_RATE, applyTopupFee } from '@/lib/config';
 import { TierInfoCard } from '@/components/tier/tier-info-card';
+import { HoldingsRewardsSummaryCard } from '@/components/holdings/HoldingsRewardsSummaryCard';
 
 // Confetti/Emoji explosion component
 const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
@@ -588,6 +589,11 @@ function CreditsPageContent() {
           </div>
         </div>
       )}
+
+      {/* Holdings rewards: free credits for tokens held in linked wallets (/rewards). */}
+      <div className="max-w-2xl mx-auto">
+        <HoldingsRewardsSummaryCard />
+      </div>
 
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
