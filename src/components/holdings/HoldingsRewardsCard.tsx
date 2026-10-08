@@ -144,7 +144,7 @@ function HoldingsRewardsView({ data, linkedAtByAddress }: { data: HoldingsReward
                     {b.kind === 'no_wallets' && (
                       <>
                         {' '}
-                        <Link href="/settings/wallets" className="underline">
+                        <Link href="/rewards#link-wallet" className="underline">
                           Link a wallet
                         </Link>
                       </>
@@ -176,7 +176,7 @@ function HoldingsRewardsView({ data, linkedAtByAddress }: { data: HoldingsReward
             <div className="flex flex-col items-start gap-3">
               <p className="text-sm text-muted-foreground">No wallets linked to this account.</p>
               <Button asChild variant="outline" size="sm">
-                <Link href="/settings/wallets">Link a wallet</Link>
+                <Link href="/rewards#link-wallet">Link a wallet</Link>
               </Button>
             </div>
           ) : (

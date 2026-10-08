@@ -128,7 +128,7 @@ export function getHoldingsBlockers(data: HoldingsRewards, walletStatuses: Walle
     blockers.push({
       kind: 'no_wallets',
       title: 'No linked wallets',
-      detail: 'Only wallets linked to your account are measured. Link one in Settings → Wallets.',
+      detail: 'Only wallets linked to your account are measured. Link one on the Rewards page.',
       severity: 'blocking',
     });
   }

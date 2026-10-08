@@ -11,6 +11,7 @@
 import {
   getLinkedWallets,
   requestWalletLinkNonce,
+  requestWalletLinkNonceForAnyChain,
   linkWallet,
   unlinkWallet,
   WalletAuthError,
@@ -202,6 +203,39 @@ describe('wallet-auth-api', () => {
         status: 429,
         code: 'rate_limited',
       });
+    });
+  });
+
+  describe('requestWalletLinkNonceForAnyChain', () => {
+    it('sends the wallet chain id when the backend allows it', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createSuccessResponse({ success: true, data: { message: 'msg', expires_in: 300 } })
+      );
+
+      await expect(requestWalletLinkNonceForAnyChain('0xabc', 43114)).resolves.toEqual({
+        message: 'msg',
+        expires_in: 300,
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ wallet_address: '0xabc', chain_id: 43114 });
+    });
+
+    it('retries without chain_id when the wallet network is not on the allow-list', async () => {
+      mockFetch
+        .mockResolvedValueOnce(createMockResponse(CHAIN_ID_NOT_ALLOWED_BODY, { status: 422, ok: false }))
+        .mockResolvedValueOnce(createSuccessResponse({ success: true, data: { message: 'msg', expires_in: 300 } }));
+
+      await expect(requestWalletLinkNonceForAnyChain('0xabc', 1)).resolves.toEqual({ message: 'msg', expires_in: 300 });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ wallet_address: '0xabc', chain_id: 1 });
+      expect(JSON.parse(mockFetch.mock.calls[1][1].body)).toEqual({ wallet_address: '0xabc' });
+    });
+
+    it('does not retry other errors', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse(RATE_LIMITED_BODY, { status: 429, ok: false }));
+
+      await expect(requestWalletLinkNonceForAnyChain('0xabc', 1)).rejects.toMatchObject({ code: 'rate_limited' });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 
