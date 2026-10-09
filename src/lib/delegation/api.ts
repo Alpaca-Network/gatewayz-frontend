@@ -1,5 +1,5 @@
 // Typed client for the backend's delegated-staking endpoints
-// (gatewayz-backend src/routes/delegation.py):
+// (gatewayz-backend src/routes/delegation.py, src/routes/wallet_auth_cardano.py):
 //   GET  /delegation/status            public: is it on, which vault / pool, rates
 //   GET  /delegation/rewards           Bearer: the caller's positions and allowance
 //   POST /auth/wallet/cardano/nonce    Bearer: message for a stake address to sign
@@ -7,9 +7,10 @@
 //
 // The user stakes from their own wallet into a StakeWise vault (ETH) or delegates
 // to our pool (ADA). Gatewayz keeps the protocol rewards and gives inference
-// credits up to an allowance. Numbers may arrive as strings (Decimal -> str) and
-// are parsed here. The backend wraps every body as `{success, data}`; bare
-// bodies are accepted too.
+// credits up to an allowance. The backend wraps every body as `{success, data}`
+// (bare bodies are accepted too), sends numbers as strings (Decimal -> str,
+// e.g. fee_percent "99.00") and lowercase asset ids ("eth", "ada"); all of that
+// is normalized here, assets to "ETH" / "ADA".
 import { makeAuthenticatedRequest } from '@/lib/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
@@ -40,7 +41,10 @@ export interface DelegationPosition {
 export interface DelegationHistoryRow {
   date: string;
   asset: string;
+  wallet_address: string;
+  usd_basis: number;
   credits: number;
+  /** pending | claimed (payment in flight) | paid */
   status: string;
 }
 
@@ -65,9 +69,10 @@ export interface DelegationRewards {
   positions: DelegationPosition[];
   /** Empty when the backend does not list them; the panel then scans events itself. */
   exit_requests: DelegationExitTicket[];
-  allowance: { credits_per_day_estimate: number; month_estimate_usd: number };
+  allowance: { credits_per_day_estimate: number; month_estimate_usd: number; daily_cap_credits: number };
   totals: { pending: number; paid: number };
   history: DelegationHistoryRow[];
+  disclaimer: string;
 }
 
 export interface CardanoLinkNonce {
@@ -76,6 +81,13 @@ export interface CardanoLinkNonce {
   /** hex(utf8(message)): exactly what the wallet must sign. Null if the backend omits it. */
   payload_hex: string | null;
   expires_at: string | null;
+}
+
+/** `data.wallet` of POST /auth/wallet/cardano/link (the new /auth/wallets row). */
+export interface CardanoLinkedWallet {
+  wallet_address: string;
+  /** "cip34" for Cardano; EVM rows carry "eip155". */
+  chain_namespace: string;
 }
 
 /** Thrown for any non-2xx response from these endpoints. */
@@ -177,14 +189,18 @@ export function parseDelegationRewards(data: unknown): DelegationRewards {
     allowance: {
       credits_per_day_estimate: toNumber(allowance.credits_per_day_estimate),
       month_estimate_usd: toNumber(allowance.month_estimate_usd),
+      daily_cap_credits: toNumber(allowance.daily_cap_credits),
     },
     totals: { pending: toNumber(totals.pending), paid: toNumber(totals.paid) },
     history: asRows(d.history).map((r) => ({
       date: String(r.date ?? r.reward_date ?? ''),
       asset: assetOf(r.asset),
+      wallet_address: String(r.wallet_address ?? ''),
+      usd_basis: toNumber(r.usd_basis),
       credits: toNumber(r.credits),
       status: String(r.status ?? ''),
     })),
+    disclaimer: typeof d.disclaimer === 'string' ? d.disclaimer : '',
   };
 }
 
@@ -246,13 +262,17 @@ export async function linkCardanoStakeAddress(input: {
   stakeAddress: string;
   signature: string;
   key: string;
-}): Promise<void> {
+}): Promise<CardanoLinkedWallet> {
   const response = await makeAuthenticatedRequest(`${API_BASE_URL}/auth/wallet/cardano/link`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ stake_address: input.stakeAddress, signature: input.signature, key: input.key }),
   });
-  await readJson(response);
+  const wallet = asObject(asObject(await readJson(response)).wallet);
+  return {
+    wallet_address: String(wallet.wallet_address ?? input.stakeAddress),
+    chain_namespace: String(wallet.chain_namespace ?? 'cip34'),
+  };
 }
 
 /** Short, user-facing copy for a failed link. */

@@ -22,13 +22,13 @@ const mockTauri = useIsTauri as jest.Mock;
 
 const STATUS: DelegationStatus = {
   enabled: true,
-  eth: { vault_address: '0x1111111111111111111111111111111111111111', chain_id: 1, fee_percent: 5 },
+  eth: { vault_address: '0x1111111111111111111111111111111111111111', chain_id: 1, fee_percent: 99 },
   cardano: { pool_id: 'pool1abc' },
   allowance_rates: [
     { asset: 'ETH', credits_per_1k_usd_per_day: 1.5 },
     { asset: 'ADA', credits_per_1k_usd_per_day: 2 },
   ],
-  disclaimer: 'Rates can change. Not an investment product.',
+  disclaimer: 'Rates are set by Gatewayz, can change at any time, and are not a guaranteed return.',
 };
 
 describe('DelegationSection', () => {
@@ -70,6 +70,7 @@ describe('DelegationSection', () => {
     expect(screen.getByText(/funds are never locked/)).toBeInTheDocument();
     expect(screen.getByText(/ETH 1.5 credits per \$1,000 staked per day/)).toBeInTheDocument();
     expect(screen.getByText(/not guaranteed/)).toBeInTheDocument();
+    expect(screen.getByText(/takes a 99% fee on staking rewards/)).toBeInTheDocument();
     expect(screen.getByText(STATUS.disclaimer)).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'ETH' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'ADA' })).toBeInTheDocument();
@@ -112,9 +113,12 @@ describe('DelegationPositionCard', () => {
         ],
         exit_requests: [],
         linked_wallets: [],
-        allowance: { credits_per_day_estimate: 2.5, month_estimate_usd: 75 },
+        allowance: { credits_per_day_estimate: 2.5, month_estimate_usd: 75, daily_cap_credits: 100 },
         totals: { pending: 1, paid: 10 },
-        history: [{ date: '2026-10-07', asset: 'ETH', credits: 2.5, status: 'paid' }],
+        history: [
+          { date: '2026-10-07', asset: 'ETH', wallet_address: '0x1111111111111111111111111111111111111111', usd_basis: 4400, credits: 2.5, status: 'claimed' },
+        ],
+        disclaimer: 'Rates are set by Gatewayz.',
       },
     });
     render(<DelegationPositionCard />);
@@ -123,6 +127,9 @@ describe('DelegationPositionCard', () => {
     expect(screen.getByText('1.5 ETH')).toBeInTheDocument();
     expect(screen.getByText('stake1u9yl...tvm3rc')).toBeInTheDocument();
     expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByText('Capped at 100.0000 per day')).toBeInTheDocument();
+    expect(screen.getByText('paying')).toBeInTheDocument();
+    expect(screen.getByText('Rates are set by Gatewayz.')).toBeInTheDocument();
   });
 
   it('shows an empty state and errors', () => {

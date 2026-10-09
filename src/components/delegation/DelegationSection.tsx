@@ -69,7 +69,7 @@ function Explainer({ status }: { status: DelegationStatus }) {
       <p className="text-xs text-muted-foreground">
         Rates are current, set by Gatewayz, and not guaranteed; they can change or stop.
         {status.eth.fee_percent !== null && isEthVaultLive(status)
-          ? ` The ETH vault charges a ${status.eth.fee_percent}% fee on staking rewards.`
+          ? ` The ETH vault takes a ${status.eth.fee_percent}% fee on staking rewards; that is how Gatewayz collects the rewards that fund your allowance.`
           : ''}
       </p>
       {status.disclaimer && (
@@ -126,7 +126,7 @@ function AccountArea({ status }: { status: DelegationStatus }) {
           </TabsContent>
         )}
       </Tabs>
-      <DelegationPositionCard />
+      <DelegationPositionCard shownDisclaimer={status.disclaimer} />
     </div>
   );
 }

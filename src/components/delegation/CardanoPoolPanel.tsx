@@ -105,6 +105,8 @@ export function CardanoPoolPanel({ status }: { status: DelegationStatus }) {
       await linkCardanoStakeAddress({ stakeAddress: connected.stakeAddress, signature, key });
       setJustLinked(true);
       queryClient.invalidateQueries({ queryKey: delegationQueryKeys.rewards });
+      // The stake address is now also a row in GET /auth/wallets.
+      queryClient.invalidateQueries({ queryKey: ['linked-wallets'] });
       toast({ title: 'Stake address linked', description: shortId(connected.stakeAddress) });
     } catch (error) {
       const description = isCip30Rejection(error)

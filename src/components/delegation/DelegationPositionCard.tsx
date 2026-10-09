@@ -19,7 +19,8 @@ function shortAddress(address: string): string {
     : truncateAddress(address);
 }
 
-export function DelegationPositionCard() {
+/** `shownDisclaimer`: text already on the page (from /delegation/status), not repeated here. */
+export function DelegationPositionCard({ shownDisclaimer = '' }: { shownDisclaimer?: string }) {
   const query = useDelegationRewards();
 
   return (
@@ -49,6 +50,11 @@ export function DelegationPositionCard() {
               <div className="flex flex-col gap-1 rounded-lg border p-4">
                 <span className="text-xs text-muted-foreground">Allowance per day</span>
                 <span className="text-lg font-semibold">{formatCredits(query.data.allowance.credits_per_day_estimate)}</span>
+                {query.data.allowance.daily_cap_credits > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    Capped at {formatCredits(query.data.allowance.daily_cap_credits)} per day
+                  </span>
+                )}
               </div>
               <div className="flex flex-col gap-1 rounded-lg border p-4">
                 <span className="text-xs text-muted-foreground">Estimated per month</span>
@@ -103,6 +109,7 @@ export function DelegationPositionCard() {
                       <tr>
                         <th scope="col" className="px-3 py-2 font-medium">Date</th>
                         <th scope="col" className="px-3 py-2 font-medium">Asset</th>
+                        <th scope="col" className="px-3 py-2 text-right font-medium">Basis</th>
                         <th scope="col" className="px-3 py-2 text-right font-medium">Credits</th>
                         <th scope="col" className="px-3 py-2 font-medium">Status</th>
                       </tr>
@@ -112,14 +119,19 @@ export function DelegationPositionCard() {
                         <tr key={`${row.date}:${row.asset}:${i}`}>
                           <td className="px-3 py-2">{row.date}</td>
                           <td className="px-3 py-2">{row.asset}</td>
+                          <td className="px-3 py-2 text-right font-mono">{formatUsd(row.usd_basis)}</td>
                           <td className="px-3 py-2 text-right font-mono">{formatCredits(row.credits)}</td>
-                          <td className="px-3 py-2 capitalize">{row.status}</td>
+                          <td className="px-3 py-2 capitalize">{row.status === 'claimed' ? 'paying' : row.status}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               </div>
+            )}
+
+            {query.data.disclaimer && query.data.disclaimer !== shownDisclaimer && (
+              <p className="text-xs text-muted-foreground">{query.data.disclaimer}</p>
             )}
           </>
         )}

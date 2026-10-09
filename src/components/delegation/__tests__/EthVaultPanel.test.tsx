@@ -38,7 +38,7 @@ const USER = '0x2222222222222222222222222222222222222222';
 const ETH = BigInt(10) ** BigInt(18);
 const STATUS: DelegationStatus = {
   enabled: true,
-  eth: { vault_address: VAULT, chain_id: 1, fee_percent: 5 },
+  eth: { vault_address: VAULT, chain_id: 1, fee_percent: 99 },
   cardano: { pool_id: null },
   allowance_rates: [],
   disclaimer: '',
@@ -120,7 +120,7 @@ describe('EthVaultPanel', () => {
     expect(await screen.findByText('up to 0.002 ETH')).toBeInTheDocument();
     const dialog = screen.getByRole('alertdialog');
     expect(within(dialog).getByText('0.5 ETH')).toBeInTheDocument();
-    expect(within(dialog).getByText('5% of rewards')).toBeInTheDocument();
+    expect(within(dialog).getByText('99% of rewards')).toBeInTheDocument();
     expect(mutateAsync).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm in wallet' }));
