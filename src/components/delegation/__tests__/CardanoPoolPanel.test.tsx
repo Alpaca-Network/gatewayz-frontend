@@ -65,7 +65,12 @@ describe('CardanoPoolPanel', () => {
     (connectCardanoWallet as jest.Mock).mockResolvedValue({ key: 'eternl', wallet: {}, stakeAddress: STAKE });
     (fetchCardanoAccount as jest.Mock).mockResolvedValue({ registered: false, delegatedPool: null, totalLovelace: BigInt(0) });
     (fetchCardanoProtocolParams as jest.Mock).mockResolvedValue(null);
-    (requestCardanoLinkNonce as jest.Mock).mockResolvedValue({ nonce: 'n', message: 'Link stake1u...', expires_at: null });
+    (requestCardanoLinkNonce as jest.Mock).mockResolvedValue({
+      nonce: 'n',
+      message: 'Link stake1u...',
+      payload_hex: '4c696e6b',
+      expires_at: null,
+    });
     (signLinkMessage as jest.Mock).mockResolvedValue({ signature: '84a4', key: 'a401' });
     (linkCardanoStakeAddress as jest.Mock).mockResolvedValue(undefined);
     (buildDelegationTx as jest.Mock).mockResolvedValue({
@@ -94,7 +99,10 @@ describe('CardanoPoolPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Link with a signature' }));
     await waitFor(() => expect(linkCardanoStakeAddress).toHaveBeenCalledWith({ stakeAddress: STAKE, signature: '84a4', key: 'a401' }));
     expect(requestCardanoLinkNonce).toHaveBeenCalledWith(STAKE);
-    expect(signLinkMessage).toHaveBeenCalledWith(expect.objectContaining({ stakeAddress: STAKE }), 'Link stake1u...');
+    expect(signLinkMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ stakeAddress: STAKE }),
+      expect.objectContaining({ payload_hex: '4c696e6b' }),
+    );
 
     fireEvent.click(await screen.findByRole('button', { name: 'Delegate to Gatewayz' }));
     expect(await screen.findByText('0.18 ADA + 2 ADA refundable deposit')).toBeInTheDocument();
@@ -106,9 +114,9 @@ describe('CardanoPoolPanel', () => {
     expect(await screen.findByText(/View .* on Cardanoscan/)).toBeInTheDocument();
   });
 
-  it('treats an address with an ADA position as linked and shows current delegation to our pool', async () => {
+  it('treats an address in linked_wallets as linked (before any position) and shows delegation to our pool', async () => {
     (useDelegationRewards as jest.Mock).mockReturnValue({
-      data: { positions: [{ asset: 'ADA', wallet_address: STAKE, amount: 10, usd_value: 3, measured_at: null }] },
+      data: { linked_wallets: [{ asset: 'ADA', wallet_address: STAKE }], positions: [] },
     });
     (fetchCardanoAccount as jest.Mock).mockResolvedValue({
       registered: true,

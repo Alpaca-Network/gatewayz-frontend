@@ -8,7 +8,8 @@
 // The user stakes from their own wallet into a StakeWise vault (ETH) or delegates
 // to our pool (ADA). Gatewayz keeps the protocol rewards and gives inference
 // credits up to an allowance. Numbers may arrive as strings (Decimal -> str) and
-// are parsed here. Both `{success, data}` and bare bodies are accepted.
+// are parsed here. The backend wraps every body as `{success, data}`; bare
+// bodies are accepted too.
 import { makeAuthenticatedRequest } from '@/lib/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
@@ -52,8 +53,15 @@ export interface DelegationExitTicket {
   shares: string;
 }
 
+export interface DelegationLinkedWallet {
+  asset: DelegationAsset | string;
+  wallet_address: string;
+}
+
 export interface DelegationRewards {
   enabled: boolean;
+  /** Linked immediately on link; positions only appear after the next measurement. */
+  linked_wallets: DelegationLinkedWallet[];
   positions: DelegationPosition[];
   /** Empty when the backend does not list them; the panel then scans events itself. */
   exit_requests: DelegationExitTicket[];
@@ -65,6 +73,8 @@ export interface DelegationRewards {
 export interface CardanoLinkNonce {
   nonce: string;
   message: string;
+  /** hex(utf8(message)): exactly what the wallet must sign. Null if the backend omits it. */
+  payload_hex: string | null;
   expires_at: string | null;
 }
 
@@ -107,6 +117,11 @@ function toNullableString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 }
 
+/** The backend sends lowercase assets ("eth", "ada"); the UI uses "ETH" / "ADA". */
+function assetOf(value: unknown): string {
+  return String(value ?? '').toUpperCase();
+}
+
 /** `{success, data}` envelope or a bare object: returns the payload either way. */
 function unwrap(body: unknown): unknown {
   const b = asObject(body);
@@ -127,7 +142,7 @@ export function parseDelegationStatus(data: unknown): DelegationStatus {
     },
     cardano: { pool_id: toNullableString(cardano.pool_id) },
     allowance_rates: asRows(d.allowance_rates).map((r) => ({
-      asset: String(r.asset ?? ''),
+      asset: assetOf(r.asset),
       credits_per_1k_usd_per_day: toNumber(r.credits_per_1k_usd_per_day),
     })),
     disclaimer: typeof d.disclaimer === 'string' ? d.disclaimer : '',
@@ -141,8 +156,11 @@ export function parseDelegationRewards(data: unknown): DelegationRewards {
   const totals = asObject(d.totals);
   return {
     enabled: d.enabled === true,
+    linked_wallets: asRows(d.linked_wallets)
+      .map((r) => ({ asset: assetOf(r.asset), wallet_address: String(r.wallet_address ?? '') }))
+      .filter((w) => w.wallet_address !== ''),
     positions: asRows(d.positions).map((r) => ({
-      asset: String(r.asset ?? ''),
+      asset: assetOf(r.asset),
       wallet_address: String(r.wallet_address ?? ''),
       amount: toNumber(r.amount),
       usd_value: toNumber(r.usd_value),
@@ -163,7 +181,7 @@ export function parseDelegationRewards(data: unknown): DelegationRewards {
     totals: { pending: toNumber(totals.pending), paid: toNumber(totals.paid) },
     history: asRows(d.history).map((r) => ({
       date: String(r.date ?? r.reward_date ?? ''),
-      asset: String(r.asset ?? ''),
+      asset: assetOf(r.asset),
       credits: toNumber(r.credits),
       status: String(r.status ?? ''),
     })),
@@ -214,7 +232,13 @@ export async function requestCardanoLinkNonce(stakeAddress: string): Promise<Car
   if (typeof d.message !== 'string' || d.message === '') {
     throw new DelegationApiError(500, 'The link message was missing from the response.');
   }
-  return { nonce: String(d.nonce ?? ''), message: d.message, expires_at: toNullableString(d.expires_at) };
+  const payloadHex = typeof d.payload_hex === 'string' && /^[0-9a-f]+$/i.test(d.payload_hex) ? d.payload_hex : null;
+  return {
+    nonce: String(d.nonce ?? ''),
+    message: d.message,
+    payload_hex: payloadHex,
+    expires_at: toNullableString(d.expires_at),
+  };
 }
 
 /** POST /auth/wallet/cardano/link (Bearer): CIP-30 signData output (COSE_Sign1 + COSE_Key hex). */
@@ -237,6 +261,9 @@ export function describeCardanoLinkError(error: unknown): string {
     if (error.status === 400) return 'Your linking session expired. Please try again.';
     if (error.status === 401) return 'The wallet signature could not be verified. Please try again.';
     if (error.status === 409) return 'This stake address is already linked to another Gatewayz account.';
+    if (error.status === 422) {
+      return 'This stake address cannot be linked. Use a regular Cardano mainnet wallet (not a script or testnet address).';
+    }
     if (error.status === 429) return 'Too many attempts. Please wait a moment and try again.';
     if (error.status === 503) return 'Linking is temporarily unavailable. Please try again shortly.';
   }

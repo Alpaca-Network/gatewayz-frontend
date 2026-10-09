@@ -49,11 +49,13 @@ describe('parseDelegationRewards', () => {
   it('normalizes positions, allowance, totals and history', () => {
     const parsed = parseDelegationRewards({
       enabled: true,
-      positions: [{ asset: 'ADA', wallet_address: 'stake1u', amount: '100', usd_value: '50', measured_at: '2026-10-08' }],
+      linked_wallets: [{ asset: 'ada', wallet_address: 'stake1u' }, { asset: 'eth', wallet_address: '' }],
+      positions: [{ asset: 'ada', wallet_address: 'stake1u', amount: '100', usd_value: '50', measured_at: '2026-10-08' }],
       allowance: { credits_per_day_estimate: '0.25', month_estimate_usd: '7.5' },
       totals: { pending: '1', paid: '2' },
       history: [{ reward_date: '2026-10-07', asset: 'ADA', credits: '0.25', status: 'paid' }],
     });
+    expect(parsed.linked_wallets).toEqual([{ asset: 'ADA', wallet_address: 'stake1u' }]);
     expect(parsed.positions[0]).toEqual({
       asset: 'ADA',
       wallet_address: 'stake1u',
@@ -95,10 +97,12 @@ describe('endpoints', () => {
 
   it('posts the stake address for a nonce and the COSE pair to link', async () => {
     mockAuthRequest
-      .mockResolvedValueOnce(json({ nonce: 'n1', message: 'Link stake1u', expires_at: '2026-10-08T00:05:00Z' }))
+      .mockResolvedValueOnce(
+        json({ success: true, data: { nonce: 'n1', message: 'Link stake1u', payload_hex: '4c696e6b', expires_at: '2026-10-08T00:05:00Z' } }),
+      )
       .mockResolvedValueOnce(json({ success: true }));
     const nonce = await requestCardanoLinkNonce('stake1u');
-    expect(nonce).toEqual({ nonce: 'n1', message: 'Link stake1u', expires_at: '2026-10-08T00:05:00Z' });
+    expect(nonce).toEqual({ nonce: 'n1', message: 'Link stake1u', payload_hex: '4c696e6b', expires_at: '2026-10-08T00:05:00Z' });
     await linkCardanoStakeAddress({ stakeAddress: 'stake1u', signature: '84a4', key: 'a401' });
 
     const [nonceUrl, nonceInit] = mockAuthRequest.mock.calls[0];
@@ -120,6 +124,7 @@ describe('describeCardanoLinkError', () => {
     [400, /expired/],
     [401, /could not be verified/],
     [409, /another Gatewayz account/],
+    [422, /cannot be linked/],
     [429, /Too many/],
   ])('maps %s', (status, pattern) => {
     expect(describeCardanoLinkError(new DelegationApiError(status, ''))).toMatch(pattern);

@@ -37,21 +37,31 @@ export async function connectCardanoWallet(key: string): Promise<ConnectedCardan
   if (networkId !== CARDANO_MAINNET_NETWORK_ID) {
     throw new CardanoWalletError('Switch your wallet to Cardano mainnet and connect again.');
   }
+  // Mesh returns these bech32-encoded ("stake1..."), the form the backend expects.
   const [stakeAddress] = await wallet.getRewardAddresses();
   if (!stakeAddress) throw new CardanoWalletError('This wallet did not share a stake address.');
+  // Key-hash mainnet stake addresses (header 0xe1) encode as "stake1u..."; script
+  // ones (0xf1, "stake17...") have no key to sign with and the backend rejects them.
+  if (!stakeAddress.startsWith('stake1u')) {
+    throw new CardanoWalletError('This wallet uses a script stake address, which cannot sign. Use a regular wallet.');
+  }
   return { key, wallet, stakeAddress };
 }
 
 /**
- * CIP-30 signData over the backend's link message with the stake key.
- * Mesh hex-encodes the UTF-8 message and the bech32 address before calling the
+ * CIP-30 signData with the stake key. The backend verifies that the COSE
+ * protected `address` header is the stake address and the payload is
+ * hex(utf8(message)); it sends that hex as `payload_hex`, which is signed
+ * as-is when present. Mesh converts the bech32 address to raw bytes for the
  * wallet. Returns COSE_Sign1 and COSE_Key, both hex.
  */
 export async function signLinkMessage(
   connected: ConnectedCardanoWallet,
-  message: string,
+  nonce: { message: string; payload_hex: string | null },
 ): Promise<{ signature: string; key: string }> {
-  const { signature, key } = await connected.wallet.signData(message, connected.stakeAddress);
+  const { signature, key } = nonce.payload_hex
+    ? await connected.wallet.signData(nonce.payload_hex, connected.stakeAddress, false)
+    : await connected.wallet.signData(nonce.message, connected.stakeAddress);
   return { signature, key };
 }
 

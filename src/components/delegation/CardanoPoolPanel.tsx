@@ -74,7 +74,9 @@ export function CardanoPoolPanel({ status }: { status: DelegationStatus }) {
   }
 
   const linkedAddresses = new Set(
-    (rewardsQuery.data?.positions ?? []).filter((p) => p.asset === 'ADA').map((p) => p.wallet_address),
+    [...(rewardsQuery.data?.linked_wallets ?? []), ...(rewardsQuery.data?.positions ?? [])]
+      .filter((w) => w.asset === 'ADA')
+      .map((w) => w.wallet_address),
   );
   const isLinked = justLinked || (!!stakeAddress && linkedAddresses.has(stakeAddress));
   const account = accountQuery.data;
@@ -99,7 +101,7 @@ export function CardanoPoolPanel({ status }: { status: DelegationStatus }) {
     setLinking(true);
     try {
       const nonce = await requestCardanoLinkNonce(connected.stakeAddress);
-      const { signature, key } = await signLinkMessage(connected, nonce.message);
+      const { signature, key } = await signLinkMessage(connected, nonce);
       await linkCardanoStakeAddress({ stakeAddress: connected.stakeAddress, signature, key });
       setJustLinked(true);
       queryClient.invalidateQueries({ queryKey: delegationQueryKeys.rewards });

@@ -111,6 +111,7 @@ describe('DelegationPositionCard', () => {
           { asset: 'ADA', wallet_address: 'stake1u9ylzsgxaa6xctf4juup682ar3juj85n8tx3hthnljg47zctvm3rc', amount: 1000, usd_value: 350, measured_at: null },
         ],
         exit_requests: [],
+        linked_wallets: [],
         allowance: { credits_per_day_estimate: 2.5, month_estimate_usd: 75 },
         totals: { pending: 1, paid: 10 },
         history: [{ date: '2026-10-07', asset: 'ETH', credits: 2.5, status: 'paid' }],

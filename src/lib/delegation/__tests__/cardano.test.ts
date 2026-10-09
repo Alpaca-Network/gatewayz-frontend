@@ -103,10 +103,27 @@ describe('cardano wallet actions', () => {
     await expect(connectCardanoWallet('lace')).rejects.toBeInstanceOf(CardanoWalletError);
   });
 
-  it('signs the link message with the stake address', async () => {
+  it('refuses a script stake address, which cannot sign', async () => {
+    mockEnable.mockResolvedValue(
+      fakeWallet({ getRewardAddresses: jest.fn().mockResolvedValue(['stake17yqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqr0rjsu']) }),
+    );
+    await expect(connectCardanoWallet('lace')).rejects.toThrow(/script stake address/);
+  });
+
+  it("signs the backend's payload_hex as-is with the stake address", async () => {
     const wallet = fakeWallet();
     const connected = { key: 'eternl', wallet, stakeAddress: STAKE } as unknown as ConnectedCardanoWallet;
-    await expect(signLinkMessage(connected, 'Link this')).resolves.toEqual({ signature: '84a4', key: 'a401' });
+    await expect(signLinkMessage(connected, { message: 'Link this', payload_hex: '4c696e6b2074686973' })).resolves.toEqual({
+      signature: '84a4',
+      key: 'a401',
+    });
+    expect(wallet.signData).toHaveBeenCalledWith('4c696e6b2074686973', STAKE, false);
+  });
+
+  it('falls back to the UTF-8 message when payload_hex is missing', async () => {
+    const wallet = fakeWallet();
+    const connected = { key: 'eternl', wallet, stakeAddress: STAKE } as unknown as ConnectedCardanoWallet;
+    await signLinkMessage(connected, { message: 'Link this', payload_hex: null });
     expect(wallet.signData).toHaveBeenCalledWith('Link this', STAKE);
   });
 
