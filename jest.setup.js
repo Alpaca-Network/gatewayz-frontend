@@ -197,7 +197,9 @@ jest.mock('ofetch', () => ({
   default: jest.fn(),
 }))
 
-// Mock uint8arrays library (ESM module used by @walletconnect)
+// Mock uint8arrays library (ESM module used by @walletconnect). Virtual: the
+// copy pnpm hoists to the top level can be an ESM-only major (Mesh SDK's
+// cardano-sdk tree brings v5/v6) that jest's CJS resolver cannot load.
 jest.mock('uint8arrays', () => ({
   compare: jest.fn(),
   concat: jest.fn(),
@@ -205,7 +207,7 @@ jest.mock('uint8arrays', () => ({
   fromString: jest.fn(),
   toString: jest.fn(),
   __esModule: true,
-}))
+}), { virtual: true })
 
 // Mock @coinbase/wallet-sdk library (ESM module)
 jest.mock('@coinbase/wallet-sdk', () => ({

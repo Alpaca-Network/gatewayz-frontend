@@ -4,6 +4,7 @@
 // the wallet-link flow and the account's HoldingsRewardsCard. Product language
 // is "holdings rewards" only; __tests__/language.test.ts enforces the
 // backend's word policy on this file.
+import dynamic from 'next/dynamic';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +15,15 @@ import { REWARDS_HEADLINE } from '@/components/holdings/HoldingsRewardsSummaryCa
 import { HoldingsWalletLink } from '@/components/holdings/HoldingsWalletLink';
 import { HOLDINGS_RULES } from '@/lib/holdings/status';
 import { HOLDINGS_SUPPORTED_CHAINS } from '@/lib/holdings/supported-tokens';
+import { isDelegationFlagOn } from '@/lib/delegation/flags';
+
+// A separate opt-in feature with its own copy, kept in src/components/delegation.
+// Loaded only when its build flag is on; it then renders nothing until the
+// backend reports it enabled.
+const DelegationSection = dynamic(
+  () => import('@/components/delegation/DelegationSection').then((m) => m.DelegationSection),
+  { ssr: false },
+);
 
 const STEPS = [
   {
@@ -147,6 +157,7 @@ export function RewardsPageClient() {
       </header>
       <HowItWorks />
       <AccountSection />
+      {isDelegationFlagOn() && <DelegationSection />}
       <SupportedTokens />
     </div>
   );
