@@ -64,6 +64,9 @@ jest.mock('@/components/tier/tier-info-card', () => ({
 jest.mock('@/components/holdings/HoldingsRewardsSummaryCard', () => ({
   HoldingsRewardsSummaryCard: () => <div data-testid="holdings-rewards-summary-card" />,
 }));
+jest.mock('@/components/delegation/InferenceDiscountBalanceLine', () => ({
+  InferenceDiscountBalanceLine: () => <div data-testid="inference-discount-balance-line" />,
+}));
 
 describe('CreditsPage', () => {
   const mockBasicUserData: UserData = {
@@ -162,6 +165,30 @@ describe('CreditsPage', () => {
       });
 
       expect(screen.getByText('Available Balance')).toBeInTheDocument();
+    });
+
+    it('shows the inference discount line only when the delegated staking flag is on', async () => {
+      (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
+      const original = process.env.NEXT_PUBLIC_DELEGATED_STAKING_ENABLED;
+      try {
+        process.env.NEXT_PUBLIC_DELEGATED_STAKING_ENABLED = 'false';
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+          view = render(<CreditsPage />);
+          jest.runAllTimers();
+        });
+        expect(screen.queryByTestId('inference-discount-balance-line')).not.toBeInTheDocument();
+        view?.unmount();
+
+        process.env.NEXT_PUBLIC_DELEGATED_STAKING_ENABLED = 'true';
+        await act(async () => {
+          render(<CreditsPage />);
+          jest.runAllTimers();
+        });
+        expect(screen.getByTestId('inference-discount-balance-line')).toBeInTheDocument();
+      } finally {
+        process.env.NEXT_PUBLIC_DELEGATED_STAKING_ENABLED = original;
+      }
     });
 
     it('should display Recent Transactions header', async () => {

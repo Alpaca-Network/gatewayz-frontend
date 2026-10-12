@@ -1,4 +1,11 @@
-import { isCardanoPoolLive, isDelegationFlagOn, isDelegationLive, isEthVaultLive } from '../flags';
+import {
+  isCardanoPoolLive,
+  isDelegationFlagOn,
+  isDelegationLive,
+  isDiscountLive,
+  isEthVaultLive,
+  isRewardShareModel,
+} from '../flags';
 import type { DelegationStatus } from '../api';
 
 const status = (over: Partial<DelegationStatus> = {}): DelegationStatus => ({
@@ -42,5 +49,23 @@ describe('delegation flags', () => {
     expect(isEthVaultLive(status({ eth: { vault_address: '0x1', chain_id: 17000, fee_percent: null } }))).toBe(false);
     expect(isCardanoPoolLive(status({ cardano: { pool_id: null } }))).toBe(false);
     expect(isCardanoPoolLive(status())).toBe(true);
+  });
+
+  it('needs the build flag, the backend and its discount switch for the discount', () => {
+    process.env.NEXT_PUBLIC_DELEGATED_STAKING_ENABLED = 'true';
+    expect(isDiscountLive(status({ discount_enabled: true }))).toBe(true);
+    expect(isDiscountLive(status())).toBe(false);
+    expect(isDiscountLive(status({ discount_enabled: false }))).toBe(false);
+    expect(isDiscountLive(status({ enabled: false, discount_enabled: true }))).toBe(false);
+    expect(isDiscountLive(undefined)).toBe(false);
+    process.env.NEXT_PUBLIC_DELEGATED_STAKING_ENABLED = 'false';
+    expect(isDiscountLive(status({ discount_enabled: true }))).toBe(false);
+  });
+
+  it('reads the payout model', () => {
+    expect(isRewardShareModel(status({ payout_model: 'reward_share' }))).toBe(true);
+    expect(isRewardShareModel(status({ payout_model: 'allowance' }))).toBe(false);
+    expect(isRewardShareModel(status())).toBe(false);
+    expect(isRewardShareModel(undefined)).toBe(false);
   });
 });

@@ -77,6 +77,71 @@ describe('DelegationSection', () => {
     expect(screen.getByText('eth-panel')).toBeInTheDocument();
   });
 
+  describe('with the v3 reward-share payout model', () => {
+    const V3: DelegationStatus = {
+      ...STATUS,
+      allowance_rates: [],
+      payout_model: 'reward_share',
+      reward_share: 0.95,
+      discount_percent: 0.99,
+      discount_enabled: true,
+    };
+    const REWARDS = {
+      enabled: true,
+      positions: [],
+      exit_requests: [],
+      linked_wallets: [],
+      allowance: { credits_per_day_estimate: 0, month_estimate_usd: 0, daily_cap_credits: 0 },
+      totals: { pending: 0, paid: 0 },
+      history: [],
+      disclaimer: STATUS.disclaimer,
+      discount: {
+        enabled: true,
+        discount_percent: 0.99,
+        reward_share: 0.95,
+        balance_usd: 3,
+        lifetime_granted_usd: 3,
+        lifetime_used_usd: 0,
+      },
+      attributions: [],
+      discount_history: [],
+    };
+
+    it('describes the discount instead of the allowance, and shows the discount card', () => {
+      mockStatus.mockReturnValue({ data: V3 });
+      mockRewards.mockReturnValue({ isLoading: false, isError: false, data: REWARDS });
+      render(<DelegationSection />);
+      expect(screen.getByText(/get 95% of the staking rewards it brings Gatewayz back as an inference discount/)).toBeInTheDocument();
+      expect(screen.getByText(/each request costs you 1% of the list price/)).toBeInTheDocument();
+      expect(screen.queryByText(/Inference at 99% off/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Current allowance/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Rates are current, set by Gatewayz/)).not.toBeInTheDocument();
+      expect(screen.getByText(/takes a 99% fee on staking rewards/)).toBeInTheDocument();
+      // The API disclaimer stays on the page (once, in the explainer).
+      expect(screen.getAllByText(STATUS.disclaimer)).toHaveLength(1);
+      expect(screen.getByRole('region', { name: 'Inference discount' })).toBeInTheDocument();
+      expect(screen.getByText('You pay 1% of the list price until your balance runs out.')).toBeInTheDocument();
+      expect(screen.getByText('Your positions')).toBeInTheDocument();
+      expect(screen.queryByText('Allowance per day')).not.toBeInTheDocument();
+    });
+
+    it('keeps the discount card out until the backend discount switch is on', () => {
+      mockStatus.mockReturnValue({ data: { ...V3, discount_enabled: false } });
+      mockRewards.mockReturnValue({ isLoading: false, isError: false, data: REWARDS });
+      render(<DelegationSection />);
+      expect(screen.queryByRole('region', { name: 'Inference discount' })).not.toBeInTheDocument();
+    });
+
+    it('shows the discount card to desktop users too', () => {
+      mockTauri.mockReturnValue(true);
+      mockStatus.mockReturnValue({ data: V3 });
+      mockRewards.mockReturnValue({ isLoading: false, isError: false, data: REWARDS });
+      render(<DelegationSection />);
+      expect(screen.getByText(/the discount then counts for this account everywhere/)).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Inference discount' })).toBeInTheDocument();
+    });
+  });
+
   it('shows only the ADA tab when only a pool is configured', () => {
     mockStatus.mockReturnValue({ data: { ...STATUS, eth: { vault_address: null, chain_id: 1, fee_percent: null } } });
     render(<DelegationSection />);

@@ -28,6 +28,8 @@ import { formatCredits, formatCreditsDollar } from '@/lib/format-credits';
 import { API_BASE_URL, CREDIT_TOPUP_FEE_RATE, applyTopupFee } from '@/lib/config';
 import { TierInfoCard } from '@/components/tier/tier-info-card';
 import { HoldingsRewardsSummaryCard } from '@/components/holdings/HoldingsRewardsSummaryCard';
+import { InferenceDiscountBalanceLine } from '@/components/delegation/InferenceDiscountBalanceLine';
+import { isDelegationFlagOn } from '@/lib/delegation/flags';
 
 // Confetti/Emoji explosion component
 const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
@@ -591,8 +593,10 @@ function CreditsPageContent() {
       )}
 
       {/* Holdings rewards: free credits for tokens held in linked wallets (/rewards). */}
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl mx-auto flex flex-col gap-4">
         <HoldingsRewardsSummaryCard />
+        {/* Inference discount from delegated staking (v3); renders nothing until the backend turns it on. */}
+        {isDelegationFlagOn() && <InferenceDiscountBalanceLine />}
       </div>
 
       <div className="space-y-4">

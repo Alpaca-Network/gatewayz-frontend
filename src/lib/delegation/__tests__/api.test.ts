@@ -76,7 +76,34 @@ describe('parseDelegationStatus', () => {
       cardano: { pool_id: 'pool1xyz' },
       allowance_rates: [{ asset: 'ETH', credits_per_1k_usd_per_day: 1.5 }],
       disclaimer: DISCLAIMER,
+      // A pre-v3 backend: no discount fields, so the discount stays off.
+      payout_model: null,
+      reward_share: null,
+      discount_percent: null,
+      discount_enabled: false,
     });
+  });
+
+  it('reads the v3 reward-share fields', () => {
+    const parsed = parseDelegationStatus({
+      ...STATUS,
+      payout_model: 'reward_share',
+      reward_share: '0.95',
+      discount_percent: '0.99',
+      discount_enabled: true,
+    });
+    expect(parsed).toMatchObject({ payout_model: 'reward_share', reward_share: 0.95, discount_percent: 0.99, discount_enabled: true });
+  });
+
+  it('scales a percent, and drops unusable v3 values', () => {
+    expect(parseDelegationStatus({ ...STATUS, discount_percent: '99.00', reward_share: 95 })).toMatchObject({
+      discount_percent: 0.99,
+      reward_share: 0.95,
+    });
+    expect(
+      parseDelegationStatus({ ...STATUS, payout_model: 'other', discount_percent: '-1', reward_share: 'x', discount_enabled: 'true' }),
+    ).toMatchObject({ payout_model: null, discount_percent: null, reward_share: null, discount_enabled: false });
+    expect(parseDelegationStatus({ ...STATUS, discount_percent: 150 }).discount_percent).toBeNull();
   });
 
   it('reads the dark backend as off with no targets', () => {
@@ -127,6 +154,80 @@ describe('parseDelegationRewards', () => {
     ]);
     expect(parsed.disclaimer).toBe(DISCLAIMER);
     expect(parsed.exit_requests).toEqual([]);
+  });
+
+  it('has no discount, attributions or history from a pre-v3 backend', () => {
+    const parsed = parseDelegationRewards(REWARDS);
+    expect(parsed.discount).toBeNull();
+    expect(parsed.attributions).toEqual([]);
+    expect(parsed.discount_history).toEqual([]);
+  });
+
+  it('normalizes the v3 discount, attributions and history', () => {
+    const parsed = parseDelegationRewards({
+      ...REWARDS,
+      discount: {
+        enabled: true,
+        discount_percent: '0.99',
+        reward_share: '0.95',
+        balance_usd: '12.345678',
+        lifetime_granted_usd: '20.000000',
+        lifetime_used_usd: '7.654322',
+      },
+      attributions: [
+        {
+          asset: 'eth',
+          period_key: '2026-10-10',
+          stake_native: '1.500000000000000000',
+          attributed_usd: '0.420000',
+          discount_usd: '0.399000',
+          status: 'granted',
+          granted_at: '2026-10-11T01:00:00+00:00',
+        },
+        { asset: 'ada', period_key: '', discount_usd: '1' },
+      ],
+      discount_history: [
+        { created_at: '2026-10-11T02:00:00+00:00', kind: 'use', amount_usd: '-0.000123', balance_after: '12.345678', ref: 'req' },
+        { created_at: null, kind: 'grant', amount_usd: '0.399000', balance_after: null },
+      ],
+    });
+    expect(parsed.discount).toEqual({
+      enabled: true,
+      discount_percent: 0.99,
+      reward_share: 0.95,
+      balance_usd: 12.345678,
+      lifetime_granted_usd: 20,
+      lifetime_used_usd: 7.654322,
+    });
+    expect(parsed.attributions).toEqual([
+      {
+        asset: 'ETH',
+        period_key: '2026-10-10',
+        stake_native: 1.5,
+        attributed_usd: 0.42,
+        discount_usd: 0.399,
+        status: 'granted',
+        granted_at: '2026-10-11T01:00:00+00:00',
+      },
+    ]);
+    expect(parsed.discount_history).toEqual([
+      { created_at: '2026-10-11T02:00:00+00:00', kind: 'use', amount_usd: -0.000123, balance_after: 12.345678, ref: 'req' },
+      { created_at: null, kind: 'grant', amount_usd: 0.399, balance_after: null, ref: null },
+    ]);
+  });
+
+  it('treats a malformed discount as absent or off', () => {
+    expect(parseDelegationRewards({ discount: 'yes' }).discount).toBeNull();
+    expect(parseDelegationRewards({ discount: [] }).discount).toBeNull();
+    expect(parseDelegationRewards({ discount: { enabled: 'true', balance_usd: '-5' } }).discount).toMatchObject({
+      enabled: false,
+      balance_usd: 0,
+      discount_percent: null,
+    });
+    expect(parseDelegationRewards({ attributions: 'x', discount_history: {} })).toMatchObject({
+      attributions: [],
+      discount_history: [],
+    });
   });
 
   it('drops linked wallets without an address', () => {
