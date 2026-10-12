@@ -6,8 +6,11 @@
 //   POST /auth/wallet/cardano/link     Bearer: CIP-30 signData proof for that address
 //
 // The user stakes from their own wallet into a StakeWise vault (ETH) or delegates
-// to our pool (ADA). Gatewayz keeps the protocol rewards and gives inference
-// credits up to an allowance. The backend wraps every body as `{success, data}`
+// to our pool (ADA). Gatewayz receives the protocol rewards and gives back either
+// inference credits up to an allowance (payout_model "allowance", v2) or a share
+// of the rewards that user's stake earned as an inference discount balance
+// (payout_model "reward_share", v3). The v3 fields are optional on the wire:
+// an older backend omits them and the discount UI stays hidden. The backend wraps every body as `{success, data}`
 // (bare bodies are accepted too), sends numbers as strings (Decimal -> str,
 // e.g. fee_percent "99.00") and lowercase asset ids ("eth", "ada"); all of that
 // is normalized here, assets to "ETH" / "ADA".
@@ -22,12 +25,21 @@ export interface DelegationAllowanceRate {
   credits_per_1k_usd_per_day: number;
 }
 
+export type DelegationPayoutModel = 'allowance' | 'reward_share';
+
 export interface DelegationStatus {
   enabled: boolean;
   eth: { vault_address: string | null; chain_id: number; fee_percent: number | null };
   cardano: { pool_id: string | null };
   allowance_rates: DelegationAllowanceRate[];
   disclaimer: string;
+  /** v3 fields; absent (undefined / null) from a backend that predates them. */
+  payout_model?: DelegationPayoutModel | null;
+  /** Fraction 0..1 of the rewards a stake earned Gatewayz that comes back as discount. */
+  reward_share?: number | null;
+  /** Fraction 0..1 of the list price drawn from the discount balance per request. */
+  discount_percent?: number | null;
+  discount_enabled?: boolean;
 }
 
 export interface DelegationPosition {
@@ -62,6 +74,38 @@ export interface DelegationLinkedWallet {
   wallet_address: string;
 }
 
+/** `discount` of GET /delegation/rewards: the account's inference discount balance. */
+export interface DelegationDiscount {
+  enabled: boolean;
+  discount_percent: number | null;
+  reward_share: number | null;
+  balance_usd: number;
+  lifetime_granted_usd: number;
+  lifetime_used_usd: number;
+}
+
+/** One wallet/period: the share of Gatewayz's staking rewards that stake earned, and the discount it gave. */
+export interface DelegationAttribution {
+  asset: string;
+  period_key: string;
+  stake_native: number;
+  attributed_usd: number;
+  discount_usd: number;
+  /** pending | granted | void */
+  status: string;
+  granted_at: string | null;
+}
+
+export interface DelegationDiscountEntry {
+  created_at: string | null;
+  /** grant | use | adjust | reverse */
+  kind: string;
+  /** Signed: grants positive, uses negative. */
+  amount_usd: number;
+  balance_after: number | null;
+  ref: string | null;
+}
+
 export interface DelegationRewards {
   enabled: boolean;
   /** Linked immediately on link; positions only appear after the next measurement. */
@@ -73,6 +117,10 @@ export interface DelegationRewards {
   totals: { pending: number; paid: number };
   history: DelegationHistoryRow[];
   disclaimer: string;
+  /** Null when the backend omits it (pre-v3) or sends something unusable. */
+  discount: DelegationDiscount | null;
+  attributions: DelegationAttribution[];
+  discount_history: DelegationDiscountEntry[];
 }
 
 export interface CardanoLinkNonce {
@@ -134,6 +182,34 @@ function assetOf(value: unknown): string {
   return String(value ?? '').toUpperCase();
 }
 
+/**
+ * A 0..1 fraction. Tolerates a percent ("99.00", like fee_percent) by scaling
+ * values in (1, 100]; anything else unusable is null so the UI hides it.
+ */
+function toFraction(value: unknown): number | null {
+  const parsed = toNullableNumber(value);
+  if (parsed === null || parsed < 0) return null;
+  if (parsed <= 1) return parsed;
+  return parsed <= 100 ? parsed / 100 : null;
+}
+
+function toPayoutModel(value: unknown): DelegationPayoutModel | null {
+  return value === 'allowance' || value === 'reward_share' ? value : null;
+}
+
+function parseDiscount(value: unknown): DelegationDiscount | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const d = value as Row;
+  return {
+    enabled: d.enabled === true,
+    discount_percent: toFraction(d.discount_percent),
+    reward_share: toFraction(d.reward_share),
+    balance_usd: Math.max(0, toNumber(d.balance_usd)),
+    lifetime_granted_usd: toNumber(d.lifetime_granted_usd),
+    lifetime_used_usd: toNumber(d.lifetime_used_usd),
+  };
+}
+
 /** `{success, data}` envelope or a bare object: returns the payload either way. */
 function unwrap(body: unknown): unknown {
   const b = asObject(body);
@@ -158,6 +234,10 @@ export function parseDelegationStatus(data: unknown): DelegationStatus {
       credits_per_1k_usd_per_day: toNumber(r.credits_per_1k_usd_per_day),
     })),
     disclaimer: typeof d.disclaimer === 'string' ? d.disclaimer : '',
+    payout_model: toPayoutModel(d.payout_model),
+    reward_share: toFraction(d.reward_share),
+    discount_percent: toFraction(d.discount_percent),
+    discount_enabled: d.discount_enabled === true,
   };
 }
 
@@ -201,6 +281,25 @@ export function parseDelegationRewards(data: unknown): DelegationRewards {
       status: String(r.status ?? ''),
     })),
     disclaimer: typeof d.disclaimer === 'string' ? d.disclaimer : '',
+    discount: parseDiscount(d.discount),
+    attributions: asRows(d.attributions)
+      .map((r) => ({
+        asset: assetOf(r.asset),
+        period_key: String(r.period_key ?? ''),
+        stake_native: toNumber(r.stake_native),
+        attributed_usd: toNumber(r.attributed_usd),
+        discount_usd: toNumber(r.discount_usd),
+        status: String(r.status ?? ''),
+        granted_at: toNullableString(r.granted_at),
+      }))
+      .filter((r) => r.period_key !== ''),
+    discount_history: asRows(d.discount_history).map((r) => ({
+      created_at: toNullableString(r.created_at),
+      kind: String(r.kind ?? ''),
+      amount_usd: toNumber(r.amount_usd),
+      balance_after: toNullableNumber(r.balance_after),
+      ref: toNullableString(r.ref),
+    })),
   };
 }
 

@@ -20,3 +20,17 @@ export function isCardanoPoolLive(status: DelegationStatus | undefined): boolean
 export function isDelegationLive(status: DelegationStatus | undefined): boolean {
   return isDelegationFlagOn() && (isEthVaultLive(status) || isCardanoPoolLive(status));
 }
+
+/** v3: rewards come back as an inference discount, not as allowance credits. */
+export function isRewardShareModel(status: DelegationStatus | undefined): boolean {
+  return status?.payout_model === 'reward_share';
+}
+
+/**
+ * The inference discount needs the build flag, the backend on, and its own
+ * discount switch. The account's `discount.enabled` from /delegation/rewards
+ * is checked again where the balance renders.
+ */
+export function isDiscountLive(status: DelegationStatus | undefined): boolean {
+  return isDelegationFlagOn() && !!status?.enabled && status.discount_enabled === true;
+}

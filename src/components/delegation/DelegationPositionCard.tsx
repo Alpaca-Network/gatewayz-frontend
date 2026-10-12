@@ -2,7 +2,10 @@
 
 // The account's staked positions and the inference allowance they earn, from
 // GET /delegation/rewards. Positions are measured by the backend from chain
-// data, so a fresh stake appears after its next measurement.
+// data, so a fresh stake appears after its next measurement. Under the v3
+// reward_share model no allowance accrues (InferenceDiscountCard shows the
+// discount instead), so the allowance tiles are hidden and the credit totals
+// show only if an earlier allowance left any.
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,17 +22,29 @@ function shortAddress(address: string): string {
     : truncateAddress(address);
 }
 
-/** `shownDisclaimer`: text already on the page (from /delegation/status), not repeated here. */
-export function DelegationPositionCard({ shownDisclaimer = '' }: { shownDisclaimer?: string }) {
+/**
+ * `shownDisclaimer`: text already on the page (from /delegation/status), not repeated here.
+ * `rewardShare`: payout_model is "reward_share"; the allowance does not apply.
+ */
+export function DelegationPositionCard({
+  shownDisclaimer = '',
+  rewardShare = false,
+}: {
+  shownDisclaimer?: string;
+  rewardShare?: boolean;
+}) {
   const query = useDelegationRewards();
+  const showCreditTotals =
+    !!query.data && (!rewardShare || query.data.totals.pending > 0 || query.data.totals.paid > 0);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your positions and allowance</CardTitle>
+        <CardTitle>{rewardShare ? 'Your positions' : 'Your positions and allowance'}</CardTitle>
         <CardDescription>
-          What you have staked through Gatewayz, and the inference allowance it earns. Positions update after each
-          measurement.
+          {rewardShare
+            ? 'What you have staked through Gatewayz. Positions update after each measurement.'
+            : 'What you have staked through Gatewayz, and the inference allowance it earns. Positions update after each measurement.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
@@ -46,29 +61,37 @@ export function DelegationPositionCard({ shownDisclaimer = '' }: { shownDisclaim
         )}
         {query.data && (
           <>
-            <div className="grid gap-3 sm:grid-cols-4">
-              <div className="flex flex-col gap-1 rounded-lg border p-4">
-                <span className="text-xs text-muted-foreground">Allowance per day</span>
-                <span className="text-lg font-semibold">{formatCredits(query.data.allowance.credits_per_day_estimate)}</span>
-                {query.data.allowance.daily_cap_credits > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    Capped at {formatCredits(query.data.allowance.daily_cap_credits)} per day
-                  </span>
+            {showCreditTotals && (
+              <div className={rewardShare ? 'grid gap-3 sm:grid-cols-2' : 'grid gap-3 sm:grid-cols-4'}>
+                {!rewardShare && (
+                  <>
+                    <div className="flex flex-col gap-1 rounded-lg border p-4">
+                      <span className="text-xs text-muted-foreground">Allowance per day</span>
+                      <span className="text-lg font-semibold">
+                        {formatCredits(query.data.allowance.credits_per_day_estimate)}
+                      </span>
+                      {query.data.allowance.daily_cap_credits > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          Capped at {formatCredits(query.data.allowance.daily_cap_credits)} per day
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1 rounded-lg border p-4">
+                      <span className="text-xs text-muted-foreground">Estimated per month</span>
+                      <span className="text-lg font-semibold">{formatUsd(query.data.allowance.month_estimate_usd)}</span>
+                    </div>
+                  </>
                 )}
+                <div className="flex flex-col gap-1 rounded-lg border p-4">
+                  <span className="text-xs text-muted-foreground">Pending credits</span>
+                  <span className="text-lg font-semibold">{formatCredits(query.data.totals.pending)}</span>
+                </div>
+                <div className="flex flex-col gap-1 rounded-lg border p-4">
+                  <span className="text-xs text-muted-foreground">Credits paid</span>
+                  <span className="text-lg font-semibold">{formatCredits(query.data.totals.paid)}</span>
+                </div>
               </div>
-              <div className="flex flex-col gap-1 rounded-lg border p-4">
-                <span className="text-xs text-muted-foreground">Estimated per month</span>
-                <span className="text-lg font-semibold">{formatUsd(query.data.allowance.month_estimate_usd)}</span>
-              </div>
-              <div className="flex flex-col gap-1 rounded-lg border p-4">
-                <span className="text-xs text-muted-foreground">Pending credits</span>
-                <span className="text-lg font-semibold">{formatCredits(query.data.totals.pending)}</span>
-              </div>
-              <div className="flex flex-col gap-1 rounded-lg border p-4">
-                <span className="text-xs text-muted-foreground">Credits paid</span>
-                <span className="text-lg font-semibold">{formatCredits(query.data.totals.paid)}</span>
-              </div>
-            </div>
+            )}
 
             <div className="flex flex-col gap-2">
               <h4 className="text-sm font-semibold">Positions</h4>
