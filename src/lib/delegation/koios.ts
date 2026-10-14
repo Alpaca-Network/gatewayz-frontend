@@ -1,9 +1,11 @@
 // Read-only Cardano chain lookups via Koios's public, keyless API. Used for the
 // two facts a CIP-30 wallet cannot tell us: whether the stake key is already
 // registered (a registration certificate and its 2 ADA deposit are needed if
-// not) and which pool it delegates to now. api.koios.rest is allowed in the CSP
-// connect-src for exactly this.
-export const KOIOS_BASE_URL = 'https://api.koios.rest/api/v1';
+// not) and which pool it delegates to now. api.koios.rest (and preprod.koios.rest
+// for testnet demos) is allowed in the CSP connect-src for exactly this.
+import { cardanoNetworkConfig, type CardanoNetwork } from './cardano-network';
+
+export const KOIOS_BASE_URL = cardanoNetworkConfig('mainnet').koiosBaseUrl;
 
 export interface CardanoAccountInfo {
   registered: boolean;
@@ -21,8 +23,8 @@ export interface CardanoProtocolParams {
   maxTxSize: number;
 }
 
-async function koiosPost(path: string, body: unknown): Promise<unknown> {
-  const response = await fetch(`${KOIOS_BASE_URL}${path}`, {
+async function koiosPost(path: string, body: unknown, network: CardanoNetwork): Promise<unknown> {
+  const response = await fetch(`${cardanoNetworkConfig(network).koiosBaseUrl}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body),
@@ -31,8 +33,11 @@ async function koiosPost(path: string, body: unknown): Promise<unknown> {
   return response.json();
 }
 
-export async function fetchCardanoAccount(stakeAddress: string): Promise<CardanoAccountInfo> {
-  const rows = await koiosPost('/account_info', { _stake_addresses: [stakeAddress] });
+export async function fetchCardanoAccount(
+  stakeAddress: string,
+  network: CardanoNetwork = 'mainnet',
+): Promise<CardanoAccountInfo> {
+  const rows = await koiosPost('/account_info', { _stake_addresses: [stakeAddress] }, network);
   const row = (Array.isArray(rows) ? rows[0] : null) as
     | { status?: unknown; delegated_pool?: unknown; total_balance?: unknown }
     | null;
@@ -52,9 +57,9 @@ export async function fetchCardanoAccount(stakeAddress: string): Promise<Cardano
 }
 
 /** Current-epoch fee parameters; null when Koios is unreachable (Mesh's defaults apply). */
-export async function fetchCardanoProtocolParams(): Promise<CardanoProtocolParams | null> {
+export async function fetchCardanoProtocolParams(network: CardanoNetwork = 'mainnet'): Promise<CardanoProtocolParams | null> {
   try {
-    const response = await fetch(`${KOIOS_BASE_URL}/cli_protocol_params`, { headers: { Accept: 'application/json' } });
+    const response = await fetch(`${cardanoNetworkConfig(network).koiosBaseUrl}/cli_protocol_params`, { headers: { Accept: 'application/json' } });
     if (!response.ok) return null;
     const p = (await response.json()) as Record<string, unknown>;
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);

@@ -103,6 +103,23 @@ describe('cardano wallet actions', () => {
     await expect(connectCardanoWallet('lace')).rejects.toBeInstanceOf(CardanoWalletError);
   });
 
+  it('connects on preprod only when the backend says preprod', async () => {
+    const testStake = 'stake_test1uqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
+    mockEnable.mockResolvedValue(
+      fakeWallet({
+        getNetworkId: jest.fn().mockResolvedValue(0),
+        getRewardAddresses: jest.fn().mockResolvedValue([testStake]),
+      }),
+    );
+    await expect(connectCardanoWallet('lace', 'preprod')).resolves.toMatchObject({ stakeAddress: testStake });
+    await expect(connectCardanoWallet('lace')).rejects.toThrow(/mainnet/);
+  });
+
+  it('refuses a mainnet wallet on preprod', async () => {
+    mockEnable.mockResolvedValue(fakeWallet());
+    await expect(connectCardanoWallet('eternl', 'preprod')).rejects.toThrow(/preprod/);
+  });
+
   it('refuses a script stake address, which cannot sign', async () => {
     mockEnable.mockResolvedValue(
       fakeWallet({ getRewardAddresses: jest.fn().mockResolvedValue(['stake17yqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqr0rjsu']) }),
@@ -182,6 +199,17 @@ describe('koios', () => {
     const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
     expect(url).toBe('https://api.koios.rest/api/v1/account_info');
     expect(JSON.parse(init.body)).toEqual({ _stake_addresses: [STAKE] });
+  });
+
+  it('reads preprod Koios on preprod', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    await fetchCardanoAccount(STAKE, 'preprod');
+    await fetchCardanoProtocolParams('preprod');
+    const urls = (global.fetch as jest.Mock).mock.calls.map(([url]) => url);
+    expect(urls).toEqual([
+      'https://preprod.koios.rest/api/v1/account_info',
+      'https://preprod.koios.rest/api/v1/cli_protocol_params',
+    ]);
   });
 
   it('treats an unseen stake address as unregistered', async () => {
