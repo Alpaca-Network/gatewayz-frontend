@@ -179,11 +179,13 @@ export function DelegationSection() {
   const status = statusQuery.data;
   const regionBlocked = useDelegationRegionBlocked();
   const { status: authStatus } = useGatewayzAuth();
-  // Only a restricted visitor needs this here: to find an existing stake to show.
-  const rewardsQuery = useDelegationRewards({ enabled: regionBlocked === true && authStatus === 'authenticated' });
+  // The account's eligibility, and for a restricted visitor any existing stake to show.
+  const rewardsQuery = useDelegationRewards({ enabled: authStatus === 'authenticated' });
   if (regionBlocked === undefined) return null;
   if (!status || !isDelegationLive(status)) return null;
-  if (regionBlocked) {
+  // Restricted by the edge country, or by the backend (it saw a US / Canadian
+  // request, or refused the attestation): exits only.
+  if (regionBlocked || rewardsQuery.data?.eligibility?.status === 'restricted') {
     const rewards = rewardsQuery.data;
     const hasStake = !!rewards && (rewards.positions.length > 0 || rewards.linked_wallets.length > 0);
     return hasStake ? <ExistingStakeSection status={status} /> : null;

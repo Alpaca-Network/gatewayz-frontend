@@ -3,7 +3,10 @@
 // Vercel places in either country never see it. The country comes from the
 // edge (src/middleware.ts) as the `gw_geo` cookie; an unknown country (local
 // dev, header missing) is allowed. IP location is easy to get around, which is
-// why every wallet action also needs the self-attestation below.
+// why every wallet action also needs the self-attestation below. The backend
+// (gatewayz-backend#2396) is the real lock: it stores the attestation and
+// refuses with HTTP 451; the tick kept here only covers a signed-out visitor
+// and a backend that predates it.
 
 export const RESTRICTED_DELEGATION_COUNTRIES: readonly string[] = ['US', 'CA'];
 
@@ -57,10 +60,32 @@ export function hasAttested(): boolean {
   }
 }
 
+/** Fired on window when this browser's tick changes, so every gate re-reads it. */
+export const ATTESTATION_CHANGED_EVENT = 'gatewayz:delegation-attestation';
+
+function notifyAttestationChanged(): void {
+  try {
+    window.dispatchEvent(new Event(ATTESTATION_CHANGED_EVENT));
+  } catch {
+    // No window (server): nothing is listening.
+  }
+}
+
 export function recordAttestation(): void {
   try {
     window.localStorage.setItem(ATTESTATION_STORAGE_KEY, 'true');
   } catch {
     // Storage blocked (private window): the box just shows again next visit.
   }
+  notifyAttestationChanged();
+}
+
+/** Forgets the tick, e.g. after the backend answers attestation_required. */
+export function clearAttestation(): void {
+  try {
+    window.localStorage.removeItem(ATTESTATION_STORAGE_KEY);
+  } catch {
+    // Storage blocked: there was nothing stored.
+  }
+  notifyAttestationChanged();
 }

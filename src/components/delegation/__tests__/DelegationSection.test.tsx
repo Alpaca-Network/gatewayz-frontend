@@ -88,6 +88,33 @@ describe('DelegationSection', () => {
     expect(screen.getByText('eth-panel:exit-only')).toBeInTheDocument();
   });
 
+  it('goes exit-only when the backend marked the account restricted, whatever the edge country', () => {
+    document.cookie = `${GEO_COOKIE}=FR; path=/`;
+    mockRewards.mockReturnValue({
+      data: {
+        enabled: true,
+        positions: [],
+        exit_requests: [],
+        linked_wallets: [{ asset: 'eth', wallet_address: '0x2222222222222222222222222222222222222222' }],
+        allowance: { credits_per_day_estimate: 0, month_estimate_usd: 0, daily_cap_credits: 0 },
+        totals: { pending: 0, paid: 0 },
+        history: [],
+        disclaimer: '',
+        eligibility: { status: 'restricted', attested_at: null },
+      },
+    });
+    render(<DelegationSection />);
+    expect(screen.getByText('Your stake')).toBeInTheDocument();
+    expect(screen.queryByText('Stake for inference')).not.toBeInTheDocument();
+    expect(screen.getByText('eth-panel:exit-only')).toBeInTheDocument();
+  });
+
+  it('fetches the rewards (and so the eligibility) for any signed-in visitor', () => {
+    document.cookie = `${GEO_COOKIE}=FR; path=/`;
+    render(<DelegationSection />);
+    expect(mockRewards).toHaveBeenCalledWith({ enabled: true });
+  });
+
   it('renders for a visitor in an allowed country', () => {
     document.cookie = `${GEO_COOKIE}=FR; path=/`;
     render(<DelegationSection />);

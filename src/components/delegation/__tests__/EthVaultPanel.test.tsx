@@ -1,4 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { EthVaultPanel } from '../EthVaultPanel';
 import { useLinkedWallets } from '@/lib/hooks/use-linked-wallets';
@@ -13,11 +15,18 @@ import { estimateNetworkFee } from '@/lib/delegation/eth-vault';
 import type { DelegationStatus } from '@/lib/delegation/api';
 import { ATTESTATION_STORAGE_KEY } from '@/lib/delegation/region';
 
+// EligibilityGate stores the attestation through react-query.
+const render = (ui: ReactElement) =>
+  rtlRender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>);
+
 const mockToast = jest.fn();
 jest.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mockToast }) }));
 jest.mock('@privy-io/react-auth', () => ({ usePrivy: jest.fn(), useWallets: jest.fn() }));
 jest.mock('@/lib/hooks/use-linked-wallets', () => ({ useLinkedWallets: jest.fn() }));
-jest.mock('@/lib/delegation/use-delegation', () => ({ useDelegationRewards: jest.fn() }));
+jest.mock('@/lib/delegation/use-delegation', () => ({
+  ...jest.requireActual('@/lib/delegation/use-delegation'),
+  useDelegationRewards: jest.fn(),
+}));
 jest.mock('@/components/holdings/HoldingsWalletLink', () => ({ HoldingsWalletLink: () => <div>wallet-link-card</div> }));
 jest.mock('@/lib/delegation/use-eth-vault', () => {
   const actual = jest.requireActual('@/lib/delegation/use-eth-vault');

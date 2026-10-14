@@ -16,13 +16,14 @@ import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { DelegationFlagOverrideProvider } from '@/lib/delegation/flag-override';
 import { isCardanoPoolLive, isRewardShareModel } from '@/lib/delegation/flags';
 import { useDelegationStatus } from '@/lib/delegation/use-delegation';
-import { useDelegationRegionBlocked } from '@/lib/delegation/use-region';
+import { useDelegationRestricted } from '@/lib/delegation/use-region';
 
 function Journey() {
   const statusQuery = useDelegationStatus();
   const { status: authStatus, login } = useGatewayzAuth();
   const status = statusQuery.data;
-  const regionBlocked = useDelegationRegionBlocked();
+  // Edge country, or the backend has marked the account restricted.
+  const regionBlocked = useDelegationRestricted();
 
   if (regionBlocked) {
     return (

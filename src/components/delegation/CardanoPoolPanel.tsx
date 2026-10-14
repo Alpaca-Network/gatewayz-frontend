@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import {
+  delegationRefusalOf,
   describeCardanoLinkError,
   linkCardanoStakeAddress,
   requestCardanoLinkNonce,
@@ -29,6 +30,7 @@ import { detectCip30Wallets, isCip30Rejection, type Cip30WalletInfo } from '@/li
 import { formatAda } from '@/lib/delegation/format';
 import { fetchCardanoAccount, fetchCardanoProtocolParams } from '@/lib/delegation/koios';
 import { delegationQueryKeys, useDelegationRewards } from '@/lib/delegation/use-delegation';
+import { clearAttestation, hasAttested } from '@/lib/delegation/region';
 import { truncateAddress } from '@/lib/holdings/format';
 import { ConfirmTxDialog } from './ConfirmTxDialog';
 import { EligibilityGate, NewStakeUnavailable } from './EligibilityGate';
@@ -109,15 +111,23 @@ export function CardanoPoolPanel({ status, allowNewStake = true }: { status: Del
     if (!connected) return;
     setLinking(true);
     try {
-      const nonce = await requestCardanoLinkNonce(connected.stakeAddress);
+      // The tick from EligibilityGate; the backend needs it unless the account
+      // already attested.
+      const notUsCaPerson = hasAttested();
+      const nonce = await requestCardanoLinkNonce(connected.stakeAddress, notUsCaPerson);
       const { signature, key } = await signLinkMessage(connected, nonce);
-      await linkCardanoStakeAddress({ stakeAddress: connected.stakeAddress, signature, key });
+      await linkCardanoStakeAddress({ stakeAddress: connected.stakeAddress, signature, key, notUsCaPerson });
       setJustLinked(true);
       queryClient.invalidateQueries({ queryKey: delegationQueryKeys.rewards });
       // The stake address is now also a row in GET /auth/wallets.
       queryClient.invalidateQueries({ queryKey: ['linked-wallets'] });
       toast({ title: 'Stake address linked', description: shortId(connected.stakeAddress) });
     } catch (error) {
+      const refusal = delegationRefusalOf(error);
+      // attestation_required: show the box again. region_restricted: the
+      // rewards refetch carries the restriction and the section goes exit-only.
+      if (refusal === 'attestation_required') clearAttestation();
+      if (refusal) queryClient.invalidateQueries({ queryKey: delegationQueryKeys.rewards });
       const description = isCip30Rejection(error)
         ? 'The signature request was cancelled.'
         : describeCardanoLinkError(error);

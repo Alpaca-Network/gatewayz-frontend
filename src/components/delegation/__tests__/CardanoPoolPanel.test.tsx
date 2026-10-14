@@ -2,7 +2,13 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CardanoPoolPanel } from '../CardanoPoolPanel';
 import { useDelegationRewards } from '@/lib/delegation/use-delegation';
-import { linkCardanoStakeAddress, requestCardanoLinkNonce, type DelegationStatus } from '@/lib/delegation/api';
+import {
+  DelegationApiError,
+  attestDelegationEligibility,
+  linkCardanoStakeAddress,
+  requestCardanoLinkNonce,
+  type DelegationStatus,
+} from '@/lib/delegation/api';
 import {
   buildDelegationTx,
   connectCardanoWallet,
@@ -20,7 +26,12 @@ jest.mock('@/lib/delegation/use-delegation', () => {
 });
 jest.mock('@/lib/delegation/api', () => {
   const actual = jest.requireActual('@/lib/delegation/api');
-  return { ...actual, requestCardanoLinkNonce: jest.fn(), linkCardanoStakeAddress: jest.fn() };
+  return {
+    ...actual,
+    requestCardanoLinkNonce: jest.fn(),
+    linkCardanoStakeAddress: jest.fn(),
+    attestDelegationEligibility: jest.fn(),
+  };
 });
 jest.mock('@/lib/delegation/cardano-wallet', () => {
   const actual = jest.requireActual('@/lib/delegation/cardano-wallet');
@@ -119,8 +130,15 @@ describe('CardanoPoolPanel', () => {
     expect(await screen.findByText('Not delegated to any pool yet.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Link with a signature' }));
-    await waitFor(() => expect(linkCardanoStakeAddress).toHaveBeenCalledWith({ stakeAddress: STAKE, signature: '84a4', key: 'a401' }));
-    expect(requestCardanoLinkNonce).toHaveBeenCalledWith(STAKE);
+    await waitFor(() =>
+      expect(linkCardanoStakeAddress).toHaveBeenCalledWith({
+        stakeAddress: STAKE,
+        signature: '84a4',
+        key: 'a401',
+        notUsCaPerson: true,
+      }),
+    );
+    expect(requestCardanoLinkNonce).toHaveBeenCalledWith(STAKE, true);
     expect(signLinkMessage).toHaveBeenCalledWith(
       expect.objectContaining({ stakeAddress: STAKE }),
       expect.objectContaining({ payload_hex: '4c696e6b' }),
@@ -165,5 +183,67 @@ describe('CardanoPoolPanel', () => {
       ),
     );
     expect(linkCardanoStakeAddress).not.toHaveBeenCalled();
+  });
+
+  describe('backend eligibility', () => {
+    const withEligibility = (status: 'eligible' | 'restricted' | 'none') =>
+      (useDelegationRewards as jest.Mock).mockReturnValue({
+        data: { positions: [], linked_wallets: [], eligibility: { status, attested_at: null } },
+      });
+
+    it('skips the box for an account the backend already knows as eligible', async () => {
+      window.localStorage.removeItem(ATTESTATION_STORAGE_KEY);
+      withEligibility('eligible');
+      renderPanel();
+      fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Link with a signature' }));
+      await waitFor(() => expect(requestCardanoLinkNonce).toHaveBeenCalledWith(STAKE, false));
+    });
+
+    it('asks again when the backend has no attestation, and stores it on Continue', async () => {
+      withEligibility('none');
+      (attestDelegationEligibility as jest.Mock).mockResolvedValue({ status: 'eligible', attested_at: null });
+      renderPanel();
+      fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
+      expect(await screen.findByText('Not delegated to any pool yet.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Link with a signature' })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('checkbox'));
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+      await waitFor(() => expect(attestDelegationEligibility).toHaveBeenCalledTimes(1));
+      expect(await screen.findByRole('button', { name: 'Link with a signature' })).toBeInTheDocument();
+    });
+
+    it('shows the region refusal when the backend refuses the attestation', async () => {
+      withEligibility('none');
+      (attestDelegationEligibility as jest.Mock).mockRejectedValue(new DelegationApiError(451, 'No', 'region_restricted'));
+      renderPanel();
+      fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
+      await screen.findByText('Not delegated to any pool yet.');
+      fireEvent.click(screen.getByRole('checkbox'));
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/not available in your region/);
+      expect(screen.queryByRole('button', { name: 'Link with a signature' })).not.toBeInTheDocument();
+    });
+
+    it('offers no linking to an account the backend marked restricted', async () => {
+      withEligibility('restricted');
+      renderPanel();
+      fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
+      expect(await screen.findByText('Not delegated to any pool yet.')).toBeInTheDocument();
+      expect(screen.getByText(/not available in your region/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Link with a signature' })).not.toBeInTheDocument();
+    });
+
+    it('shows the box again when the link is refused with attestation_required', async () => {
+      (requestCardanoLinkNonce as jest.Mock).mockRejectedValue(new DelegationApiError(451, 'Confirm', 'attestation_required'));
+      renderPanel();
+      fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Link with a signature' }));
+      await waitFor(() =>
+        expect(mockToast).toHaveBeenCalledWith(expect.objectContaining({ description: expect.stringMatching(/Confirm you are not/) })),
+      );
+      expect(await screen.findByRole('checkbox')).toBeInTheDocument();
+      expect(window.localStorage.getItem(ATTESTATION_STORAGE_KEY)).toBeNull();
+    });
   });
 });
