@@ -5,6 +5,7 @@ import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { useIsTauri } from '@/lib/desktop/hooks';
 import { useDelegationRewards, useDelegationStatus } from '@/lib/delegation/use-delegation';
 import type { DelegationStatus } from '@/lib/delegation/api';
+import { ATTESTATION_STORAGE_KEY, GEO_COOKIE } from '@/lib/delegation/region';
 
 jest.mock('@/context/gatewayz-auth-context', () => ({ useGatewayzAuth: jest.fn() }));
 jest.mock('@/lib/desktop/hooks', () => ({ useIsTauri: jest.fn() }));
@@ -42,9 +43,36 @@ describe('DelegationSection', () => {
     mockAuth.mockReturnValue({ status: 'authenticated', login });
     mockStatus.mockReturnValue({ data: STATUS });
     mockRewards.mockReturnValue({ isLoading: false, isError: false, data: undefined });
+    window.localStorage.setItem(ATTESTATION_STORAGE_KEY, 'true');
+    document.cookie = `${GEO_COOKIE}=; path=/`;
   });
   afterAll(() => {
     process.env.NEXT_PUBLIC_DELEGATED_STAKING_ENABLED = original;
+    window.localStorage.clear();
+  });
+
+  it.each(['US', 'CA', 'us'])('renders nothing for a visitor in %s', (country) => {
+    document.cookie = `${GEO_COOKIE}=${country}; path=/`;
+    const { container } = render(<DelegationSection />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders for a visitor in an allowed country', () => {
+    document.cookie = `${GEO_COOKIE}=FR; path=/`;
+    render(<DelegationSection />);
+    expect(screen.getByText('Stake for inference')).toBeInTheDocument();
+  });
+
+  it('asks for the eligibility attestation before any wallet panel', () => {
+    window.localStorage.removeItem(ATTESTATION_STORAGE_KEY);
+    render(<DelegationSection />);
+    expect(screen.queryByText('eth-panel')).not.toBeInTheDocument();
+    const continueButton = screen.getByRole('button', { name: 'Continue' });
+    expect(continueButton).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /not a resident or citizen of the United States or Canada/ }));
+    fireEvent.click(continueButton);
+    expect(screen.getByText('eth-panel')).toBeInTheDocument();
+    expect(window.localStorage.getItem(ATTESTATION_STORAGE_KEY)).toBe('true');
   });
 
   it('renders nothing while the build flag is off, even if the backend says on', () => {

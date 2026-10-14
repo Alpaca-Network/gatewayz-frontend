@@ -6,7 +6,9 @@
 // only when its own target is configured. With payout_model "reward_share"
 // (v3) the copy describes the inference discount instead of the allowance, and
 // the discount card renders once the backend's discount switch is on. Kept out of src/components/holdings
-// because that feature's copy policy forbids these words.
+// because that feature's copy policy forbids these words. Hidden for visitors in
+// a restricted country (src/lib/delegation/region.ts), and every wallet action
+// sits behind the eligibility attestation.
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,8 +17,10 @@ import { useIsTauri } from '@/lib/desktop/hooks';
 import type { DelegationStatus } from '@/lib/delegation/api';
 import { isCardanoPoolLive, isDelegationLive, isEthVaultLive, isRewardShareModel } from '@/lib/delegation/flags';
 import { useDelegationStatus } from '@/lib/delegation/use-delegation';
+import { useDelegationRegionBlocked } from '@/lib/delegation/use-region';
 import { CardanoPoolPanel } from './CardanoPoolPanel';
 import { DelegationPositionCard } from './DelegationPositionCard';
+import { EligibilityGate } from './EligibilityGate';
 import { rewardShareDescription, rewardShareFootnote, rewardSharePoints } from './discount-copy';
 import { EthVaultPanel } from './EthVaultPanel';
 import { InferenceDiscountCard } from './InferenceDiscountCard';
@@ -148,22 +152,24 @@ function AccountArea({ status }: { status: DelegationStatus }) {
   const defaultTab = eth ? 'eth' : 'ada';
   return (
     <div className="flex flex-col gap-6">
-      <Tabs defaultValue={defaultTab}>
-        <TabsList aria-label="Asset">
-          {eth && <TabsTrigger value="eth">ETH</TabsTrigger>}
-          {ada && <TabsTrigger value="ada">ADA</TabsTrigger>}
-        </TabsList>
-        {eth && (
-          <TabsContent value="eth" className="pt-4">
-            <EthVaultPanel status={status} />
-          </TabsContent>
-        )}
-        {ada && (
-          <TabsContent value="ada" className="pt-4">
-            <CardanoPoolPanel status={status} />
-          </TabsContent>
-        )}
-      </Tabs>
+      <EligibilityGate>
+        <Tabs defaultValue={defaultTab}>
+          <TabsList aria-label="Asset">
+            {eth && <TabsTrigger value="eth">ETH</TabsTrigger>}
+            {ada && <TabsTrigger value="ada">ADA</TabsTrigger>}
+          </TabsList>
+          {eth && (
+            <TabsContent value="eth" className="pt-4">
+              <EthVaultPanel status={status} />
+            </TabsContent>
+          )}
+          {ada && (
+            <TabsContent value="ada" className="pt-4">
+              <CardanoPoolPanel status={status} />
+            </TabsContent>
+          )}
+        </Tabs>
+      </EligibilityGate>
       <InferenceDiscountCard status={status} shownDisclaimer={status.disclaimer} />
       <DelegationPositionCard shownDisclaimer={status.disclaimer} rewardShare={rewardShare} />
     </div>
@@ -173,6 +179,8 @@ function AccountArea({ status }: { status: DelegationStatus }) {
 export function DelegationSection() {
   const statusQuery = useDelegationStatus();
   const status = statusQuery.data;
+  const regionBlocked = useDelegationRegionBlocked();
+  if (regionBlocked !== false) return null;
   if (!status || !isDelegationLive(status)) return null;
 
   return (
