@@ -5,6 +5,7 @@ import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { useIsTauri } from '@/lib/desktop/hooks';
 import { useDelegationRewards, useDelegationStatus } from '@/lib/delegation/use-delegation';
 import type { DelegationStatus } from '@/lib/delegation/api';
+import { ATTESTATION_STORAGE_KEY, GEO_COOKIE } from '@/lib/delegation/region';
 
 jest.mock('@/context/gatewayz-auth-context', () => ({ useGatewayzAuth: jest.fn() }));
 jest.mock('@/lib/desktop/hooks', () => ({ useIsTauri: jest.fn() }));
@@ -12,7 +13,11 @@ jest.mock('@/lib/delegation/use-delegation', () => ({
   useDelegationStatus: jest.fn(),
   useDelegationRewards: jest.fn(),
 }));
-jest.mock('../EthVaultPanel', () => ({ EthVaultPanel: () => <div>eth-panel</div> }));
+jest.mock('../EthVaultPanel', () => ({
+  EthVaultPanel: ({ allowNewStake = true }: { allowNewStake?: boolean }) => (
+    <div>{allowNewStake ? 'eth-panel' : 'eth-panel:exit-only'}</div>
+  ),
+}));
 jest.mock('../CardanoPoolPanel', () => ({ CardanoPoolPanel: () => <div>ada-panel</div> }));
 
 const mockStatus = useDelegationStatus as jest.Mock;
@@ -42,9 +47,78 @@ describe('DelegationSection', () => {
     mockAuth.mockReturnValue({ status: 'authenticated', login });
     mockStatus.mockReturnValue({ data: STATUS });
     mockRewards.mockReturnValue({ isLoading: false, isError: false, data: undefined });
+    window.localStorage.setItem(ATTESTATION_STORAGE_KEY, 'true');
+    document.cookie = `${GEO_COOKIE}=; path=/`;
   });
   afterAll(() => {
     process.env.NEXT_PUBLIC_DELEGATED_STAKING_ENABLED = original;
+    window.localStorage.clear();
+  });
+
+  it.each(['US', 'CA', 'us'])('renders nothing for a visitor in %s with no stake', (country) => {
+    document.cookie = `${GEO_COOKIE}=${country}; path=/`;
+    mockRewards.mockReturnValue({ data: { positions: [], linked_wallets: [] } });
+    const { container } = render(<DelegationSection />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('lets a restricted visitor with an existing stake view and exit it, without new staking', () => {
+    document.cookie = `${GEO_COOKIE}=US; path=/`;
+    window.localStorage.removeItem(ATTESTATION_STORAGE_KEY);
+    mockRewards.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        enabled: true,
+        positions: [
+          { asset: 'ETH', wallet_address: '0x2222222222222222222222222222222222222222', amount: 1, usd_value: 3000, measured_at: null },
+        ],
+        exit_requests: [],
+        linked_wallets: [{ asset: 'eth', wallet_address: '0x2222222222222222222222222222222222222222' }],
+        allowance: { credits_per_day_estimate: 0, month_estimate_usd: 0, daily_cap_credits: 0 },
+        totals: { pending: 0, paid: 0 },
+        history: [],
+        disclaimer: '',
+      },
+    });
+    render(<DelegationSection />);
+    expect(screen.getByText('Your stake')).toBeInTheDocument();
+    expect(screen.getByText(/New stakes are not available in your region/)).toBeInTheDocument();
+    expect(screen.queryByText('Stake for inference')).not.toBeInTheDocument();
+    expect(screen.getByText('eth-panel:exit-only')).toBeInTheDocument();
+  });
+
+  it('goes exit-only when the backend marked the account restricted, whatever the edge country', () => {
+    document.cookie = `${GEO_COOKIE}=FR; path=/`;
+    mockRewards.mockReturnValue({
+      data: {
+        enabled: true,
+        positions: [],
+        exit_requests: [],
+        linked_wallets: [{ asset: 'eth', wallet_address: '0x2222222222222222222222222222222222222222' }],
+        allowance: { credits_per_day_estimate: 0, month_estimate_usd: 0, daily_cap_credits: 0 },
+        totals: { pending: 0, paid: 0 },
+        history: [],
+        disclaimer: '',
+        eligibility: { status: 'restricted', attested_at: null },
+      },
+    });
+    render(<DelegationSection />);
+    expect(screen.getByText('Your stake')).toBeInTheDocument();
+    expect(screen.queryByText('Stake for inference')).not.toBeInTheDocument();
+    expect(screen.getByText('eth-panel:exit-only')).toBeInTheDocument();
+  });
+
+  it('fetches the rewards (and so the eligibility) for any signed-in visitor', () => {
+    document.cookie = `${GEO_COOKIE}=FR; path=/`;
+    render(<DelegationSection />);
+    expect(mockRewards).toHaveBeenCalledWith({ enabled: true });
+  });
+
+  it('renders for a visitor in an allowed country', () => {
+    document.cookie = `${GEO_COOKIE}=FR; path=/`;
+    render(<DelegationSection />);
+    expect(screen.getByText('Stake for inference')).toBeInTheDocument();
   });
 
   it('renders nothing while the build flag is off, even if the backend says on', () => {
