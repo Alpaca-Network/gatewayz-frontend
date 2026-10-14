@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton';
 import type { DelegationAttribution, DelegationDiscountEntry, DelegationStatus } from '@/lib/delegation/api';
 import { formatDiscountUsd, formatFractionPercent } from '@/lib/delegation/discount-format';
+import { useDelegationFlagOn } from '@/lib/delegation/flag-override';
 import { isDiscountLive } from '@/lib/delegation/flags';
 import { useDelegationRewards } from '@/lib/delegation/use-delegation';
 import { attributionStatusLabel, DISCOUNT_ANCHOR, DISCOUNT_TITLE, historyKindLabel, payLine } from './discount-copy';
@@ -157,7 +158,7 @@ function Shell({ children, description }: { children: React.ReactNode; descripti
 
 /** `shownDisclaimer`: text already on the page (from /delegation/status), not repeated here. */
 export function InferenceDiscountCard({ status, shownDisclaimer = '' }: { status: DelegationStatus; shownDisclaimer?: string }) {
-  const live = isDiscountLive(status);
+  const live = isDiscountLive(status, useDelegationFlagOn());
   const query = useDelegationRewards({ enabled: live });
   if (!live) return null;
 

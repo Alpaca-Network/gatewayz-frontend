@@ -31,6 +31,6 @@ export function isRewardShareModel(status: DelegationStatus | undefined): boolea
  * discount switch. The account's `discount.enabled` from /delegation/rewards
  * is checked again where the balance renders.
  */
-export function isDiscountLive(status: DelegationStatus | undefined): boolean {
-  return isDelegationFlagOn() && !!status?.enabled && status.discount_enabled === true;
+export function isDiscountLive(status: DelegationStatus | undefined, flagOn = isDelegationFlagOn()): boolean {
+  return flagOn && !!status?.enabled && status.discount_enabled === true;
 }
