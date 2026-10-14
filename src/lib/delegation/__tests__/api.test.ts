@@ -73,7 +73,8 @@ describe('parseDelegationStatus', () => {
     expect(parseDelegationStatus(STATUS)).toEqual({
       enabled: true,
       eth: { vault_address: '0xabc', chain_id: 1, fee_percent: 99 },
-      cardano: { pool_id: 'pool1xyz' },
+      // A backend that predates cardano.network is mainnet.
+      cardano: { pool_id: 'pool1xyz', network: 'mainnet' },
       allowance_rates: [{ asset: 'ETH', credits_per_1k_usd_per_day: 1.5 }],
       disclaimer: DISCLAIMER,
       // A pre-v3 backend: no discount fields, so the discount stays off.
@@ -82,6 +83,13 @@ describe('parseDelegationStatus', () => {
       discount_percent: null,
       discount_enabled: false,
     });
+  });
+
+  it('reads cardano.network, and treats anything but "preprod" as mainnet', () => {
+    expect(parseDelegationStatus({ ...STATUS, cardano: { pool_id: 'pool1xyz', network: 'preprod' } }).cardano.network).toBe('preprod');
+    for (const network of ['mainnet', 'preview', 'PREPROD', '', null, 1]) {
+      expect(parseDelegationStatus({ ...STATUS, cardano: { pool_id: 'pool1xyz', network } }).cardano.network).toBe('mainnet');
+    }
   });
 
   it('reads the v3 reward-share fields', () => {
