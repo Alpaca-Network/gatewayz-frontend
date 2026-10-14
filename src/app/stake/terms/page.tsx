@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Staking terms & eligibility | Gatewayz",
-  description: "Terms and eligibility for the staking-to-inference preview.",
+  description: "Terms and eligibility for delegating ADA to the Gatewayz pool in exchange for discounted inference.",
 };
 
 export default function StakingTerms() {
@@ -11,26 +11,23 @@ export default function StakingTerms() {
     <main className="mx-auto max-w-3xl px-5 py-12">
       <Link href="/stake" className="text-sm text-primary">← back</Link>
       <h1 className="mt-3 text-3xl font-extrabold tracking-tight">Terms &amp; eligibility</h1>
-      <p className="mt-1 font-mono text-xs text-muted-foreground">DRAFT · 2026-10-06</p>
-
-      <div className="mt-5 rounded-md border border-amber-500/50 bg-amber-500/5 p-4 text-sm">
-        <b className="text-amber-500">⚠️ DRAFT — NOT LEGAL ADVICE, NOT REVIEWED BY COUNSEL.</b>{" "}
-        No lawyer has read this page. It is written to be reviewed, not relied on,
-        and must not be published as binding terms until counsel has approved it.
-      </div>
+      <p className="mt-1 font-mono text-xs text-muted-foreground">Early access · last updated 2026-10-14</p>
 
       <S n="1" t="What this is">
-        <p>A <b>preview</b>. It reads public Cardano chain data, calculates what a
-        delegation&apos;s staking rewards would be worth, and spends a notional
-        credit on an inference request.</p>
-        <p><b>It is not an offer, a product, or an invitation to invest.</b> No token
-        exists. Nothing is for sale. No account is created. We are not operating a
-        stake pool, so no staking margin is being earned — the inference shown is
-        paid for by us.</p>
+        <p><b>ADA delegation is live.</b> You can delegate a Cardano stake address
+        to the Gatewayz stake pool from your own wallet. The pool&apos;s staking
+        rewards fund a discount on inference on the Gatewayz gateway for the
+        Gatewayz account you link that stake address to. You receive the right to
+        buy inference at a lower price, not a payout in ADA or any other asset.</p>
+        <p>The discount rate is set by Gatewayz, can change or stop at any time,
+        and is not a guaranteed return. Your current rate and balance are shown on
+        the staking page once you are signed in.</p>
+        <p><b>Every other asset listed on these pages is a preview.</b> Nothing
+        about them is open, offered or for sale, and no Gatewayz token exists.</p>
       </S>
 
       <S n="2" t="Who may not use it">
-        <p>This preview is <b>not available to, and must not be used by</b>:</p>
+        <p>Staking with Gatewayz is <b>not available to, and must not be used by</b>:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li><b>United States persons</b>, including US citizens and residents
           wherever located, and entities organised under US law;</li>
@@ -66,8 +63,9 @@ export default function StakingTerms() {
         pool across five recent epochs, one delegation&apos;s share ranged from
         <b> 0 ADA to 94 ADA per epoch</b> — a genuine zero included.</p>
         <p>Figures shown are an <b>average over several recent epochs</b>,
-        historical, and not a forecast. Any rate we quote is a rate we choose to
-        offer, not a pass-through of what your asset earns, and it may change.
+        historical, and not a forecast. The discount you receive is set by
+        Gatewayz, not a pass-through of what your delegation earns, and it may
+        change.
         <b> Nothing here is a promise of yield, income, return, or any particular
         amount of inference.</b></p>
       </S>
@@ -93,8 +91,9 @@ export default function StakingTerms() {
 
       <S n="6" t="Withdrawal and queuing">
         <p>For ADA there is nothing to withdraw from us: re-delegate in your own
-        wallet at any time.</p>
-        <p>For custodial assets we aim to return them within <b>24 hours</b>. The
+        wallet at any time. The discount stops accruing from the epoch your stake
+        leaves the pool.</p>
+        <p>For custodial assets, if and when they are offered, we aim to return them within <b>24 hours</b>. The
         underlying networks take longer to unbond — up to <b>28 days</b> — and we
         cover the difference from a liquidity buffer. <b>If redemption requests
         exceed that buffer, they are queued and met in the order received as
@@ -111,15 +110,17 @@ export default function StakingTerms() {
       </S>
 
       <S n="8" t="What we can and cannot see">
-        <p>A stake address you enter is public chain data and is used only to read
-        your delegation. <b>Entering an address proves nothing about ownership</b> —
-        anyone can enter anyone&apos;s. We never ask for, and must never be given, a
+        <p>A stake address you paste into the quote tool is public chain data and is
+        used only to read its delegation. <b>Pasting an address proves nothing about
+        ownership</b>, so the discount only counts for a stake address you link to
+        your account by signing a message with its stake key in your wallet. That
+        signature authorises nothing else: it cannot move or spend your ADA. We never ask for, and must never be given, a
         seed phrase or private key. Prompts you submit are sent to our inference
         gateway and to its upstream model providers.</p>
       </S>
 
       <footer className="mt-12 border-t pt-5 text-xs text-muted-foreground">
-        Draft for counsel review. Not binding. Not published as terms.{" "}
+        Early access terms, pending legal review; we may update them.{" "}
         <Link href="/stake" className="text-primary underline">Back to staking</Link>
       </footer>
     </main>
