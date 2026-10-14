@@ -145,7 +145,7 @@ export default async function TokenPage(
       </ul>
 
       <footer className="mt-14 border-t pt-5 text-xs text-muted-foreground">
-        Preview. Draft, not reviewed by counsel.{" "}
+        Early access. Rates are set by Gatewayz and can change.{" "}
         <Link href="/stake/terms" className="text-primary underline">Terms</Link> ·{" "}
         <Link href="/stake" className="text-primary underline">All assets</Link>
       </footer>
