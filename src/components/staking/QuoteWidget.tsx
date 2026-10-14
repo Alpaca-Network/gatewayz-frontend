@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 type Quote = {
   pool: string; stakeAda: number; epochs: number[]; sharesAda: number[];
   avgShareAda: number; minShareAda: number; maxShareAda: number;
   zeroRewardEpochs: number; epochsUnavailable: number;
-  usdPerMonth: number; usdPerYear: number; adaPrice: number; error?: string;
+  usdPerMonth: number; usdPerYear: number; adaPrice: number; keepShare: number; error?: string;
 };
 
 const usd = (n: number) =>
@@ -78,7 +79,7 @@ export default function QuoteWidget() {
                r={`${q.avgShareAda.toFixed(4)} ADA / epoch`} />
           <Row l="Range across those epochs"
                r={`${q.minShareAda.toFixed(3)} – ${q.maxShareAda.toFixed(3)} ADA`} />
-          <Row l="Funds roughly" r={<span className="text-lg font-bold text-emerald-500">{usd(q.usdPerMonth)} / mo</span>} />
+          <Row l={`Funds roughly (you keep ${Math.round(q.keepShare * 100)}%)`} r={<span className="text-lg font-bold text-emerald-500">{usd(q.usdPerMonth)} / mo</span>} />
           <div className="flex items-end gap-1 h-8 pt-1">
             {q.sharesAda.map((s, i) => (
               <i key={i} title={`${s.toFixed(3)} ADA`}
@@ -107,7 +108,7 @@ export default function QuoteWidget() {
                  className="mt-1" />
           <span>
             I confirm I am <b>not a US person and not a Canadian person</b>, I have read the{" "}
-            <a href="/staking/terms" className="text-primary underline">terms</a>, and I understand
+            <Link href="/stake/terms" className="text-primary underline">terms</Link>, and I understand
             this is a preview with <b>no guaranteed return</b>.
           </span>
         </label>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { bySymbol, feeFor } from '@/lib/staking/tokens';
 
 /**
  * Entitlement quote for a Cardano stake address.
@@ -34,6 +35,7 @@ const cacheStore = globalThis as unknown as {
 };
 cacheStore.__stakingQuoteCache ??= new Map();
 const EPOCHS_PER_YEAR = 73;
+const KEEP_SHARE = 1 - feeFor(bySymbol('ADA')!, 12);
 const ADA_USD = Number(process.env.STAKING_ADA_USD ?? '0.207');
 
 async function koios(path: string, body?: unknown) {
@@ -119,8 +121,11 @@ export async function POST(request: NextRequest) {
       maxShareAda: Math.max(...shares) / 1e6,
       zeroRewardEpochs: shares.filter((s) => s === 0).length,
       epochsUnavailable: unavailable,
-      usdPerMonth: (adaPerEpoch * ADA_USD * EPOCHS_PER_YEAR) / 12,
-      usdPerYear: adaPerEpoch * ADA_USD * EPOCHS_PER_YEAR,
+      // What it funds is the share the user keeps after our fee, at the same
+      // 12-month tier the /stake headline quotes.
+      keepShare: KEEP_SHARE,
+      usdPerMonth: (adaPerEpoch * ADA_USD * EPOCHS_PER_YEAR * KEEP_SHARE) / 12,
+      usdPerYear: adaPerEpoch * ADA_USD * EPOCHS_PER_YEAR * KEEP_SHARE,
       adaPrice: ADA_USD,
     };
 

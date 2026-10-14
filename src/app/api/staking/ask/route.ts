@@ -54,6 +54,20 @@ export async function POST(request: NextRequest) {
   if (hits.length >= PER_IP_IN_WINDOW)
     return NextResponse.json({ error: 'Slow down — a few calls a minute per visitor.' });
 
+  // Reserve the slot BEFORE the paid call, with no await between check and
+  // reserve, so a concurrent burst on this instance cannot all pass the checks.
+  // These counters are per serverless instance; the hard ceiling across
+  // instances is the credit balance on the dedicated GATEWAYZ_API_KEY.
+  hits.push(now);
+  g.__stakingIps!.set(ip, hits);
+  g.__stakingCalls = (g.__stakingCalls ?? 0) + 1;
+  const release = () => {
+    g.__stakingCalls = Math.max(0, (g.__stakingCalls ?? 1) - 1);
+    const kept = g.__stakingIps!.get(ip) ?? [];
+    const i = kept.indexOf(now);
+    if (i !== -1) kept.splice(i, 1);
+  };
+
   try {
     const res = await fetch(GATEWAYZ, {
       method: 'POST',
@@ -66,15 +80,13 @@ export async function POST(request: NextRequest) {
       cache: 'no-store',
     });
     const data = await res.json();
-    if (!res.ok)
+    if (!res.ok) {
+      release();
       return NextResponse.json({
         error: `The gateway refused the request (${res.status}).`,
         detail: typeof data?.error?.message === 'string' ? data.error.message : undefined,
       });
-
-    hits.push(now);
-    g.__stakingIps!.set(ip, hits);
-    g.__stakingCalls = (g.__stakingCalls ?? 0) + 1;
+    }
 
     const usage = data.usage ?? {};
     return NextResponse.json({
@@ -85,6 +97,7 @@ export async function POST(request: NextRequest) {
       callsLeft: GLOBAL_CAP - (g.__stakingCalls ?? 0),
     });
   } catch (e) {
+    release();
     return NextResponse.json({ error: `Gateway unreachable: ${(e as Error).message}` });
   }
 }
