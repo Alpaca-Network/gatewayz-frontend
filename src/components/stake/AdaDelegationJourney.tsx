@@ -5,12 +5,12 @@
 // same panels as /rewards, run under the flag override so /stake works by
 // direct link while every listed surface stays dark. The middleware already
 // serves /stake/unavailable to restricted countries; the client check here is a
-// second lock, and the wallet panel sits behind the eligibility attestation.
+// second lock. Inside the panel, linking and delegating need the eligibility
+// attestation; connecting and viewing do not.
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CardanoPoolPanel } from '@/components/delegation/CardanoPoolPanel';
 import { DelegationPositionCard } from '@/components/delegation/DelegationPositionCard';
-import { EligibilityGate } from '@/components/delegation/EligibilityGate';
 import { InferenceDiscountCard } from '@/components/delegation/InferenceDiscountCard';
 import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { DelegationFlagOverrideProvider } from '@/lib/delegation/flag-override';
@@ -27,7 +27,8 @@ function Journey() {
   if (regionBlocked) {
     return (
       <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
-        ADA delegation is not available in your region.
+        ADA delegation is not available in your region. If you already delegated, your ADA is still in your wallet:
+        re-delegate or spend it from your wallet at any time.
       </p>
     );
   }
@@ -57,9 +58,7 @@ function Journey() {
 
   return (
     <div className="flex flex-col gap-6">
-      <EligibilityGate>
-        <CardanoPoolPanel status={status} />
-      </EligibilityGate>
+      <CardanoPoolPanel status={status} />
       <InferenceDiscountCard status={status} shownDisclaimer={status.disclaimer} />
       <DelegationPositionCard shownDisclaimer={status.disclaimer} rewardShare={isRewardShareModel(status)} />
       {status.disclaimer && (

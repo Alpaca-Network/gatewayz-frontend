@@ -11,6 +11,7 @@ import {
 } from '@/lib/delegation/use-eth-vault';
 import { estimateNetworkFee } from '@/lib/delegation/eth-vault';
 import type { DelegationStatus } from '@/lib/delegation/api';
+import { ATTESTATION_STORAGE_KEY } from '@/lib/delegation/region';
 
 const mockToast = jest.fn();
 jest.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mockToast }) }));
@@ -80,6 +81,50 @@ describe('EthVaultPanel', () => {
     (publicClientFor as jest.Mock).mockResolvedValue({});
     (estimateNetworkFee as jest.Mock).mockResolvedValue({ gas: BigInt(100000), fee: BigInt(2_000_000_000_000_000) });
     mutateAsync.mockResolvedValue('0xabc123');
+    window.localStorage.setItem(ATTESTATION_STORAGE_KEY, 'true');
+  });
+  afterAll(() => window.localStorage.clear());
+
+  describe('eligibility', () => {
+    it('lets a staker see the position, exit and claim without the attestation', async () => {
+      window.localStorage.removeItem(ATTESTATION_STORAGE_KEY);
+      render(<EthVaultPanel status={STATUS} />);
+      expect(screen.getByText('1.1 ETH')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Stake ETH', { selector: 'input' })).not.toBeInTheDocument();
+      expect(screen.getByRole('checkbox', { name: /not a resident or citizen/ })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Max' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Exit' }));
+      expect(await screen.findByRole('alertdialog')).toHaveTextContent('Exit the vault');
+      await screen.findByText('up to 0.002 ETH');
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm in wallet' }));
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith({ kind: 'exit', shares: ETH }));
+      expect(screen.getByRole('button', { name: 'Claim 0.5 ETH' })).toBeEnabled();
+    });
+
+    it('shows the stake form once the attestation is ticked', () => {
+      window.localStorage.removeItem(ATTESTATION_STORAGE_KEY);
+      render(<EthVaultPanel status={STATUS} />);
+      fireEvent.click(screen.getByRole('checkbox', { name: /not a resident or citizen/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+      expect(screen.getByLabelText('Stake ETH', { selector: 'input' })).toBeInTheDocument();
+    });
+
+    it('in a restricted region keeps exit and claim but drops staking', () => {
+      render(<EthVaultPanel status={STATUS} allowNewStake={false} />);
+      expect(screen.queryByLabelText('Stake ETH', { selector: 'input' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+      expect(screen.getByText(/New stakes are not available in your region/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Exit' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Claim 0.5 ETH' })).toBeEnabled();
+    });
+
+    it('in a restricted region does not offer linking a new wallet', () => {
+      (useLinkedWallets as jest.Mock).mockReturnValue({ isLoading: false, data: [] });
+      render(<EthVaultPanel status={STATUS} allowNewStake={false} />);
+      expect(screen.queryByText('wallet-link-card')).not.toBeInTheDocument();
+      expect(screen.getByText(/New stakes are not available in your region/)).toBeInTheDocument();
+    });
   });
 
   it('asks for a wallet when none is connected', () => {

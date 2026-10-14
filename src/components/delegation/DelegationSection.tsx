@@ -6,9 +6,10 @@
 // only when its own target is configured. With payout_model "reward_share"
 // (v3) the copy describes the inference discount instead of the allowance, and
 // the discount card renders once the backend's discount switch is on. Kept out of src/components/holdings
-// because that feature's copy policy forbids these words. Hidden for visitors in
-// a restricted country (src/lib/delegation/region.ts), and every wallet action
-// sits behind the eligibility attestation.
+// because that feature's copy policy forbids these words. Visitors in a
+// restricted country (src/lib/delegation/region.ts) see it only if they already
+// have a stake, and then only to view and leave it. Starting a new stake (link,
+// stake, delegate) needs the eligibility attestation; leaving never does.
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -16,11 +17,10 @@ import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { useIsTauri } from '@/lib/desktop/hooks';
 import type { DelegationStatus } from '@/lib/delegation/api';
 import { isCardanoPoolLive, isDelegationLive, isEthVaultLive, isRewardShareModel } from '@/lib/delegation/flags';
-import { useDelegationStatus } from '@/lib/delegation/use-delegation';
+import { useDelegationRewards, useDelegationStatus } from '@/lib/delegation/use-delegation';
 import { useDelegationRegionBlocked } from '@/lib/delegation/use-region';
 import { CardanoPoolPanel } from './CardanoPoolPanel';
 import { DelegationPositionCard } from './DelegationPositionCard';
-import { EligibilityGate } from './EligibilityGate';
 import { rewardShareDescription, rewardShareFootnote, rewardSharePoints } from './discount-copy';
 import { EthVaultPanel } from './EthVaultPanel';
 import { InferenceDiscountCard } from './InferenceDiscountCard';
@@ -116,7 +116,7 @@ function RewardShareExplainer({ status }: { status: DelegationStatus }) {
   );
 }
 
-function AccountArea({ status }: { status: DelegationStatus }) {
+function AccountArea({ status, allowNewStake = true }: { status: DelegationStatus; allowNewStake?: boolean }) {
   const { status: authStatus, login } = useGatewayzAuth();
   const isDesktop = useIsTauri();
   const eth = isEthVaultLive(status);
@@ -152,24 +152,22 @@ function AccountArea({ status }: { status: DelegationStatus }) {
   const defaultTab = eth ? 'eth' : 'ada';
   return (
     <div className="flex flex-col gap-6">
-      <EligibilityGate>
-        <Tabs defaultValue={defaultTab}>
-          <TabsList aria-label="Asset">
-            {eth && <TabsTrigger value="eth">ETH</TabsTrigger>}
-            {ada && <TabsTrigger value="ada">ADA</TabsTrigger>}
-          </TabsList>
-          {eth && (
-            <TabsContent value="eth" className="pt-4">
-              <EthVaultPanel status={status} />
-            </TabsContent>
-          )}
-          {ada && (
-            <TabsContent value="ada" className="pt-4">
-              <CardanoPoolPanel status={status} />
-            </TabsContent>
-          )}
-        </Tabs>
-      </EligibilityGate>
+      <Tabs defaultValue={defaultTab}>
+        <TabsList aria-label="Asset">
+          {eth && <TabsTrigger value="eth">ETH</TabsTrigger>}
+          {ada && <TabsTrigger value="ada">ADA</TabsTrigger>}
+        </TabsList>
+        {eth && (
+          <TabsContent value="eth" className="pt-4">
+            <EthVaultPanel status={status} allowNewStake={allowNewStake} />
+          </TabsContent>
+        )}
+        {ada && (
+          <TabsContent value="ada" className="pt-4">
+            <CardanoPoolPanel status={status} allowNewStake={allowNewStake} />
+          </TabsContent>
+        )}
+      </Tabs>
       <InferenceDiscountCard status={status} shownDisclaimer={status.disclaimer} />
       <DelegationPositionCard shownDisclaimer={status.disclaimer} rewardShare={rewardShare} />
     </div>
@@ -180,8 +178,16 @@ export function DelegationSection() {
   const statusQuery = useDelegationStatus();
   const status = statusQuery.data;
   const regionBlocked = useDelegationRegionBlocked();
-  if (regionBlocked !== false) return null;
+  const { status: authStatus } = useGatewayzAuth();
+  // Only a restricted visitor needs this here: to find an existing stake to show.
+  const rewardsQuery = useDelegationRewards({ enabled: regionBlocked === true && authStatus === 'authenticated' });
+  if (regionBlocked === undefined) return null;
   if (!status || !isDelegationLive(status)) return null;
+  if (regionBlocked) {
+    const rewards = rewardsQuery.data;
+    const hasStake = !!rewards && (rewards.positions.length > 0 || rewards.linked_wallets.length > 0);
+    return hasStake ? <ExistingStakeSection status={status} /> : null;
+  }
 
   return (
     <section id={DELEGATION_ANCHOR} aria-labelledby="stake-for-inference-title" className="scroll-mt-24">
@@ -199,6 +205,27 @@ export function DelegationSection() {
         <CardContent className="flex flex-col gap-8">
           <Explainer status={status} />
           <AccountArea status={status} />
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
+/** Restricted region with an existing stake: view, exit and claim only. */
+function ExistingStakeSection({ status }: { status: DelegationStatus }) {
+  return (
+    <section id={DELEGATION_ANCHOR} aria-labelledby="stake-for-inference-title" className="scroll-mt-24">
+      <Card>
+        <CardHeader>
+          <CardTitle id="stake-for-inference-title" className="text-xl">
+            Your stake
+          </CardTitle>
+          <CardDescription>
+            New stakes are not available in your region. You can view and exit your existing position at any time.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-8">
+          <AccountArea status={status} allowNewStake={false} />
         </CardContent>
       </Card>
     </section>

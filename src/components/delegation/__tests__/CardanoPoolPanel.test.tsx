@@ -10,6 +10,7 @@ import {
   signLinkMessage,
 } from '@/lib/delegation/cardano-wallet';
 import { fetchCardanoAccount, fetchCardanoProtocolParams } from '@/lib/delegation/koios';
+import { ATTESTATION_STORAGE_KEY } from '@/lib/delegation/region';
 
 const mockToast = jest.fn();
 jest.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mockToast }) }));
@@ -43,11 +44,11 @@ const STATUS: DelegationStatus = {
   disclaimer: '',
 };
 
-function renderPanel() {
+function renderPanel(allowNewStake = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <CardanoPoolPanel status={STATUS} />
+      <CardanoPoolPanel status={STATUS} allowNewStake={allowNewStake} />
     </QueryClientProvider>,
   );
 }
@@ -79,9 +80,30 @@ describe('CardanoPoolPanel', () => {
       depositLovelace: BigInt(2_000_000),
     });
     (signAndSubmit as jest.Mock).mockResolvedValue('a'.repeat(64));
+    window.localStorage.setItem(ATTESTATION_STORAGE_KEY, 'true');
   });
   afterEach(() => {
     delete (window as unknown as { cardano?: unknown }).cardano;
+  });
+  afterAll(() => window.localStorage.clear());
+
+  it('connects and shows the delegation without the attestation, but asks for it before linking', async () => {
+    window.localStorage.removeItem(ATTESTATION_STORAGE_KEY);
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
+    expect(await screen.findByText('Not delegated to any pool yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Link with a signature' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: /not a resident or citizen/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByRole('button', { name: 'Link with a signature' })).toBeInTheDocument();
+  });
+
+  it('in a restricted region shows the delegation but offers no link or delegate', async () => {
+    renderPanel(false);
+    fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
+    expect(await screen.findByText('Not delegated to any pool yet.')).toBeInTheDocument();
+    expect(screen.getByText(/New stakes are not available in your region/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Link with a signature' })).not.toBeInTheDocument();
   });
 
   it('says so when no CIP-30 wallet is installed', async () => {

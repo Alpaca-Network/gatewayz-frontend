@@ -1,9 +1,10 @@
 "use client";
 
-// Self-attestation in front of every wallet action (connect, link, stake,
-// delegate). The IP check in src/middleware.ts is easy to get around, so the
-// user also confirms they are outside the US and Canada. Accepted once per
-// browser; position and discount cards stay outside the gate.
+// Self-attestation in front of starting something new: linking a wallet,
+// staking ETH, delegating ADA. The IP check in src/middleware.ts is easy to get
+// around, so the user also confirms they are outside the US and Canada.
+// Accepted once per browser. Leaving is never gated: connecting a wallet,
+// viewing a position, exiting and claiming all sit outside this component.
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -47,5 +48,17 @@ export function EligibilityGate({ children }: { children: ReactNode }) {
         Continue
       </Button>
     </div>
+  );
+}
+
+/** Shown in place of the stake/delegate controls to visitors in a restricted region. */
+export function NewStakeUnavailable({ asset }: { asset: 'eth' | 'ada' }) {
+  return (
+    <p role="status" className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
+      New stakes are not available in your region.{' '}
+      {asset === 'eth'
+        ? 'You can still view, exit and claim an existing position here.'
+        : 'Your ADA stays in your wallet; you can re-delegate or spend it from your wallet at any time.'}
+    </p>
   );
 }

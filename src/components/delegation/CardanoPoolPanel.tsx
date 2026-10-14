@@ -31,6 +31,7 @@ import { fetchCardanoAccount, fetchCardanoProtocolParams } from '@/lib/delegatio
 import { delegationQueryKeys, useDelegationRewards } from '@/lib/delegation/use-delegation';
 import { truncateAddress } from '@/lib/holdings/format';
 import { ConfirmTxDialog } from './ConfirmTxDialog';
+import { EligibilityGate, NewStakeUnavailable } from './EligibilityGate';
 
 const CARDANOSCAN = 'https://cardanoscan.io';
 
@@ -38,7 +39,13 @@ function shortId(id: string): string {
   return id.length > 20 ? `${id.slice(0, 10)}...${id.slice(-6)}` : id;
 }
 
-export function CardanoPoolPanel({ status }: { status: DelegationStatus }) {
+/**
+ * Connecting a wallet and viewing its delegation are never gated. Linking and
+ * delegating start something new, so they need the eligibility attestation, and
+ * are replaced by a notice when `allowNewStake` is false (restricted region).
+ * Moving away from the pool is done in the user's own wallet at any time.
+ */
+export function CardanoPoolPanel({ status, allowNewStake = true }: { status: DelegationStatus; allowNewStake?: boolean }) {
   const poolId = status.cardano.pool_id;
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -81,6 +88,8 @@ export function CardanoPoolPanel({ status }: { status: DelegationStatus }) {
   const isLinked = justLinked || (!!stakeAddress && linkedAddresses.has(stakeAddress));
   const account = accountQuery.data;
   const delegatedHere = !!account && account.delegatedPool === poolId;
+  // Link or delegate still to do; nothing to gate once both are done.
+  const hasNextStep = !isLinked || (!delegatedHere && !!account);
 
   const handleConnect = async (key: string) => {
     setConnecting(key);
@@ -219,31 +228,37 @@ export function CardanoPoolPanel({ status }: { status: DelegationStatus }) {
             </p>
           )}
 
-          {!isLinked ? (
-            <div className="flex flex-col items-start gap-2">
-              <p className="text-sm">
-                First, link this stake address to your Gatewayz account so the allowance reaches you. Your wallet asks
-                you to sign a message: free, no transaction.
-              </p>
-              <Button onClick={handleLink} disabled={linking}>
-                {linking ? 'Waiting for signature...' : 'Link with a signature'}
-              </Button>
-            </div>
+          {!hasNextStep ? null : !allowNewStake ? (
+            <NewStakeUnavailable asset="ada" />
           ) : (
-            !delegatedHere &&
-            account && (
-              <div className="flex flex-col items-start gap-2">
-                <Button onClick={() => setConfirmOpen(true)} disabled={submitting || !!submittedTx}>
-                  {submitting ? 'Waiting for wallet...' : submittedTx ? 'Delegation submitted' : 'Delegate to Gatewayz'}
-                </Button>
-                {!account.registered && (
-                  <p className="text-xs text-muted-foreground">
-                    First delegation from this stake key also registers it, with a 2 ADA deposit you get back if you
-                    ever deregister.
+            <EligibilityGate>
+              {!isLinked ? (
+                <div className="flex flex-col items-start gap-2">
+                  <p className="text-sm">
+                    First, link this stake address to your Gatewayz account so the allowance reaches you. Your wallet asks
+                    you to sign a message: free, no transaction.
                   </p>
-                )}
-              </div>
-            )
+                  <Button onClick={handleLink} disabled={linking}>
+                    {linking ? 'Waiting for signature...' : 'Link with a signature'}
+                  </Button>
+                </div>
+              ) : (
+                !delegatedHere &&
+                account && (
+                  <div className="flex flex-col items-start gap-2">
+                    <Button onClick={() => setConfirmOpen(true)} disabled={submitting || !!submittedTx}>
+                      {submitting ? 'Waiting for wallet...' : submittedTx ? 'Delegation submitted' : 'Delegate to Gatewayz'}
+                    </Button>
+                    {!account.registered && (
+                      <p className="text-xs text-muted-foreground">
+                        First delegation from this stake key also registers it, with a 2 ADA deposit you get back if you
+                        ever deregister.
+                      </p>
+                    )}
+                  </div>
+                )
+              )}
+            </EligibilityGate>
           )}
 
           {submittedTx && (

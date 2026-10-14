@@ -13,7 +13,11 @@ jest.mock('@/lib/delegation/use-delegation', () => ({
   useDelegationStatus: jest.fn(),
   useDelegationRewards: jest.fn(),
 }));
-jest.mock('../EthVaultPanel', () => ({ EthVaultPanel: () => <div>eth-panel</div> }));
+jest.mock('../EthVaultPanel', () => ({
+  EthVaultPanel: ({ allowNewStake = true }: { allowNewStake?: boolean }) => (
+    <div>{allowNewStake ? 'eth-panel' : 'eth-panel:exit-only'}</div>
+  ),
+}));
 jest.mock('../CardanoPoolPanel', () => ({ CardanoPoolPanel: () => <div>ada-panel</div> }));
 
 const mockStatus = useDelegationStatus as jest.Mock;
@@ -51,28 +55,43 @@ describe('DelegationSection', () => {
     window.localStorage.clear();
   });
 
-  it.each(['US', 'CA', 'us'])('renders nothing for a visitor in %s', (country) => {
+  it.each(['US', 'CA', 'us'])('renders nothing for a visitor in %s with no stake', (country) => {
     document.cookie = `${GEO_COOKIE}=${country}; path=/`;
+    mockRewards.mockReturnValue({ data: { positions: [], linked_wallets: [] } });
     const { container } = render(<DelegationSection />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('lets a restricted visitor with an existing stake view and exit it, without new staking', () => {
+    document.cookie = `${GEO_COOKIE}=US; path=/`;
+    window.localStorage.removeItem(ATTESTATION_STORAGE_KEY);
+    mockRewards.mockReturnValue({
+      isLoading: false,
+      isError: false,
+      data: {
+        enabled: true,
+        positions: [
+          { asset: 'ETH', wallet_address: '0x2222222222222222222222222222222222222222', amount: 1, usd_value: 3000, measured_at: null },
+        ],
+        exit_requests: [],
+        linked_wallets: [{ asset: 'eth', wallet_address: '0x2222222222222222222222222222222222222222' }],
+        allowance: { credits_per_day_estimate: 0, month_estimate_usd: 0, daily_cap_credits: 0 },
+        totals: { pending: 0, paid: 0 },
+        history: [],
+        disclaimer: '',
+      },
+    });
+    render(<DelegationSection />);
+    expect(screen.getByText('Your stake')).toBeInTheDocument();
+    expect(screen.getByText(/New stakes are not available in your region/)).toBeInTheDocument();
+    expect(screen.queryByText('Stake for inference')).not.toBeInTheDocument();
+    expect(screen.getByText('eth-panel:exit-only')).toBeInTheDocument();
   });
 
   it('renders for a visitor in an allowed country', () => {
     document.cookie = `${GEO_COOKIE}=FR; path=/`;
     render(<DelegationSection />);
     expect(screen.getByText('Stake for inference')).toBeInTheDocument();
-  });
-
-  it('asks for the eligibility attestation before any wallet panel', () => {
-    window.localStorage.removeItem(ATTESTATION_STORAGE_KEY);
-    render(<DelegationSection />);
-    expect(screen.queryByText('eth-panel')).not.toBeInTheDocument();
-    const continueButton = screen.getByRole('button', { name: 'Continue' });
-    expect(continueButton).toBeDisabled();
-    fireEvent.click(screen.getByRole('checkbox', { name: /not a resident or citizen of the United States or Canada/ }));
-    fireEvent.click(continueButton);
-    expect(screen.getByText('eth-panel')).toBeInTheDocument();
-    expect(window.localStorage.getItem(ATTESTATION_STORAGE_KEY)).toBe('true');
   });
 
   it('renders nothing while the build flag is off, even if the backend says on', () => {
