@@ -88,7 +88,7 @@ const Navigation = () => {
                     <a href="https://beta.gatewayz.ai">Try Now</a>
                   </Button>
                   <Button asChild size="sm" className="h-9 bg-indigo-600 hover:bg-indigo-700">
-                    <a href="https://cal.com/vonalytics/gatewayz" target="_blank" rel="noopener noreferrer">Book Demo Call</a>
+                    <a href="https://www.gatewayz.ai/book" target="_blank" rel="noopener noreferrer">Book Demo Call</a>
                   </Button>
                 </div>
               </>
@@ -124,7 +124,7 @@ const Navigation = () => {
                     <a href="https://beta.gatewayz.ai">Try Now</a>
                   </Button>
                   <Button asChild size="sm" className="h-9 bg-indigo-600 hover:bg-indigo-700">
-                    <a href="https://cal.com/vonalytics/gatewayz" target="_blank" rel="noopener noreferrer">Book Demo Call</a>
+                    <a href="https://www.gatewayz.ai/book" target="_blank" rel="noopener noreferrer">Book Demo Call</a>
                   </Button>
                 </div>
               </>
@@ -170,7 +170,7 @@ const Navigation = () => {
                     <a href="https://beta.gatewayz.ai">Try Now</a>
                   </Button>
                   <Button asChild className="w-full bg-indigo-600 hover:bg-indigo-700">
-                    <a href="https://cal.com/vonalytics/gatewayz" target="_blank" rel="noopener noreferrer">Book Demo Call</a>
+                    <a href="https://www.gatewayz.ai/book" target="_blank" rel="noopener noreferrer">Book Demo Call</a>
                   </Button>
                 </div>
               </div>
