@@ -36,8 +36,11 @@ export default function StakingTerms() {
           <li>persons in any jurisdiction where use would be unlawful, and persons
           subject to applicable sanctions.</li>
         </ul>
-        <p>By continuing you confirm you are none of the above. We may block access
-        by region and may withdraw access at any time.</p>
+        <p>Before you connect a wallet we ask you to confirm you are not a resident
+        or citizen of the United States or Canada. By continuing you confirm you are
+        none of the above. Access is blocked for visitors located in the United
+        States or Canada, and we may block other regions and withdraw access at any
+        time.</p>
       </S>
 
       <S n="3" t="Custody — and a distinction that matters">
