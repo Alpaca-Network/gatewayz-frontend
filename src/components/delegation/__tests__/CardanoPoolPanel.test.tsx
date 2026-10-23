@@ -55,11 +55,11 @@ const STATUS: DelegationStatus = {
   disclaimer: '',
 };
 
-function renderPanel(allowNewStake = true) {
+function renderPanel(status: DelegationStatus = STATUS, allowNewStake = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <CardanoPoolPanel status={STATUS} allowNewStake={allowNewStake} />
+      <CardanoPoolPanel status={status} allowNewStake={allowNewStake} />
     </QueryClientProvider>,
   );
 }
@@ -110,11 +110,38 @@ describe('CardanoPoolPanel', () => {
   });
 
   it('in a restricted region shows the delegation but offers no link or delegate', async () => {
-    renderPanel(false);
+    renderPanel(STATUS, false);
     fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
     expect(await screen.findByText('Not delegated to any pool yet.')).toBeInTheDocument();
     expect(screen.getByText(/New stakes are not available in your region/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Link with a signature' })).not.toBeInTheDocument();
+  });
+
+  it('shows no testnet banner on mainnet', async () => {
+    renderPanel();
+    await screen.findByRole('button', { name: /Connect eternl/ });
+    expect(screen.queryByText(/Testnet demo/)).not.toBeInTheDocument();
+  });
+
+  it('on preprod: shows the testnet banner, connects and reads on preprod, links to preprod Cardanoscan', async () => {
+    const testStake = 'stake_test1uqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
+    (connectCardanoWallet as jest.Mock).mockResolvedValue({ key: 'eternl', wallet: {}, stakeAddress: testStake });
+    (useDelegationRewards as jest.Mock).mockReturnValue({
+      data: { linked_wallets: [{ asset: 'ADA', wallet_address: testStake }], positions: [] },
+    });
+    renderPanel({ ...STATUS, cardano: { pool_id: POOL, network: 'preprod' } });
+    expect(screen.getByText(/Testnet demo — preprod ADA, no real value/)).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
+    await waitFor(() => expect(connectCardanoWallet).toHaveBeenCalledWith('eternl', 'preprod'));
+    await waitFor(() => expect(fetchCardanoAccount).toHaveBeenCalledWith(testStake, 'preprod'));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delegate to Gatewayz' }));
+    await screen.findByText('0.18 ADA + 2 ADA refundable deposit');
+    expect(fetchCardanoProtocolParams).toHaveBeenCalledWith('preprod');
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in wallet' }));
+    const link = await screen.findByRole('link', { name: /on Cardanoscan/ });
+    expect(link).toHaveAttribute('href', `https://preprod.cardanoscan.io/transaction/${'a'.repeat(64)}`);
   });
 
   it('says so when no CIP-30 wallet is installed', async () => {
@@ -126,7 +153,7 @@ describe('CardanoPoolPanel', () => {
   it('connects, links via nonce -> signData -> link, then delegates with a confirmed fee', async () => {
     renderPanel();
     fireEvent.click(await screen.findByRole('button', { name: /Connect eternl/ }));
-    await waitFor(() => expect(connectCardanoWallet).toHaveBeenCalledWith('eternl'));
+    await waitFor(() => expect(connectCardanoWallet).toHaveBeenCalledWith('eternl', 'mainnet'));
     expect(await screen.findByText('Not delegated to any pool yet.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Link with a signature' }));

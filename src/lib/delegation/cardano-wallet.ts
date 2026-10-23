@@ -10,9 +10,10 @@
 // deposit the first time a stake key is used). ADA stays in the user's wallet
 // and spendable, and they can re-delegate at any time.
 import type { BrowserWallet } from '@meshsdk/wallet';
+import { cardanoNetworkConfig, type CardanoNetwork } from './cardano-network';
 import type { CardanoProtocolParams } from './koios';
 
-export const CARDANO_MAINNET_NETWORK_ID = 1;
+export const CARDANO_MAINNET_NETWORK_ID = cardanoNetworkConfig('mainnet').walletNetworkId;
 const DEFAULT_KEY_DEPOSIT_LOVELACE = 2_000_000;
 
 export interface ConnectedCardanoWallet {
@@ -29,20 +30,32 @@ export class CardanoWalletError extends Error {
   }
 }
 
-/** Enables the CIP-30 wallet under `window.cardano[key]` and reads its stake address. */
-export async function connectCardanoWallet(key: string): Promise<ConnectedCardanoWallet> {
+/**
+ * Enables the CIP-30 wallet under `window.cardano[key]` and reads its stake address.
+ * `network` comes from the backend's status; only a testnet demo passes "preprod".
+ */
+export async function connectCardanoWallet(
+  key: string,
+  network: CardanoNetwork = 'mainnet',
+): Promise<ConnectedCardanoWallet> {
+  const { walletNetworkId, stakeAddressPrefix } = cardanoNetworkConfig(network);
   const { BrowserWallet } = await import('@meshsdk/wallet');
   const wallet = await BrowserWallet.enable(key);
   const networkId = await wallet.getNetworkId();
-  if (networkId !== CARDANO_MAINNET_NETWORK_ID) {
-    throw new CardanoWalletError('Switch your wallet to Cardano mainnet and connect again.');
+  if (networkId !== walletNetworkId) {
+    throw new CardanoWalletError(
+      network === 'preprod'
+        ? 'Switch your wallet to the Cardano preprod testnet and connect again.'
+        : 'Switch your wallet to Cardano mainnet and connect again.',
+    );
   }
   // Mesh returns these bech32-encoded ("stake1..."), the form the backend expects.
   const [stakeAddress] = await wallet.getRewardAddresses();
   if (!stakeAddress) throw new CardanoWalletError('This wallet did not share a stake address.');
-  // Key-hash mainnet stake addresses (header 0xe1) encode as "stake1u..."; script
-  // ones (0xf1, "stake17...") have no key to sign with and the backend rejects them.
-  if (!stakeAddress.startsWith('stake1u')) {
+  // Key-hash mainnet stake addresses (header 0xe1) encode as "stake1u..." (0xe0,
+  // "stake_test1u..." on testnets); script ones (0xf1, "stake17...") have no key to
+  // sign with and the backend rejects them.
+  if (!stakeAddress.startsWith(stakeAddressPrefix)) {
     throw new CardanoWalletError('This wallet uses a script stake address, which cannot sign. Use a regular wallet.');
   }
   return { key, wallet, stakeAddress };

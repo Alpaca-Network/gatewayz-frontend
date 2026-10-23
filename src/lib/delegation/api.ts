@@ -20,6 +20,7 @@
 // e.g. fee_percent "99.00") and lowercase asset ids ("eth", "ada"); all of that
 // is normalized here, assets to "ETH" / "ADA".
 import { makeAuthenticatedRequest } from '@/lib/api';
+import { toCardanoNetwork, type CardanoNetwork } from './cardano-network';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 
@@ -35,7 +36,8 @@ export type DelegationPayoutModel = 'allowance' | 'reward_share';
 export interface DelegationStatus {
   enabled: boolean;
   eth: { vault_address: string | null; chain_id: number; fee_percent: number | null };
-  cardano: { pool_id: string | null };
+  /** `network` is "preprod" only on a testnet-demo backend; absent means mainnet. */
+  cardano: { pool_id: string | null; network?: CardanoNetwork };
   allowance_rates: DelegationAllowanceRate[];
   disclaimer: string;
   /** v3 fields; absent (undefined / null) from a backend that predates them. */
@@ -255,7 +257,7 @@ export function parseDelegationStatus(data: unknown): DelegationStatus {
       chain_id: toNumber(eth.chain_id) || 1,
       fee_percent: toNullableNumber(eth.fee_percent),
     },
-    cardano: { pool_id: toNullableString(cardano.pool_id) },
+    cardano: { pool_id: toNullableString(cardano.pool_id), network: toCardanoNetwork(cardano.network) },
     allowance_rates: asRows(d.allowance_rates).map((r) => ({
       asset: assetOf(r.asset),
       credits_per_1k_usd_per_day: toNumber(r.credits_per_1k_usd_per_day),

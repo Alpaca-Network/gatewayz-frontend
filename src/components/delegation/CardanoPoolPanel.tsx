@@ -26,6 +26,7 @@ import {
   type ConnectedCardanoWallet,
   type DelegationTx,
 } from '@/lib/delegation/cardano-wallet';
+import { cardanoNetworkConfig, toCardanoNetwork } from '@/lib/delegation/cardano-network';
 import { detectCip30Wallets, isCip30Rejection, type Cip30WalletInfo } from '@/lib/delegation/cip30';
 import { formatAda } from '@/lib/delegation/format';
 import { fetchCardanoAccount, fetchCardanoProtocolParams } from '@/lib/delegation/koios';
@@ -34,8 +35,6 @@ import { clearAttestation, hasAttested } from '@/lib/delegation/region';
 import { truncateAddress } from '@/lib/holdings/format';
 import { ConfirmTxDialog } from './ConfirmTxDialog';
 import { EligibilityGate, NewStakeUnavailable } from './EligibilityGate';
-
-const CARDANOSCAN = 'https://cardanoscan.io';
 
 function shortId(id: string): string {
   return id.length > 20 ? `${id.slice(0, 10)}...${id.slice(-6)}` : id;
@@ -49,6 +48,9 @@ function shortId(id: string): string {
  */
 export function CardanoPoolPanel({ status, allowNewStake = true }: { status: DelegationStatus; allowNewStake?: boolean }) {
   const poolId = status.cardano.pool_id;
+  const network = toCardanoNetwork(status.cardano.network);
+  const isTestnet = network === 'preprod';
+  const explorerUrl = cardanoNetworkConfig(network).explorerUrl;
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [available, setAvailable] = useState<Cip30WalletInfo[] | null>(null);
@@ -64,8 +66,8 @@ export function CardanoPoolPanel({ status, allowNewStake = true }: { status: Del
   const rewardsQuery = useDelegationRewards();
   const stakeAddress = connected?.stakeAddress ?? null;
   const accountQuery = useQuery({
-    queryKey: [...delegationQueryKeys.cardanoAccount, stakeAddress],
-    queryFn: () => fetchCardanoAccount(stakeAddress as string),
+    queryKey: [...delegationQueryKeys.cardanoAccount, network, stakeAddress],
+    queryFn: () => fetchCardanoAccount(stakeAddress as string, network),
     enabled: !!stakeAddress,
     staleTime: 30_000,
     retry: 1,
@@ -96,7 +98,7 @@ export function CardanoPoolPanel({ status, allowNewStake = true }: { status: Del
   const handleConnect = async (key: string) => {
     setConnecting(key);
     try {
-      const wallet = await connectCardanoWallet(key);
+      const wallet = await connectCardanoWallet(key, network);
       setConnected(wallet);
       setJustLinked(false);
       setSubmittedTx(null);
@@ -140,7 +142,7 @@ export function CardanoPoolPanel({ status, allowNewStake = true }: { status: Del
   const estimate = async (): Promise<string> => {
     if (!connected || !account) throw new Error('Connect a wallet first.');
     try {
-      const params = await fetchCardanoProtocolParams();
+      const params = await fetchCardanoProtocolParams(network);
       const tx = await buildDelegationTx(connected, { poolId, registered: account.registered, params });
       builtTx.current = tx;
       return tx.depositLovelace > BigInt(0)
@@ -160,7 +162,7 @@ export function CardanoPoolPanel({ status, allowNewStake = true }: { status: Del
     try {
       const hash = await signAndSubmit(connected, tx.unsignedTx);
       setSubmittedTx(hash);
-      toast({ title: 'Delegation submitted', description: `It takes effect from the next epoch boundary. ${CARDANOSCAN}/transaction/${hash}` });
+      toast({ title: 'Delegation submitted', description: `It takes effect from the next epoch boundary. ${explorerUrl}/transaction/${hash}` });
       queryClient.invalidateQueries({ queryKey: delegationQueryKeys.cardanoAccount });
     } catch (error) {
       toast({ title: 'Delegation not sent', description: describeCardanoError(error, isCip30Rejection), variant: 'destructive' });
@@ -172,6 +174,12 @@ export function CardanoPoolPanel({ status, allowNewStake = true }: { status: Del
 
   return (
     <div className="flex flex-col gap-5">
+      {isTestnet && (
+        <p role="note" className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm font-medium">
+          Testnet demo — preprod ADA, no real value. Connect a wallet set to the Cardano preprod network; discounts
+          shown here are for demonstration only.
+        </p>
+      )}
       <p className="text-sm text-muted-foreground">
         Delegating points your stake key at the Gatewayz pool ({shortId(poolId)}). Your ADA never leaves your wallet
         and stays spendable; there is no lock-up, and you can re-delegate any time.
@@ -276,7 +284,7 @@ export function CardanoPoolPanel({ status, allowNewStake = true }: { status: Del
               Submitted.{' '}
               <a
                 className="underline"
-                href={`${CARDANOSCAN}/transaction/${submittedTx}`}
+                href={`${explorerUrl}/transaction/${submittedTx}`}
                 target="_blank"
                 rel="noreferrer noopener"
               >
