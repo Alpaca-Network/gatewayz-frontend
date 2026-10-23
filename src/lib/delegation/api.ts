@@ -4,6 +4,11 @@
 //   GET  /delegation/rewards           Bearer: the caller's positions and allowance
 //   POST /auth/wallet/cardano/nonce    Bearer: message for a stake address to sign
 //   POST /auth/wallet/cardano/link     Bearer: CIP-30 signData proof for that address
+//   POST /delegation/eligibility       Bearer: "not a US / Canadian person" attestation
+//
+// Starting to delegate (linking a stake address, attesting before an ETH stake)
+// is refused with HTTP 451 for the US and Canada: error.type "region_restricted",
+// or "attestation_required" when the account has not attested yet.
 //
 // The user stakes from their own wallet into a StakeWise vault (ETH) or delegates
 // to our pool (ADA). Gatewayz receives the protocol rewards and gives back either
@@ -123,7 +128,20 @@ export interface DelegationRewards {
   discount: DelegationDiscount | null;
   attributions: DelegationAttribution[];
   discount_history: DelegationDiscountEntry[];
+  /** Null when the backend predates the US / Canada attestation (it omits the field). */
+  eligibility: DelegationEligibility | null;
 }
+
+/** "none" = not attested yet (or the backend could not read it). */
+export type DelegationEligibilityStatus = 'eligible' | 'restricted' | 'none';
+
+export interface DelegationEligibility {
+  status: DelegationEligibilityStatus;
+  attested_at: string | null;
+}
+
+/** HTTP 451 refusals, from `error.type`. */
+export type DelegationRefusal = 'region_restricted' | 'attestation_required';
 
 export interface CardanoLinkNonce {
   nonce: string;
@@ -144,13 +162,22 @@ export interface CardanoLinkedWallet {
 export class DelegationApiError extends Error {
   status: number;
   detail: string;
+  /** `error.type` from the body, when the backend sent one (e.g. "region_restricted"). */
+  code: string | null;
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, code: string | null = null) {
     super(detail);
     this.name = 'DelegationApiError';
     this.status = status;
     this.detail = detail;
+    this.code = code;
   }
+}
+
+/** Which US / Canada refusal this error is, or null for anything else. */
+export function delegationRefusalOf(error: unknown): DelegationRefusal | null {
+  if (!(error instanceof DelegationApiError) || error.status !== 451) return null;
+  return error.code === 'attestation_required' ? 'attestation_required' : 'region_restricted';
 }
 
 type Row = Record<string, unknown>;
@@ -302,26 +329,44 @@ export function parseDelegationRewards(data: unknown): DelegationRewards {
       balance_after: toNullableNumber(r.balance_after),
       ref: toNullableString(r.ref),
     })),
+    eligibility: parseEligibility(d.eligibility),
   };
 }
 
-/** Pulls a user-facing message out of either error envelope the backend uses. */
-async function extractErrorDetail(response: Response): Promise<string> {
+function parseEligibility(value: unknown): DelegationEligibility | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const e = value as Row;
+  const status: DelegationEligibilityStatus =
+    e.status === 'eligible' || e.status === 'restricted' ? e.status : 'none';
+  return { status, attested_at: toNullableString(e.attested_at) };
+}
+
+/**
+ * Pulls a user-facing message and the `error.type` out of either error envelope
+ * the backend uses (`{detail}` or `{error: {type, message}}`, possibly nested
+ * under `detail`).
+ */
+async function extractErrorDetail(response: Response): Promise<{ message: string; code: string | null }> {
+  const fallback = response.statusText || 'Request failed';
   try {
     const body = asObject(await response.json());
-    if (typeof body.detail === 'string') return body.detail;
-    const error = body.error;
-    if (typeof error === 'string') return error;
-    const message = asObject(error).message;
-    return (typeof message === 'string' && message) || response.statusText || 'Request failed';
+    if (typeof body.detail === 'string') return { message: body.detail, code: null };
+    const error = body.error ?? asObject(body.detail).error;
+    if (typeof error === 'string') return { message: error, code: null };
+    const { message, type } = asObject(error);
+    return {
+      message: (typeof message === 'string' && message) || fallback,
+      code: typeof type === 'string' && type ? type : null,
+    };
   } catch {
-    return response.statusText || 'Request failed';
+    return { message: fallback, code: null };
   }
 }
 
 async function readJson(response: Response): Promise<unknown> {
   if (!response.ok) {
-    throw new DelegationApiError(response.status, await extractErrorDetail(response));
+    const { message, code } = await extractErrorDetail(response);
+    throw new DelegationApiError(response.status, message, code);
   }
   return unwrap(await response.json());
 }
@@ -338,12 +383,29 @@ export async function getDelegationRewards(): Promise<DelegationRewards> {
   return parseDelegationRewards(await readJson(response));
 }
 
-/** POST /auth/wallet/cardano/nonce (Bearer): the message the stake key signs. */
-export async function requestCardanoLinkNonce(stakeAddress: string): Promise<CardanoLinkNonce> {
+/**
+ * POST /delegation/eligibility (Bearer): records "I am not a resident or
+ * citizen of the United States or Canada". 451 when refused.
+ */
+export async function attestDelegationEligibility(): Promise<DelegationEligibility | null> {
+  const response = await makeAuthenticatedRequest(`${API_BASE_URL}/delegation/eligibility`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ not_us_ca_person: true }),
+  });
+  return parseEligibility(asObject(await readJson(response)).eligibility);
+}
+
+/**
+ * POST /auth/wallet/cardano/nonce (Bearer): the message the stake key signs.
+ * `notUsCaPerson` carries the eligibility tick; the backend needs it unless the
+ * account already attested.
+ */
+export async function requestCardanoLinkNonce(stakeAddress: string, notUsCaPerson = false): Promise<CardanoLinkNonce> {
   const response = await makeAuthenticatedRequest(`${API_BASE_URL}/auth/wallet/cardano/nonce`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stake_address: stakeAddress }),
+    body: JSON.stringify({ stake_address: stakeAddress, not_us_ca_person: notUsCaPerson }),
   });
   const d = asObject(await readJson(response));
   if (typeof d.message !== 'string' || d.message === '') {
@@ -363,11 +425,17 @@ export async function linkCardanoStakeAddress(input: {
   stakeAddress: string;
   signature: string;
   key: string;
+  notUsCaPerson?: boolean;
 }): Promise<CardanoLinkedWallet> {
   const response = await makeAuthenticatedRequest(`${API_BASE_URL}/auth/wallet/cardano/link`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ stake_address: input.stakeAddress, signature: input.signature, key: input.key }),
+    body: JSON.stringify({
+      stake_address: input.stakeAddress,
+      signature: input.signature,
+      key: input.key,
+      not_us_ca_person: input.notUsCaPerson ?? false,
+    }),
   });
   const wallet = asObject(asObject(await readJson(response)).wallet);
   return {
@@ -378,6 +446,9 @@ export async function linkCardanoStakeAddress(input: {
 
 /** Short, user-facing copy for a failed link. */
 export function describeCardanoLinkError(error: unknown): string {
+  const refusal = delegationRefusalOf(error);
+  if (refusal === 'region_restricted') return REGION_RESTRICTED_MESSAGE;
+  if (refusal === 'attestation_required') return ATTESTATION_REQUIRED_MESSAGE;
   if (error instanceof DelegationApiError) {
     if (error.status === 400) return 'Your linking session expired. Please try again.';
     if (error.status === 401) return 'The wallet signature could not be verified. Please try again.';
@@ -390,3 +461,7 @@ export function describeCardanoLinkError(error: unknown): string {
   }
   return 'Something went wrong. Please try again.';
 }
+
+export const REGION_RESTRICTED_MESSAGE = 'Delegated staking is not available in your region.';
+export const ATTESTATION_REQUIRED_MESSAGE =
+  'Confirm you are not a resident or citizen of the United States or Canada to continue.';

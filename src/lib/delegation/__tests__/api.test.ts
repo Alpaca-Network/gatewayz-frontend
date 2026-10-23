@@ -1,5 +1,7 @@
 import {
   DelegationApiError,
+  attestDelegationEligibility,
+  delegationRefusalOf,
   describeCardanoLinkError,
   getDelegationRewards,
   getDelegationStatus,
@@ -241,6 +243,15 @@ describe('parseDelegationRewards', () => {
   it('drops linked wallets without an address', () => {
     expect(parseDelegationRewards({ linked_wallets: [{ asset: 'eth', wallet_address: '' }] }).linked_wallets).toEqual([]);
   });
+
+  it('reads eligibility, null when the backend omits it', () => {
+    expect(parseDelegationRewards({}).eligibility).toBeNull();
+    expect(parseDelegationRewards({ eligibility: { status: 'restricted', attested_at: null } }).eligibility).toEqual({
+      status: 'restricted',
+      attested_at: null,
+    });
+    expect(parseDelegationRewards({ eligibility: { status: 'weird' } }).eligibility).toEqual({ status: 'none', attested_at: null });
+  });
 });
 
 describe('endpoints', () => {
@@ -310,10 +321,50 @@ describe('endpoints', () => {
 
     const [nonceUrl, nonceInit] = mockAuthRequest.mock.calls[0];
     expect(nonceUrl).toMatch(/\/auth\/wallet\/cardano\/nonce$/);
-    expect(JSON.parse(nonceInit.body)).toEqual({ stake_address: 'stake1u' });
+    expect(JSON.parse(nonceInit.body)).toEqual({ stake_address: 'stake1u', not_us_ca_person: false });
     const [linkUrl, linkInit] = mockAuthRequest.mock.calls[1];
     expect(linkUrl).toMatch(/\/auth\/wallet\/cardano\/link$/);
-    expect(JSON.parse(linkInit.body)).toEqual({ stake_address: 'stake1u', signature: '84a4', key: 'a401' });
+    expect(JSON.parse(linkInit.body)).toEqual({ stake_address: 'stake1u', signature: '84a4', key: 'a401', not_us_ca_person: false });
+  });
+
+  it('sends the eligibility tick on the nonce and link calls', async () => {
+    mockAuthRequest
+      .mockResolvedValueOnce(json({ data: { nonce: 'n1', message: 'Link stake1u' } }))
+      .mockResolvedValueOnce(json({ data: { wallet: { wallet_address: 'stake1u' } } }));
+    await requestCardanoLinkNonce('stake1u', true);
+    await linkCardanoStakeAddress({ stakeAddress: 'stake1u', signature: '84a4', key: 'a401', notUsCaPerson: true });
+    expect(JSON.parse(mockAuthRequest.mock.calls[0][1].body).not_us_ca_person).toBe(true);
+    expect(JSON.parse(mockAuthRequest.mock.calls[1][1].body).not_us_ca_person).toBe(true);
+  });
+
+  it('posts the attestation to /delegation/eligibility', async () => {
+    mockAuthRequest.mockResolvedValueOnce(
+      json({ success: true, data: { eligibility: { status: 'eligible', attested_at: '2026-10-14T00:00:00Z' } } }),
+    );
+    await expect(attestDelegationEligibility()).resolves.toEqual({ status: 'eligible', attested_at: '2026-10-14T00:00:00Z' });
+    const [url, init] = mockAuthRequest.mock.calls[0];
+    expect(url).toMatch(/\/delegation\/eligibility$/);
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ not_us_ca_person: true });
+  });
+
+  it.each([
+    ['region_restricted', 'region_restricted'],
+    ['attestation_required', 'attestation_required'],
+  ])('reads a 451 %s refusal from the error envelope', async (type, refusal) => {
+    mockAuthRequest.mockResolvedValueOnce(
+      json({ error: { type, code: type.toUpperCase(), message: 'Refused', status: 451 } }, 451),
+    );
+    const error = await requestCardanoLinkNonce('stake1u').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DelegationApiError);
+    expect((error as DelegationApiError).code).toBe(type);
+    expect(delegationRefusalOf(error)).toBe(refusal);
+  });
+
+  it('also reads a refusal nested under detail', async () => {
+    mockAuthRequest.mockResolvedValueOnce(json({ detail: { error: { type: 'region_restricted', message: 'No' } } }, 451));
+    const error = await attestDelegationEligibility().catch((e: unknown) => e);
+    expect(delegationRefusalOf(error)).toBe('region_restricted');
   });
 
   it('rejects a nonce response without a message', async () => {
@@ -331,5 +382,10 @@ describe('describeCardanoLinkError', () => {
     [429, /Too many/],
   ])('maps %s', (status, pattern) => {
     expect(describeCardanoLinkError(new DelegationApiError(status, ''))).toMatch(pattern);
+  });
+
+  it('maps the 451 refusals', () => {
+    expect(describeCardanoLinkError(new DelegationApiError(451, '', 'region_restricted'))).toMatch(/not available in your region/);
+    expect(describeCardanoLinkError(new DelegationApiError(451, '', 'attestation_required'))).toMatch(/Confirm you are not/);
   });
 });

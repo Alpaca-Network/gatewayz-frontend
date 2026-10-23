@@ -3,7 +3,10 @@
 // The live ADA flow on /stake: sign in, connect a CIP-30 wallet, link its stake
 // address, delegate to the Gatewayz pool, then watch the discount accrue. The
 // same panels as /rewards, run under the flag override so /stake works by
-// direct link while every listed surface stays dark.
+// direct link while every listed surface stays dark. The middleware already
+// serves /stake/unavailable to restricted countries; the client check here is a
+// second lock. Inside the panel, linking and delegating need the eligibility
+// attestation; connecting and viewing do not.
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CardanoPoolPanel } from '@/components/delegation/CardanoPoolPanel';
@@ -13,13 +16,24 @@ import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { DelegationFlagOverrideProvider } from '@/lib/delegation/flag-override';
 import { isCardanoPoolLive, isRewardShareModel } from '@/lib/delegation/flags';
 import { useDelegationStatus } from '@/lib/delegation/use-delegation';
+import { useDelegationRestricted } from '@/lib/delegation/use-region';
 
 function Journey() {
   const statusQuery = useDelegationStatus();
   const { status: authStatus, login } = useGatewayzAuth();
   const status = statusQuery.data;
+  // Edge country, or the backend has marked the account restricted.
+  const regionBlocked = useDelegationRestricted();
 
-  if (statusQuery.isLoading) {
+  if (regionBlocked) {
+    return (
+      <p className="rounded-md border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
+        ADA delegation is not available in your region. If you already delegated, your ADA is still in your wallet:
+        re-delegate or spend it from your wallet at any time.
+      </p>
+    );
+  }
+  if (statusQuery.isLoading || regionBlocked === undefined) {
     return <Skeleton className="h-24 w-full" aria-busy="true" aria-label="Loading ADA delegation" />;
   }
   if (!status || !isCardanoPoolLive(status)) {

@@ -36,6 +36,7 @@ import {
 } from '@/lib/delegation/use-eth-vault';
 import { useDelegationRewards } from '@/lib/delegation/use-delegation';
 import { ConfirmTxDialog, type ConfirmRow } from './ConfirmTxDialog';
+import { EligibilityGate, NewStakeUnavailable } from './EligibilityGate';
 
 const ETHERSCAN = 'https://etherscan.io';
 
@@ -60,7 +61,13 @@ interface PendingConfirm {
   confirmLabel: string;
 }
 
-export function EthVaultPanel({ status }: { status: DelegationStatus }) {
+/**
+ * Viewing a position, exiting and claiming are never gated, so anyone with a
+ * stake can always leave. Linking a wallet and staking need the eligibility
+ * attestation, and are replaced by a notice when `allowNewStake` is false
+ * (restricted region).
+ */
+export function EthVaultPanel({ status, allowNewStake = true }: { status: DelegationStatus; allowNewStake?: boolean }) {
   const vault = status.eth.vault_address && isAddress(status.eth.vault_address) ? (status.eth.vault_address as Address) : null;
   const { ready: privyReady, connectWallet } = usePrivy();
   const { wallets } = useWallets();
@@ -109,17 +116,23 @@ export function EthVaultPanel({ status }: { status: DelegationStatus }) {
     <Panel>
       <WalletPicker wallets={wallets} current={wallet} linkedSet={linkedSet} onSelect={setSelected} />
       {!isLinked ? (
-        <div className="flex flex-col gap-3">
-          <p role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            Link {truncateAddress(wallet.address)} to your Gatewayz account first, so the inference allowance from
-            this wallet reaches you. It takes one free signature.
-          </p>
-          <HoldingsWalletLink />
-        </div>
+        !allowNewStake ? (
+          <NewStakeUnavailable asset="eth" />
+        ) : (
+          <EligibilityGate>
+            <div className="flex flex-col gap-3">
+              <p role="status" className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                Link {truncateAddress(wallet.address)} to your Gatewayz account first, so the inference allowance from
+                this wallet reaches you. It takes one free signature.
+              </p>
+              <HoldingsWalletLink />
+            </div>
+          </EligibilityGate>
+        )
       ) : chainIdOf(wallet) !== ETHEREUM_MAINNET_ID ? (
         <SwitchNetwork wallet={wallet} />
       ) : (
-        <VaultControls wallet={wallet} vault={vault} feePercent={status.eth.fee_percent} />
+        <VaultControls wallet={wallet} vault={vault} feePercent={status.eth.fee_percent} allowNewStake={allowNewStake} />
       )}
     </Panel>
   );
@@ -196,10 +209,12 @@ function VaultControls({
   wallet,
   vault,
   feePercent,
+  allowNewStake,
 }: {
   wallet: ConnectedWallet;
   vault: Address;
   feePercent: number | null;
+  allowNewStake: boolean;
 }) {
   const { toast } = useToast();
   const account = wallet.address as Address;
@@ -350,28 +365,34 @@ function VaultControls({
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <form onSubmit={handleDeposit} className="flex flex-col gap-2" aria-label="Stake ETH">
-          <Label htmlFor="eth-deposit-amount">Stake ETH</Label>
-          <div className="flex gap-2">
-            <Input
-              id="eth-deposit-amount"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="0.0"
-              value={depositInput}
-              onChange={(e) => setDepositInput(e.target.value)}
-              disabled={busy}
-            />
-            <Button type="submit" disabled={busy || depositInput.trim() === ''}>
-              Stake
-            </Button>
-          </div>
-          {position.stateUpdateRequired && (
-            <p className="text-xs text-muted-foreground">
-              The vault is updating its rewards and will accept deposits again shortly.
-            </p>
-          )}
-        </form>
+        {!allowNewStake ? (
+          <NewStakeUnavailable asset="eth" />
+        ) : (
+          <EligibilityGate>
+            <form onSubmit={handleDeposit} className="flex flex-col gap-2" aria-label="Stake ETH">
+              <Label htmlFor="eth-deposit-amount">Stake ETH</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="eth-deposit-amount"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0.0"
+                  value={depositInput}
+                  onChange={(e) => setDepositInput(e.target.value)}
+                  disabled={busy}
+                />
+                <Button type="submit" disabled={busy || depositInput.trim() === ''}>
+                  Stake
+                </Button>
+              </div>
+              {position.stateUpdateRequired && (
+                <p className="text-xs text-muted-foreground">
+                  The vault is updating its rewards and will accept deposits again shortly.
+                </p>
+              )}
+            </form>
+          </EligibilityGate>
+        )}
 
         <form onSubmit={handleExit} className="flex flex-col gap-2" aria-label="Exit the vault">
           <Label htmlFor="eth-exit-amount">Exit (ETH)</Label>
