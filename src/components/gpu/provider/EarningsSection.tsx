@@ -143,7 +143,7 @@ export function EarningsSection() {
                       <TableCell>
                         {settlement.tx_url ? (
                           <a className="text-primary underline" href={settlement.tx_url} target="_blank" rel="noreferrer">
-                            {settlement.asset === 'ETH' ? 'View on Basescan' : 'View on Snowtrace'}
+                            {settlement.asset === 'ETH' ? 'View on Basescan' : 'View transaction'}
                           </a>
                         ) : (
                           '—'

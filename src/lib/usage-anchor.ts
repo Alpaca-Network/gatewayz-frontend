@@ -52,8 +52,8 @@ export const RPC_URLS: Record<number, string> = {
 };
 
 export const CHAIN_NAMES: Record<number, string> = {
-  43114: "Avalanche C-Chain",
-  43113: "Avalanche Fuji testnet",
+  43114: "mainnet",
+  43113: "testnet",
 };
 
 const ROOT_OF_SELECTOR = "9d7384d9"; // rootOf(uint64)

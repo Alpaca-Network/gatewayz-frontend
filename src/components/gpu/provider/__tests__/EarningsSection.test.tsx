@@ -127,7 +127,7 @@ describe('EarningsSection', () => {
     expect(screen.queryByText(/today's price/)).not.toBeInTheDocument();
   });
 
-  it('keeps legacy pre-switch WAYZ settlements labelled WAYZ with a Snowtrace link', () => {
+  it('keeps legacy pre-switch WAYZ settlements labelled WAYZ with a transaction link', () => {
     mockUseMyGpuEarnings.mockReturnValue({
       isLoading: false,
       data: {
@@ -159,7 +159,7 @@ describe('EarningsSection', () => {
 
     render(<EarningsSection />);
     expect(screen.getByText('456 WAYZ')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /view on snowtrace/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^view transaction$/i })).toHaveAttribute(
       'href',
       'https://testnet.snowtrace.io/tx/0xdeadbeef'
     );

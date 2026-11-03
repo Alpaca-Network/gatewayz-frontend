@@ -43,7 +43,7 @@ describe('FaucetCard', () => {
     expect(screen.getByRole('button', { name: /claim 1000 wayz/i })).toBeInTheDocument();
   });
 
-  it('shows the existing claim status and a Snowtrace link when already claimed', () => {
+  it('shows the existing claim status and a transaction link when already claimed', () => {
     mockUseFaucetStatus.mockReturnValue({
       isLoading: false,
       data: {
@@ -63,7 +63,7 @@ describe('FaucetCard', () => {
     render(<FaucetCard address={ADDRESS as never} />);
 
     expect(screen.getByText(/sent/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /view transaction on snowtrace/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^view transaction$/i })).toHaveAttribute(
       'href',
       'https://testnet.snowtrace.io/tx/0xdeadbeef'
     );
