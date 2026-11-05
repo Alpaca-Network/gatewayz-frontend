@@ -26,11 +26,6 @@ import {useGatewayzAuth} from "@/context/gatewayz-auth-context";
 import {trackTwitterSignupClick} from "@/components/analytics/twitter-pixel";
 import {useIsTauri} from "@/lib/desktop/hooks";
 import {isGpuMarketplaceEnabled} from "@/lib/gpu/flag";
-import {shouldShowStakingNav} from "@/lib/wayz/addresses";
-
-// Never on production builds: /staking is unlisted there (reachable by URL,
-// no link, noindex). Shown on preview deployments once WAYZ is configured.
-const SHOW_STAKING_NAV = shouldShowStakingNav();
 
 // Hidden until the backend GPU marketplace routes ship (Milestone 4).
 const SHOW_GPU_NAV = isGpuMarketplaceEnabled();
@@ -285,14 +280,6 @@ export function AppHeader() {
             >
               Rewards
             </Link>
-            {SHOW_STAKING_NAV && (
-              <Link
-                href="/staking"
-                className="transition-colors hover:text-foreground/80 "
-              >
-                Staking
-              </Link>
-            )}
             {SHOW_GPU_NAV && (
               <Link
                 href="/gpu"
@@ -415,15 +402,6 @@ export function AppHeader() {
                     >
                       Rewards
                     </Link>
-                    {SHOW_STAKING_NAV && (
-                      <Link
-                        href="/staking"
-                        className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        Staking
-                      </Link>
-                    )}
                     {SHOW_GPU_NAV && (
                       <Link
                         href="/gpu"

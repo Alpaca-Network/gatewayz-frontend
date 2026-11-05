@@ -3,7 +3,6 @@
     "NEXT_PUBLIC_API_BASE_URL",
     "NEXT_PUBLIC_APP_URL",
     "NEXT_PUBLIC_APP_VERSION",
-    "NEXT_PUBLIC_AVALANCHE_FUJI_RPC_URL",
     "NEXT_PUBLIC_BACKEND_URL",
     "NEXT_PUBLIC_BASE_URL",
     "NEXT_PUBLIC_BYOK_ENABLED",
@@ -28,10 +27,7 @@
     "NEXT_PUBLIC_STRIPE_PRO_PRICE_ID",
     "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
     "NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID",
-    "NEXT_PUBLIC_TERRAGON_URL",
-    "NEXT_PUBLIC_WAYZ_STAKING_ADDRESS",
-    "NEXT_PUBLIC_WAYZ_STAKING_PREVIEW",
-    "NEXT_PUBLIC_WAYZ_TOKEN_ADDRESS"
+    "NEXT_PUBLIC_TERRAGON_URL"
   ],
   "knownPublicKeys": {
     "NEXT_PUBLIC_DEV_API_KEY": "Contains \"API_KEY\" but is allowed: used only as a client-side demo/quick-start GatewayZ API key in src/components/models/inline-chat.tsx (process.env.NEXT_PUBLIC_DEV_API_KEY). A human should confirm the value configured in Vercel is a low-privilege/rate-limited demo key, never a real user or admin key, and that this naming is still acceptable long-term.",

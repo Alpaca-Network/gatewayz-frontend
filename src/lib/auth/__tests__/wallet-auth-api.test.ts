@@ -181,10 +181,10 @@ describe('wallet-auth-api', () => {
         createSuccessResponse({ success: true, data: { message: 'msg', expires_in: 300 } })
       );
 
-      await requestWalletLinkNonce('0xabc', 43113);
+      await requestWalletLinkNonce('0xabc', 8453);
 
       const [, options] = mockFetch.mock.calls[0];
-      expect(JSON.parse(options.body)).toEqual({ wallet_address: '0xabc', chain_id: 43113 });
+      expect(JSON.parse(options.body)).toEqual({ wallet_address: '0xabc', chain_id: 8453 });
     });
 
     it('maps 422 chain_id_not_allowed to a WalletAuthError with user-facing copy', async () => {
@@ -212,12 +212,12 @@ describe('wallet-auth-api', () => {
         createSuccessResponse({ success: true, data: { message: 'msg', expires_in: 300 } })
       );
 
-      await expect(requestWalletLinkNonceForAnyChain('0xabc', 43114)).resolves.toEqual({
+      await expect(requestWalletLinkNonceForAnyChain('0xabc', 1)).resolves.toEqual({
         message: 'msg',
         expires_in: 300,
       });
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ wallet_address: '0xabc', chain_id: 43114 });
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({ wallet_address: '0xabc', chain_id: 1 });
     });
 
     it('retries without chain_id when the wallet network is not on the allow-list', async () => {

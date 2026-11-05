@@ -78,25 +78,16 @@ Properties from usePrivy():
 - getAccessToken(): Promise<string | null> - Get Privy access token
 ```
 
-### 2.3 Wallets & Chains (WAYZ Testnet)
-
-Added for gatewayz-backend#2243 (Milestone 1 — WAYZ Token & Staking Testnet, Avalanche Fuji).
+### 2.3 Wallets & Chains
 
 **Wallet login method:** `"wallet"` was added to `loginMethods` in `privy-web-provider.tsx`
 (alongside `email`, `sms`, `google`, `github`), so users can connect an external wallet
 (MetaMask, Coinbase Wallet, WalletConnect, etc.) directly from the Privy login/connect modal, in
 addition to the existing embedded wallet Privy already creates for web2 logins.
 
-**Supported chains:** `supportedChains: [base, avalancheFuji]` (`viem/chains`,
-`FUJI_CHAIN_ID = 43113` in `src/lib/wayz/chains.ts`). **Base stays the default chain** — this
-does not change existing users' behavior. The WAYZ staking dashboard is expected to switch to
-Fuji explicitly via `useActiveWallet().switchToFuji()` rather than the app defaulting to it.
-
-**wagmi:** `src/lib/wayz/wagmi-config.ts` builds a `wagmi` `Config` via `@privy-io/wagmi`'s
-`createConfig` (not plain `wagmi`) so wallets wagmi sees stay in sync with Privy's connection
-state. `WayzWagmiProvider` (`src/components/providers/wagmi-provider.tsx`) mounts `@privy-io/wagmi`'s
-`WagmiProvider` inside `<PrivyProvider>` in `privy-web-provider.tsx` — i.e. only on web, never
-on Tauri desktop (see §2.1's Tauri bypass).
+**Supported chains:** `supportedChains: [base]`, with Base as the default chain (`viem/chains`).
+Flows that need another network (e.g. the ETH vault on Ethereum mainnet) build their own viem
+clients on the wallet's EIP-1193 provider instead of changing this default.
 
 **`useActiveWallet()` hook (`src/lib/hooks/use-active-wallet.ts`)** — the single, contractual way
 client components read/act on the connected wallet:
@@ -109,7 +100,6 @@ interface ActiveWallet {
   isReady: boolean;               // false until usePrivy().ready
   walletClientType: string | null; // "privy" (embedded), "metamask", "coinbase_wallet", ...
   connect: () => Promise<void>;
-  switchToFuji: () => Promise<void>;
   signMessage: (message: string) => Promise<string>; // EIP-191 personal_sign
 }
 ```

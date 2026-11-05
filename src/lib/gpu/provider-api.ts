@@ -2,9 +2,9 @@
 // (Milestone 4, W-D — gatewayz-backend#2262 #2266, spec.md §3, §5.6, and
 // WD-frontend.md's "Contracts" section). Bearer-authenticated via
 // makeAuthenticatedRequest, calling the backend directly — same pattern as
-// src/lib/wayz/staking-api.ts and src/lib/auth/wallet-auth-api.ts. Every wei
+// src/lib/auth/wallet-auth-api.ts. Every wei
 // amount arrives as a decimal string and is parsed to `bigint` here, at the
-// boundary (see src/lib/wayz/staking-api.ts's header comment for why).
+// boundary so no precision is lost to JS numbers.
 import { makeAuthenticatedRequest } from '@/lib/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
@@ -111,7 +111,7 @@ export interface GpuWorkRow {
   created_at: string;
 }
 
-/** `ETH` (on Base) for every settlement since 2026-09-22; `WAYZ` (Avalanche Fuji testnet)
+/** `ETH` (on Base) for every settlement since 2026-09-22; `WAYZ` (testnet)
  *  only for legacy pre-switch rows. */
 export type GpuSettlementAsset = 'ETH' | 'WAYZ';
 
@@ -130,7 +130,7 @@ export interface GpuSettlementRow {
   confirmed: boolean;
   tx_hash: string | null;
   /** Backend-computed explorer URL (`_settlement_view` in gpu_earnings.py: Basescan for ETH,
-   *  Snowtrace for legacy WAYZ) — use this rather than reconstructing one from `tx_hash`. */
+   *  the testnet explorer for legacy WAYZ) — use this rather than reconstructing one from `tx_hash`. */
   tx_url: string | null;
   status: GpuSettlementStatus;
 }

@@ -90,7 +90,7 @@ never required, defaults to `invalid_signature` if absent.
 All wallet-auth calls go straight to the backend (`${API_BASE_URL}/auth/wallet/...` via
 `makeAuthenticatedRequest`), not through a Next `/api/*` proxy — this matches the dominant
 pattern for authenticated settings calls (`src/app/settings/page.tsx`,
-`src/app/settings/credits/page.tsx`, `src/lib/wayz/staking-api.ts`); only
+`src/app/settings/credits/page.tsx`); only
 `src/app/settings/keys/page.tsx` proxies, because that route already existed as
 `/api/user/api-keys`.
 

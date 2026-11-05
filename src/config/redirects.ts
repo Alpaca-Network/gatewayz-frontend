@@ -13,28 +13,6 @@ import type { Redirect } from 'next/dist/lib/load-custom-routes';
 export const TERRAGON_DASHBOARD_URL = 'https://terragon-www-production.up.railway.app/dashboard';
 
 /**
- * Whether this BUILD lists /staking in the header nav.
- *
- * Staking is UNLISTED on production: the page is reachable at /staking (so the
- * owner can test it end to end on beta.gatewayz.ai, which Privy already allows)
- * but nothing links to it, and the page is noindex. Preview/development
- * deployments and `next dev` show the nav link.
- *
- * Read at build time by next.config.ts, which inlines the result as
- * STAKING_NAV_HIDDEN for the header. Off Vercel it fails closed: any
- * `next build` hides the link, only `next dev` shows it.
- *
- * Kept free of "@/" imports: next.config.ts compiles this module without the
- * path alias.
- */
-export function isStakingNavHiddenForBuild(env: NodeJS.ProcessEnv = process.env): boolean {
-  if (env.VERCEL_ENV) {
-    return env.VERCEL_ENV === 'production';
-  }
-  return env.NODE_ENV === 'production';
-}
-
-/**
  * Redirect rules for the application
  *
  * These redirects are applied at the Next.js routing level,
@@ -76,6 +54,12 @@ export function getRedirects(): Redirect[] {
     {
       source: '/catalog/providers',
       destination: '/models',
+      permanent: false,
+    },
+    // The WAYZ testnet staking dashboard was retired; staking lives on /stake.
+    {
+      source: '/staking',
+      destination: '/stake',
       permanent: false,
     },
   ];

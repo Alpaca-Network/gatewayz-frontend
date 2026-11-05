@@ -2,7 +2,7 @@
  * Typed client for the backend's wallet-linking endpoints (M2 W1 — gatewayz-backend#2251).
  * Bearer-authenticated via makeAuthenticatedRequest, calling the backend directly
  * (`${API_BASE_URL}/auth/wallet/*`), matching the dominant pattern for authenticated
- * settings calls in this codebase (see src/lib/wayz/staking-api.ts, src/app/settings/page.tsx,
+ * settings calls in this codebase (see src/app/settings/page.tsx,
  * src/app/settings/credits/page.tsx — three of the four settings pages call the backend
  * directly rather than through a Next `/api/*` proxy; only src/app/settings/keys/page.tsx
  * proxies, for a route that already existed as `/api/user/api-keys`).
@@ -148,7 +148,7 @@ export async function requestWalletLinkNonce(
  *
  * The chain id only labels the SIWE message — the backend verifies the
  * signature, not the network — but it rejects ids outside
- * `SIWE_ALLOWED_CHAIN_IDS` (default 43113,43114) with 422. A wallet on
+ * the backend's `SIWE_ALLOWED_CHAIN_IDS` allowlist with 422. A wallet on
  * Ethereum, Base, Arbitrum, BNB Chain or Polygon would otherwise be unable to
  * link at all, so on that 422 this retries without a chain id and lets the
  * backend use its default. Signing still needs no network switch.
