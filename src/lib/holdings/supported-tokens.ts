@@ -32,11 +32,6 @@ export const HOLDINGS_SUPPORTED_CHAINS: HoldingsChain[] = [
     tokens: ['ETH', 'USDC', 'LINK', 'UNI', 'wstETH', 'rETH', 'cbETH'],
   },
   {
-    chainId: 43114,
-    name: 'Avalanche C-Chain',
-    tokens: ['AVAX', 'USDT', 'USDC', 'WBTC', 'LINK', 'UNI'],
-  },
-  {
     chainId: 56,
     name: 'BNB Chain',
     tokens: ['BNB', 'WBTC', 'LINK', 'UNI'],

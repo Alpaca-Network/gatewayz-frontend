@@ -86,14 +86,6 @@ export const TOKENS: StakingToken[] = [
     risks: ["we hold your ATOM", "21-day unbonding", "slashing"],
   },
   {
-    symbol: "AVAX", name: "Avalanche", model: "custodial",
-    nativeApy: 0.07, yieldVerified: false, chain: "Avalanche",
-    unbonding: "fixed staking period",
-    blurb: "Staked through a provider. We take custody to do so.",
-    provider: "institutional validator (to be selected)",
-    risks: ["we hold your AVAX", "funds are locked for the staking period"],
-  },
-  {
     symbol: "USDC", name: "USD Coin", model: "custodial",
     nativeApy: 0.04, yieldVerified: false, chain: "multi-chain",
     unbonding: "venue-dependent",

@@ -15,8 +15,7 @@ export function StakingHeader() {
     <div className="flex flex-col gap-4">
       {!configured && (
         <div className="rounded-[12px] border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-400">
-          Testnet contracts not deployed yet. Staking and the faucet will unlock once WAYZ launches on Avalanche
-          Fuji.
+          Testnet contracts not deployed yet. Staking and the faucet will unlock once the WAYZ testnet launches.
         </div>
       )}
       <Card>

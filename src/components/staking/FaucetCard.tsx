@@ -66,7 +66,7 @@ export function FaucetCard({ address }: { address: Address | null }) {
               target="_blank"
               rel="noreferrer"
             >
-              View transaction on Snowtrace
+              View transaction
             </a>
           )}
         </CardContent>

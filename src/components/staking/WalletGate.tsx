@@ -29,8 +29,8 @@ export function WalletGate({ children }: { children: ReactNode }) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
-          <p className="text-sm text-muted-foreground">Switch your wallet to the Avalanche Fuji testnet to continue.</p>
-          <Button onClick={() => wallet.switchToFuji()}>Switch to Avalanche Fuji</Button>
+          <p className="text-sm text-muted-foreground">Switch your wallet to the WAYZ test network to continue.</p>
+          <Button onClick={() => wallet.switchToFuji()}>Switch network</Button>
         </CardContent>
       </Card>
     );

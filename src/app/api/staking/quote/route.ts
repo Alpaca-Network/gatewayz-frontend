@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
   if (/^0x[0-9a-fA-F]{40}$/.test(stakeAddress)) {
     return NextResponse.json({
       error:
-        'That is an Ethereum/Avalanche address. Cardano stake addresses begin with stake1.',
+        'That is an EVM (0x) address. Cardano stake addresses begin with stake1.',
     });
   }
   if (!/^stake1[0-9a-z]{40,}$/.test(stakeAddress)) {
