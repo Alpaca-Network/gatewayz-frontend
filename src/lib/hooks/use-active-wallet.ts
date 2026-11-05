@@ -3,14 +3,12 @@
 /**
  * Client-side active-wallet access, built on Privy's `usePrivy`/`useWallets`.
  *
- * This is a CONTRACT consumed by the WAYZ staking dashboard (a parallel workstream) — keep the
- * `ActiveWallet` shape stable. Out of scope here: linking the wallet to the Gatewayz account
- * (Epic 2) and any on-chain reads/writes beyond signing and switching chains.
+ * Out of scope here: linking the wallet to the Gatewayz account (Epic 2) and any on-chain
+ * reads/writes beyond signing.
  */
 import { useCallback, useMemo } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { isTauriDesktop } from "@/lib/browser-detection";
-import { FUJI_CHAIN_ID } from "@/lib/wayz/chains";
 
 export interface ActiveWallet {
   /** Checksummed address of the active wallet, or null when none is connected. */
@@ -24,8 +22,6 @@ export interface ActiveWallet {
   walletClientType: string | null;
   /** Opens Privy's connect-wallet flow (or login with wallet if not authenticated). */
   connect: () => Promise<void>;
-  /** Switches the active wallet to Avalanche Fuji (43113). Resolves when done; rejects on user refusal. */
-  switchToFuji: () => Promise<void>;
   /** personal_sign the given message with the active wallet; returns the 0x-prefixed signature. */
   signMessage: (message: string) => Promise<string>;
 }
@@ -45,9 +41,6 @@ const DISCONNECTED_WALLET: ActiveWallet = {
   isReady: true,
   walletClientType: null,
   connect: async () => {},
-  switchToFuji: async () => {
-    throw new Error(NO_WALLET_ERROR);
-  },
   signMessage: async () => {
     throw new Error(NO_WALLET_ERROR);
   },
@@ -64,7 +57,7 @@ export function useActiveWallet(): ActiveWallet {
 
   const chainId = useMemo(() => {
     if (!wallet) return null;
-    // wallet.chainId is CAIP-2 formatted, e.g. "eip155:43113".
+    // wallet.chainId is CAIP-2 formatted, e.g. "eip155:8453".
     const parsed = Number.parseInt(wallet.chainId.split(":")[1] ?? "", 10);
     return Number.isFinite(parsed) ? parsed : null;
   }, [wallet]);
@@ -76,13 +69,6 @@ export function useActiveWallet(): ActiveWallet {
     }
     connectWallet();
   }, [authenticated, login, connectWallet]);
-
-  const switchToFuji = useCallback(async () => {
-    if (!wallet) {
-      throw new Error(NO_WALLET_ERROR);
-    }
-    await wallet.switchChain(FUJI_CHAIN_ID);
-  }, [wallet]);
 
   const signMessage = useCallback(
     async (message: string) => {
@@ -105,7 +91,6 @@ export function useActiveWallet(): ActiveWallet {
     isReady: ready,
     walletClientType: wallet?.walletClientType ?? null,
     connect,
-    switchToFuji,
     signMessage,
   };
 }

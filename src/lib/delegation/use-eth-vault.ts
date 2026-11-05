@@ -2,7 +2,7 @@
 
 // React glue for the ETH vault. Clients are built per call on the chosen Privy
 // wallet's EIP-1193 provider with chain = Ethereum mainnet, so this never
-// touches the app-wide wagmi config (Base + Avalanche Fuji for /staking).
+// depends on the wallet's current network.
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConnectedWallet } from '@privy-io/react-auth';

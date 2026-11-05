@@ -326,7 +326,7 @@ describe('gpu/provider-api', () => {
                 amount_wei: '456000000000000000000',
                 status: 'sent',
                 tx_hash: '0xdead',
-                tx_url: 'https://testnet.snowtrace.io/tx/0xdead',
+                tx_url: 'https://explorer.example/tx/0xdead',
               },
             ],
             emission: {
@@ -390,7 +390,7 @@ describe('gpu/provider-api', () => {
                 amount_wei: '456000000000000000000',
                 status: 'sent',
                 tx_hash: '0xdeadbeef',
-                tx_url: 'https://testnet.snowtrace.io/tx/0xdeadbeef',
+                tx_url: 'https://explorer.example/tx/0xdeadbeef',
               },
             ],
           },
@@ -403,7 +403,7 @@ describe('gpu/provider-api', () => {
       expect(result.settled_wei).toBe(456n * 10n ** 18n);
       expect(result.work[0].billing_ref).toBe('br_1');
       expect(result.settlements[0].amount_wei).toBe(456n * 10n ** 18n);
-      expect(result.settlements[0].tx_url).toBe('https://testnet.snowtrace.io/tx/0xdeadbeef');
+      expect(result.settlements[0].tx_url).toBe('https://explorer.example/tx/0xdeadbeef');
     });
 
     // Mirrors test_earnings_settlement_without_tx_hash_has_no_tx_url (L64-84 area).

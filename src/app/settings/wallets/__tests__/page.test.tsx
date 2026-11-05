@@ -30,7 +30,6 @@ jest.mock('@/lib/hooks/use-active-wallet', () => ({
     isReady: true,
     walletClientType: null,
     connect: mockConnect,
-    switchToFuji: jest.fn(),
     signMessage: mockSignMessage,
   }),
 }));
@@ -133,7 +132,7 @@ describe('WalletsPage', () => {
 
       mockConnect.mockImplementation(async () => {
         // Simulate useActiveWallet picking up the newly connected wallet.
-        mockActiveWallet = { address: '0xabc0000000000000000000000000000000abcd', chainId: 43113, isConnected: true };
+        mockActiveWallet = { address: '0xabc0000000000000000000000000000000abcd', chainId: 8453, isConnected: true };
       });
       mockRequestWalletLinkNonce.mockResolvedValue({ message: 'sign this', expires_in: 300 });
       mockSignMessage.mockResolvedValue('0xsignature');
@@ -149,7 +148,7 @@ describe('WalletsPage', () => {
       rerender(<WalletsPage />);
 
       await waitFor(() => {
-        expect(mockRequestWalletLinkNonce).toHaveBeenCalledWith('0xabc0000000000000000000000000000000abcd', 43113);
+        expect(mockRequestWalletLinkNonce).toHaveBeenCalledWith('0xabc0000000000000000000000000000000abcd', 8453);
       });
       expect(mockSignMessage).toHaveBeenCalledWith('sign this');
       expect(mockLinkMutateAsync).toHaveBeenCalledWith({
@@ -165,7 +164,7 @@ describe('WalletsPage', () => {
     it('skips connect() and links directly when a wallet is already active', async () => {
       const user = userEvent.setup();
       mockWalletsData = [];
-      mockActiveWallet = { address: '0xdef0000000000000000000000000000000dead', chainId: 43113, isConnected: true };
+      mockActiveWallet = { address: '0xdef0000000000000000000000000000000dead', chainId: 8453, isConnected: true };
       mockRequestWalletLinkNonce.mockResolvedValue({ message: 'sign this', expires_in: 300 });
       mockSignMessage.mockResolvedValue('0xsignature');
       mockLinkMutateAsync.mockResolvedValue(makeWallet());
@@ -188,7 +187,7 @@ describe('WalletsPage', () => {
     it('shows the 409 wallet_linked_to_other_account message', async () => {
       const user = userEvent.setup();
       mockWalletsData = [];
-      mockActiveWallet = { address: '0xabc', chainId: 43113, isConnected: true };
+      mockActiveWallet = { address: '0xabc', chainId: 8453, isConnected: true };
       mockRequestWalletLinkNonce.mockResolvedValue({ message: 'sign this', expires_in: 300 });
       mockSignMessage.mockResolvedValue('0xsignature');
       mockLinkMutateAsync.mockRejectedValue(new WalletAuthError(409, 'wallet_linked_to_other_account'));

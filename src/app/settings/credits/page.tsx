@@ -30,9 +30,6 @@ import { TierInfoCard } from '@/components/tier/tier-info-card';
 import { HoldingsRewardsSummaryCard } from '@/components/holdings/HoldingsRewardsSummaryCard';
 import { InferenceDiscountBalanceLine } from '@/components/delegation/InferenceDiscountBalanceLine';
 import { isDelegationFlagOn } from '@/lib/delegation/flags';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { VerifyUsageDialog, usePublishedAnchors } from '@/components/usage-anchor/verify-usage-dialog';
-import type { AnchorsDoc } from '@/lib/usage-anchor';
 
 // Confetti/Emoji explosion component
 const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
@@ -162,10 +159,7 @@ interface Transaction {
 }
 
 // Reusable TransactionRow component
-const TransactionRow = ({ transaction, anchors }: { transaction: Transaction; anchors?: AnchorsDoc | null }) => {
-  const [verifyOpen, setVerifyOpen] = useState(false);
-  // Usage rows can be proven against the daily on-chain anchor once anchoring is configured.
-  const verifiable = !!anchors && transaction.transaction_type.toLowerCase() === 'api_usage';
+const TransactionRow = ({ transaction }: { transaction: Transaction }) => {
 
   const handleMoreClick = () => {
     // Handle more options click
@@ -214,27 +208,14 @@ const TransactionRow = ({ transaction, anchors }: { transaction: Transaction; an
           {transaction.balance !== undefined ? `$${transaction.balance.toFixed(2)}` : '-'}
         </div>
         <div className="flex justify-end">
-          {verifiable ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label="Transaction actions">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setVerifyOpen(true)}>Verify on-chain</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={handleMoreClick}
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={handleMoreClick}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
@@ -257,15 +238,7 @@ const TransactionRow = ({ transaction, anchors }: { transaction: Transaction; an
             Balance: {transaction.balance !== undefined ? `$${transaction.balance.toFixed(2)}` : '-'}
           </span>
         </div>
-        {verifiable && (
-          <button type="button" className="text-xs text-primary hover:underline" onClick={() => setVerifyOpen(true)}>
-            Verify on-chain
-          </button>
-        )}
       </div>
-      {verifiable && anchors && (
-        <VerifyUsageDialog ledgerId={transaction.id} published={anchors} open={verifyOpen} onOpenChange={setVerifyOpen} />
-      )}
     </div>
   );
 };
@@ -283,7 +256,6 @@ function CreditsPageContent() {
   const [loadingCredits, setLoadingCredits] = useState(true);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
-  const anchors = usePublishedAnchors();
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [showEmojiExplosion, setShowEmojiExplosion] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
@@ -1074,7 +1046,7 @@ function CreditsPageContent() {
               </div>
             ) : (
               transactions.map((transaction) => (
-                <TransactionRow key={transaction.id} transaction={transaction} anchors={anchors} />
+                <TransactionRow key={transaction.id} transaction={transaction} />
               ))
             )}
           </div>

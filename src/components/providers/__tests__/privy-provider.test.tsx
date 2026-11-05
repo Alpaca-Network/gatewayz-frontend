@@ -35,21 +35,6 @@ jest.mock('@privy-io/react-auth', () => ({
   },
 }));
 
-// Mock @privy-io/wagmi — it's ESM-only (no CJS build, see wagmi-config.test.ts's comment) so
-// Jest can't load the real package at all. This suite only exercises Privy config, not wagmi
-// wiring (see wagmi-config.test.ts for chain coverage), and the real WagmiProvider needs
-// usePrivy()/useWallets() from @privy-io/react-auth, which isn't mocked above.
-// `virtual: true` — Jest can't resolve @privy-io/wagmi's module path at all (see above), so
-// it can't mock it the normal way either.
-jest.mock(
-  '@privy-io/wagmi',
-  () => ({
-    WagmiProvider: ({ children }: any) => <div data-testid="wagmi-provider">{children}</div>,
-    createConfig: (args: any) => args,
-  }),
-  { virtual: true }
-);
-
 // Mock the GatewayzAuthProvider and GatewayzAuthContext
 jest.mock('@/context/gatewayz-auth-context', () => {
   const { createContext } = require('react');
@@ -243,7 +228,7 @@ describe('PrivyProviderWrapper', () => {
       expect(config.loginMethods).toContain('wallet');
     });
 
-    it('should support both Base and Avalanche Fuji (43113)', () => {
+    it('should support Base (8453)', () => {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app-id-12345';
 
       render(
@@ -254,8 +239,7 @@ describe('PrivyProviderWrapper', () => {
 
       const config = (global as any).__PRIVY_CONFIG__;
       const supportedChainIds = config.supportedChains.map((chain: any) => chain.id);
-      expect(supportedChainIds).toContain(43113);
-      expect(supportedChainIds).toContain(8453);
+      expect(supportedChainIds).toEqual([8453]);
     });
 
     it('should keep Base as the default chain', () => {

@@ -18,7 +18,7 @@ underlying react-query hooks) — flipping the flag on before the backend exists
 
 - `src/lib/gpu/public-api.ts` / `src/lib/gpu/provider-api.ts` — typed clients. Public
   endpoints are unauthenticated `fetch`; provider endpoints go through
-  `makeAuthenticatedRequest` (Bearer), mirroring `src/lib/wayz/staking-api.ts` and
+  `makeAuthenticatedRequest` (Bearer), mirroring
   `src/lib/auth/wallet-auth-api.ts`. Every wei amount is a decimal string on the wire,
   parsed to `bigint` at this boundary.
 - `src/lib/gpu/format.ts` — display formatting (heartbeat age, node status labels).
@@ -32,7 +32,7 @@ underlying react-query hooks) — flipping the flag on before the backend exists
   registration form (wallet picker from `useLinkedWallets`), node list (rotate/disable
   with confirm), add-node dialog (validates https + at least one model, reveals the
   one-time node token), earnings section (accrued/settled/void, work + settlements with
-  Snowtrace links).
+  explorer links).
 
 ## Contracts (verified against the real, merged backend code — Fix round 2)
 

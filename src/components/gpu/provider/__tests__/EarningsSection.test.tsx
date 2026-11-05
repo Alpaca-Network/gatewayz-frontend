@@ -150,7 +150,7 @@ describe('EarningsSection', () => {
             eth_usd_price: null,
             confirmed: true,
             tx_hash: '0xdeadbeef',
-            tx_url: 'https://testnet.snowtrace.io/tx/0xdeadbeef',
+            tx_url: 'https://explorer.example/tx/0xdeadbeef',
             status: 'sent',
           },
         ],
@@ -161,7 +161,7 @@ describe('EarningsSection', () => {
     expect(screen.getByText('456 WAYZ')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^view transaction$/i })).toHaveAttribute(
       'href',
-      'https://testnet.snowtrace.io/tx/0xdeadbeef'
+      'https://explorer.example/tx/0xdeadbeef'
     );
   });
 });

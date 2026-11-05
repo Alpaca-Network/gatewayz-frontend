@@ -17,7 +17,7 @@ jest.mock("@/lib/browser-detection", () => ({
 function makeWallet(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     address: "0xabc0000000000000000000000000000000abcd",
-    chainId: "eip155:43113",
+    chainId: "eip155:8453",
     walletClientType: "metamask",
     switchChain: jest.fn().mockResolvedValue(undefined),
     sign: jest.fn().mockResolvedValue("0xsignature"),
@@ -70,27 +70,9 @@ describe("useActiveWallet", () => {
     const { result } = renderHook(() => useActiveWallet());
 
     expect(result.current.address).toBe(wallet.address);
-    expect(result.current.chainId).toBe(43113);
+    expect(result.current.chainId).toBe(8453);
     expect(result.current.isConnected).toBe(true);
     expect(result.current.walletClientType).toBe("metamask");
-  });
-
-  it("switchToFuji calls wallet.switchChain(43113)", async () => {
-    const wallet = makeWallet();
-    mockUseWallets.mockReturnValue({ wallets: [wallet] });
-
-    const { result } = renderHook(() => useActiveWallet());
-    await act(async () => {
-      await result.current.switchToFuji();
-    });
-
-    expect(wallet.switchChain).toHaveBeenCalledWith(43113);
-  });
-
-  it("switchToFuji rejects when no wallet is connected", async () => {
-    const { result } = renderHook(() => useActiveWallet());
-
-    await expect(result.current.switchToFuji()).rejects.toThrow(/no wallet connected/i);
   });
 
   it("signMessage performs personal_sign via wallet.sign", async () => {

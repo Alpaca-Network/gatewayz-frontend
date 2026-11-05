@@ -20,8 +20,7 @@ import type { PrivyClientConfig } from "@privy-io/react-auth";
 import { RateLimitHandler } from "@/components/auth/rate-limit-handler";
 import { OriginErrorHandler } from "@/components/auth/origin-error-handler";
 import { GatewayzAuthProvider } from "@/context/gatewayz-auth-context";
-import { WayzWagmiProvider } from "@/components/providers/wagmi-provider";
-import { avalancheFuji, base } from "@/lib/wayz/chains";
+import { base } from "viem/chains";
 import { PreviewHostnameInterceptor } from "@/components/auth/preview-hostname-interceptor";
 import { isVercelPreviewDeployment } from "@/lib/preview-hostname-handler";
 import { buildPreviewSafeRedirectUrl, DEFAULT_PREVIEW_REDIRECT_ORIGIN } from "@/lib/preview-oauth-redirect";
@@ -473,10 +472,8 @@ export function PrivyWebProvider({ children, className, storageStatus }: PrivyWe
           createOnLogin: disableEmbeddedWallets ? "off" : "users-without-wallets",
         },
       },
-      // Base stays the default for existing users; the WAYZ staking dashboard switches to
-      // Fuji explicitly (useActiveWallet().switchToFuji()) rather than changing this default.
       defaultChain: base,
-      supportedChains: [base, avalancheFuji],
+      supportedChains: [base],
     };
 
     if (previewSafeOAuthRedirectUrl) {
@@ -499,10 +496,8 @@ export function PrivyWebProvider({ children, className, storageStatus }: PrivyWe
         appId={appId}
         config={privyConfig}
       >
-        <WayzWagmiProvider>
-          <PreviewHostnameInterceptor />
-          <GatewayzAuthProvider onAuthError={handleAuthError}>{children}</GatewayzAuthProvider>
-        </WayzWagmiProvider>
+        <PreviewHostnameInterceptor />
+        <GatewayzAuthProvider onAuthError={handleAuthError}>{children}</GatewayzAuthProvider>
       </PrivyProvider>
     </StorageStatusContext.Provider>
   );

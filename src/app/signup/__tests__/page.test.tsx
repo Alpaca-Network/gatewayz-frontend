@@ -50,7 +50,6 @@ jest.mock('@/lib/hooks/use-active-wallet', () => ({
     isReady: true,
     walletClientType: null,
     connect: mockConnectWallet,
-    switchToFuji: jest.fn(),
     signMessage: jest.fn(),
   }),
 }));
