@@ -140,20 +140,20 @@ const SuccessPopup = ({ open, onOpenChange, userEmail }: SuccessPopupProps) => {
               <div className="p-6 border border-gray-200 bg-indigo-50 rounded-lg">
                 <p className="font-semibold mb-3 text-lg text-center text-gray-900">🎁 Get Priority Access</p>
                 <p className="text-sm text-gray-600 text-center">
-                  Book a 15-minute call with our founder Vaughn to explore priority access and potentially run a pilot program.
+                  Tell us about your use case and book a 30-minute call with the team to explore priority access or a pilot.
                 </p>
               </div>
               
               <div className="space-y-3">
                 <Button asChild size="lg" className="w-full bg-indigo-600 hover:bg-indigo-700">
                   <a 
-                    href="https://cal.com/vonalytics/welcome" 
+                    href="https://www.gatewayz.ai/book" 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="flex items-center gap-2"
                   >
                     <Calendar className="w-4 h-4" />
-                    Book Call with Vaughn
+                    Book a call
                   </a>
                 </Button>
                 

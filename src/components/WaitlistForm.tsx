@@ -139,7 +139,7 @@ export default function WaitlistForm({ compact = false }: WaitlistFormProps) {
                 </a>
               </Button>
               <Button type="button" variant="outline" asChild className="w-full sm:w-auto whitespace-nowrap">
-                <a href="https://cal.com/vonalytics/gatewayz" target="_blank" rel="noopener noreferrer">
+                <a href="https://www.gatewayz.ai/book" target="_blank" rel="noopener noreferrer">
                   Book a Call
                 </a>
               </Button>
