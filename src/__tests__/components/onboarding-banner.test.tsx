@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { OnboardingBanner } from '@/components/onboarding/onboarding-banner';
 import { getUserData } from '@/lib/api';
 import { safeSessionStorage } from '@/lib/safe-session-storage';
@@ -310,6 +310,29 @@ describe('OnboardingBanner Hydration Fix', () => {
         const links = screen.getAllByRole('link', { name: /Start Your First Chat/i });
         expect(links.length).toBeGreaterThan(0);
         expect(links[0]).toHaveAttribute('href', '/chat');
+      });
+    });
+  });
+
+  describe('Dismissal', () => {
+    it('closing the banner persists across sessions (not just this tab session)', async () => {
+      localStorage.setItem('gatewayz_onboarding_tasks', JSON.stringify({ welcome: true }));
+
+      render(<OnboardingBanner />);
+
+      const dismissButtons = await screen.findAllByRole('button', { name: /Dismiss banner/i });
+      fireEvent.click(dismissButtons[0]);
+
+      expect(localStorage.getItem('gatewayz_onboarding_completed')).toBe('true');
+    });
+
+    it('stays hidden on a later sign-in once onboarding is completed', async () => {
+      localStorage.setItem('gatewayz_onboarding_completed', 'true');
+
+      render(<OnboardingBanner />);
+
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: /Dismiss banner/i })).toBeNull();
       });
     });
   });
