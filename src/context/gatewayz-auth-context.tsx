@@ -31,6 +31,7 @@ import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
 import { trackSignupConversion } from "@/components/analytics/google-analytics";
 import { useQueryClient } from "@tanstack/react-query";
 import { clearSessionCacheOnLogout } from "@/lib/session-cache";
+import { useAuthStore } from "@/lib/store/auth-store";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -267,6 +268,12 @@ export function GatewayzAuthProvider({
     setUserData(stored);
     if (key && stored) {
       setAuthStatus("authenticated", "from storage");
+      // Keep the chat's Zustand auth store in step with this context. The store only
+      // reads localStorage once at module load, and its event bridge (useAuthSync) is
+      // mounted only inside ChatLayout — so signing in anywhere else and then opening
+      // /chat left the chat thinking the user was a guest ("create an account" on send)
+      // while the header, which reads this context, showed their credits.
+      useAuthStore.getState().setAuth(key, stored);
     }
   }, [setAuthStatus]);
 
