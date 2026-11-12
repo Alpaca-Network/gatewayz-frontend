@@ -45,13 +45,31 @@ const getWalletAddress = (user: any) => {
 
 export function AppHeader() {
   const {
-    privyUser: user,
+    privyUser,
+    userData,
     login,
     logout,
     status,
     authTiming,
     error: authError,
   } = useGatewayzAuth();
+  // The Gatewayz session deliberately outlives the Privy session (see the
+  // "Privy not authenticated but cached credentials found" branch in
+  // gatewayz-auth-context). Keying the header off Privy alone showed "Sign In"
+  // while chat, credits and the API key all still worked. Fall back to a
+  // Privy-shaped user built from the cached Gatewayz profile.
+  const user = useMemo(
+    () =>
+      privyUser ??
+      (status === "authenticated" && userData
+        ? {
+            email: userData.email ? { address: userData.email } : undefined,
+            linkedAccounts: [],
+            isGuest: false,
+          }
+        : null),
+    [privyUser, status, userData]
+  );
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const {toast} = useToast();
   const pathname = usePathname();

@@ -326,6 +326,23 @@ describe('OnboardingBanner Hydration Fix', () => {
       expect(localStorage.getItem('gatewayz_onboarding_completed')).toBe('true');
     });
 
+    it('stays hidden for an account that has already topped up (restored session)', async () => {
+      mockGetUserData.mockReturnValue({
+        user_id: 1,
+        api_key: 'test-key',
+        display_name: 'Test User',
+        email: 'test@example.com',
+        credits: 14,
+        purchased_credits: 14,
+      });
+
+      render(<OnboardingBanner />);
+
+      await waitFor(() => {
+        expect(screen.queryByRole('button', { name: /Dismiss banner/i })).toBeNull();
+      });
+    });
+
     it('stays hidden on a later sign-in once onboarding is completed', async () => {
       localStorage.setItem('gatewayz_onboarding_completed', 'true');
 
