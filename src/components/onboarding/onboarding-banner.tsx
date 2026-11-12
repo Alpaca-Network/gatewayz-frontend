@@ -228,8 +228,10 @@ export function OnboardingBanner() {
 
     // Chat will adjust automatically via CSS classes
 
-    // Remember dismissal for this session
-    safeSessionStorage.setItem('onboarding_banner_dismissed', 'true');
+    // Closing the banner ends onboarding for good in this browser (same flag as
+    // "Finish" on /onboarding). It used to be session-only, so it reappeared on
+    // every new sign-in.
+    safeLocalStorageSet('gatewayz_onboarding_completed', 'true');
   };
 
   const completedCount = tasks.filter(t => t.completed).length;

@@ -32,6 +32,7 @@ import { trackSignupConversion } from "@/components/analytics/google-analytics";
 import { useQueryClient } from "@tanstack/react-query";
 import { clearSessionCacheOnLogout } from "@/lib/session-cache";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { safeLocalStorageSet } from "@/lib/safe-storage";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -544,6 +545,13 @@ export function GatewayzAuthProvider({
       // Verify localStorage was written before redirecting
       const savedUserData = getUserData();
       console.log("[Auth] Verified saved user data (API key masked in logs)");
+
+      // Returning accounts have already been onboarded. Onboarding progress lives only
+      // in localStorage (per browser, per domain), so without this every new browser
+      // or a beta.gatewayz.ai visit showed the onboarding steps again on sign-in.
+      if (authData.is_new_user === false) {
+        safeLocalStorageSet("gatewayz_onboarding_completed", "true");
+      }
 
       if (authData.is_new_user ?? isNewUserExpected) {
         console.log("[Auth] New user detected");
