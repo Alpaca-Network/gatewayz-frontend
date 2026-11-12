@@ -52,9 +52,12 @@ export function OnboardingBanner() {
       return;
     }
 
-    // Check if onboarding is completed
+    // Check if onboarding is completed. An account that has already topped up
+    // is past onboarding too: this covers returning users whose session was
+    // restored from cache (no fresh sign-in, so the auth context never got the
+    // chance to mark them onboarded).
     const completed = safeLocalStorageGet('gatewayz_onboarding_completed');
-    if (completed) {
+    if (completed || hasToppedUp) {
       setVisible(false);
       return;
     }
