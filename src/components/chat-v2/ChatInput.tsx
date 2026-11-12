@@ -59,6 +59,7 @@ import { useSearchAugmentation } from "@/lib/hooks/use-search-augmentation";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { getApiKey, getUserData } from "@/lib/api";
 import { Switch } from "@/components/ui/switch";
 import { usePrivy } from "@privy-io/react-auth";
 import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
@@ -378,10 +379,18 @@ export function ChatInput() {
         return;
     }
 
-    // Unauthenticated users must sign up before chatting
+    // Unauthenticated users must sign up before chatting. The store can lag behind
+    // a sign-in that happened elsewhere (cross-domain session transfer, sign-in on
+    // another page), so before prompting, adopt credentials already in localStorage.
     if (!isAuthenticated) {
-      login();
-      return;
+      const storedKey = getApiKey();
+      const storedUser = getUserData();
+      if (storedKey && storedUser) {
+        useAuthStore.getState().setAuth(storedKey, storedUser);
+      } else {
+        login();
+        return;
+      }
     }
 
     // Block paid model usage when user has no credits at all

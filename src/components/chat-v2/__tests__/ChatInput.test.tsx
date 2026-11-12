@@ -187,6 +187,8 @@ const mockAuthStoreUserData = {
   credits: 1000,
 };
 
+const mockSetAuth = jest.fn();
+
 jest.mock('@/lib/store/auth-store', () => {
   const useAuthStore = () => ({
     isAuthenticated: mockIsAuthenticated,
@@ -194,15 +196,16 @@ jest.mock('@/lib/store/auth-store', () => {
   });
 
   // Add getState method to the function (Zustand's static store accessor)
-  useAuthStore.getState = () => ({ userData: mockAuthStoreUserData });
+  useAuthStore.getState = () => ({ userData: mockAuthStoreUserData, setAuth: mockSetAuth });
 
   return { useAuthStore };
 });
 
 // Mock Privy
+const mockPrivyLogin = jest.fn();
 jest.mock('@privy-io/react-auth', () => ({
   usePrivy: () => ({
-    login: jest.fn(),
+    login: mockPrivyLogin,
   }),
 }));
 
@@ -2622,5 +2625,50 @@ describe('ChatInput Whisper fallback to Web Speech API', () => {
 
     // Should NOT call Whisper for unauthenticated users
     expect(mockWhisperStartRecording).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChatInput send when the auth store lags behind a real sign-in', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetMockStoreState();
+    localStorage.clear();
+    mockIsAuthenticated = false;
+  });
+
+  afterEach(() => {
+    mockIsAuthenticated = true;
+    localStorage.clear();
+    delete (window as any).__chatInputSend;
+  });
+
+  it('adopts stored credentials and sends instead of prompting sign-up', async () => {
+    // Signed in elsewhere: credentials are in localStorage but the chat store still says guest
+    localStorage.setItem('gatewayz_api_key', 'gw_test_key');
+    localStorage.setItem(
+      'gatewayz_user_data',
+      JSON.stringify({ user_id: 1, api_key: 'gw_test_key', email: 'user@example.com', credits: 10, auth_method: 'email', privy_user_id: 'p1', display_name: 'User' })
+    );
+    mockCreateSession.mutateAsync.mockResolvedValue({ id: 1 });
+    mockStreamMessage.mockResolvedValue(undefined);
+    mockStoreState.inputValue = 'hello';
+
+    render(<ChatInput />);
+    await (window as any).__chatInputSend();
+
+    expect(mockPrivyLogin).not.toHaveBeenCalled();
+    expect(mockSetAuth).toHaveBeenCalledWith('gw_test_key', expect.objectContaining({ user_id: 1 }));
+    await waitFor(() => expect(mockStreamMessage).toHaveBeenCalled());
+  });
+
+  it('still prompts sign-up for a real guest with no stored credentials', async () => {
+    mockStoreState.inputValue = 'hello';
+
+    render(<ChatInput />);
+    await (window as any).__chatInputSend();
+
+    expect(mockPrivyLogin).toHaveBeenCalled();
+    expect(mockSetAuth).not.toHaveBeenCalled();
+    expect(mockStreamMessage).not.toHaveBeenCalled();
   });
 });
