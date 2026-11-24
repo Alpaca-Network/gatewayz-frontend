@@ -61,8 +61,8 @@ jest.mock('lucide-react', () => ({
 jest.mock('@/components/tier/tier-info-card', () => ({
   TierInfoCard: () => <div data-testid="tier-info-card">TierInfoCard</div>,
 }));
-jest.mock('@/components/discount-credits/InferenceDiscountBalanceLine', () => ({
-  InferenceDiscountBalanceLine: () => <div data-testid="inference-discount-balance-line" />,
+jest.mock('@/components/discount-credits/InferenceDiscountCard', () => ({
+  InferenceDiscountCard: () => <div data-testid="inference-discount-card" />,
 }));
 
 describe('CreditsPage', () => {
@@ -175,7 +175,7 @@ describe('CreditsPage', () => {
           view = render(<CreditsPage />);
           jest.runAllTimers();
         });
-        expect(screen.queryByTestId('inference-discount-balance-line')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('inference-discount-card')).not.toBeInTheDocument();
         view?.unmount();
 
         process.env.NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED = 'true';
@@ -183,7 +183,7 @@ describe('CreditsPage', () => {
           render(<CreditsPage />);
           jest.runAllTimers();
         });
-        expect(screen.getByTestId('inference-discount-balance-line')).toBeInTheDocument();
+        expect(screen.getByTestId('inference-discount-card')).toBeInTheDocument();
       } finally {
         if (original === undefined) delete process.env.NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED;
         else process.env.NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED = original;

@@ -3,7 +3,7 @@
 // The account's discount credits in full: the balance, what share of the list
 // price is still paid while it lasts, lifetime totals and the balance history.
 // Two locks: the build flag (NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED) and
-// the account's own `enabled` from the backend. Not placed on any page yet.
+// the account's own `enabled` from the backend. Shown on Settings -> Credits.
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
