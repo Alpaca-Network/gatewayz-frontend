@@ -22,8 +22,8 @@ export default function StakePage() {
       </h1>
       <p className="mt-4 text-muted-foreground text-lg">
         Gatewayz is building a vault on Cardano that is designed to turn the yield on
-        deposited ADA or a supported Cardano stablecoin into inference credits on the
-        Gatewayz gateway. Nothing can be deposited today, on any network.
+        deposited ADA or a supported Cardano stablecoin into discount credits that
+        lower the price of requests on the Gatewayz gateway. Nothing can be deposited today, on any network.
       </p>
 
       <div className="mt-6 rounded-md border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
