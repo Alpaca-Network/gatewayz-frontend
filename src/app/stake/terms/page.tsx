@@ -30,7 +30,8 @@ export default function StakingTerms() {
       <S n="2" t="What is planned">
         <p>A vault on Cardano: a smart contract that holds a deposit of ADA or a
         supported Cardano stablecoin, with the yield it actually receives turned
-        into inference credits on the Gatewayz gateway. The vault is planned to
+        into discount credits that lower the price of requests on the Gatewayz
+        gateway. The vault is planned to
         open on mainnet only after an independent security audit and a legal
         review.</p>
         <p><b>The terms are to be announced.</b> The vault&apos;s terms, including
@@ -52,9 +53,9 @@ export default function StakingTerms() {
       </S>
 
       <S n="4" t="No guaranteed return">
-        <p>Inference credits will be a share of yield the vault actually receives.
+        <p>Discount credits will be a share of yield the vault actually receives.
         That yield is variable and may be zero. <b>Nothing here is a promise of
-        yield, income, return, or any particular amount of inference.</b></p>
+        yield, income, return, or any particular amount of discount.</b></p>
       </S>
 
       <S n="5" t="Not advice, not a security">
