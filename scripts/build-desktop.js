@@ -30,7 +30,7 @@ const DIRS_TO_EXCLUDE = [
   'sandbox/[sandboxId]',    // Dynamic sandbox pages
   'share/[token]',          // Dynamic share pages
   'staking',                // force-dynamic (real 404 status for its gate); web-only
-  'stake',                  // needs /api/staking/* and a browser wallet; web-only
+  'stake',                  // vault notice pages, geo-gated by middleware; web-only
 ];
 
 function moveExcludedDirs() {

@@ -168,13 +168,6 @@ describe('CSP Configuration', () => {
         expect(cspHeader).toContain('https://*.reddit.com');
       });
 
-      it('should allow Koios (Cardano chain reads for the ADA delegation tab)', () => {
-        const connectSrc = cspHeader.split(';').find((d: string) => d.trim().startsWith('connect-src'));
-        expect(connectSrc).toContain('https://api.koios.rest');
-        // Preprod Koios, used only when the backend reports cardano.network "preprod" (testnet demos).
-        expect(connectSrc).toContain('https://preprod.koios.rest');
-      });
-
       it('should allow Statsig beyondwickedmapping domain', () => {
         expect(cspHeader).toContain('https://beyondwickedmapping.org');
       });
