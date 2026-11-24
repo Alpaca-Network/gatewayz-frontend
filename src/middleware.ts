@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { GEO_COOKIE, STAKE_UNAVAILABLE_PATH, shouldBlockStakePath } from '@/lib/delegation/region';
+import { GEO_COOKIE, STAKE_UNAVAILABLE_PATH, shouldBlockStakePath } from '@/lib/stake/region';
 
 // Vercel's edge sets this from the client IP; absent in local dev.
 const COUNTRY_HEADER = 'x-vercel-ip-country';
@@ -16,13 +16,13 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  // Delegated staking is not offered in the US or Canada (src/lib/delegation/region.ts).
+  // The /stake pages are not shown in the US or Canada (src/lib/stake/region.ts).
   // /stake/terms stays readable; every other /stake page shows /stake/unavailable.
   const country = request.headers.get(COUNTRY_HEADER)?.toUpperCase() ?? '';
   const response = shouldBlockStakePath(pathname, country)
     ? NextResponse.rewrite(new URL(STAKE_UNAVAILABLE_PATH, request.url))
     : NextResponse.next();
-  // Client components (the /rewards section, the /stake journey) read this to hide themselves.
+  // Readable by client components that need the visitor's country.
   response.cookies.set(GEO_COOKIE, country, { path: '/', sameSite: 'lax', httpOnly: false });
   return response;
 }

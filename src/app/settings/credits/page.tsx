@@ -27,8 +27,8 @@ import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData
 import { formatCredits, formatCreditsDollar } from '@/lib/format-credits';
 import { API_BASE_URL, CREDIT_TOPUP_FEE_RATE, applyTopupFee } from '@/lib/config';
 import { TierInfoCard } from '@/components/tier/tier-info-card';
-import { InferenceDiscountBalanceLine } from '@/components/delegation/InferenceDiscountBalanceLine';
-import { isDelegationFlagOn } from '@/lib/delegation/flags';
+import { InferenceDiscountBalanceLine } from '@/components/discount-credits/InferenceDiscountBalanceLine';
+import { isVaultDiscountCreditsEnabled } from '@/lib/discount-credits/flag';
 
 // Confetti/Emoji explosion component
 const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
@@ -593,8 +593,8 @@ function CreditsPageContent() {
       )}
 
       <div className="max-w-2xl mx-auto flex flex-col gap-4">
-        {/* Inference discount from delegated staking (v3); renders nothing until the backend turns it on. */}
-        {isDelegationFlagOn() && <InferenceDiscountBalanceLine />}
+        {/* Discount credits balance; hidden unless NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED is "true". */}
+        {isVaultDiscountCreditsEnabled() && <InferenceDiscountBalanceLine />}
       </div>
 
       <div className="space-y-4">

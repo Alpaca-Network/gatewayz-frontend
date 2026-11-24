@@ -4,8 +4,7 @@ import type { Metadata } from 'next';
 // Holdings rewards (credits for tokens held in a linked wallet) is no longer
 // offered. This page used to advertise it; it now says so and points to the
 // one program Gatewayz is building, the Cardano vault. The explainer and the
-// signed-in panels that lived here are in @/components/holdings and are not
-// rendered anywhere.
+// signed-in panels that lived here have been removed.
 const VAULT_URL = 'https://www.gatewayz.ai/yield';
 
 export const metadata: Metadata = {
