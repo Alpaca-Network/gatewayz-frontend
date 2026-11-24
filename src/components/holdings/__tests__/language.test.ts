@@ -18,7 +18,6 @@ const FILES = [
   'src/components/holdings/HoldingsWalletLink.tsx',
   'src/components/holdings/HoldingsRewardsSummaryCard.tsx',
   'src/components/holdings/RewardsPageClient.tsx',
-  'src/app/rewards/page.tsx',
 ];
 const FORBIDDEN = ['staking', 'stake', 'yield', 'apy', 'wayz'];
 

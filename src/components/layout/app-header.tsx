@@ -292,12 +292,6 @@ export function AppHeader() {
                 Account
               </Link>
             )}
-            <Link
-              href="/rewards"
-              className="transition-colors hover:text-foreground/80 "
-            >
-              Rewards
-            </Link>
             {SHOW_GPU_NAV && (
               <Link
                 href="/gpu"
@@ -413,13 +407,6 @@ export function AppHeader() {
                         Account
                       </Link>
                     )}
-                    <Link
-                      href="/rewards"
-                      className="transition-colors hover:text-foreground/80 text-foreground/60 py-2"
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      Rewards
-                    </Link>
                     {SHOW_GPU_NAV && (
                       <Link
                         href="/gpu"

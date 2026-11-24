@@ -61,9 +61,6 @@ jest.mock('lucide-react', () => ({
 jest.mock('@/components/tier/tier-info-card', () => ({
   TierInfoCard: () => <div data-testid="tier-info-card">TierInfoCard</div>,
 }));
-jest.mock('@/components/holdings/HoldingsRewardsSummaryCard', () => ({
-  HoldingsRewardsSummaryCard: () => <div data-testid="holdings-rewards-summary-card" />,
-}));
 jest.mock('@/components/delegation/InferenceDiscountBalanceLine', () => ({
   InferenceDiscountBalanceLine: () => <div data-testid="inference-discount-balance-line" />,
 }));
