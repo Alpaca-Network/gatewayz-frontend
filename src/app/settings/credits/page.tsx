@@ -27,7 +27,7 @@ import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData
 import { formatCredits, formatCreditsDollar } from '@/lib/format-credits';
 import { API_BASE_URL, CREDIT_TOPUP_FEE_RATE, applyTopupFee } from '@/lib/config';
 import { TierInfoCard } from '@/components/tier/tier-info-card';
-import { InferenceDiscountBalanceLine } from '@/components/discount-credits/InferenceDiscountBalanceLine';
+import { InferenceDiscountCard } from '@/components/discount-credits/InferenceDiscountCard';
 import { isVaultDiscountCreditsEnabled } from '@/lib/discount-credits/flag';
 
 // Confetti/Emoji explosion component
@@ -593,8 +593,10 @@ function CreditsPageContent() {
       )}
 
       <div className="max-w-2xl mx-auto flex flex-col gap-4">
-        {/* Discount credits balance; hidden unless NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED is "true". */}
-        {isVaultDiscountCreditsEnabled() && <InferenceDiscountBalanceLine />}
+        {/* Discount credits: balance and history. Hidden unless
+            NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED is "true" and the
+            backend reports the account as enabled. */}
+        {isVaultDiscountCreditsEnabled() && <InferenceDiscountCard />}
       </div>
 
       <div className="space-y-4">

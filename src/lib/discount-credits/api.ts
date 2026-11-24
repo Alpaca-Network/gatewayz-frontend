@@ -1,16 +1,14 @@
 // Typed client for an account's discount credits: the balance, lifetime
 // totals and the balance history.
 //
-// The backend serves these today as the `discount`, `discount_history` and
-// `disclaimer` fields of GET /delegation/rewards (Bearer). That path is named
-// after an earlier program; only those three fields are read here, and
-// DISCOUNT_CREDITS_PATH is the one place to change when the vault's endpoint
-// exists. The backend wraps the body as `{success, data}` (a bare body is
-// accepted too) and sends numbers as strings (Decimal -> str).
+// The backend serves these as the `discount`, `discount_history` and
+// `disclaimer` fields of GET /discount-credits (Bearer). It wraps the body as
+// `{success, data}` (a bare body is accepted too) and sends numbers as strings
+// (Decimal -> str).
 import { makeAuthenticatedRequest } from '@/lib/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
-const DISCOUNT_CREDITS_PATH = '/delegation/rewards';
+const DISCOUNT_CREDITS_PATH = '/discount-credits';
 
 export interface DiscountCreditsBalance {
   /** The account's own switch: nothing renders while this is false. */
