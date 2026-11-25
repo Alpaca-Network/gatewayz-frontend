@@ -10,6 +10,7 @@ import type { DiscountCreditsEntry } from '@/lib/discount-credits/api';
 import { isVaultDiscountCreditsEnabled } from '@/lib/discount-credits/flag';
 import { formatDiscountUsd } from '@/lib/discount-credits/format';
 import { useDiscountCredits } from '@/lib/discount-credits/use-discount-credits';
+import { DailyLimitSection } from './DailyLimitSection';
 import {
   BALANCE_EMPTY,
   BALANCE_IN_USE_FALLBACK,
@@ -133,6 +134,8 @@ export function DiscountCreditsCard() {
           <dd className="text-lg font-semibold tabular-nums">{formatDiscountUsd(balance.lifetime_used_usd)}</dd>
         </div>
       </dl>
+
+      {balance.daily_cap && <DailyLimitSection dailyCap={balance.daily_cap} />}
 
       <HistoryTable rows={data.history} />
 

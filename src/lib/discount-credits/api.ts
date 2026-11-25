@@ -5,10 +5,31 @@
 // `disclaimer` fields of GET /discount-credits (Bearer). It wraps the body as
 // `{success, data}` (a bare body is accepted too) and sends numbers as strings
 // (Decimal -> str).
+//
+// `discount.daily_cap` (the daily limit) is optional: a backend that does not
+// send it yet leaves `daily_cap` null and the UI shows no daily limit section.
+// PUT /discount-credits/daily-cap changes the limit, with the same Bearer helper.
 import { makeAuthenticatedRequest } from '@/lib/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
 const DISCOUNT_CREDITS_PATH = '/discount-credits';
+const DAILY_CAP_PATH = `${DISCOUNT_CREDITS_PATH}/daily-cap`;
+
+/** The daily limit accepts 0 (nothing is drawn from the balance) up to this amount, with up to 6 decimals. */
+export const DAILY_CAP_MAX_USD = 1_000_000;
+
+/** How much of the balance can be used per UTC calendar day. */
+export interface DiscountCreditsDailyCap {
+  daily_cap_usd: number;
+  used_today_usd: number;
+  left_today_usd: number;
+  /** ISO time of the next reset (00:00 UTC). */
+  resets_at: string | null;
+  /** A higher limit that is waiting for the next UTC day; null when none is pending. */
+  next_daily_cap_usd: number | null;
+  /** UTC date (YYYY-MM-DD) the pending limit starts on. */
+  next_daily_cap_from: string | null;
+}
 
 export interface DiscountCreditsBalance {
   /** True when the backend applies discount credits to this account. */
@@ -21,6 +42,8 @@ export interface DiscountCreditsBalance {
   balance_usd: number;
   lifetime_granted_usd: number;
   lifetime_used_usd: number;
+  /** Null when the backend does not send a daily limit (or sends one with no amount). */
+  daily_cap: DiscountCreditsDailyCap | null;
 }
 
 export interface DiscountCreditsEntry {
@@ -75,6 +98,24 @@ function toFraction(value: unknown): number | null {
   return parsed <= 100 ? parsed / 100 : null;
 }
 
+/** Exported for tests. Null when the key is absent, malformed, or has no `daily_cap_usd`. */
+export function parseDailyCap(value: unknown): DiscountCreditsDailyCap | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const c = value as Row;
+  const cap = toNullableNumber(c.daily_cap_usd);
+  if (cap === null || cap < 0) return null;
+  const used = Math.max(0, toNumber(c.used_today_usd));
+  const left = toNullableNumber(c.left_today_usd);
+  return {
+    daily_cap_usd: cap,
+    used_today_usd: used,
+    left_today_usd: Math.max(0, left ?? cap - used),
+    resets_at: toNullableString(c.resets_at),
+    next_daily_cap_usd: toNullableNumber(c.next_daily_cap_usd),
+    next_daily_cap_from: toNullableString(c.next_daily_cap_from),
+  };
+}
+
 function parseBalance(value: unknown): DiscountCreditsBalance | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const d = value as Row;
@@ -84,6 +125,7 @@ function parseBalance(value: unknown): DiscountCreditsBalance | null {
     balance_usd: Math.max(0, toNumber(d.balance_usd)),
     lifetime_granted_usd: toNumber(d.lifetime_granted_usd),
     lifetime_used_usd: toNumber(d.lifetime_used_usd),
+    daily_cap: parseDailyCap(d.daily_cap),
   };
 }
 
@@ -112,4 +154,55 @@ export async function getDiscountCredits(): Promise<DiscountCredits> {
   if (!response.ok) throw new Error(`Discount credits request failed with status ${response.status}`);
   const body = asObject(await response.json());
   return parseDiscountCredits('data' in body && body.data && typeof body.data === 'object' ? body.data : body);
+}
+
+export type DailyCapErrorCode = 'invalid_value' | 'discount_credits_not_enabled' | 'discount_credits_unavailable' | 'unknown';
+
+const DAILY_CAP_ERROR_CODES: Record<number, DailyCapErrorCode> = {
+  422: 'invalid_value',
+  404: 'discount_credits_not_enabled',
+  503: 'discount_credits_unavailable',
+};
+
+/** A refused daily limit change. `code` follows the HTTP status: 422, 404, 503, anything else `unknown`. */
+export class DiscountCreditsDailyCapError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: DailyCapErrorCode,
+  ) {
+    super(`Discount credits daily limit request failed with status ${status}`);
+    this.name = 'DiscountCreditsDailyCapError';
+  }
+}
+
+export interface DiscountCreditsDailyCapResult {
+  /** `set`: applies now (the limit was lowered or kept). `scheduled`: a higher limit starts on the next UTC day. */
+  status: 'set' | 'scheduled';
+  daily_cap: DiscountCreditsDailyCap | null;
+}
+
+/** "20", never "2e-7": the backend reads a decimal string with up to 6 decimals. */
+function capToString(capUsd: string | number): string {
+  if (typeof capUsd === 'string') return capUsd.trim();
+  return capUsd.toFixed(6).replace(/\.?0+$/, '');
+}
+
+/**
+ * Changes the signed-in account's daily limit (Bearer, same helper as the read).
+ * Throws DiscountCreditsDailyCapError on any non-2xx response.
+ */
+export async function setDiscountCreditsDailyCap(capUsd: string | number): Promise<DiscountCreditsDailyCapResult> {
+  const response = await makeAuthenticatedRequest(`${API_BASE_URL}${DAILY_CAP_PATH}`, {
+    method: 'PUT',
+    body: JSON.stringify({ daily_cap_usd: capToString(capUsd) }),
+  });
+  if (!response.ok) {
+    throw new DiscountCreditsDailyCapError(response.status, DAILY_CAP_ERROR_CODES[response.status] ?? 'unknown');
+  }
+  const body = asObject(await response.json());
+  const data = asObject('data' in body && body.data && typeof body.data === 'object' ? body.data : body);
+  return {
+    status: data.status === 'scheduled' ? 'scheduled' : 'set',
+    daily_cap: parseDailyCap(data.daily_cap),
+  };
 }
