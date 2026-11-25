@@ -370,13 +370,13 @@ export default function StartClaudeCodePage() {
               </div>
               <div className="flex items-center justify-between">
                 <pre className="text-sm leading-relaxed font-mono text-green-400 flex-1">
-                  /model gatewayz,x-ai/grok-code-fast-1
+                  /model gatewayz,openai/gpt-5.5
                 </pre>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText('/model gatewayz,x-ai/grok-code-fast-1');
+                    navigator.clipboard.writeText('/model gatewayz,openai/gpt-5.5');
                     toast({ title: "Copied to clipboard" });
                   }}
                   className="text-slate-300 hover:text-white ml-4"

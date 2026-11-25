@@ -48,14 +48,12 @@ The router comes pre-configured with:
 
 | Model | Use Case | Speed | Cost |
 |-------|----------|-------|------|
-| `claude-3.7-sonnet` | Default tasks | Fast | Medium |
-| `deepseek-chat` | Background ops | Very Fast | Very Low |
-| `claude-3.5-sonnet` | Complex reasoning | Fast | Medium |
-| `gemini-1.5-pro` | Long context (100k+) | Fast | Low |
-| `gemini-2.0-flash-exp` | Web search | Very Fast | Very Low |
-| `gpt-4` | Alternative | Medium | High |
-| `claude-3-opus` | Most capable | Slow | High |
-| `claude-3-haiku` | Fastest | Very Fast | Very Low |
+| `claude-sonnet-5-5` | Default tasks and complex reasoning | Fast | Medium |
+| `gpt-5.4-mini` | Background ops and web search | Very Fast | Very Low |
+| `grok-4` | Long context (100k+) | Fast | Medium |
+| `gpt-5.5` | Alternative | Fast | Medium |
+| `claude-haiku-4-5` | Fastest Claude | Very Fast | Low |
+| `kimi-k2.6`, `deepseek-v4.1-flash`, `qwen3-coder`, `glm-5.3` | Lower-cost coding models | Fast | Low |
 
 ## 💡 Usage
 
@@ -68,8 +66,8 @@ ccr code
 While in Claude Code, use the `/model` command:
 ```
 /model gatewayz,openai/gpt-4
-/model gatewayz,deepseek/deepseek-chat
-/model gatewayz,anthropic/claude-3-opus
+/model gatewayz,deepseek-ai/DeepSeek-V4.1-Flash
+/model gatewayz,openai/gpt-5.5
 ```
 
 ### Web Configuration UI
@@ -127,7 +125,7 @@ Edit `~/.claude-code-router/config.json`:
   "Providers": [{
     "name": "gatewayz",
     "models": [
-      "anthropic/claude-3.7-sonnet",
+      "anthropic/claude-sonnet-5-5",
       "your-custom-model-here"
     ]
   }]
