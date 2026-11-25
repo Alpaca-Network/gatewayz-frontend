@@ -142,7 +142,7 @@ test('rejected-name pattern flags SECRET/SERVICE_ROLE/PRIVATE/TOKEN/PASSWORD reg
 
 test('rejected-name pattern does not flag a public contract "token address"', () => {
   // Common, benign Web3 naming: an ERC-20/staking contract address is a
-  // public identifier, not a bearer token — see src/lib/wayz/addresses.ts.
+  // public identifier, not a bearer token.
   assert.equal(REJECTED_NAME_RE.test('NEXT_PUBLIC_WAYZ_TOKEN_ADDRESS'), false);
   // But a real bearer-token-shaped name is still caught.
   assert.equal(REJECTED_NAME_RE.test('NEXT_PUBLIC_ACCESS_TOKEN'), true);

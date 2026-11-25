@@ -6,7 +6,7 @@ const YIELD_URL = "https://www.gatewayz.ai/yield";
 export const metadata: Metadata = {
   title: "Yield vault status & eligibility | Gatewayz",
   description:
-    "The Gatewayz yield vault is in development and not live. The earlier ADA delegation program is switched off. Vault terms will be published before launch.",
+    "The Gatewayz yield vault is in development and not live. The earlier ADA delegation program has ended and been removed. Vault terms will be published before launch.",
 };
 
 export default function StakingTerms() {
@@ -14,15 +14,15 @@ export default function StakingTerms() {
     <main className="mx-auto max-w-3xl px-5 py-12">
       <Link href="/stake" className="text-sm text-primary">← back</Link>
       <h1 className="mt-3 text-3xl font-extrabold tracking-tight">Status &amp; eligibility</h1>
-      <p className="mt-1 font-mono text-xs text-muted-foreground">Last updated 2026-11-18</p>
+      <p className="mt-1 font-mono text-xs text-muted-foreground">Last updated 2026-11-25</p>
 
       <S n="1" t="Nothing is offered here today">
         <p><b>The Gatewayz yield vault is in development and is not live.</b> No
         deposits are accepted on any network, and nothing on these pages is open,
-        offered or for sale. No Gatewayz token exists.</p>
+        offered or for sale. No Gatewayz token is offered or sold here.</p>
         <p>The earlier program described on this page, in which ADA was delegated
-        from the holder&apos;s own wallet in exchange for an inference discount, is
-        <b> switched off</b> and is replaced by the vault. The early-access terms
+        from the holder&apos;s own wallet in exchange for an inference discount,
+        <b> has ended and been removed</b> and is replaced by the vault. The early-access terms
         published here on 2026-10-14 applied to that program only and do not
         describe the vault.</p>
       </S>

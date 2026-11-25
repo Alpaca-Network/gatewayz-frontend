@@ -3,10 +3,8 @@
 // /stake/unavailable instead (src/middleware.ts). The country comes from the
 // edge; an unknown country (local dev, header missing) is allowed.
 
-export const RESTRICTED_STAKE_COUNTRIES: readonly string[] = ['US', 'CA'];
-
-/** Non-HttpOnly cookie the middleware sets so client components can read the country. */
-export const GEO_COOKIE = 'gw_geo';
+// Same list as the backend's WALLET_LINK_RESTRICTED_COUNTRIES; keep in step.
+const RESTRICTED_STAKE_COUNTRIES: readonly string[] = ['US', 'CA'];
 
 export function isRestrictedCountry(country: string | null | undefined): boolean {
   if (!country) return false;

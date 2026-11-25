@@ -13,7 +13,7 @@ export function formatDiscountUsd(value: number): string {
 }
 
 /** 0.99 -> "99%", 0.955 -> "95.5%"; floating noise (1 - 0.99) is rounded away. */
-export function formatFractionPercent(fraction: number): string {
+export function formatSharePercent(fraction: number): string {
   return `${Number((fraction * 100).toFixed(2)).toLocaleString('en-US', { maximumFractionDigits: 2 })}%`;
 }
 

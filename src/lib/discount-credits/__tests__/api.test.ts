@@ -54,6 +54,14 @@ describe('parseDiscountCredits', () => {
     expect(parseDiscountCredits({ discount: { discount_percent: 150 } }).balance?.discount_percent).toBeNull();
   });
 
+  it('keeps a null discount_percent as null (accounts the switch does not apply to)', () => {
+    expect(parseDiscountCredits({ discount: { enabled: false, discount_percent: null } }).balance).toMatchObject({
+      enabled: false,
+      discount_percent: null,
+    });
+    expect(parseDiscountCredits({ discount: { enabled: true, discount_percent: null } }).balance?.discount_percent).toBeNull();
+  });
+
   it('treats a malformed balance as absent or off', () => {
     expect(parseDiscountCredits({ discount: 'yes' }).balance).toBeNull();
     expect(parseDiscountCredits({ discount: [] }).balance).toBeNull();

@@ -2,12 +2,10 @@
 
 // The account's discount credits in full: the balance, what share of the list
 // price is still paid while it lasts, lifetime totals and the balance history.
-// Two locks: the build flag (NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED) and
-// the account's own `enabled` from the backend. Shown on Settings -> Credits.
+// Shown on Settings > Credits. When it renders: see src/lib/discount-credits/flag.ts.
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import type { DiscountCreditsEntry } from '@/lib/discount-credits/api';
 import { isVaultDiscountCreditsEnabled } from '@/lib/discount-credits/flag';
 import { formatDiscountUsd } from '@/lib/discount-credits/format';
@@ -17,7 +15,6 @@ import {
   BALANCE_IN_USE_FALLBACK,
   DISCOUNT_ANCHOR,
   DISCOUNT_DESCRIPTION,
-  DISCOUNT_LOADING_LABEL,
   DISCOUNT_TITLE,
   historyKindLabel,
   payLine,
@@ -103,35 +100,18 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** `shownDisclaimer`: text already on the page, not repeated here. */
-export function InferenceDiscountCard({ shownDisclaimer = '' }: { shownDisclaimer?: string }) {
+export function DiscountCreditsCard() {
   const live = isVaultDiscountCreditsEnabled();
   const query = useDiscountCredits({ enabled: live });
   if (!live) return null;
 
-  if (query.isLoading) {
-    return (
-      <Shell>
-        <div className="flex flex-col gap-2" aria-busy="true" aria-label={DISCOUNT_LOADING_LABEL}>
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-      </Shell>
-    );
-  }
-  if (query.isError) {
-    return (
-      <Shell>
-        <p role="alert" className="text-sm text-muted-foreground">
-          Couldn&apos;t load your discount credits. Please try again later.
-        </p>
-      </Shell>
-    );
-  }
+  // Nothing while loading or on error: until a response says the account is
+  // enabled, nobody should see a discount credits card.
+  if (query.isLoading || query.isError) return null;
 
   const data = query.data;
   const balance = data?.balance;
-  if (!data || !balance || !balance.enabled) return null;
+  if (!data || !balance || balance.enabled !== true) return null;
 
   return (
     <Shell>
@@ -156,7 +136,7 @@ export function InferenceDiscountCard({ shownDisclaimer = '' }: { shownDisclaime
 
       <HistoryTable rows={data.history} />
 
-      {data.disclaimer && data.disclaimer !== shownDisclaimer && (
+      {data.disclaimer && (
         <p className="whitespace-pre-line text-xs text-muted-foreground">{data.disclaimer}</p>
       )}
     </Shell>

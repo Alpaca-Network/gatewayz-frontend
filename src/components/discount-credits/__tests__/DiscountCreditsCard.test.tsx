@@ -1,15 +1,11 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { InferenceDiscountCard } from '../InferenceDiscountCard';
-import { InferenceDiscountBalanceLine } from '../InferenceDiscountBalanceLine';
-import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
+import { DiscountCreditsCard } from '../DiscountCreditsCard';
 import { useDiscountCredits } from '@/lib/discount-credits/use-discount-credits';
 import type { DiscountCredits } from '@/lib/discount-credits/api';
 
-jest.mock('@/context/gatewayz-auth-context', () => ({ useGatewayzAuth: jest.fn() }));
 jest.mock('@/lib/discount-credits/use-discount-credits', () => ({ useDiscountCredits: jest.fn() }));
 
 const mockCredits = useDiscountCredits as jest.Mock;
-const mockAuth = useGatewayzAuth as jest.Mock;
 
 const FLAG = 'NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED';
 const DISCLAIMER = 'Terms are set by Gatewayz and can change or stop.';
@@ -41,7 +37,7 @@ function restoreFlag() {
   else process.env[FLAG] = originalFlag;
 }
 
-describe('InferenceDiscountCard', () => {
+describe('DiscountCreditsCard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env[FLAG] = 'true';
@@ -50,7 +46,7 @@ describe('InferenceDiscountCard', () => {
   afterAll(restoreFlag);
 
   it('shows the balance, what you pay, totals, history and the API disclaimer', () => {
-    render(<InferenceDiscountCard />);
+    render(<DiscountCreditsCard />);
     expect(screen.getByRole('region', { name: 'Discount credits' })).toBeInTheDocument();
     expect(screen.getByText('$12.35')).toBeInTheDocument();
     expect(screen.getByText('You pay 1% of the list price until your balance runs out.')).toBeInTheDocument();
@@ -66,21 +62,23 @@ describe('InferenceDiscountCard', () => {
     expect(screen.getByText(DISCLAIMER)).toBeInTheDocument();
   });
 
-  it('does not repeat a disclaimer already shown on the page', () => {
-    render(<InferenceDiscountCard shownDisclaimer={DISCLAIMER} />);
+  it('shows no disclaimer paragraph when the API sends none', () => {
+    mockCredits.mockReturnValue(loaded({ ...CREDITS, disclaimer: '' }));
+    render(<DiscountCreditsCard />);
+    expect(screen.getByRole('region', { name: 'Discount credits' })).toBeInTheDocument();
     expect(screen.queryByText(DISCLAIMER)).not.toBeInTheDocument();
   });
 
   it('says the list price applies while the balance is empty', () => {
     mockCredits.mockReturnValue(loaded({ ...withBalance({ balance_usd: 0 }), history: [] }));
-    render(<InferenceDiscountCard />);
+    render(<DiscountCreditsCard />);
     expect(screen.getByText(/balance is empty, so requests are charged at the list price/)).toBeInTheDocument();
     expect(screen.queryByText('Balance history')).not.toBeInTheDocument();
   });
 
   it('hides the pay line when the backend sends no usable discount percent', () => {
     mockCredits.mockReturnValue(loaded(withBalance({ discount_percent: null })));
-    render(<InferenceDiscountCard />);
+    render(<DiscountCreditsCard />);
     expect(screen.queryByText(/You pay/)).not.toBeInTheDocument();
     expect(screen.getByText(/Part of each request is paid from this balance/)).toBeInTheDocument();
   });
@@ -88,7 +86,7 @@ describe('InferenceDiscountCard', () => {
   it('collapses a long history behind a toggle', () => {
     const many = Array.from({ length: 12 }, (_, i) => ({ ...CREDITS.history[0], created_at: `2026-09-${10 + i}T00:00:00+00:00` }));
     mockCredits.mockReturnValue(loaded({ ...CREDITS, history: many }));
-    render(<InferenceDiscountCard />);
+    render(<DiscountCreditsCard />);
     const table = screen.getByRole('table');
     expect(within(table).getAllByRole('row')).toHaveLength(11);
     fireEvent.click(screen.getByRole('button', { name: 'Show all 12' }));
@@ -96,14 +94,22 @@ describe('InferenceDiscountCard', () => {
     expect(screen.getByRole('button', { name: 'Show fewer' })).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('shows loading and error states', () => {
-    mockCredits.mockReturnValue({ isLoading: true, isError: false, data: undefined });
-    const { rerender } = render(<InferenceDiscountCard />);
-    expect(screen.getByLabelText('Loading your discount credits')).toHaveAttribute('aria-busy', 'true');
+  it.each([
+    ['loading', { isLoading: true, isError: false, data: undefined }],
+    ['a load error', { isLoading: false, isError: true, data: undefined }],
+    // Stale data must not show through a failed refetch either.
+    ['a load error with earlier data', { isLoading: false, isError: true, data: CREDITS }],
+  ])('renders nothing with the build flag on and %s', (_label, result) => {
+    mockCredits.mockReturnValue(result);
+    const { container } = render(<DiscountCreditsCard />);
+    expect(container).toBeEmptyDOMElement();
+    expect(mockCredits).toHaveBeenLastCalledWith({ enabled: true });
+  });
 
-    mockCredits.mockReturnValue({ isLoading: false, isError: true, data: undefined });
-    rerender(<InferenceDiscountCard />);
-    expect(screen.getByRole('alert')).toHaveTextContent(/Couldn.t load your discount credits/);
+  it('renders the card with the build flag on once the account is reported enabled', () => {
+    mockCredits.mockReturnValue(loaded(withBalance({ enabled: true })));
+    render(<DiscountCreditsCard />);
+    expect(screen.getByRole('region', { name: 'Discount credits' })).toBeInTheDocument();
   });
 
   it.each([
@@ -114,64 +120,7 @@ describe('InferenceDiscountCard', () => {
   ])('renders nothing when %s', (_label, setup, credits) => {
     setup();
     mockCredits.mockReturnValue(loaded(credits));
-    const { container } = render(<InferenceDiscountCard />);
+    const { container } = render(<DiscountCreditsCard />);
     expect(container).toBeEmptyDOMElement();
-  });
-});
-
-describe('InferenceDiscountBalanceLine', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    process.env[FLAG] = 'true';
-    mockAuth.mockReturnValue({ status: 'authenticated' });
-    mockCredits.mockReturnValue(loaded(CREDITS));
-  });
-  afterAll(restoreFlag);
-
-  it('shows the balance, what you pay and the disclaimer', () => {
-    render(<InferenceDiscountBalanceLine />);
-    expect(screen.getByRole('region', { name: 'Discount credits balance' })).toBeInTheDocument();
-    expect(screen.getByText('$12.35')).toBeInTheDocument();
-    expect(screen.getByText('You pay 1% of the list price until your balance runs out.')).toBeInTheDocument();
-    expect(screen.getByText(DISCLAIMER)).toBeInTheDocument();
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
-  });
-
-  it('says the list price applies when the balance is empty', () => {
-    mockCredits.mockReturnValue(loaded(withBalance({ balance_usd: 0 })));
-    render(<InferenceDiscountBalanceLine />);
-    expect(screen.getByText('$0.00')).toBeInTheDocument();
-    expect(screen.getByText(/balance is empty, so requests are charged at the list price/)).toBeInTheDocument();
-  });
-
-  it('only fetches the balance when signed in', () => {
-    mockAuth.mockReturnValue({ status: 'unauthenticated' });
-    const { container } = render(<InferenceDiscountBalanceLine />);
-    expect(container).toBeEmptyDOMElement();
-    expect(mockCredits).toHaveBeenLastCalledWith({ enabled: false });
-  });
-
-  it.each(['false', undefined])('renders nothing and does not fetch with the build flag %p', (value) => {
-    if (value === undefined) delete process.env[FLAG];
-    else process.env[FLAG] = value;
-    const { container } = render(<InferenceDiscountBalanceLine />);
-    expect(container).toBeEmptyDOMElement();
-    expect(mockCredits).toHaveBeenLastCalledWith({ enabled: false });
-  });
-
-  it.each([
-    ['the account switch off', loaded(withBalance({ enabled: false }))],
-    ['a load error', { isLoading: false, isError: true, data: undefined }],
-    ['no balance in the response', loaded({ ...CREDITS, balance: null })],
-  ])('renders nothing with %s', (_label, credits) => {
-    mockCredits.mockReturnValue(credits);
-    const { container } = render(<InferenceDiscountBalanceLine />);
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it('shows a placeholder while loading', () => {
-    mockCredits.mockReturnValue({ isLoading: true, isError: false, data: undefined });
-    render(<InferenceDiscountBalanceLine />);
-    expect(screen.getByLabelText('Loading your discount credits')).toBeInTheDocument();
   });
 });

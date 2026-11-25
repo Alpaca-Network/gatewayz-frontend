@@ -56,7 +56,7 @@ export function getRedirects(): Redirect[] {
       destination: '/models',
       permanent: false,
     },
-    // The WAYZ testnet staking dashboard was retired; staking lives on /stake.
+    // The WAYZ testnet staking dashboard was retired; /stake is the vault notice.
     {
       source: '/staking',
       destination: '/stake',

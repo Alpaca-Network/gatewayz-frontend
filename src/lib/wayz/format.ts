@@ -1,8 +1,5 @@
-// Display formatting for the /staking dashboard. Kept separate from
-// staking-api.ts/contract-reads.ts so those stay pure data layers — this is
-// the only place that turns a bigint/ISO-string into copy a user reads.
+// WAYZ amount formatting for the GPU / emission pages.
 import { formatUnits } from 'viem';
-import { formatDistanceToNow } from 'date-fns';
 
 /** Formats a wei bigint as a trimmed WAYZ amount (e.g. "123.4", not "123.400000000000000000"). */
 export function formatWayz(wei: bigint, maxDecimals = 4): string {
@@ -13,18 +10,9 @@ export function formatWayz(wei: bigint, maxDecimals = 4): string {
   return trimmed ? `${whole}.${trimmed}` : whole;
 }
 
-/** Formats a USD-denominated inference-credits amount to a fixed 4 decimal places
- *  (staking rewards spec, 2026-09-11 §API — these are small `numeric(18,6)` credit
- *  amounts, not wei, so no bigint/formatUnits here — pair with `tabular-nums` in
- *  the caller's className so a column of these lines up). */
-export function formatCredits(value: number): string {
-  if (!Number.isFinite(value)) return '0.0000';
-  return value.toFixed(4);
-}
-
 /** Formats a plain (non-wei) WAYZ amount — a config value like a daily emission target or a
- *  provider's next-epoch allocation estimate — to a fixed 4 decimal places. Same convention
- *  as `formatCredits`; pair with `tabular-nums` in the caller's className. */
+ *  provider's next-epoch allocation estimate — to a fixed 4 decimal places.
+ *  Pair with `tabular-nums` in the caller's className so a column of these lines up. */
 export function formatWayzAmount(value: number): string {
   if (!Number.isFinite(value)) return '0.0000';
   return value.toFixed(4);
@@ -37,44 +25,9 @@ export function formatBps(bps: number): string {
   return `${(bps / 100).toFixed(2)}%`;
 }
 
-/** Formats a 0..1 fraction (e.g. a provider's `score.share`, or a staker's `your_share`) as a
+/** Formats a 0..1 fraction (e.g. a provider's `score.share`) as a
  *  percent string, e.g. 0.1234 -> "12.34%". */
 export function formatFractionPercent(value: number): string {
   if (!Number.isFinite(value)) return '0.00%';
   return `${(value * 100).toFixed(2)}%`;
-}
-
-/** "synced 3 minutes ago" copy for the indexer's last_synced_at. */
-export function formatSyncedAt(iso: string | null): string {
-  if (!iso) return 'never synced';
-  try {
-    return `synced ${formatDistanceToNow(new Date(iso), { addSuffix: true })}`;
-  } catch {
-    return 'sync status unknown';
-  }
-}
-
-/** "7 days" copy for UNSTAKE_COOLDOWN() / unstake_cooldown_seconds. */
-export function formatCooldownDuration(seconds: number): string {
-  if (!seconds) return '—';
-  const days = Math.round(seconds / 86400);
-  if (days >= 1) return days === 1 ? '1 day' : `${days} days`;
-  const hours = Math.round(seconds / 3600);
-  return hours === 1 ? '1 hour' : `${hours} hours`;
-}
-
-/** Countdown copy to a pending unstake's `unlockAt` (unix seconds, as returned by the contract). */
-export function formatCountdown(unlockAtSeconds: bigint, nowMs: number = Date.now()): string {
-  const unlockMs = Number(unlockAtSeconds) * 1000;
-  const remainingMs = unlockMs - nowMs;
-  if (remainingMs <= 0) return 'Ready to withdraw';
-
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-
-  if (days > 0) return `${days}d ${hours}h remaining`;
-  if (hours > 0) return `${hours}h ${minutes}m remaining`;
-  return `${minutes}m remaining`;
 }

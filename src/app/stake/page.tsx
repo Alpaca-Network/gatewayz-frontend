@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 // Unlisted: reachable by direct link only. noindex comes from ./layout.tsx.
-// The earlier delegate-from-your-wallet flow that lived here is switched off;
+// The earlier delegate-from-your-wallet flow that lived here has ended and been removed;
 // the program is now a Cardano vault described at www.gatewayz.ai/yield. This
 // page states no rates: the terms are to be announced.
 const YIELD_URL = "https://www.gatewayz.ai/yield";
@@ -36,7 +36,7 @@ export default function StakePage() {
       <h2 className="mt-10 text-base font-semibold">What happened to ADA delegation?</h2>
       <p className="mt-2 text-sm text-muted-foreground">
         An earlier design, where ADA was delegated from your own wallet, was shown on
-        this page. It is switched off and is replaced by the vault. If you delegated
+        this page. It has ended and been removed, and is replaced by the vault. If you delegated
         to a pool from your own wallet, that delegation is yours to manage in your
         wallet as with any Cardano stake pool.
       </p>

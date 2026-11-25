@@ -27,8 +27,7 @@ import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData
 import { formatCredits, formatCreditsDollar } from '@/lib/format-credits';
 import { API_BASE_URL, CREDIT_TOPUP_FEE_RATE, applyTopupFee } from '@/lib/config';
 import { TierInfoCard } from '@/components/tier/tier-info-card';
-import { InferenceDiscountCard } from '@/components/discount-credits/InferenceDiscountCard';
-import { isVaultDiscountCreditsEnabled } from '@/lib/discount-credits/flag';
+import { DiscountCreditsCard } from '@/components/discount-credits/DiscountCreditsCard';
 
 // Confetti/Emoji explosion component
 const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
@@ -593,10 +592,8 @@ function CreditsPageContent() {
       )}
 
       <div className="max-w-2xl mx-auto flex flex-col gap-4">
-        {/* Discount credits: balance and history. Hidden unless
-            NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED is "true" and the
-            backend reports the account as enabled. */}
-        {isVaultDiscountCreditsEnabled() && <InferenceDiscountCard />}
+        {/* Renders nothing unless enabled: see src/lib/discount-credits/flag.ts. */}
+        <DiscountCreditsCard />
       </div>
 
       <div className="space-y-4">
