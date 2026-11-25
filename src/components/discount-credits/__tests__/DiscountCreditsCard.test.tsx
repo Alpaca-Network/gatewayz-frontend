@@ -3,7 +3,10 @@ import { DiscountCreditsCard } from '../DiscountCreditsCard';
 import { useDiscountCredits } from '@/lib/discount-credits/use-discount-credits';
 import type { DiscountCredits } from '@/lib/discount-credits/api';
 
-jest.mock('@/lib/discount-credits/use-discount-credits', () => ({ useDiscountCredits: jest.fn() }));
+jest.mock('@/lib/discount-credits/use-discount-credits', () => ({
+  useDiscountCredits: jest.fn(),
+  useSetDiscountCreditsDailyCap: () => ({ mutate: jest.fn(), reset: jest.fn(), isPending: false, isError: false, isSuccess: false }),
+}));
 
 const mockCredits = useDiscountCredits as jest.Mock;
 
@@ -17,6 +20,7 @@ const CREDITS: DiscountCredits = {
     balance_usd: 12.345678,
     lifetime_granted_usd: 20,
     lifetime_used_usd: 7.654322,
+    daily_cap: null,
   },
   history: [
     { created_at: '2026-10-11T02:00:00+00:00', kind: 'use', amount_usd: -0.000123, balance_after: 11.5, ref: null },
@@ -60,6 +64,32 @@ describe('DiscountCreditsCard', () => {
     expect(within(history).getByText('+$0.40')).toBeInTheDocument();
 
     expect(screen.getByText(DISCLAIMER)).toBeInTheDocument();
+  });
+
+  it('shows the daily limit only when the backend sends one', () => {
+    const { unmount } = render(<DiscountCreditsCard />);
+    expect(screen.queryByText('Daily limit')).not.toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    unmount();
+
+    mockCredits.mockReturnValue(
+      loaded(
+        withBalance({
+          daily_cap: {
+            daily_cap_usd: 50,
+            used_today_usd: 12.5,
+            left_today_usd: 37.5,
+            resets_at: '2026-11-26T00:00:00Z',
+            next_daily_cap_usd: null,
+            next_daily_cap_from: null,
+          },
+        }),
+      ),
+    );
+    render(<DiscountCreditsCard />);
+    expect(screen.getByText('Daily limit')).toBeInTheDocument();
+    expect(screen.getByText('$12.50 of $50.00 used today')).toBeInTheDocument();
+    expect(screen.getByRole('table')).toBeInTheDocument();
   });
 
   it('shows no disclaimer paragraph when the API sends none', () => {

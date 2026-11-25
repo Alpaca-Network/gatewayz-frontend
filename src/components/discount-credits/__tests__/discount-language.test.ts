@@ -11,6 +11,7 @@ const ROOT = join(__dirname, '..', '..', '..', '..');
 const FILES = [
   'src/components/discount-credits/discount-copy.ts',
   'src/components/discount-credits/DiscountCreditsCard.tsx',
+  'src/components/discount-credits/DailyLimitSection.tsx',
   'src/lib/discount-credits/format.ts',
 ];
 const FORBIDDEN = [
