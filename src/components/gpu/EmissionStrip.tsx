@@ -9,9 +9,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { GpuPublicEmission } from '@/lib/gpu/public-api';
 import { formatBps, formatWayzAmount } from '@/lib/wayz/format';
 
-const SPLITS: Array<{ key: keyof Pick<GpuPublicEmission, 'providers_bps' | 'stakers_bps' | 'treasury_bps'>; label: string }> = [
+// Each share is shown exactly as the backend sent it (bps of the daily emission). The two
+// are not assumed to add up to 100% (an older backend response still carries a third share,
+// which the parser drops), so no total and no "remainder" is rendered.
+const SPLITS: Array<{ key: keyof Pick<GpuPublicEmission, 'providers_bps' | 'treasury_bps'>; label: string }> = [
   { key: 'providers_bps', label: 'Providers' },
-  { key: 'stakers_bps', label: 'Stakers' },
   { key: 'treasury_bps', label: 'Treasury' },
 ];
 
@@ -58,7 +60,7 @@ export function EmissionStrip({ emission, loading }: { emission: GpuPublicEmissi
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Daily emission</p>
           <p className="text-2xl font-bold tabular-nums">{formatWayzAmount(emission.daily_emission_wayz)} WAYZ</p>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {SPLITS.map(({ key, label }) => (
             <SplitBar key={key} label={label} bps={emission[key]} />
           ))}

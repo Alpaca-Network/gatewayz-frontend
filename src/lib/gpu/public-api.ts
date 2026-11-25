@@ -40,11 +40,15 @@ export interface GpuPublicLastHour {
  *  returns `"daily_emission_wayz": str(Config.WAYZ_DAILY_EMISSION)` (an env-derived Decimal,
  *  serialized as `str()`) while the `*_bps` fields are plain `int`s. `getGpuPublicSummary`
  *  coerces every numeric field defensively via `toNumber` regardless, matching
- *  provider-api.ts/rewards-api.ts's convention — this type is the post-parse shape. */
+ *  provider-api.ts/rewards-api.ts's convention — this type is the post-parse shape.
+ *
+ *  The emission is split between GPU providers and the treasury only. Older backend
+ *  responses carry a third `*_bps` share; the parser drops it (see `parseEmission`), so
+ *  `providers_bps + treasury_bps` is NOT guaranteed to be 10000 — never derive one from
+ *  the other or render a total from them. */
 export interface GpuPublicEmission {
   daily_emission_wayz: number;
   providers_bps: number;
-  stakers_bps: number;
   treasury_bps: number;
   last_epoch: string | null;
 }
@@ -120,14 +124,15 @@ function toNumber(value: string | number | null | undefined): number {
 
 /** Parses the optional `emission` block, coercing every numeric field regardless of whether
  *  the wire sends it as a string or a number (see `GpuPublicEmission`'s header comment).
- *  Missing/non-object -> undefined, so callers can gate rendering on `Boolean(emission)`. */
+ *  Missing/non-object -> undefined, so callers can gate rendering on `Boolean(emission)`.
+ *  Only the fields named here are kept: anything else on the wire (the `mode` field, a
+ *  third `*_bps` share from an older backend) is ignored, and its absence is not an error. */
 function parseEmission(value: unknown): GpuPublicEmission | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const r = value as Record<string, unknown>;
   return {
     daily_emission_wayz: toNumber(r.daily_emission_wayz as string | number),
     providers_bps: toNumber(r.providers_bps as string | number),
-    stakers_bps: toNumber(r.stakers_bps as string | number),
     treasury_bps: toNumber(r.treasury_bps as string | number),
     last_epoch: (r.last_epoch as string | null | undefined) ?? null,
   };
