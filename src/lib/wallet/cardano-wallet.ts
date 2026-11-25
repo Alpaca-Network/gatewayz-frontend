@@ -9,6 +9,7 @@
 // ./cardano-link-api.ts sends to the backend to link the wallet to the account.
 import type { BrowserWallet } from '@meshsdk/wallet';
 import { cardanoNetworkConfig, type CardanoNetwork } from './cardano-network';
+import { isCip30Rejection } from './cip30';
 
 export interface ConnectedCardanoWallet {
   key: string;
@@ -26,7 +27,7 @@ export class CardanoWalletError extends Error {
 
 /**
  * Enables the CIP-30 wallet under `window.cardano[key]` and reads its stake address.
- * Only a testnet demo passes "preprod".
+ * Only a testnet demo passes "preprod" (no caller yet; kept for the vault's testnet phase).
  */
 export async function connectCardanoWallet(
   key: string,
@@ -72,9 +73,9 @@ export async function signLinkMessage(
   return { signature, key };
 }
 
-/** Short, user-facing copy for a failed connect or signature. `isRejection`: see ./cip30.ts. */
-export function describeCardanoError(error: unknown, isRejection: (e: unknown) => boolean): string {
+/** Short, user-facing copy for a failed connect or signature. */
+export function describeCardanoError(error: unknown): string {
   if (error instanceof CardanoWalletError) return error.message;
-  if (isRejection(error)) return 'The request was cancelled in your wallet.';
+  if (isCip30Rejection(error)) return 'The request was cancelled in your wallet.';
   return 'Something went wrong. Please try again.';
 }

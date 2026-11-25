@@ -111,9 +111,9 @@ describe('cardano wallet actions', () => {
   });
 
   it('describes connect and signature failures', () => {
-    expect(describeCardanoError(new CardanoWalletError('Switch networks.'), isCip30Rejection)).toBe('Switch networks.');
-    expect(describeCardanoError({ code: -3 }, isCip30Rejection)).toMatch(/cancelled in your wallet/);
-    expect(describeCardanoError(new Error('boom'), isCip30Rejection)).toMatch(/Something went wrong/);
+    expect(describeCardanoError(new CardanoWalletError('Switch networks.'))).toBe('Switch networks.');
+    expect(describeCardanoError({ code: -3 })).toMatch(/cancelled in your wallet/);
+    expect(describeCardanoError(new Error('boom'))).toMatch(/Something went wrong/);
   });
 });
 

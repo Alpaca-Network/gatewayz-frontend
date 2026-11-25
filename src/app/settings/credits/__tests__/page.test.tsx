@@ -61,8 +61,18 @@ jest.mock('lucide-react', () => ({
 jest.mock('@/components/tier/tier-info-card', () => ({
   TierInfoCard: () => <div data-testid="tier-info-card">TierInfoCard</div>,
 }));
-jest.mock('@/components/discount-credits/InferenceDiscountCard', () => ({
-  InferenceDiscountCard: () => <div data-testid="inference-discount-card" />,
+// The real DiscountCreditsCard renders (it owns the build-flag check); only its
+// data hook is mocked, answering as an account the backend reports as enabled.
+jest.mock('@/lib/discount-credits/use-discount-credits', () => ({
+  useDiscountCredits: () => ({
+    isLoading: false,
+    isError: false,
+    data: {
+      balance: { enabled: true, discount_percent: 0.99, balance_usd: 5, lifetime_granted_usd: 5, lifetime_used_usd: 0 },
+      history: [],
+      disclaimer: '',
+    },
+  }),
 }));
 
 describe('CreditsPage', () => {
@@ -164,7 +174,7 @@ describe('CreditsPage', () => {
       expect(screen.getByText('Available Balance')).toBeInTheDocument();
     });
 
-    it('shows the discount credits line only when the vault discount credits flag is on', async () => {
+    it('shows the discount credits card only when the vault discount credits flag is on', async () => {
       (getUserData as jest.Mock).mockReturnValue(mockBasicUserData);
       const original = process.env.NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED;
       try {
@@ -175,7 +185,8 @@ describe('CreditsPage', () => {
           view = render(<CreditsPage />);
           jest.runAllTimers();
         });
-        expect(screen.queryByTestId('inference-discount-card')).not.toBeInTheDocument();
+        expect(screen.queryByRole('region', { name: 'Discount credits' })).not.toBeInTheDocument();
+        expect(screen.queryByText(/discount credits/i)).not.toBeInTheDocument();
         view?.unmount();
 
         process.env.NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED = 'true';
@@ -183,7 +194,7 @@ describe('CreditsPage', () => {
           render(<CreditsPage />);
           jest.runAllTimers();
         });
-        expect(screen.getByTestId('inference-discount-card')).toBeInTheDocument();
+        expect(screen.getByRole('region', { name: 'Discount credits' })).toBeInTheDocument();
       } finally {
         if (original === undefined) delete process.env.NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED;
         else process.env.NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED = original;

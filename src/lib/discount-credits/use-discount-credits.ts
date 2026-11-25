@@ -4,7 +4,7 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { getDiscountCredits, type DiscountCredits } from './api';
 import { isVaultDiscountCreditsEnabled } from './flag';
 
-export const discountCreditsQueryKey = ['discount-credits'] as const;
+const discountCreditsQueryKey = ['discount-credits'] as const;
 
 /** The signed-in account's discount credits. Never fetched while the build flag is off. */
 export function useDiscountCredits(options: { enabled?: boolean } = {}): UseQueryResult<DiscountCredits> {

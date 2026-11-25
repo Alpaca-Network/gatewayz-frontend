@@ -1,4 +1,4 @@
-import { formatDiscountUsd, formatFractionPercent, payShareOfList } from '../format';
+import { formatDiscountUsd, formatSharePercent, payShareOfList } from '../format';
 
 describe('discount credits formatting', () => {
   it('keeps sub-cent amounts instead of rounding them to $0.00', () => {
@@ -9,9 +9,9 @@ describe('discount credits formatting', () => {
   });
 
   it('formats fractions as percents without floating noise', () => {
-    expect(formatFractionPercent(0.95)).toBe('95%');
-    expect(formatFractionPercent(1 - 0.99)).toBe('1%');
-    expect(formatFractionPercent(0.955)).toBe('95.5%');
+    expect(formatSharePercent(0.95)).toBe('95%');
+    expect(formatSharePercent(1 - 0.99)).toBe('1%');
+    expect(formatSharePercent(0.955)).toBe('95.5%');
   });
 
   it('is the share of the list price still paid, or null', () => {

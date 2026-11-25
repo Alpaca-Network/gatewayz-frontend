@@ -49,6 +49,7 @@ export class CardanoLinkApiError extends Error {
 /** Which US / Canada refusal this error is, or null for anything else. */
 export function cardanoLinkRefusalOf(error: unknown): CardanoLinkRefusal | null {
   if (!(error instanceof CardanoLinkApiError) || error.status !== 451) return null;
+  // An unknown future 451 type is treated as region-restricted.
   return error.code === 'attestation_required' ? 'attestation_required' : 'region_restricted';
 }
 
@@ -146,8 +147,8 @@ export async function linkCardanoStakeAddress(input: {
   };
 }
 
-export const REGION_RESTRICTED_MESSAGE = 'Wallet linking is not available in your region.';
-export const ATTESTATION_REQUIRED_MESSAGE =
+const REGION_RESTRICTED_MESSAGE = 'Wallet linking is not available in your region.';
+const ATTESTATION_REQUIRED_MESSAGE =
   'Confirm you are not a resident or citizen of the United States or Canada to continue.';
 
 /** Short, user-facing copy for a failed link. */

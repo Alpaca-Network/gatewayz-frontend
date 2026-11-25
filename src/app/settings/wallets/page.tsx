@@ -192,7 +192,7 @@ export default function WalletsPage() {
               <div>
                 <p className="font-medium text-foreground">No wallets linked yet</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Link a wallet to sign in with it and stake WAYZ from this account.
+                  Link a wallet to sign in with it.
                 </p>
               </div>
             </div>

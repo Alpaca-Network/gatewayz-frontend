@@ -10,8 +10,7 @@ import { join } from 'path';
 const ROOT = join(__dirname, '..', '..', '..', '..');
 const FILES = [
   'src/components/discount-credits/discount-copy.ts',
-  'src/components/discount-credits/InferenceDiscountCard.tsx',
-  'src/components/discount-credits/InferenceDiscountBalanceLine.tsx',
+  'src/components/discount-credits/DiscountCreditsCard.tsx',
   'src/lib/discount-credits/format.ts',
 ];
 const FORBIDDEN = [

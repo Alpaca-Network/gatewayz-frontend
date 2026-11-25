@@ -86,7 +86,7 @@ Properties from usePrivy():
 addition to the existing embedded wallet Privy already creates for web2 logins.
 
 **Supported chains:** `supportedChains: [base]`, with Base as the default chain (`viem/chains`).
-Flows that need another network (e.g. the ETH vault on Ethereum mainnet) build their own viem
+Flows that need another network build their own viem
 clients on the wallet's EIP-1193 provider instead of changing this default.
 
 **`useActiveWallet()` hook (`src/lib/hooks/use-active-wallet.ts`)** — the single, contractual way

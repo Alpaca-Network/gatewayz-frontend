@@ -11,9 +11,12 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewa
 const DISCOUNT_CREDITS_PATH = '/discount-credits';
 
 export interface DiscountCreditsBalance {
-  /** The account's own switch: nothing renders while this is false. */
+  /** True when the backend applies discount credits to this account. */
   enabled: boolean;
-  /** Fraction 0..1 of the list price drawn from the balance per request; null when unusable. */
+  /**
+   * Share of the list price drawn from the balance per request, as a fraction
+   * (0.99 means 99%). May be null when not enabled, or when the value is unusable.
+   */
   discount_percent: number | null;
   balance_usd: number;
   lifetime_granted_usd: number;
@@ -68,6 +71,7 @@ function toFraction(value: unknown): number | null {
   const parsed = toNullableNumber(value);
   if (parsed === null || parsed < 0) return null;
   if (parsed <= 1) return parsed;
+  // Defensive only: the backend sends a fraction, never a value above 1.
   return parsed <= 100 ? parsed / 100 : null;
 }
 
