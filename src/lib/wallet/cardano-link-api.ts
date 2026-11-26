@@ -141,8 +141,14 @@ export async function linkCardanoStakeAddress(input: {
     }),
   });
   const wallet = asObject(asObject(await readJson(response)).wallet);
+  const linked = String(wallet.wallet_address ?? '');
+  // The backend must report the address the user connected; anything else is
+  // treated as a failed link rather than shown as success.
+  if (linked !== input.stakeAddress.toLowerCase()) {
+    throw new Error('Linked wallet address does not match the connected wallet');
+  }
   return {
-    wallet_address: String(wallet.wallet_address ?? input.stakeAddress),
+    wallet_address: linked,
     chain_namespace: String(wallet.chain_namespace ?? 'cip34'),
   };
 }

@@ -10,7 +10,6 @@
     "NEXT_PUBLIC_CHAT_HISTORY_API_URL",
     "NEXT_PUBLIC_CREDIT_TOPUP_FEE_RATE",
     "NEXT_PUBLIC_DEBUG_STREAMING",
-    "NEXT_PUBLIC_DEV_API_KEY",
     "NEXT_PUBLIC_GPU_MARKETPLACE",
     "NEXT_PUBLIC_POSTHOG_HOST",
     "NEXT_PUBLIC_POSTHOG_KEY",
@@ -18,7 +17,6 @@
     "NEXT_PUBLIC_PRIVY_APP_ID",
     "NEXT_PUBLIC_PRIVY_GUEST_ACCOUNTS",
     "NEXT_PUBLIC_PRIVY_OAUTH_REDIRECT_ORIGIN",
-    "NEXT_PUBLIC_SAMPLEAPP_API_KEY",
     "NEXT_PUBLIC_SHARE_BASE_URL",
     "NEXT_PUBLIC_SITE_URL",
     "NEXT_PUBLIC_STATSIG_CLIENT_KEY",
@@ -29,8 +27,5 @@
     "NEXT_PUBLIC_TERRAGON_URL",
     "NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED"
   ],
-  "knownPublicKeys": {
-    "NEXT_PUBLIC_DEV_API_KEY": "Contains \"API_KEY\" but is allowed: used only as a client-side demo/quick-start GatewayZ API key in src/components/models/inline-chat.tsx (process.env.NEXT_PUBLIC_DEV_API_KEY). A human should confirm the value configured in Vercel is a low-privilege/rate-limited demo key, never a real user or admin key, and that this naming is still acceptable long-term.",
-    "NEXT_PUBLIC_SAMPLEAPP_API_KEY": "Contains \"API_KEY\" but is allowed: appears only as changelog copy text in src/app/releases/page.tsx (\"Added NEXT_PUBLIC_SAMPLEAPP_API_KEY to .env.example\") -- not read as an env var by any code today. A human should confirm it stays unused, or, if it becomes a real env var, that its value is safe to ship to the browser."
-  }
+  "knownPublicKeys": {}
 }

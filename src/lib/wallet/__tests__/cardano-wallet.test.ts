@@ -103,11 +103,20 @@ describe('cardano wallet actions', () => {
     expect(wallet.signData).toHaveBeenCalledWith('4c696e6b2074686973', STAKE, false);
   });
 
-  it('falls back to the UTF-8 message when payload_hex is missing', async () => {
+  it('signs the hex of the shown message when payload_hex is missing', async () => {
     const wallet = fakeWallet();
     const connected = { key: 'eternl', wallet, stakeAddress: STAKE } as unknown as ConnectedCardanoWallet;
     await signLinkMessage(connected, { message: 'Link this', payload_hex: null });
-    expect(wallet.signData).toHaveBeenCalledWith('Link this', STAKE);
+    expect(wallet.signData).toHaveBeenCalledWith('4c696e6b2074686973', STAKE, false);
+  });
+
+  it('refuses to sign when payload_hex is not the message the user was shown', async () => {
+    const wallet = fakeWallet();
+    const connected = { key: 'eternl', wallet, stakeAddress: STAKE } as unknown as ConnectedCardanoWallet;
+    await expect(
+      signLinkMessage(connected, { message: 'Link this', payload_hex: '4f74686572' }),
+    ).rejects.toBeInstanceOf(CardanoWalletError);
+    expect(wallet.signData).not.toHaveBeenCalled();
   });
 
   it('describes connect and signature failures', () => {
