@@ -67,10 +67,18 @@ export async function signLinkMessage(
   connected: ConnectedCardanoWallet,
   nonce: { message: string; payload_hex: string | null },
 ): Promise<{ signature: string; key: string }> {
-  const { signature, key } = nonce.payload_hex
-    ? await connected.wallet.signData(nonce.payload_hex, connected.stakeAddress, false)
-    : await connected.wallet.signData(nonce.message, connected.stakeAddress);
+  // The user reads `message`; the wallet signs `payload_hex`. They must be the
+  // same text, or the user would be signing something they were not shown.
+  const expectedHex = utf8ToHex(nonce.message);
+  if (nonce.payload_hex && nonce.payload_hex.toLowerCase() !== expectedHex) {
+    throw new CardanoWalletError('The message to sign did not match. Please try again.');
+  }
+  const { signature, key } = await connected.wallet.signData(expectedHex, connected.stakeAddress, false);
   return { signature, key };
+}
+
+function utf8ToHex(text: string): string {
+  return Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 /** Short, user-facing copy for a failed connect or signature. */

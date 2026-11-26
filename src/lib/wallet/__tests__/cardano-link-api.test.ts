@@ -116,4 +116,13 @@ describe('describeCardanoLinkError', () => {
     expect(describeCardanoLinkError(new CardanoLinkApiError(451, '', 'region_restricted'))).toMatch(/not available in your region/);
     expect(describeCardanoLinkError(new CardanoLinkApiError(451, '', 'attestation_required'))).toMatch(/Confirm you are not/);
   });
+
+  it('treats a link response for a different address as a failure', async () => {
+    mockAuthRequest.mockResolvedValueOnce(
+      json({ success: true, data: { wallet: { wallet_address: 'stake1other', chain_namespace: 'cip34' } } }),
+    );
+    await expect(
+      linkCardanoStakeAddress({ stakeAddress: 'stake1mine', signature: 'aa', key: 'bb' }),
+    ).rejects.toThrow(/does not match/);
+  });
 });

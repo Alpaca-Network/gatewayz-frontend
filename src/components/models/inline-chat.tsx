@@ -47,18 +47,11 @@ export function InlineChat({ modelId, modelName, gateway }: InlineChatProps) {
     if (!input.trim() || loading) return;
 
     // Get API key and user data
-    let apiKey = getApiKey();
+    const apiKey = getApiKey();
     const userData = getUserData();
-
-    // Development fallback: use env variable if API key not found (CORS issue on localhost)
-    if (!apiKey && process.env.NODE_ENV === 'development') {
-      apiKey = process.env.NEXT_PUBLIC_DEV_API_KEY || null;
-      console.log('[InlineChat] Using development API key fallback');
-    }
 
     if (!apiKey) {
       console.warn('[InlineChat] No API key found - triggering auth refresh');
-      console.log('[InlineChat] localStorage gatewayz_api_key:', localStorage.getItem('gatewayz_api_key'));
       console.log('[InlineChat] localStorage gatewayz_user_data:', localStorage.getItem('gatewayz_user_data'));
 
       // Trigger auth refresh to attempt re-authentication
