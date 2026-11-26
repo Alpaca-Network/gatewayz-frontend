@@ -9,13 +9,13 @@ Claude Code talks to Gatewayz directly through the Anthropic Messages API (`http
 **macOS**
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-macos.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup.sh)
 ```
 
 **Linux**
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-linux.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup.sh)
 ```
 
 **Windows (PowerShell)**

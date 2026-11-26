@@ -60,8 +60,8 @@ export default function StartOpencodePage() {
 
   const installCommands = {
     windows: 'irm https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-windows.ps1 | iex',
-    macos: 'bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-macos.sh)',
-    linux: 'bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-linux.sh)'
+    macos: 'bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup.sh)',
+    linux: 'bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup.sh)'
   };
 
   const handleCopyInstaller = async () => {

@@ -22,9 +22,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            script: opencode/setup-linux.sh
+            script: opencode/setup.sh
           - os: macos-latest
-            script: opencode/setup-macos.sh
+            script: opencode/setup.sh
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

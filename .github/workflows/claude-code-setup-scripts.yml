@@ -23,9 +23,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            script: claude-code/setup-linux.sh
+            script: claude-code/setup.sh
           - os: macos-latest
-            script: claude-code/setup-macos.sh
+            script: claude-code/setup.sh
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

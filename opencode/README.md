@@ -7,13 +7,13 @@ Use [OpenCode](https://opencode.ai) in your terminal with any model in the Gatew
 **macOS**
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-macos.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup.sh)
 ```
 
 **Linux**
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-linux.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup.sh)
 ```
 
 **Windows (PowerShell)**
