@@ -46,15 +46,16 @@ The router is configured with the following GatewayZ models:
 
 | Model | Purpose | Cost |
 |-------|---------|------|
-| `anthropic/claude-3.7-sonnet` | Default - General tasks | Medium |
-| `deepseek/deepseek-chat` | Background tasks | Low |
-| `anthropic/claude-3.5-sonnet` | Complex reasoning | Medium |
-| `google/gemini-1.5-pro` | Long context (100k+ tokens) | Low |
-| `google/gemini-2.0-flash-exp` | Web search | Very Low |
-| `openai/gpt-4` | Alternative reasoning | High |
-| `openai/gpt-4-turbo` | Fast GPT-4 | Medium |
-| `anthropic/claude-3-opus` | Most capable | High |
-| `anthropic/claude-3-haiku` | Fastest | Very Low |
+| `anthropic/claude-sonnet-5-5` | Default - general tasks and complex reasoning | Medium |
+| `openai/gpt-5.4-mini` | Background tasks and web search | Very Low |
+| `grok-4` | Long context (100k+ tokens) | Medium |
+| `openai/gpt-5.5` | Alternative reasoning | Medium |
+| `anthropic/claude-haiku-4-5-20251001` | Fastest Claude | Low |
+| `moonshot/kimi-k2.6` | Lower-cost coding | Low |
+| `deepseek-ai/DeepSeek-V4.1-Flash` | Lower-cost coding | Very Low |
+| `deepseek-ai/DeepSeek-V4-Pro` | Lower-cost reasoning | Low |
+| `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` | Coding | Low |
+| `zai-org/GLM-5.3` | Coding | Low |
 
 ## 🎯 Routing Strategy
 
@@ -62,11 +63,11 @@ The router automatically selects the best model for each task:
 
 ```json
 {
-  "default": "anthropic/claude-3.7-sonnet",
-  "background": "deepseek/deepseek-chat",
-  "think": "anthropic/claude-3.5-sonnet",
-  "longContext": "google/gemini-1.5-pro",
-  "webSearch": "google/gemini-2.0-flash-exp"
+  "default": "anthropic/claude-sonnet-5-5",
+  "background": "openai/gpt-5.4-mini",
+  "think": "anthropic/claude-sonnet-5-5",
+  "longContext": "grok-4",
+  "webSearch": "openai/gpt-5.4-mini"
 }
 ```
 
@@ -87,7 +88,7 @@ ccr code
 While in Claude Code, use the `/model` command:
 ```
 /model gatewayz,openai/gpt-4
-/model gatewayz,deepseek/deepseek-chat
+/model gatewayz,deepseek-ai/DeepSeek-V4.1-Flash
 ```
 
 ### Open Web UI
@@ -109,7 +110,7 @@ Edit the `models` array in `config.json`:
   "Providers": [{
     "name": "gatewayz",
     "models": [
-      "anthropic/claude-3.7-sonnet",
+      "anthropic/claude-sonnet-5-5",
       "your-new-model"
     ]
   }]

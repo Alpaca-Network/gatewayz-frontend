@@ -308,8 +308,8 @@ export default function ClaudeCodePage() {
                 <CopyButton text="/model gatewayz,openai/gpt-5" id="model-gpt5" />
               </div>
               <div className="flex items-center justify-between">
-                <code className="text-green-300 dark:text-green-400">/model gatewayz,x-ai/grok-code-fast-1</code>
-                <CopyButton text="/model gatewayz,x-ai/grok-code-fast-1" id="model-grok" />
+                <code className="text-green-300 dark:text-green-400">/model gatewayz,openai/gpt-5.5</code>
+                <CopyButton text="/model gatewayz,openai/gpt-5.5" id="model-grok" />
               </div>
             </div>
           </div>
