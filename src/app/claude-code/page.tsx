@@ -117,10 +117,10 @@ export default function ClaudeCodePage() {
       <div className="text-center mb-12">
         <div className="flex items-center justify-center gap-3 mb-4">
           <Terminal className="h-10 w-10 text-primary" />
-          <h1 className="text-4xl font-bold">Claude Code + GatewayZ</h1>
+          <h1 className="text-4xl font-bold">One key. Every model. In Claude Code.</h1>
         </div>
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-          Use Claude Code with GatewayZ on one key — native Anthropic Messages, plus models from OpenAI, xAI, Moonshot and Meta
+          Run Claude Code on your GatewayZ key with Claude, GPT, Grok, Kimi, DeepSeek, Qwen and more, and switch models mid-session with /model. One command to set up; your normal claude command stays as it is.
         </p>
       </div>
 
@@ -144,9 +144,9 @@ export default function ClaudeCodePage() {
             <div className="flex items-start gap-3">
               <Code2 className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold mb-1">One Catalog</h3>
+                <h3 className="font-semibold mb-1">Switch models mid-session</h3>
                 <p className="text-sm text-muted-foreground">
-                  Claude, GPT, Grok, Kimi and Muse Spark
+                  Pick from the GatewayZ models in /model, or type any catalog id
                 </p>
               </div>
             </div>
@@ -157,9 +157,9 @@ export default function ClaudeCodePage() {
             <div className="flex items-start gap-3">
               <Terminal className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold mb-1">Per-Model Pricing</h3>
+                <h3 className="font-semibold mb-1">See what you spend</h3>
                 <p className="text-sm text-muted-foreground">
-                  Cost-plus prices, listed per model in the catalog
+                  Model and credits left under the prompt; per-model prices in the catalog
                 </p>
               </div>
             </div>
