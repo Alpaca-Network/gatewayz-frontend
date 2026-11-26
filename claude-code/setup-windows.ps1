@@ -1,6 +1,14 @@
 ﻿#!/usr/bin/env pwsh
-# Claude Code Router + GatewayZ Setup for Windows
-# Usage: powershell -ExecutionPolicy Bypass -File setup-windows.ps1
+# Claude Code on Gatewayz - setup for Windows
+# Usage: powershell -ExecutionPolicy Bypass -File setup-windows.ps1 [-ApiKey <key>]
+#
+# Installs Claude Code (if missing) and a `gatewayz` command that starts it on
+# your Gatewayz key. Your normal `claude` command is not changed. The key and
+# settings live in %USERPROFILE%\.gatewayz\claude-settings.json, readable only
+# by your account.
+#
+# Claude Code talks to Gatewayz directly (https://api.gatewayz.ai, Anthropic
+# Messages API). No router or proxy is installed.
 
 param(
     [string]$ApiKey = ""
@@ -9,319 +17,142 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 
-function Write-Header {
-    Write-Host ""
-    Write-Host "╔════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║  Claude Code Router + GatewayZ Setup       ║" -ForegroundColor Cyan
-    Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Cyan
-    Write-Host ""
-}
+$GatewayzUrl = "https://api.gatewayz.ai"
+$KeysPage = "https://beta.gatewayz.ai/settings/keys"
+$DefaultModel = "anthropic/claude-sonnet-5-5"
+$SmallModel = "anthropic/claude-haiku-4-5-20251001"
+$ConfigDir = Join-Path $env:USERPROFILE ".gatewayz"
+$SettingsFile = Join-Path $ConfigDir "claude-settings.json"
+$BinDir = Join-Path $ConfigDir "bin"
+$Launcher = Join-Path $BinDir "gatewayz.cmd"
 
-function Write-Step {
-    param([string]$Message)
-    Write-Host "→ $Message" -ForegroundColor Yellow
-}
+function Write-Step([string]$Message) { Write-Host "→ $Message" -ForegroundColor Yellow }
+function Write-Ok([string]$Message) { Write-Host "✓ $Message" -ForegroundColor Green }
+function Write-Fail([string]$Message) { Write-Host "✗ $Message" -ForegroundColor Red }
 
-function Write-Success {
-    param([string]$Message)
-    Write-Host "✓ $Message" -ForegroundColor Green
-}
+Write-Host ""
+Write-Host "╔════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║  Claude Code on Gatewayz - Setup           ║" -ForegroundColor Cyan
+Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host ""
 
-function Write-Error {
-    param([string]$Message)
-    Write-Host "✗ $Message" -ForegroundColor Red
-}
-
-Write-Header
-
-# Step 1: Check Node.js
+# Step 1: Node.js
 Write-Step "Checking Node.js installation..."
-try {
-    $nodeVersion = node --version 2>$null
-    $npmVersion = npm --version 2>$null
-    Write-Success "Node.js $nodeVersion and npm $npmVersion installed"
-} catch {
-    Write-Error "Node.js is not installed"
-    Write-Host "Please install Node.js from https://nodejs.org/" -ForegroundColor Yellow
-    exit 1
-}
-
-# Step 2: Install Claude Code
-Write-Host ""
-Write-Step "Installing Claude Code..."
-try {
-    # Check if claude command already exists
-    $claudePath = Get-Command claude -ErrorAction SilentlyContinue
-    if ($claudePath) {
-        Write-Success "Claude Code already installed at: $($claudePath.Source)"
-    } else {
-        Write-Host "Running: npm install -g @anthropic-ai/claude-code" -ForegroundColor Gray
-        $claudeInstall = npm install -g @anthropic-ai/claude-code 2>&1
-        $claudeExitCode = $LASTEXITCODE
-
-        if ($claudeExitCode -ne 0) {
-            Write-Host "NPM output:" -ForegroundColor Yellow
-            Write-Host $claudeInstall -ForegroundColor Gray
-            throw "npm install failed with exit code $claudeExitCode"
-        }
-
-        $claudePath = Get-Command claude -ErrorAction SilentlyContinue
-        if ($claudePath) {
-            Write-Success "Claude Code installed at: $($claudePath.Source)"
-        } else {
-            Write-Host "⚠ Claude Code package installed but 'claude' command not found" -ForegroundColor Yellow
-            Write-Host "Installation output:" -ForegroundColor Gray
-            Write-Host $claudeInstall -ForegroundColor Gray
-            Write-Host "You may need to restart your terminal" -ForegroundColor Yellow
-        }
-    }
-} catch {
-    Write-Host ""
-    Write-Error "Failed to install Claude Code"
-    Write-Host "Error: $_" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Manual installation command:" -ForegroundColor Yellow
-    Write-Host "  npm install -g @anthropic-ai/claude-code" -ForegroundColor Cyan
-    Write-Host ""
-    exit 1
-}
-
-# Step 3: Install Claude Code Router
-Write-Host ""
-Write-Step "Installing Claude Code Router..."
-try {
-    Write-Host "Running: npm install -g @alpaca-network/claude-code-router" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "DEBUG INFO:" -ForegroundColor Cyan
-    Write-Host "  NPM version: $(npm --version)" -ForegroundColor Gray
-    Write-Host "  NPM global prefix: $(npm config get prefix)" -ForegroundColor Gray
-    Write-Host "  Current PATH contains: $env:PATH" -ForegroundColor Gray
-    Write-Host ""
-
-    Write-Host "Starting npm install (this may take 30-60 seconds, please be patient)..." -ForegroundColor Cyan
-    Write-Host ""
-
-    # Resolve npm.cmd explicitly and capture the real exit code
-    $npmCmd = (Get-Command npm.cmd -ErrorAction Stop).Source
-    Write-Host ("Running: {0} install -g @alpaca-network/claude-code-router" -f $npmCmd)
-    & $npmCmd install -g '@alpaca-network/claude-code-router'
-    $exitCode = $LASTEXITCODE
-
-    Write-Host ("Install command completed with exit code: {0}" -f $exitCode)
-    if ($exitCode -ne 0) {
-        throw "npm install failed with exit code $exitCode"
-    }
-
-    Write-Host "✓ Installed Claude Code Router" -ForegroundColor Green
-    Write-Host ""
-
-    # Verify installation
-    Write-Host "Verifying installation..." -ForegroundColor Cyan
-    $ccrPath = Get-Command ccr -ErrorAction SilentlyContinue
-    if ($ccrPath) {
-        Write-Success "Claude Code Router installed at: $($ccrPath.Source)"
-    } else {
-        Write-Host "Package installed but 'ccr' command not found. Attempting quick diagnostics..." -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "DEBUG: Checking npm global installation..." -ForegroundColor Cyan
-        $npmRoot = npm root -g 2>&1
-        Write-Host "  NPM global root: $npmRoot" -ForegroundColor Gray
-
-        $npmList = npm list -g @alpaca-network/claude-code-router 2>&1
-        Write-Host "  NPM list output:" -ForegroundColor Gray
-        Write-Host "  $npmList" -ForegroundColor Gray
-        Write-Host ""
-
-        # Refresh PATH and re-check
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-        $ccrPath = Get-Command ccr -ErrorAction SilentlyContinue
-        if ($ccrPath) {
-            Write-Success "Claude Code Router available after PATH refresh at: $($ccrPath.Source)"
-        } else {
-            Write-Host ""
-            Write-Host "═══════════════════════════════════════════" -ForegroundColor Red
-            Write-Host "  INSTALLATION ISSUE DETECTED" -ForegroundColor Red
-            Write-Host "═══════════════════════════════════════════" -ForegroundColor Red
-            Write-Host ""
-            $npmPrefix = npm config get prefix
-            $binPath   = "$npmPrefix"
-            Write-Host "Possible solutions:" -ForegroundColor White
-            Write-Host "  1. Close and reopen PowerShell (PATH may not be updated)" -ForegroundColor White
-            Write-Host "  2. Ensure this directory is on PATH: $binPath" -ForegroundColor White
-            Write-Host "  3. Or: npm config set prefix $env:APPDATA\npm" -ForegroundColor White
-            Write-Host "  4. Manual install: npm install -g @alpaca-network/claude-code-router" -ForegroundColor White
-            Write-Host ""
-            throw "ccr command not available after installation"
-        }
-    }
-}
-catch {
-    Write-Host ""
-    Write-Error "Failed to install Claude Code Router"
-    Write-Host "Error: $_" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "Manual installation command:" -ForegroundColor Yellow
-    Write-Host "  npm install -g @alpaca-network/claude-code-router" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "For more help, please report this issue with the DEBUG INFO above at:" -ForegroundColor Yellow
-    Write-Host "  https://github.com/Alpaca-Network/gatewayz-frontend/issues" -ForegroundColor Cyan
-    Write-Host ""
-    exit 1
-}
-
-# Step 4: Get API Key
-Write-Host ""
-Write-Step "Setting up GatewayZ API key..."
-
-if (-not $ApiKey) {
-    $ApiKey = $env:GATEWAYZ_API_KEY
-}
-
-if (-not $ApiKey) {
-    Write-Host ""
-    Write-Host "═══════════════════════════════════════════" -ForegroundColor Yellow
-    Write-Host "  API KEY REQUIRED" -ForegroundColor Yellow
-    Write-Host "═══════════════════════════════════════════" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "To get your API key, you need to:" -ForegroundColor White
-    Write-Host "  1. Visit: " -NoNewline -ForegroundColor White
-    Write-Host "https://beta.gatewayz.ai/settings/keys" -ForegroundColor Cyan
-    Write-Host "  2. Sign in to GatewayZ" -ForegroundColor White
-    Write-Host "  3. Click 'Generate API Key' if you don't have one" -ForegroundColor White
-    Write-Host "  4. Copy your API key" -ForegroundColor White
-    Write-Host ""
-
-    # Check if running interactively
-    if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
-        Write-Host "Press Enter to open the API keys page in your browser, or Ctrl+C to cancel..." -ForegroundColor Yellow
-        Read-Host
-
-        # Open browser after user confirms
-        Write-Host "Opening browser..." -ForegroundColor Cyan
-        Start-Process "https://beta.gatewayz.ai/settings/keys"
-
-        Write-Host ""
-        Write-Host "After copying your API key from the browser, paste it below:" -ForegroundColor White
-        $ApiKey = Read-Host "Paste your GatewayZ API key here"
-    }
-
-    if (-not $ApiKey) {
-        Write-Host ""
-        Write-Host "═══════════════════════════════════════════" -ForegroundColor Yellow
-        Write-Host "  MANUAL SETUP REQUIRED" -ForegroundColor Yellow
-        Write-Host "═══════════════════════════════════════════" -ForegroundColor Yellow
-        Write-Host ""
-        Write-Host "No API key provided. To complete setup manually:" -ForegroundColor White
-        Write-Host ""
-        Write-Host "  1. Visit: " -NoNewline -ForegroundColor White
-        Write-Host "https://beta.gatewayz.ai/settings/keys" -ForegroundColor Cyan
-        Write-Host "  2. Sign in and generate an API key" -ForegroundColor White
-        Write-Host "  3. Copy your key and run this command in PowerShell:" -ForegroundColor White
-        Write-Host ""
-        Write-Host "     [System.Environment]::SetEnvironmentVariable('GATEWAYZ_API_KEY', 'your-key-here', 'User')" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "  4. Close and reopen PowerShell" -ForegroundColor White
-        Write-Host "  5. Run: " -NoNewline -ForegroundColor White
-        Write-Host "ccr code" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "Setup will continue with placeholder configuration..." -ForegroundColor Yellow
-        Write-Host ""
-        $ApiKey = "YOUR_GATEWAYZ_API_KEY_HERE"
-    }
-}
-
-# Set environment variable (only if not placeholder)
-if ($ApiKey -ne "YOUR_GATEWAYZ_API_KEY_HERE") {
-    [System.Environment]::SetEnvironmentVariable('GATEWAYZ_API_KEY', $ApiKey, 'User')
-    $env:GATEWAYZ_API_KEY = $ApiKey
-    Write-Success "API key configured"
+if ((Get-Command node -ErrorAction SilentlyContinue) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+    Write-Ok "Node.js $(node --version) and npm $(npm --version) installed"
 } else {
-    Write-Host "⚠ Skipping API key environment variable setup" -ForegroundColor Yellow
+    Write-Fail "Node.js is not installed"
+    Write-Host "Install it from https://nodejs.org/" -ForegroundColor Yellow
+    exit 1
 }
 
-# Step 5: Create configuration
+# Step 2: Claude Code
 Write-Host ""
-Write-Step "Creating router configuration..."
-
-$configDir = "$env:USERPROFILE\.claude-code-router"
-$configFile = "$configDir\config.json"
-
-if (-not (Test-Path $configDir)) {
-    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+Write-Step "Checking Claude Code..."
+if (Get-Command claude -ErrorAction SilentlyContinue) {
+    Write-Ok "Claude Code already installed"
+} else {
+    Write-Host "Running: npm install -g @anthropic-ai/claude-code" -ForegroundColor Gray
+    npm install -g @anthropic-ai/claude-code | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "Failed to install Claude Code"
+        Write-Host "Try manually: npm install -g @anthropic-ai/claude-code" -ForegroundColor Yellow
+        exit 1
+    }
+    Write-Ok "Claude Code installed"
 }
 
-$config = @{
-    LOG = $true
-    LOG_LEVEL = "info"
-    Providers = @(
-        @{
-            name = "gatewayz"
-            api_base_url = "https://api.gatewayz.ai/v1/chat/completions"
-            api_key = $ApiKey
-            models = @(
-                "anthropic/claude-sonnet-5-5",
-                "anthropic/claude-haiku-4-5-20251001",
-                "openai/gpt-5.5",
-                "openai/gpt-5.4-mini",
-                "grok-4",
-                "moonshot/kimi-k2.6",
-                "deepseek-ai/DeepSeek-V4.1-Flash",
-                "deepseek-ai/DeepSeek-V4-Pro",
-                "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo",
-                "zai-org/GLM-5.3"
-            )
-        }
-    )
-    Router = @{
-        default = "gatewayz,anthropic/claude-sonnet-5-5"
-        background = "gatewayz,openai/gpt-5.4-mini"
-        think = "gatewayz,anthropic/claude-sonnet-5-5"
-        longContext = "gatewayz,grok-4"
-        longContextThreshold = 100000
-        webSearch = "gatewayz,openai/gpt-5.4-mini"
+# Step 3: API key
+Write-Host ""
+Write-Step "Setting up your Gatewayz API key..."
+if (-not $ApiKey) { $ApiKey = $env:GATEWAYZ_API_KEY }
+if (-not $ApiKey) {
+    Write-Host ""
+    Write-Host "You need a Gatewayz API key:" -ForegroundColor White
+    Write-Host "  1. Visit: $KeysPage" -ForegroundColor White
+    Write-Host "  2. Sign in and click 'Generate API Key' if you don't have one" -ForegroundColor White
+    Write-Host "  3. Copy the key" -ForegroundColor White
+    Write-Host ""
+    Read-Host "Press Enter to open the API keys page in your browser, or Ctrl+C to cancel" | Out-Null
+    Start-Process $KeysPage
+    $secure = Read-Host "Paste your Gatewayz API key (input hidden)" -AsSecureString
+    $ApiKey = [System.Net.NetworkCredential]::new("", $secure).Password
+    if (-not $ApiKey) {
+        Write-Fail "No API key provided. Run this script again when you have one."
+        exit 1
     }
 }
 
-$config | ConvertTo-Json -Depth 10 | Set-Content -Path $configFile -Encoding UTF8
-Write-Success "Configuration created at: $configFile"
-
-# Step 6: Test connection
-Write-Host ""
-Write-Step "Testing GatewayZ connection..."
+# Step 4: Check the key against Gatewayz
+Write-Step "Checking the key..."
 try {
-    $headers = @{
-        "Authorization" = "Bearer $ApiKey"
-    }
-    Invoke-RestMethod -Uri "https://api.gatewayz.ai/" -Method Get -Headers $headers -TimeoutSec 5 -ErrorAction SilentlyContinue | Out-Null
-    Write-Success "Connection successful"
+    $body = @{ model = $DefaultModel; messages = @(@{ role = "user"; content = "hi" }) } | ConvertTo-Json -Depth 5
+    Invoke-RestMethod -Method Post -Uri "$GatewayzUrl/v1/messages/count_tokens" `
+        -Headers @{ "x-api-key" = $ApiKey } -ContentType "application/json" -Body $body -TimeoutSec 30 | Out-Null
+    Write-Ok "Key accepted by Gatewayz"
 } catch {
-    Write-Host "⚠ Could not verify connection (this may be normal)" -ForegroundColor Yellow
+    $status = $_.Exception.Response.StatusCode.value__
+    if ($status -eq 401 -or $status -eq 403) {
+        Write-Fail "Gatewayz rejected this key (HTTP $status). Check it at $KeysPage"
+        exit 1
+    }
+    Write-Host "⚠ Could not verify the key (HTTP $status). Continuing; check your connection." -ForegroundColor Yellow
 }
 
-# Summary
+# Step 5: Settings file
+Write-Host ""
+Write-Step "Writing Claude Code settings for Gatewayz..."
+New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
+$settings = @{
+    env = [ordered]@{
+        ANTHROPIC_BASE_URL = $GatewayzUrl
+        ANTHROPIC_AUTH_TOKEN = $ApiKey
+        ANTHROPIC_MODEL = $DefaultModel
+        ANTHROPIC_DEFAULT_HAIKU_MODEL = $SmallModel
+        CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY = "1"
+        ANTHROPIC_CUSTOM_HEADERS = "x-gatewayz-passthrough: true"
+    }
+}
+$settings | ConvertTo-Json -Depth 5 | Set-Content -Path $SettingsFile -Encoding UTF8
+# Readable only by the current user: drop inherited permissions, grant the owner.
+icacls $SettingsFile /inheritance:r /grant:r "$($env:USERNAME):(R,W)" | Out-Null
+Write-Ok "Settings saved to $SettingsFile (readable only by you)"
+
+# Step 6: gatewayz command
+Write-Host ""
+Write-Step "Installing the gatewayz command..."
+New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
+@"
+@echo off
+rem Start Claude Code on Gatewayz. Everything after gatewayz goes to claude,
+rem for example:  gatewayz --model openai/gpt-5.5
+claude --settings "%USERPROFILE%\.gatewayz\claude-settings.json" %*
+"@ | Set-Content -Path $Launcher -Encoding ASCII
+$userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+if (-not ($userPath -split ";" | Where-Object { $_ -eq $BinDir })) {
+    [System.Environment]::SetEnvironmentVariable("Path", "$userPath;$BinDir", "User")
+    Write-Ok "Added $BinDir to your user PATH (open a new terminal to use it)"
+}
+Write-Ok "Installed $Launcher"
+
+if (Get-Command ccr -ErrorAction SilentlyContinue) {
+    Write-Host ""
+    Write-Host "Note: Claude Code Router (ccr) is no longer needed for Gatewayz." -ForegroundColor Gray
+    Write-Host "You can remove it with: npm uninstall -g @alpaca-network/claude-code-router" -ForegroundColor Gray
+}
+
 Write-Host ""
 Write-Host "╔════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║            Setup Complete!                 ║" -ForegroundColor Green
+Write-Host "║  Setup complete                            ║" -ForegroundColor Green
 Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
-Write-Host "Quick Start:" -ForegroundColor Cyan
-Write-Host "  ccr code              " -NoNewline -ForegroundColor White
-Write-Host "- Start Claude Code with router" -ForegroundColor Gray
-Write-Host "  ccr ui                " -NoNewline -ForegroundColor White
-Write-Host "- Open web configuration UI" -ForegroundColor Gray
-Write-Host "  /model <name>         " -NoNewline -ForegroundColor White
-Write-Host "- Switch models (in Claude Code)" -ForegroundColor Gray
+Write-Host "Start a session (in a new terminal):" -ForegroundColor Cyan
+Write-Host "  gatewayz                         - Claude Code on Gatewayz (Claude Sonnet 5.5)" -ForegroundColor White
+Write-Host "  gatewayz --model openai/gpt-5.5  - start on another model" -ForegroundColor White
 Write-Host ""
-Write-Host "Available Models:" -ForegroundColor Cyan
-Write-Host "  • claude-sonnet-5-5 (default and thinking tasks)" -ForegroundColor White
-Write-Host "  • gpt-5.4-mini (background tasks and web search)" -ForegroundColor White
-Write-Host "  • grok-4 (long context)" -ForegroundColor White
-Write-Host "  • Plus: gpt-5.5, kimi-k2.6, deepseek, qwen3-coder, glm-5.3" -ForegroundColor White
+Write-Host "Inside a session:" -ForegroundColor Cyan
+Write-Host "  /model                - pick from the Gatewayz models listed" -ForegroundColor White
+Write-Host "  /model <model id>     - switch to any model by id, e.g. /model moonshot/kimi-k2.6" -ForegroundColor White
 Write-Host ""
-Write-Host "Next Steps:" -ForegroundColor Cyan
-Write-Host "  1. Close and reopen your terminal" -ForegroundColor White
-Write-Host "  2. Run: " -NoNewline -ForegroundColor White
-Write-Host "ccr code" -ForegroundColor Green
+Write-Host "Your normal 'claude' command is unchanged. Model ids: $GatewayzUrl/v1/models" -ForegroundColor Gray
 Write-Host ""
-Write-Host "Press any key to exit..." -ForegroundColor Gray
-$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")

@@ -201,9 +201,9 @@ export default function StartClaudeCodePage() {
               This script will:
             </p>
             <ul className="text-sm text-blue-900 dark:text-blue-100 list-disc ml-5 space-y-1">
-              <li>Install Claude Code Router</li>
+              <li>Install Claude Code if it is missing, plus a <code>gatewayz</code> command</li>
               <li>Configure your GatewayZ API key</li>
-              <li>Set up smart model routing</li>
+              <li>Point that command at Gatewayz (your normal <code>claude</code> is unchanged)</li>
               <li>Test the connection</li>
             </ul>
           </div>
@@ -297,7 +297,7 @@ export default function StartClaudeCodePage() {
             After setup completes, start Claude Code:
           </p>
 
-          {/* ccr code command */}
+          {/* gatewayz command */}
           <div className="rounded-xl overflow-hidden shadow-lg border border-gray-800 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 mb-6">
             {/* Terminal Header */}
             <div className="flex items-center justify-between px-4 py-3 bg-slate-950/50 border-b border-slate-700">
@@ -313,7 +313,7 @@ export default function StartClaudeCodePage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  navigator.clipboard.writeText('ccr code');
+                  navigator.clipboard.writeText('gatewayz');
                   toast({ title: "Copied to clipboard" });
                 }}
                 className="text-slate-300 hover:text-white"
@@ -325,7 +325,7 @@ export default function StartClaudeCodePage() {
             {/* Code Display */}
             <div className="bg-slate-950/80 p-6">
               <pre className="text-sm sm:text-base leading-relaxed font-mono text-green-400">
-                ccr code
+                gatewayz
               </pre>
             </div>
             {/* Bottom gradient */}
@@ -353,13 +353,13 @@ export default function StartClaudeCodePage() {
             <div className="bg-slate-950/80 p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <pre className="text-sm leading-relaxed font-mono text-green-400 flex-1">
-                  /model gatewayz,openai/gpt-5
+                  /model openai/gpt-5.5
                 </pre>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText('/model gatewayz,openai/gpt-5');
+                    navigator.clipboard.writeText('/model openai/gpt-5.5');
                     toast({ title: "Copied to clipboard" });
                   }}
                   className="text-slate-300 hover:text-white ml-4"
@@ -370,13 +370,13 @@ export default function StartClaudeCodePage() {
               </div>
               <div className="flex items-center justify-between">
                 <pre className="text-sm leading-relaxed font-mono text-green-400 flex-1">
-                  /model gatewayz,openai/gpt-5.5
+                  /model moonshot/kimi-k2.6
                 </pre>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText('/model gatewayz,openai/gpt-5.5');
+                    navigator.clipboard.writeText('/model moonshot/kimi-k2.6');
                     toast({ title: "Copied to clipboard" });
                   }}
                   className="text-slate-300 hover:text-white ml-4"
