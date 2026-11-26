@@ -79,7 +79,7 @@ If you prefer not to run the script, create `~/.gatewayz/claude-settings.json`:
     "ANTHROPIC_BASE_URL": "https://api.gatewayz.ai",
     "ANTHROPIC_AUTH_TOKEN": "<your Gatewayz API key>",
     "ANTHROPIC_MODEL": "anthropic/claude-sonnet-5-5",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "anthropic/claude-haiku-4-5-20251001",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-ai/DeepSeek-V4.1-Flash",
     "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
     "ANTHROPIC_CUSTOM_HEADERS": "x-gatewayz-passthrough: true"
   }

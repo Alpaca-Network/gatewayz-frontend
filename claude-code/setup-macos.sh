@@ -23,7 +23,8 @@ NC='\033[0m'
 GATEWAYZ_URL="https://api.gatewayz.ai"
 KEYS_PAGE="https://beta.gatewayz.ai/settings/keys"
 DEFAULT_MODEL="anthropic/claude-sonnet-5-5"
-SMALL_MODEL="anthropic/claude-haiku-4-5-20251001"
+# Background and Explore sub-agent calls: about a fifth of Claude Haiku's price.
+SMALL_MODEL="deepseek-ai/DeepSeek-V4.1-Flash"
 CONFIG_DIR="$HOME/.gatewayz"
 SETTINGS_FILE="$CONFIG_DIR/claude-settings.json"
 STATUSLINE_FILE="$CONFIG_DIR/statusline.js"
