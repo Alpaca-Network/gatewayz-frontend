@@ -52,3 +52,40 @@ export function dailyLimitPendingLine(nextUsd: number, fromDate: string | null):
   const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
   return `Changes to ${formatDiscountUsd(nextUsd)} on ${day} (UTC)`;
 }
+
+// In-app notices. One at a time, shown at the top of the card, derived from
+// the balance the backend returns (no separate notification store).
+export const NOTICE_OUT_OF_CREDITS =
+  'You are out of discount credits. Requests are billed to your paid balance at the list price.';
+export const NOTICE_DAILY_LIMIT_REACHED =
+  "You reached today's discount limit. Requests are billed to your paid balance until 00:00 UTC.";
+export const NOTICE_DAILY_LIMIT_ZERO =
+  'Your daily limit is $0.00, so discount credits are not used. Raise it below to use them again.';
+
+export type DiscountNotice = 'out_of_credits' | 'daily_limit_reached' | 'daily_limit_zero';
+
+export const NOTICE_TEXT: Record<DiscountNotice, string> = {
+  out_of_credits: NOTICE_OUT_OF_CREDITS,
+  daily_limit_reached: NOTICE_DAILY_LIMIT_REACHED,
+  daily_limit_zero: NOTICE_DAILY_LIMIT_ZERO,
+};
+
+/**
+ * Which notice, if any, the account should see now:
+ * - out_of_credits: credits were added at some point and the balance is now empty;
+ * - daily_limit_zero: the account set its limit to 0;
+ * - daily_limit_reached: there is balance left but nothing left of today's limit.
+ * An account that never had credits sees nothing.
+ */
+export function discountNotice(balance: {
+  balance_usd: number;
+  lifetime_granted_usd: number;
+  daily_cap: { daily_cap_usd: number; left_today_usd: number } | null;
+}): DiscountNotice | null {
+  if (balance.balance_usd <= 0) return balance.lifetime_granted_usd > 0 ? 'out_of_credits' : null;
+  const cap = balance.daily_cap;
+  if (!cap) return null;
+  if (cap.daily_cap_usd <= 0) return 'daily_limit_zero';
+  if (cap.left_today_usd <= 0) return 'daily_limit_reached';
+  return null;
+}

@@ -17,6 +17,8 @@ import {
   DISCOUNT_ANCHOR,
   DISCOUNT_DESCRIPTION,
   DISCOUNT_TITLE,
+  NOTICE_TEXT,
+  discountNotice,
   historyKindLabel,
   payLine,
 } from './discount-copy';
@@ -113,9 +115,15 @@ export function DiscountCreditsCard() {
   const data = query.data;
   const balance = data?.balance;
   if (!data || !balance || balance.enabled !== true) return null;
+  const notice = discountNotice(balance);
 
   return (
     <Shell>
+      {notice && (
+        <p role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          {NOTICE_TEXT[notice]}
+        </p>
+      )}
       <div className="flex flex-col gap-1 rounded-lg border bg-muted/30 p-4">
         <span className="text-xs text-muted-foreground">Balance</span>
         <span className="text-2xl font-semibold tabular-nums">{formatDiscountUsd(balance.balance_usd)}</span>

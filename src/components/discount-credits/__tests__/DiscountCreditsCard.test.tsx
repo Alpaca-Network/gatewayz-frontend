@@ -153,4 +153,47 @@ describe('DiscountCreditsCard', () => {
     const { container } = render(<DiscountCreditsCard />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  describe('notices', () => {
+    const cap = (cap_usd: number, left: number) => ({
+      daily_cap_usd: cap_usd,
+      used_today_usd: cap_usd - left,
+      left_today_usd: left,
+      resets_at: '2026-11-27T00:00:00Z',
+      next_daily_cap_usd: null,
+      next_daily_cap_from: null,
+    });
+
+    it('says nothing while there is balance and limit left', () => {
+      mockCredits.mockReturnValue(loaded(withBalance({ daily_cap: cap(50, 10) })));
+      render(<DiscountCreditsCard />);
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+
+    it('says the account is out of discount credits once a balance has run out', () => {
+      mockCredits.mockReturnValue(loaded(withBalance({ balance_usd: 0, daily_cap: cap(50, 50) })));
+      render(<DiscountCreditsCard />);
+      expect(screen.getByRole('status')).toHaveTextContent('You are out of discount credits.');
+    });
+
+    it("says today's limit is reached when there is balance but no limit left", () => {
+      mockCredits.mockReturnValue(loaded(withBalance({ daily_cap: cap(5, 0) })));
+      render(<DiscountCreditsCard />);
+      expect(screen.getByRole('status')).toHaveTextContent("You reached today's discount limit.");
+    });
+
+    it('says discount credits are not used while the limit is 0', () => {
+      mockCredits.mockReturnValue(loaded(withBalance({ daily_cap: cap(0, 0) })));
+      render(<DiscountCreditsCard />);
+      expect(screen.getByRole('status')).toHaveTextContent('Your daily limit is $0.00');
+    });
+
+    it('says nothing to an account that never had discount credits', () => {
+      mockCredits.mockReturnValue(
+        loaded(withBalance({ balance_usd: 0, lifetime_granted_usd: 0, lifetime_used_usd: 0 })),
+      );
+      render(<DiscountCreditsCard />);
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
 });
