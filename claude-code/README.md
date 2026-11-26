@@ -29,7 +29,8 @@ The script:
 1. checks for Node.js and installs Claude Code if it is missing;
 2. asks for your Gatewayz API key (from [beta.gatewayz.ai/settings/keys](https://beta.gatewayz.ai/settings/keys)) and checks it;
 3. saves the settings to `~/.gatewayz/claude-settings.json`, readable only by you;
-4. installs a `gatewayz` command.
+4. installs a `gatewayz` command;
+5. adds a status line under the prompt: `Gatewayz · <model> · $<credits left>`.
 
 Your normal `claude` command is not changed, and nothing is added to your shell profile (Windows: the command's folder is added to your user PATH).
 
