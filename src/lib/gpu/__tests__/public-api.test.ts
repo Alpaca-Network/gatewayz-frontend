@@ -52,8 +52,7 @@ describe('gpu/public-api', () => {
         emission: {
           mode: 'emission',
           daily_emission_wayz: '100000',
-          providers_bps: 4100,
-          stakers_bps: 4100,
+          providers_bps: '8200',
           treasury_bps: 1800,
           last_epoch: '2026-09-12',
         },
@@ -64,10 +63,74 @@ describe('gpu/public-api', () => {
 
       expect(result.emission).toEqual({
         daily_emission_wayz: 100000,
-        providers_bps: 4100,
-        stakers_bps: 4100,
+        providers_bps: 8200,
         treasury_bps: 1800,
         last_epoch: '2026-09-12',
+      });
+    });
+
+    describe('emission split: old and new response shapes', () => {
+      const base = {
+        active_nodes: 3,
+        approved_providers: 2,
+        regions: [],
+        models: [],
+        last_hour: { requests: 0, tokens: 0, avg_latency_ms: 0, error_rate: 0 },
+        updated_at: '2026-09-13T00:00:00+00:00',
+      };
+
+      it('old shape (carries stakers_bps): drops that field, keeps the others as sent', async () => {
+        mockFetch.mockResolvedValueOnce(
+          createSuccessResponse({
+            ...base,
+            emission: {
+              mode: 'emission',
+              daily_emission_wayz: '100000',
+              providers_bps: 4100,
+              stakers_bps: 4100,
+              treasury_bps: 1800,
+              last_epoch: '2026-09-12',
+            },
+          })
+        );
+
+        const result = await getGpuPublicSummary();
+
+        // toEqual on the exact object: no stakers_bps, and providers/treasury are not
+        // rescaled to fill the gap.
+        expect(result.emission).toEqual({
+          daily_emission_wayz: 100000,
+          providers_bps: 4100,
+          treasury_bps: 1800,
+          last_epoch: '2026-09-12',
+        });
+        expect(result.emission).not.toHaveProperty('stakers_bps');
+        expect(result.active_nodes).toBe(3);
+      });
+
+      it('new shape (no stakers_bps): parses without error and the block is still present', async () => {
+        mockFetch.mockResolvedValueOnce(
+          createSuccessResponse({
+            ...base,
+            emission: {
+              mode: 'emission',
+              daily_emission_wayz: '100000',
+              providers_bps: 8200,
+              treasury_bps: 1800,
+              last_epoch: null,
+            },
+          })
+        );
+
+        const result = await getGpuPublicSummary();
+
+        expect(result.emission).toEqual({
+          daily_emission_wayz: 100000,
+          providers_bps: 8200,
+          treasury_bps: 1800,
+          last_epoch: null,
+        });
+        expect(result.emission).not.toHaveProperty('stakers_bps');
       });
     });
 
