@@ -228,9 +228,9 @@ export default function ClaudeCodePage() {
               This script will:
             </p>
             <ul className="text-sm text-blue-900 dark:text-blue-100 list-disc ml-5 space-y-1">
-              <li>Install Claude Code Router</li>
+              <li>Install Claude Code if it is missing, plus a <code>gatewayz</code> command</li>
               <li>Configure your GatewayZ API key</li>
-              <li>Configure Claude Code Router&apos;s model settings</li>
+              <li>Point that command at Gatewayz (your normal <code>claude</code> is unchanged)</li>
               <li>Test the connection</li>
             </ul>
           </div>
@@ -270,7 +270,7 @@ export default function ClaudeCodePage() {
           </CardHeader>
           <CardContent>
             <p className="text-amber-900 dark:text-amber-100 mb-4">
-              You'll need a GatewayZ API key to use Claude Code Router. Get one for free:
+              You'll need a GatewayZ API key to use Claude Code with GatewayZ. Get one for free:
             </p>
             <Link href="/settings/keys">
               <Button variant="default">
@@ -296,20 +296,20 @@ export default function ClaudeCodePage() {
             After setup completes, start Claude Code:
           </p>
           <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 dark:border-slate-800 rounded-lg p-4 font-mono text-sm flex items-center justify-between shadow-lg">
-            <code className="text-green-300 dark:text-green-400">ccr code</code>
-            <CopyButton text="ccr code" id="start-command" />
+            <code className="text-green-300 dark:text-green-400">gatewayz</code>
+            <CopyButton text="gatewayz" id="start-command" />
           </div>
 
           <div className="space-y-2">
             <p className="text-sm font-medium">Switch models on-the-fly:</p>
             <div className="bg-slate-950 dark:bg-slate-900 border-2 border-slate-800 dark:border-slate-800 rounded-lg p-4 font-mono text-xs space-y-2 shadow-lg">
               <div className="flex items-center justify-between">
-                <code className="text-green-300 dark:text-green-400">/model gatewayz,openai/gpt-5</code>
-                <CopyButton text="/model gatewayz,openai/gpt-5" id="model-gpt5" />
+                <code className="text-green-300 dark:text-green-400">/model openai/gpt-5.5</code>
+                <CopyButton text="/model openai/gpt-5.5" id="model-gpt" />
               </div>
               <div className="flex items-center justify-between">
-                <code className="text-green-300 dark:text-green-400">/model gatewayz,openai/gpt-5.5</code>
-                <CopyButton text="/model gatewayz,openai/gpt-5.5" id="model-grok" />
+                <code className="text-green-300 dark:text-green-400">/model moonshot/kimi-k2.6</code>
+                <CopyButton text="/model moonshot/kimi-k2.6" id="model-kimi" />
               </div>
             </div>
           </div>
@@ -355,12 +355,6 @@ export default function ClaudeCodePage() {
             <Button size="lg" variant="outline" className="w-full sm:w-auto gap-2">
               <Download className="h-4 w-4" />
               Setup Guide
-            </Button>
-          </Link>
-          <Link href="https://github.com/Alpaca-Network/claude-code-router" target="_blank">
-            <Button size="lg" variant="outline" className="w-full sm:w-auto gap-2">
-              <Code2 className="h-4 w-4" />
-              Claude Code Router
             </Button>
           </Link>
           <Link href="/settings/integrations">

@@ -363,14 +363,14 @@ export default function IntegrationsPage() {
       {/* OpenCode */}
       <OpenCodeCard />
 
-      {/* Claude Code Router Integration */}
+      {/* Claude Code Integration */}
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-transparent to-transparent">
         <CardHeader>
           <div className="flex items-start justify-between">
             <div className="space-y-1">
               <CardTitle className="text-xl flex items-center gap-2">
                 <Terminal className="h-5 w-5 text-primary" />
-                Claude Code Router
+                Claude Code
                 <span className="text-xs font-normal bg-primary/10 text-primary px-2 py-0.5 rounded-full">NEW</span>
               </CardTitle>
               <CardDescription>
@@ -485,16 +485,6 @@ export default function IntegrationsPage() {
                 <Button variant="default" size="sm" className="gap-2">
                   <ExternalLink className="h-4 w-4" />
                   View Setup Guide
-                </Button>
-              </Link>
-              <Link
-                href="https://github.com/Alpaca-Network/claude-code-router"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Code2 className="h-4 w-4" />
-                  Claude Code Router
                 </Button>
               </Link>
             </div>

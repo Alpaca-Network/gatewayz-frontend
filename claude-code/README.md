@@ -1,215 +1,108 @@
-# Claude Code Router + GatewayZ Setup
+# Claude Code on Gatewayz
 
-Easy one-command setup for Claude Code Router with GatewayZ across all platforms.
+Run [Claude Code](https://docs.anthropic.com/en/docs/claude-code) in your terminal on a Gatewayz API key, with any model in the Gatewayz catalog: Claude, GPT, Kimi, DeepSeek, Qwen, Grok, GLM and more.
 
-## 🚀 Quick Install
+Claude Code talks to Gatewayz directly through the Anthropic Messages API (`https://api.gatewayz.ai/v1/messages`). No router or proxy is needed.
 
-### Windows (PowerShell)
-```powershell
-irm https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-windows.ps1 | iex
-```
+## One-command setup
 
-Or download and run:
-```powershell
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-windows.ps1" -OutFile "setup.ps1"
-powershell -ExecutionPolicy Bypass -File setup.ps1
-```
+**macOS**
 
-### macOS
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-macos.sh)
 ```
 
-### Linux
+**Linux**
+
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-linux.sh)
 ```
 
-## 📋 What It Does
+**Windows (PowerShell)**
 
-The setup script will:
-1. ✅ Check for Node.js installation
-2. ✅ Install Claude Code Router globally
-3. ✅ Configure your GatewayZ API key
-4. ✅ Create optimal routing configuration
-5. ✅ Test the connection
-6. ✅ Start Claude Code (optional)
-
-## 🔑 Get Your API Key
-
-1. Visit https://gatewayz.ai/settings/keys
-2. Click "Generate API Key"
-3. Copy your key
-4. Paste when prompted during setup
-
-## 🤖 Available Models
-
-The router comes pre-configured with:
-
-| Model | Use Case | Speed | Cost |
-|-------|----------|-------|------|
-| `claude-sonnet-5-5` | Default tasks and complex reasoning | Fast | Medium |
-| `gpt-5.4-mini` | Background ops and web search | Very Fast | Very Low |
-| `grok-4` | Long context (100k+) | Fast | Medium |
-| `gpt-5.5` | Alternative | Fast | Medium |
-| `claude-haiku-4-5` | Fastest Claude | Very Fast | Low |
-| `kimi-k2.6`, `deepseek-v4.1-flash`, `qwen3-coder`, `glm-5.3` | Lower-cost coding models | Fast | Low |
-
-## 💡 Usage
-
-### Start Coding
-```bash
-ccr code
+```powershell
+irm https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-windows.ps1 | iex
 ```
 
-### Switch Models On-the-Fly
-While in Claude Code, use the `/model` command:
-```
-/model gatewayz,openai/gpt-4
-/model gatewayz,deepseek-ai/DeepSeek-V4.1-Flash
-/model gatewayz,openai/gpt-5.5
-```
+The script:
 
-### Web Configuration UI
-```bash
-ccr ui
-```
+1. checks for Node.js and installs Claude Code if it is missing;
+2. asks for your Gatewayz API key (from [beta.gatewayz.ai/settings/keys](https://beta.gatewayz.ai/settings/keys)) and checks it;
+3. saves the settings to `~/.gatewayz/claude-settings.json`, readable only by you;
+4. installs a `gatewayz` command.
 
-### Check Current Setup
-```bash
-# View configuration
-cat ~/.claude-code-router/config.json
+Your normal `claude` command is not changed, and nothing is added to your shell profile (Windows: the command's folder is added to your user PATH).
 
-# Test connection
-curl -H "Authorization: Bearer $GATEWAYZ_API_KEY" https://api.gatewayz.ai/
-```
-
-## 🎯 Smart Routing
-
-The router automatically selects the best model for each task:
-
-- **General tasks** → Claude 3.7 Sonnet
-- **Background operations** → DeepSeek Chat (cost-effective)
-- **Complex reasoning** → Claude 3.5 Sonnet
-- **Documents >100k tokens** → Gemini 1.5 Pro
-- **Web search tasks** → Gemini 2.0 Flash
-
-You can override this anytime with `/model`.
-
-## 🔧 Configuration
-
-### Location
-- **Windows**: `%USERPROFILE%\.claude-code-router\config.json`
-- **macOS/Linux**: `~/.claude-code-router/config.json`
-
-### Environment Variable
-The router uses `$GATEWAYZ_API_KEY` environment variable.
-
-**Set it manually:**
+## Use it
 
 ```bash
-# Windows (PowerShell)
-[System.Environment]::SetEnvironmentVariable('GATEWAYZ_API_KEY', 'your-key', 'User')
-
-# macOS/Linux
-export GATEWAYZ_API_KEY="your-key"
-echo 'export GATEWAYZ_API_KEY="your-key"' >> ~/.bashrc
+gatewayz                          # Claude Code on Gatewayz (Claude Sonnet 5.5)
+gatewayz --model openai/gpt-5.5   # start on another model
 ```
 
-### Add Custom Models
+Inside a session:
 
-Edit `~/.claude-code-router/config.json`:
+| Command | What it does |
+|---|---|
+| `/model` | Pick from the Gatewayz models listed |
+| `/model <model id>` | Switch to any catalog model by id, e.g. `/model moonshot/kimi-k2.6` |
+
+Model ids are listed at `https://api.gatewayz.ai/v1/models`.
+
+## Models that work well
+
+These answered tool calls through Gatewayz on 2026-11-25:
+
+| Model id | Good for |
+|---|---|
+| `anthropic/claude-sonnet-5-5` | Default; strongest on long multi-step work |
+| `anthropic/claude-haiku-4-5-20251001` | Fast, low cost |
+| `openai/gpt-5.5` | Alternative strong model |
+| `openai/gpt-5.4-mini` | Fast, low cost |
+| `grok-4` | Long context (256k tokens) |
+| `moonshot/kimi-k2.6` | Lower-cost coding, 262k context |
+| `deepseek-ai/DeepSeek-V4.1-Flash` | Very low cost |
+| `deepseek-ai/DeepSeek-V4-Pro` | Lower-cost reasoning |
+| `Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo` | Coding |
+| `zai-org/GLM-5.3` | Coding |
+
+The model needs tool calling and a large context window: an agent request carries about 20,000 tokens of instructions before any work.
+
+## Manual setup
+
+If you prefer not to run the script, create `~/.gatewayz/claude-settings.json`:
 
 ```json
 {
-  "Providers": [{
-    "name": "gatewayz",
-    "models": [
-      "anthropic/claude-sonnet-5-5",
-      "your-custom-model-here"
-    ]
-  }]
-}
-```
-
-### Customize Routing
-
-```json
-{
-  "Router": {
-    "default": "gatewayz,your-preferred-model",
-    "background": "gatewayz,cost-effective-model",
-    "think": "gatewayz,smart-model"
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.gatewayz.ai",
+    "ANTHROPIC_AUTH_TOKEN": "<your Gatewayz API key>",
+    "ANTHROPIC_MODEL": "anthropic/claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "anthropic/claude-haiku-4-5-20251001",
+    "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
+    "ANTHROPIC_CUSTOM_HEADERS": "x-gatewayz-passthrough: true"
   }
 }
 ```
 
-## 🐛 Troubleshooting
+and start Claude Code with it:
 
-### Node.js Not Found
-**Windows:** Download from https://nodejs.org/
-**macOS:** `brew install node`
-**Linux:** `sudo apt-get install nodejs npm` (Ubuntu/Debian)
-
-### Permission Denied (Linux)
 ```bash
-sudo npm install -g @alpaca-network/claude-code-router
+claude --settings ~/.gatewayz/claude-settings.json
 ```
 
-### API Key Not Set
-```bash
-# Check if set
-echo $GATEWAYZ_API_KEY
+## Good to know
 
-# Set it
-export GATEWAYZ_API_KEY="your-key"
-```
+- **Billing.** Sessions are billed to your Gatewayz credits per token. Agent sessions use far more tokens than chat; cheaper models stretch credits much further.
+- **claude.ai features.** While a Gatewayz key is active, Claude Code turns off claude.ai connectors (Gmail, Drive and others), Remote Control and cloud sessions. Local tools, MCP servers, skills and memory work.
+- **Context window.** When you switch with `/model` to a model with a smaller window than the one you started on, Claude Code may overfill it. Starting with `gatewayz --model <id>` avoids that.
+- **Claude Code Router.** Earlier versions of this setup installed Claude Code Router (`ccr`). It is no longer needed and its current release drops tool results on the way to the model. Remove it with `npm uninstall -g @alpaca-network/claude-code-router`.
 
-### Router Not Found After Install
-Restart your terminal or:
-```bash
-# Add npm global bin to PATH
-export PATH="$PATH:$(npm config get prefix)/bin"
-```
+## Troubleshooting
 
-### Connection Failed
-1. Check your API key at https://gatewayz.ai/settings/keys
-2. Ensure you have credits/requests remaining
-3. Verify key is active (not expired)
-
-## 📊 Monitor Usage
-
-Track your API usage at:
-- **Dashboard**: https://gatewayz.ai
-- **Activity**: https://gatewayz.ai/settings/activity
-- **API Keys**: https://gatewayz.ai/settings/keys
-
-## 🎁 Benefits
-
-✅ **One Command Install** - Works on all platforms
-✅ **Smart Routing** - Best model for each task
-✅ **Cost Optimization** - Route to cheaper models
-✅ **Multiple Providers** - Access 10+ models
-✅ **Dynamic Switching** - Change models anytime
-✅ **Usage Tracking** - Monitor in GatewayZ dashboard
-✅ **Auto Failover** - Seamless fallback
-✅ **Environment-Based Config** - Secure API key handling
-
-## 📚 Resources
-
-- **GatewayZ**: https://gatewayz.ai
-- **Claude Code Router**: https://github.com/Alpaca-Network/claude-code-router
-- **Documentation**: https://gatewayz.ai/docs
-- **Support**: https://github.com/Alpaca-Network/gatewayz-frontend/issues
-
-## 🆘 Get Help
-
-- Check the [troubleshooting section](#-troubleshooting)
-- View logs: `ccr code --verbose`
-- Test connection: `curl -H "Authorization: Bearer $GATEWAYZ_API_KEY" https://api.gatewayz.ai/`
-- Open an issue: https://github.com/Alpaca-Network/gatewayz-frontend/issues
-
----
-
-🤖 Setup scripts maintained by GatewayZ
-📝 Powered by [Claude Code](https://claude.com/claude-code)
+| Message | Meaning |
+|---|---|
+| `402 Gatewayz plan limit reached` | Your plan's daily or monthly token allowance is used up. Retrying will not help until it resets or the plan is raised. |
+| `402` about credits | Top up at [beta.gatewayz.ai](https://beta.gatewayz.ai). |
+| `401` | The key is wrong or revoked. Run the setup again with a new key. |
+| `gatewayz: command not found` | Open a new terminal, or add `~/.local/bin` to your PATH. |
