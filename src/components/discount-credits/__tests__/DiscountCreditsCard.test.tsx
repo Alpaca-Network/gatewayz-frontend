@@ -82,6 +82,8 @@ describe('DiscountCreditsCard', () => {
             resets_at: '2026-11-26T00:00:00Z',
             next_daily_cap_usd: null,
             next_daily_cap_from: null,
+      next_daily_cap_at: null,
+            next_daily_cap_at: null,
           },
         }),
       ),
@@ -162,6 +164,7 @@ describe('DiscountCreditsCard', () => {
       resets_at: '2026-11-27T00:00:00Z',
       next_daily_cap_usd: null,
       next_daily_cap_from: null,
+      next_daily_cap_at: null,
     });
 
     it('says nothing while there is balance and limit left', () => {

@@ -19,6 +19,7 @@ const CAP: DiscountCreditsDailyCap = {
   resets_at: '2026-11-26T00:00:00Z',
   next_daily_cap_usd: null,
   next_daily_cap_from: null,
+  next_daily_cap_at: null,
 };
 
 const WIRE_CAP = { daily_cap_usd: '20.000000', used_today_usd: '12.500000', left_today_usd: '7.500000', resets_at: '2026-11-26T00:00:00Z' };
@@ -53,7 +54,7 @@ describe('DailyLimitSection', () => {
     expect(bar).toHaveAttribute('aria-valuenow', '25');
     expect(bar).toHaveAttribute('aria-valuetext', '$12.50 of $50.00 used today');
     expect(screen.queryByText(/Changes to/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Lowering the limit applies now\. Raising it applies from the next day \(UTC\)\./)).toBeInTheDocument();
+    expect(screen.getByText(/Lowering the limit applies now\. Raising it applies 24 hours after you change it\./)).toBeInTheDocument();
     expect(screen.getByText(/requests continue and are billed to your paid balance\./)).toBeInTheDocument();
   });
 
@@ -69,6 +70,16 @@ describe('DailyLimitSection', () => {
   it('shows a pending raise with its UTC start date', () => {
     renderSection({ ...CAP, next_daily_cap_usd: 80, next_daily_cap_from: '2026-11-26' });
     expect(screen.getByText('Changes to $80.00 on Nov 26, 2026 (UTC)')).toBeInTheDocument();
+  });
+
+  it('shows the exact time a pending raise applies when the backend sends it', () => {
+    renderSection({
+      ...CAP,
+      next_daily_cap_usd: 80,
+      next_daily_cap_from: '2026-11-27',
+      next_daily_cap_at: '2026-11-27T14:05:00Z',
+    });
+    expect(screen.getByText('Changes to $80.00 on Nov 27, 2026, 14:05 UTC')).toBeInTheDocument();
   });
 
   it('shows a full bar for a limit of 0', () => {
@@ -117,7 +128,7 @@ describe('DailyLimitSection', () => {
     );
     renderSection();
     save('80');
-    expect(await screen.findByRole('status')).toHaveTextContent('Your higher limit starts at 00:00 UTC.');
+    expect(await screen.findByRole('status')).toHaveTextContent('Your higher limit starts in 24 hours.');
   });
 
   it.each([422, 404, 503])('says the limit could not be saved on a %i response', async (status) => {

@@ -25,10 +25,12 @@ export interface DiscountCreditsDailyCap {
   left_today_usd: number;
   /** ISO time of the next reset (00:00 UTC). */
   resets_at: string | null;
-  /** A higher limit that is waiting for the next UTC day; null when none is pending. */
+  /** A higher limit that is waiting to apply (24 hours after it was asked for); null when none is pending. */
   next_daily_cap_usd: number | null;
   /** UTC date (YYYY-MM-DD) the pending limit starts on. */
   next_daily_cap_from: string | null;
+  /** ISO time a pending raise applies (24 hours after it was asked for); null when none or from an older backend. */
+  next_daily_cap_at: string | null;
 }
 
 export interface DiscountCreditsBalance {
@@ -113,6 +115,7 @@ export function parseDailyCap(value: unknown): DiscountCreditsDailyCap | null {
     resets_at: toNullableString(c.resets_at),
     next_daily_cap_usd: toNullableNumber(c.next_daily_cap_usd),
     next_daily_cap_from: toNullableString(c.next_daily_cap_from),
+    next_daily_cap_at: toNullableString(c.next_daily_cap_at),
   };
 }
 
