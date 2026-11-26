@@ -141,7 +141,7 @@ describe('StartOpencodePage', () => {
       render(<StartOpencodePage />);
 
       // The command should be visible (could be any OS based on detection)
-      expect(screen.getByText(/setup-(macos|linux|windows)/)).toBeInTheDocument();
+      expect(screen.getByText(/setup(-windows\.ps1|\.sh)/)).toBeInTheDocument();
     });
 
     it('should switch to Linux command when Linux button is clicked', () => {
