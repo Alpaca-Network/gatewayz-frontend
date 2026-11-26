@@ -17,7 +17,8 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 
-$GatewayzUrl = "https://api.gatewayz.ai"
+# Override for testing only (CI points it at an unreachable address).
+$GatewayzUrl = if ($env:GATEWAYZ_BASE_URL) { $env:GATEWAYZ_BASE_URL } else { "https://api.gatewayz.ai" }
 $KeysPage = "https://beta.gatewayz.ai/settings/keys"
 $DefaultModel = "anthropic/claude-sonnet-5-5"
 $SmallModel = "anthropic/claude-haiku-4-5-20251001"
