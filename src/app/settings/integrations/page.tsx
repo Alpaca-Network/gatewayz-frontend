@@ -283,12 +283,12 @@ const OpenCodeCard = () => {
                 <span className="text-xs font-medium text-muted-foreground">macOS</span>
               </div>
               <div className="bg-slate-950 dark:bg-slate-900 border border-slate-800 rounded-md p-3 font-mono text-xs flex items-center justify-between gap-2 group">
-                <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-macos.sh)</code>
+                <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup.sh)</code>
                 <Button
                   size="sm"
                   className="h-8 px-3 flex-shrink-0 bg-white text-black hover:bg-gray-200 border border-gray-300"
                   onClick={() => {
-                    navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-macos.sh)');
+                    navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup.sh)');
                   }}
                 >
                   <Copy className="h-4 w-4 mr-1" />
@@ -303,12 +303,12 @@ const OpenCodeCard = () => {
                 <span className="text-xs font-medium text-muted-foreground">Linux</span>
               </div>
               <div className="bg-slate-950 dark:bg-slate-900 border border-slate-800 rounded-md p-3 font-mono text-xs flex items-center justify-between gap-2 group">
-                <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-linux.sh)</code>
+                <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup.sh)</code>
                 <Button
                   size="sm"
                   className="h-8 px-3 flex-shrink-0 bg-white text-black hover:bg-gray-200 border border-gray-300"
                   onClick={() => {
-                    navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-linux.sh)');
+                    navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup.sh)');
                   }}
                 >
                   <Copy className="h-4 w-4 mr-1" />
@@ -441,12 +441,12 @@ export default function IntegrationsPage() {
                   <span className="text-xs font-medium text-muted-foreground">macOS</span>
                 </div>
                 <div className="bg-slate-950 dark:bg-slate-900 border border-slate-800 rounded-md p-3 font-mono text-xs flex items-center justify-between gap-2 group">
-                  <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-macos.sh)</code>
+                  <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup.sh)</code>
                   <Button
                     size="sm"
                     className="h-8 px-3 flex-shrink-0 bg-white text-black hover:bg-gray-200 border border-gray-300"
                     onClick={() => {
-                      navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-macos.sh)');
+                      navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup.sh)');
                     }}
                   >
                     <Copy className="h-4 w-4 mr-1" />
@@ -461,12 +461,12 @@ export default function IntegrationsPage() {
                   <span className="text-xs font-medium text-muted-foreground">Linux</span>
                 </div>
                 <div className="bg-slate-950 dark:bg-slate-900 border border-slate-800 rounded-md p-3 font-mono text-xs flex items-center justify-between gap-2 group">
-                  <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-linux.sh)</code>
+                  <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup.sh)</code>
                   <Button
                     size="sm"
                     className="h-8 px-3 flex-shrink-0 bg-white text-black hover:bg-gray-200 border border-gray-300"
                     onClick={() => {
-                      navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup-linux.sh)');
+                      navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/claude-code/setup.sh)');
                     }}
                   >
                     <Copy className="h-4 w-4 mr-1" />
