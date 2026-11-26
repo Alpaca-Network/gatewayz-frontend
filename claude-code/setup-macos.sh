@@ -20,7 +20,8 @@ WHITE='\033[1;37m'
 GRAY='\033[0;37m'
 NC='\033[0m'
 
-GATEWAYZ_URL="https://api.gatewayz.ai"
+# Override for testing only (CI points it at an unreachable address).
+GATEWAYZ_URL="${GATEWAYZ_BASE_URL:-https://api.gatewayz.ai}"
 KEYS_PAGE="https://beta.gatewayz.ai/settings/keys"
 DEFAULT_MODEL="anthropic/claude-sonnet-5-5"
 # Background and Explore sub-agent calls: about a fifth of Claude Haiku's price.

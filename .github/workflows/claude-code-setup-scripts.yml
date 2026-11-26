@@ -1,0 +1,87 @@
+name: Claude Code setup scripts
+
+# Runs the public setup scripts (claude-code/setup-*.sh|ps1) on real Windows,
+# macOS and Linux machines. The Gatewayz URL points at an unreachable address,
+# so the key check reports "could not verify" and the script carries on: every
+# step runs, no real key is used and nothing is billed.
+
+on:
+  pull_request:
+    paths:
+      - "claude-code/**"
+      - ".github/workflows/claude-code-setup-scripts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unix:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            script: claude-code/setup-linux.sh
+          - os: macos-latest
+            script: claude-code/setup-macos.sh
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run setup
+        env:
+          GATEWAYZ_BASE_URL: http://127.0.0.1:9
+        run: bash "${{ matrix.script }}" ci-placeholder-key < /dev/null
+      - name: Check what it installed
+        run: |
+          set -euo pipefail
+          test -x "$HOME/.local/bin/gatewayz"
+          test "$(stat -c %a "$HOME/.gatewayz/claude-settings.json" 2>/dev/null || stat -f %Lp "$HOME/.gatewayz/claude-settings.json")" = "600"
+          node -e '
+            const s = require(process.env.HOME + "/.gatewayz/claude-settings.json");
+            if (s.env.ANTHROPIC_BASE_URL !== "http://127.0.0.1:9") throw new Error("base url");
+            if (s.env.ANTHROPIC_AUTH_TOKEN !== "ci-placeholder-key") throw new Error("token");
+            if (!s.statusLine || !s.statusLine.command.includes("statusline.js")) throw new Error("status line");
+            console.log("settings ok");
+          '
+          echo '{"model":{"id":"claude-code/openai/gpt-5.5","display_name":"claude-code/openai/gpt-5.5"}}' \
+            | ANTHROPIC_MODEL=x node "$HOME/.gatewayz/statusline.js" | tee /tmp/statusline.txt
+          grep -q "Gatewayz · openai/gpt-5.5" /tmp/statusline.txt
+          "$HOME/.local/bin/gatewayz" --version
+
+  windows:
+    name: windows-latest
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run setup
+        shell: pwsh
+        env:
+          GATEWAYZ_BASE_URL: http://127.0.0.1:9
+        run: ./claude-code/setup-windows.ps1 -ApiKey ci-placeholder-key
+      - name: Check what it installed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dir = Join-Path $env:USERPROFILE ".gatewayz"
+          $settings = Get-Content (Join-Path $dir "claude-settings.json") -Raw | ConvertFrom-Json
+          if ($settings.env.ANTHROPIC_BASE_URL -ne "http://127.0.0.1:9") { throw "base url" }
+          if ($settings.env.ANTHROPIC_AUTH_TOKEN -ne "ci-placeholder-key") { throw "token" }
+          if ($settings.statusLine.command -notmatch "statusline.js") { throw "status line" }
+          $acl = (Get-Acl (Join-Path $dir "claude-settings.json")).Access
+          if ($acl | Where-Object { $_.IdentityReference -match "Users|Everyone" }) { throw "settings readable by others" }
+          '{"model":{"id":"claude-code/openai/gpt-5.5","display_name":"claude-code/openai/gpt-5.5"}}' |
+            node (Join-Path $dir "statusline.js") | Tee-Object -Variable line
+          if ("$line" -notmatch "Gatewayz · openai/gpt-5.5") { throw "status line output: $line" }
+          & (Join-Path $dir "bin\gatewayz.cmd") --version
+          if ($LASTEXITCODE -ne 0) { throw "gatewayz.cmd failed" }
+          $userPath = [System.Environment]::GetEnvironmentVariable("Path", "User")
+          if (-not ($userPath -split ";" | Where-Object { $_ -eq (Join-Path $dir "bin") })) { throw "PATH not updated" }
+          "windows setup ok"
