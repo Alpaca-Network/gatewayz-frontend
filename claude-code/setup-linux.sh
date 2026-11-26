@@ -26,6 +26,7 @@ DEFAULT_MODEL="anthropic/claude-sonnet-5-5"
 SMALL_MODEL="anthropic/claude-haiku-4-5-20251001"
 CONFIG_DIR="$HOME/.gatewayz"
 SETTINGS_FILE="$CONFIG_DIR/claude-settings.json"
+STATUSLINE_FILE="$CONFIG_DIR/statusline.js"
 BIN_DIR="$HOME/.local/bin"
 LAUNCHER="$BIN_DIR/gatewayz"
 
@@ -118,11 +119,86 @@ chmod 700 "$CONFIG_DIR"
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "$SMALL_MODEL",
     "CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY": "1",
     "ANTHROPIC_CUSTOM_HEADERS": "x-gatewayz-passthrough: true"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"$STATUSLINE_FILE\""
   }
 }
 EOF
 chmod 600 "$SETTINGS_FILE"
 ok "Settings saved to $SETTINGS_FILE (readable only by you)"
+
+# Status line shown under the prompt: "Gatewayz · <model> · $<credits left>".
+cat > "$STATUSLINE_FILE" <<'GZ_STATUSLINE_EOF'
+#!/usr/bin/env node
+// Claude Code status line for Gatewayz sessions: "Gatewayz · <model> · $<credits left>".
+//
+// Claude Code runs this command and passes session details as JSON on stdin.
+// The balance comes from GET <ANTHROPIC_BASE_URL>/user/balance with the
+// session's key, cached for 60 seconds. If anything fails, the model is still
+// shown and the balance is left out. The key is never printed or stored.
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
+const CACHE_SECONDS = 60;
+const CACHE_FILE = path.join(os.tmpdir(), `gatewayz-statusline-${os.userInfo().username}.json`);
+const PREFIX = "claude-code/";
+
+function modelName(session) {
+  const model = session && session.model;
+  let name = "";
+  if (model && typeof model === "object") name = model.display_name || model.id || "";
+  else if (model) name = String(model);
+  if (!name) name = process.env.ANTHROPIC_MODEL || "";
+  return name.startsWith(PREFIX) ? name.slice(PREFIX.length) : name;
+}
+
+async function balance() {
+  try {
+    const cached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
+    if (Date.now() / 1000 - cached.at < CACHE_SECONDS) return cached.credits;
+  } catch {}
+  const key = process.env.ANTHROPIC_AUTH_TOKEN;
+  const base = (process.env.ANTHROPIC_BASE_URL || "https://api.gatewayz.ai").replace(/\/+$/, "");
+  if (!key) return null;
+  try {
+    const response = await fetch(`${base}/user/balance`, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) return null;
+    const credits = Number((await response.json()).credits);
+    if (!Number.isFinite(credits)) return null;
+    try {
+      fs.writeFileSync(CACHE_FILE, JSON.stringify({ at: Date.now() / 1000, credits }), {
+        mode: 0o600,
+      });
+    } catch {}
+    return credits;
+  } catch {
+    return null;
+  }
+}
+
+let input = "";
+process.stdin.on("data", (chunk) => (input += chunk));
+process.stdin.on("end", async () => {
+  let session = {};
+  try {
+    session = JSON.parse(input);
+  } catch {}
+  const parts = ["Gatewayz"];
+  const name = modelName(session);
+  if (name) parts.push(name);
+  const credits = await balance();
+  if (credits !== null) parts.push(`$${credits.toFixed(2)}`);
+  console.log(parts.join(" · "));
+});
+GZ_STATUSLINE_EOF
+chmod 644 "$STATUSLINE_FILE"
+ok "Status line installed (model and credits left, under the prompt)"
 
 # Step 6: gatewayz command
 echo ""
