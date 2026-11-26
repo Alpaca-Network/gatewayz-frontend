@@ -150,7 +150,7 @@ describe('StartOpencodePage', () => {
       const linuxButton = screen.getByText('Linux');
       fireEvent.click(linuxButton);
 
-      expect(screen.getByText(/setup-linux\.sh/)).toBeInTheDocument();
+      expect(screen.getByText(/setup\.sh/)).toBeInTheDocument();
     });
 
     it('should switch to Windows command when Windows button is clicked', () => {
@@ -469,7 +469,7 @@ describe('StartOpencodePage Install Commands', () => {
     fireEvent.click(macButton);
 
     expect(
-      screen.getByText(/https:\/\/raw\.githubusercontent\.com\/Alpaca-Network\/gatewayz-frontend\/master\/opencode\/setup-macos\.sh/)
+      screen.getByText(/https:\/\/raw\.githubusercontent\.com\/Alpaca-Network\/gatewayz-frontend\/master\/opencode\/setup\.sh/)
     ).toBeInTheDocument();
   });
 
@@ -480,7 +480,7 @@ describe('StartOpencodePage Install Commands', () => {
     fireEvent.click(linuxButton);
 
     expect(
-      screen.getByText(/https:\/\/raw\.githubusercontent\.com\/Alpaca-Network\/gatewayz-frontend\/master\/opencode\/setup-linux\.sh/)
+      screen.getByText(/https:\/\/raw\.githubusercontent\.com\/Alpaca-Network\/gatewayz-frontend\/master\/opencode\/setup\.sh/)
     ).toBeInTheDocument();
   });
 
@@ -650,7 +650,7 @@ describe('OS Detection', () => {
     render(<StartOpencodePage />);
 
     // Should show Linux command after detection
-    expect(screen.getByText(/setup-linux\.sh/)).toBeInTheDocument();
+    expect(screen.getByText(/setup\.sh/)).toBeInTheDocument();
   });
 
   it('should detect macOS from user agent', () => {
@@ -666,7 +666,7 @@ describe('OS Detection', () => {
     render(<StartOpencodePage />);
 
     // Should show macOS command after detection
-    expect(screen.getByText(/setup-macos\.sh/)).toBeInTheDocument();
+    expect(screen.getByText(/setup\.sh/)).toBeInTheDocument();
   });
 
   it('should default to macOS for unknown user agent', () => {
@@ -682,7 +682,7 @@ describe('OS Detection', () => {
     render(<StartOpencodePage />);
 
     // Should default to macOS for unknown OS
-    expect(screen.getByText(/setup-macos\.sh/)).toBeInTheDocument();
+    expect(screen.getByText(/setup\.sh/)).toBeInTheDocument();
   });
 });
 
