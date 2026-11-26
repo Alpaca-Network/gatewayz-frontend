@@ -96,6 +96,7 @@ claude --settings ~/.gatewayz/claude-settings.json
 
 - **Billing.** Sessions are billed to your Gatewayz credits per token. Agent sessions use far more tokens than chat; cheaper models stretch credits much further.
 - **claude.ai features.** While a Gatewayz key is active, Claude Code turns off claude.ai connectors (Gmail, Drive and others), Remote Control and cloud sessions. Local tools, MCP servers, skills and memory work.
+- **GPT models and many tools.** OpenAI accepts at most 128 tools per request. Claude Code sends one tool definition per built-in tool and per MCP server tool, so a setup with many MCP servers can exceed it; GPT models then answer "Invalid 'tools': array too long". Claude, Kimi, DeepSeek and the other models accept larger tool sets. With GPT, start the session with fewer MCP servers (`gatewayz --model openai/gpt-5.5 --strict-mcp-config`).
 - **Context window.** When you switch with `/model` to a model with a smaller window than the one you started on, Claude Code may overfill it. Starting with `gatewayz --model <id>` avoids that.
 - **Claude Code Router.** Earlier versions of this setup installed Claude Code Router (`ccr`). It is no longer needed and its current release drops tool results on the way to the model. Remove it with `npm uninstall -g @alpaca-network/claude-code-router`.
 
@@ -106,4 +107,5 @@ claude --settings ~/.gatewayz/claude-settings.json
 | `402 Gatewayz plan limit reached` | Your plan's daily or monthly token allowance is used up. Retrying will not help until it resets or the plan is raised. |
 | `402` about credits | Top up at [beta.gatewayz.ai](https://beta.gatewayz.ai). |
 | `401` | The key is wrong or revoked. Run the setup again with a new key. |
+| `Invalid 'tools': array too long` (GPT models) | More than 128 tools in the session. Use fewer MCP servers, or a non-OpenAI model. |
 | `gatewayz: command not found` | Open a new terminal, or add `~/.local/bin` to your PATH. |
