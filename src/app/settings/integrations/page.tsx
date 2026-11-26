@@ -263,12 +263,12 @@ const OpenCodeCard = () => {
                 <span className="text-xs font-medium text-muted-foreground">Windows (PowerShell)</span>
               </div>
               <div className="bg-slate-950 dark:bg-slate-900 border border-slate-800 rounded-md p-3 font-mono text-xs flex items-center justify-between gap-2 group">
-                <code className="flex-1 overflow-x-auto text-green-400">irm https://raw.githubusercontent.com/Alpaca-Network/gatewayz-monorepo/main/opencode/setup-windows.ps1 | iex</code>
+                <code className="flex-1 overflow-x-auto text-green-400">irm https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-windows.ps1 | iex</code>
                 <Button
                   size="sm"
                   className="h-8 px-3 flex-shrink-0 bg-white text-black hover:bg-gray-200 border border-gray-300"
                   onClick={() => {
-                    navigator.clipboard.writeText('irm https://raw.githubusercontent.com/Alpaca-Network/gatewayz-monorepo/main/opencode/setup-windows.ps1 | iex');
+                    navigator.clipboard.writeText('irm https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-windows.ps1 | iex');
                   }}
                 >
                   <Copy className="h-4 w-4 mr-1" />
@@ -283,12 +283,12 @@ const OpenCodeCard = () => {
                 <span className="text-xs font-medium text-muted-foreground">macOS</span>
               </div>
               <div className="bg-slate-950 dark:bg-slate-900 border border-slate-800 rounded-md p-3 font-mono text-xs flex items-center justify-between gap-2 group">
-                <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-monorepo/main/opencode/setup-macos.sh)</code>
+                <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-macos.sh)</code>
                 <Button
                   size="sm"
                   className="h-8 px-3 flex-shrink-0 bg-white text-black hover:bg-gray-200 border border-gray-300"
                   onClick={() => {
-                    navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-monorepo/main/opencode/setup-macos.sh)');
+                    navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-macos.sh)');
                   }}
                 >
                   <Copy className="h-4 w-4 mr-1" />
@@ -303,12 +303,12 @@ const OpenCodeCard = () => {
                 <span className="text-xs font-medium text-muted-foreground">Linux</span>
               </div>
               <div className="bg-slate-950 dark:bg-slate-900 border border-slate-800 rounded-md p-3 font-mono text-xs flex items-center justify-between gap-2 group">
-                <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-monorepo/main/opencode/setup-linux.sh)</code>
+                <code className="flex-1 overflow-x-auto text-green-400">bash &lt;(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-linux.sh)</code>
                 <Button
                   size="sm"
                   className="h-8 px-3 flex-shrink-0 bg-white text-black hover:bg-gray-200 border border-gray-300"
                   onClick={() => {
-                    navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-monorepo/main/opencode/setup-linux.sh)');
+                    navigator.clipboard.writeText('bash <(curl -fsSL https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/opencode/setup-linux.sh)');
                   }}
                 >
                   <Copy className="h-4 w-4 mr-1" />
@@ -320,7 +320,7 @@ const OpenCodeCard = () => {
 
           <div className="flex items-center gap-2 pt-2">
             <Link
-              href="https://github.com/Alpaca-Network/gatewayz-monorepo/tree/main/opencode"
+              href="https://github.com/Alpaca-Network/gatewayz-frontend/tree/master/opencode"
               target="_blank"
               rel="noopener noreferrer"
             >

@@ -94,7 +94,8 @@ fi
 step "Checking the key..."
 HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 30 "$GATEWAYZ_URL/v1/messages/count_tokens" \
     -H "x-api-key: $API_KEY" -H "content-type: application/json" \
-    -d '{"model":"'"$DEFAULT_MODEL"'","messages":[{"role":"user","content":"hi"}]}' || echo "000")
+    -d '{"model":"'"$DEFAULT_MODEL"'","messages":[{"role":"user","content":"hi"}]}' || true)
+HTTP_CODE="${HTTP_CODE:-000}"
 if [ "$HTTP_CODE" = "200" ]; then
     ok "Key accepted by Gatewayz"
 elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then

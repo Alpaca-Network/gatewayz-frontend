@@ -1,0 +1,82 @@
+name: OpenCode setup scripts
+
+# Runs opencode/setup-*.sh|ps1 on real Windows, macOS and Linux machines with
+# the Gatewayz URL pointed at an unreachable address: every step runs, no real
+# key is used, nothing is billed. Checks the merged OpenCode config.
+
+on:
+  pull_request:
+    paths:
+      - "opencode/**"
+      - ".github/workflows/opencode-setup-scripts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unix:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            script: opencode/setup-linux.sh
+          - os: macos-latest
+            script: opencode/setup-macos.sh
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Existing config to merge into
+        run: |
+          mkdir -p "$HOME/.config/opencode"
+          echo '{"theme":"dark","provider":{"other":{"name":"Other"}}}' > "$HOME/.config/opencode/opencode.json"
+      - name: Run setup
+        env:
+          GATEWAYZ_BASE_URL: http://127.0.0.1:9
+        run: bash "${{ matrix.script }}" ci-placeholder-key < /dev/null
+      - name: Check the config
+        run: |
+          set -euo pipefail
+          f="$HOME/.config/opencode/opencode.json"
+          test "$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f")" = "600"
+          test -f "$f.bak-gatewayz"
+          node -e '
+            const c = require(process.env.HOME + "/.config/opencode/opencode.json");
+            if (c.theme !== "dark" || !c.provider.other) throw new Error("existing config not kept");
+            const g = c.provider.gatewayz;
+            if (g.options.baseURL !== "http://127.0.0.1:9/v1") throw new Error("baseURL");
+            if (g.options.apiKey !== "ci-placeholder-key") throw new Error("apiKey");
+            if (Object.keys(g.models).length < 5) throw new Error("models");
+            console.log("config ok");
+          '
+          opencode --version
+
+  windows:
+    name: windows-latest
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run setup
+        shell: pwsh
+        env:
+          GATEWAYZ_BASE_URL: http://127.0.0.1:9
+        run: ./opencode/setup-windows.ps1 -ApiKey ci-placeholder-key
+      - name: Check the config
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $f = Join-Path $env:USERPROFILE ".config\opencode\opencode.json"
+          $c = Get-Content $f -Raw | ConvertFrom-Json
+          if ($c.provider.gatewayz.options.baseURL -ne "http://127.0.0.1:9/v1") { throw "baseURL" }
+          if ($c.provider.gatewayz.options.apiKey -ne "ci-placeholder-key") { throw "apiKey" }
+          if ((Get-Acl $f).Access | Where-Object { $_.IdentityReference -match "Users|Everyone" }) { throw "config readable by others" }
+          opencode --version
+          "windows setup ok"
