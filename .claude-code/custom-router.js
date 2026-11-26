@@ -30,21 +30,21 @@ module.exports = async function router(req, config) {
 
   // Route to appropriate model
   if (isWebSearch) {
-    return "gatewayz,google/gemini-2.1-pro";
+    return "gatewayz,openai/gpt-5.4-mini";
   }
 
   if (isLongContext) {
-    return "gatewayz,qwen/qwen2-72b-a16b-2507";
+    return "gatewayz,grok-4";
   }
 
   if (isReasoningTask) {
-    return "gatewayz,anthropic/claude-3-5-sonnet-20241022";
+    return "gatewayz,anthropic/claude-sonnet-5-5";
   }
 
   if (isBackgroundTask) {
-    return "gatewayz,google/gemini-2.1-pro";
+    return "gatewayz,openai/gpt-5.4-mini";
   }
 
   // Default: use GPT-4o mini for standard tasks
-  return "gatewayz,openai/gpt-4o-mini";
+  return "gatewayz,openai/gpt-5.4-mini";
 };

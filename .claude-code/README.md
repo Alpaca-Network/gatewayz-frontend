@@ -63,15 +63,14 @@ export CLAUDE_API_ENDPOINT=http://localhost:3042/v1/messages
 
 ### Available Models
 
-The configuration includes popular models from GatewayZ:
+The configuration includes models that answered a tool call through Gatewayz on 2026-11-25:
 
-- **openai/gpt-4o-mini** - Fast, cost-effective for general tasks
-- **google/gemini-2.1-pro** - Advanced multimodal reasoning
-- **qwen/qwen2-72b-a16b-2507** - Free tier, long context support
-- **qwen/qwen2-57b-a14b-2507** - High-quality multilingual model
-- **moonshotai/kimi-k2** - Free tier with large context window
-- **anthropic/claude-3-5-sonnet-20241022** - Advanced reasoning
-- **anthropic/claude-3-5-haiku-20241022** - Fast Claude variant
+- **anthropic/claude-sonnet-5-5** - Reasoning and default coding work
+- **anthropic/claude-haiku-4-5-20251001** - Fast Claude variant
+- **openai/gpt-5.4-mini** - Fast, cost-effective for background tasks and web search
+- **grok-4** - Long context (256k tokens)
+- **moonshot/kimi-k2.6** - Lower-cost coding, large context window
+- **Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo** - Coding
 
 ### Routing Strategy
 
@@ -79,11 +78,11 @@ The custom router (`custom-router.js`) automatically selects models based on:
 
 | Task Type | Selected Model | Reason |
 |-----------|----------------|--------|
-| Web Search | Gemini 2.1 Pro | Multimodal, up-to-date knowledge |
-| Long Context (>50k chars) | Qwen2 72B | Large context window (262k tokens) |
-| Reasoning/Analysis | Claude 3.5 Sonnet | Superior reasoning capabilities |
-| Background Tasks | Gemini 2.1 Pro | Reliable for async operations |
-| Default | GPT-4o mini | Fast, cost-effective |
+| Web Search | GPT-5.4 mini | Fast and cheap |
+| Long Context (>50k chars) | Grok 4 | Large context window (256k tokens) |
+| Reasoning/Analysis | Claude Sonnet 5.5 | Strongest reasoning |
+| Background Tasks | GPT-5.4 mini | Reliable for async operations |
+| Default | GPT-5.4 mini | Fast, cost-effective |
 
 ### Predefined Routes
 
@@ -91,11 +90,11 @@ You can also use predefined routes from `config.json`:
 
 ```json
 {
-  "default": "gatewayz,openai/gpt-4o-mini",
-  "background": "gatewayz,google/gemini-2.1-pro",
-  "think": "gatewayz,anthropic/claude-3-5-sonnet-20241022",
-  "longContext": "gatewayz,qwen/qwen2-72b-a16b-2507",
-  "webSearch": "gatewayz,google/gemini-2.1-pro"
+  "default": "gatewayz,openai/gpt-5.4-mini",
+  "background": "gatewayz,openai/gpt-5.4-mini",
+  "think": "gatewayz,anthropic/claude-sonnet-5-5",
+  "longContext": "gatewayz,grok-4",
+  "webSearch": "gatewayz,openai/gpt-5.4-mini"
 }
 ```
 
@@ -129,7 +128,7 @@ module.exports = async function router(req, config) {
   const { body, context } = req;
 
   // Example: always use a specific model
-  return "gatewayz,openai/gpt-4o-mini";
+  return "gatewayz,openai/gpt-5.4-mini";
 
   // Or use conditional logic based on request
 };
@@ -154,13 +153,13 @@ This will show:
 
 ## 📊 Model Format
 
-All models must follow the GatewayZ format: `provider/model-name`
+Use the model id exactly as the Gatewayz catalog lists it (`https://api.gatewayz.ai/v1/models`). Most ids are `provider/model-name`, a few are bare.
 
 Examples:
-- ✅ `openai/gpt-4o-mini`
-- ✅ `anthropic/claude-3-5-sonnet-20241022`
-- ❌ `gpt-4o-mini` (missing provider)
-- ❌ `openai-gpt-4o-mini` (wrong separator)
+- ✅ `openai/gpt-5.4-mini`
+- ✅ `anthropic/claude-sonnet-5-5`
+- ✅ `grok-4`
+- ❌ `gpt-5.4-mini` (the catalog lists it as `openai/gpt-5.4-mini`)
 
 ## 🌐 API Endpoints
 
