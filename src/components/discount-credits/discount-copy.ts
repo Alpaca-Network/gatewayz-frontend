@@ -34,9 +34,9 @@ export const DAILY_LIMIT_RESETS = 'Resets at 00:00 UTC';
 export const DAILY_LIMIT_INPUT_LABEL = 'Daily limit (USD)';
 export const DAILY_LIMIT_SAVE = 'Save';
 export const DAILY_LIMIT_HELP =
-  'Lowering the limit applies now. Raising it applies from the next day (UTC). When the limit is reached, requests continue and are billed to your paid balance.';
+  'Lowering the limit applies now. Raising it applies 24 hours after you change it. When the limit is reached, requests continue and are billed to your paid balance.';
 export const DAILY_LIMIT_SAVED_NOW = 'Daily limit updated.';
-export const DAILY_LIMIT_SAVED_SCHEDULED = 'Your higher limit starts at 00:00 UTC.';
+export const DAILY_LIMIT_SAVED_SCHEDULED = 'Your higher limit starts in 24 hours.';
 export const DAILY_LIMIT_SAVE_FAILED = 'The daily limit could not be saved. Try again.';
 export const DAILY_LIMIT_INVALID = 'Enter an amount from 0 to 1,000,000, with up to 6 decimal places.';
 
@@ -45,10 +45,61 @@ export function dailyLimitUsedLine(usedUsd: number, capUsd: number): string {
   return `${formatDiscountUsd(usedUsd)} of ${formatDiscountUsd(capUsd)} used today`;
 }
 
-/** "Changes to $80.00 on Nov 26, 2026 (UTC)"; without a usable date, "Changes to $80.00 at 00:00 UTC". */
-export function dailyLimitPendingLine(nextUsd: number, fromDate: string | null): string {
-  const date = fromDate ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(fromDate) ? `${fromDate}T00:00:00Z` : fromDate) : null;
-  if (!date || Number.isNaN(date.getTime())) return `Changes to ${formatDiscountUsd(nextUsd)} at 00:00 UTC`;
-  const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  return `Changes to ${formatDiscountUsd(nextUsd)} on ${day} (UTC)`;
+/**
+ * "Changes to $80.00 on Nov 27, 2026, 14:05 UTC" when the exact time is known
+ * (`next_daily_cap_at`); "Changes to $80.00 on Nov 27, 2026 (UTC)" from a date
+ * alone; "Changes to $80.00 soon" without either.
+ */
+export function dailyLimitPendingLine(nextUsd: number, at: string | null, fromDate: string | null = null): string {
+  const amount = formatDiscountUsd(nextUsd);
+  const exact = at ? new Date(at) : null;
+  if (exact && !Number.isNaN(exact.getTime())) {
+    const when = exact.toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC',
+    });
+    return `Changes to ${amount} on ${when} UTC`;
+  }
+  const day = fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate) ? new Date(`${fromDate}T00:00:00Z`) : null;
+  if (day && !Number.isNaN(day.getTime())) {
+    const label = day.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    return `Changes to ${amount} on ${label} (UTC)`;
+  }
+  return `Changes to ${amount} soon`;
+}
+
+// In-app notices. One at a time, shown at the top of the card, derived from
+// the balance the backend returns (no separate notification store).
+export const NOTICE_OUT_OF_CREDITS =
+  'You are out of discount credits. Requests are billed to your paid balance at the list price.';
+export const NOTICE_DAILY_LIMIT_REACHED =
+  "You reached today's discount limit. Requests are billed to your paid balance until 00:00 UTC.";
+export const NOTICE_DAILY_LIMIT_ZERO =
+  'Your daily limit is $0.00, so discount credits are not used. Raise it below to use them again.';
+
+export type DiscountNotice = 'out_of_credits' | 'daily_limit_reached' | 'daily_limit_zero';
+
+export const NOTICE_TEXT: Record<DiscountNotice, string> = {
+  out_of_credits: NOTICE_OUT_OF_CREDITS,
+  daily_limit_reached: NOTICE_DAILY_LIMIT_REACHED,
+  daily_limit_zero: NOTICE_DAILY_LIMIT_ZERO,
+};
+
+/**
+ * Which notice, if any, the account should see now:
+ * - out_of_credits: credits were added at some point and the balance is now empty;
+ * - daily_limit_zero: the account set its limit to 0;
+ * - daily_limit_reached: there is balance left but nothing left of today's limit.
+ * An account that never had credits sees nothing.
+ */
+export function discountNotice(balance: {
+  balance_usd: number;
+  lifetime_granted_usd: number;
+  daily_cap: { daily_cap_usd: number; left_today_usd: number } | null;
+}): DiscountNotice | null {
+  if (balance.balance_usd <= 0) return balance.lifetime_granted_usd > 0 ? 'out_of_credits' : null;
+  const cap = balance.daily_cap;
+  if (!cap) return null;
+  if (cap.daily_cap_usd <= 0) return 'daily_limit_zero';
+  if (cap.left_today_usd <= 0) return 'daily_limit_reached';
+  return null;
 }

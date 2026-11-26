@@ -73,7 +73,7 @@ export function DailyLimitSection({ dailyCap }: { dailyCap: DiscountCreditsDaily
         <p className="text-xs text-muted-foreground">{DAILY_LIMIT_RESETS}</p>
         {dailyCap.next_daily_cap_usd !== null && (
           <p className="text-xs text-muted-foreground">
-            {dailyLimitPendingLine(dailyCap.next_daily_cap_usd, dailyCap.next_daily_cap_from ?? dailyCap.resets_at)}
+            {dailyLimitPendingLine(dailyCap.next_daily_cap_usd, dailyCap.next_daily_cap_at, dailyCap.next_daily_cap_from)}
           </p>
         )}
       </div>

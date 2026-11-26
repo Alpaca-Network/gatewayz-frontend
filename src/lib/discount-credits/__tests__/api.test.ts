@@ -118,6 +118,7 @@ describe('daily limit parsing', () => {
       resets_at: '2026-11-26T00:00:00Z',
       next_daily_cap_usd: null,
       next_daily_cap_from: null,
+      next_daily_cap_at: null,
     });
   });
 
