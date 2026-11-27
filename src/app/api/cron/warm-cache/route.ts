@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
-import { getConfiguredSecret } from '@/lib/secret-auth';
+import { getConfiguredSecret, verifyBearerSecret } from '@/lib/secret-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,6 +38,17 @@ export async function GET(request: NextRequest) {
             { error: 'Unauthorized - Not a valid cron request' },
             { status: 401 }
           );
+        }
+
+        // The x-vercel-cron header can be spoofed by anyone. When CRON_SECRET is
+        // configured, Vercel sends `Authorization: Bearer <CRON_SECRET>` with
+        // every cron invocation, so require it.
+        if (!isDevelopment && getConfiguredSecret('CRON_SECRET')) {
+          const cronAuth = verifyBearerSecret(authHeader, 'CRON_SECRET');
+          if (!cronAuth.ok) {
+            span.setAttribute('error', 'invalid_cron_secret');
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+          }
         }
 
         console.log('[Cron] Starting scheduled cache warming...');

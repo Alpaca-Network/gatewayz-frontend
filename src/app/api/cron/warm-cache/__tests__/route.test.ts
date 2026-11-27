@@ -69,6 +69,36 @@ describe('GET /api/cron/warm-cache', () => {
       expect(response.status).toBe(200);
     });
 
+    it('should reject a spoofed x-vercel-cron header when CRON_SECRET is set', async () => {
+      process.env.CRON_SECRET = 'cron-secret-xyz';
+      const request = new NextRequest('http://localhost:3000/api/cron/warm-cache', {
+        method: 'GET',
+        headers: { 'x-vercel-cron': '1' },
+      });
+
+      const response = await GET(request);
+
+      expect(response.status).toBe(401);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should accept the Vercel cron bearer token when CRON_SECRET is set', async () => {
+      process.env.CRON_SECRET = 'cron-secret-xyz';
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true, total_models: 100 }),
+      });
+      const request = new NextRequest('http://localhost:3000/api/cron/warm-cache', {
+        method: 'GET',
+        headers: { 'x-vercel-cron': '1', authorization: 'Bearer cron-secret-xyz' },
+      });
+
+      const response = await GET(request);
+
+      expect(response.status).toBe(200);
+    });
+
     it('should log warning if cron header is missing', async () => {
       const request = new NextRequest('http://localhost:3000/api/cron/warm-cache', {
         method: 'GET',
