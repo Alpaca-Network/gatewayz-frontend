@@ -90,457 +90,150 @@ describe('SessionInitializer', () => {
       userId: null,
     });
 
-    // No ?code= by default; the legacy path asks for consent, which tests accept
+    // No ?code= by default; account-switch prompts are accepted unless a test says otherwise
     (transferCode.getSessionTransferCode as jest.Mock).mockReturnValue(null);
     (transferCode.confirmAccountSwitch as jest.Mock).mockReturnValue(true);
     (api.getUserData as jest.Mock).mockReturnValue(null);
   });
 
-  describe('Session Transfer from URL Parameters', () => {
-    it('should process valid token and userId from URL params', async () => {
-      const mockToken = 'test-api-key-123';
-      const mockUserId = '12345';
-      const mockUserData = {
-        user_id: 12345,
-        email: 'test@example.com',
-        display_name: 'Test User',
-        credits: 100,
-        tier: 'basic',
-        subscription_status: 'active',
-      };
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockUserData,
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        // Verify token was stored
-        expect(sessionTransfer.storeSessionTransferToken).toHaveBeenCalledWith(
-          mockToken,
-          mockUserId
-        );
-      });
-
-      // Verify API key was saved
-      expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
-
-      // Verify user data fetch
-      expect(global.fetch).toHaveBeenCalledWith('/api/user/me', expect.objectContaining({
-        headers: {
-          Authorization: `Bearer ${mockToken}`,
-          'Content-Type': 'application/json',
-        },
-      }));
-
-      // Verify user data was saved
-      await waitFor(() => {
-        expect(api.saveUserData).toHaveBeenCalledWith(
-          expect.objectContaining({
-            user_id: 12345,
-            api_key: mockToken,
-            email: 'test@example.com',
-            display_name: 'Test User',
-            credits: 100,
-            tier: 'basic',
-          })
-        );
-      });
-
-      // Verify URL cleanup
-      expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
-
-      // Verify auth refresh was triggered
-      expect(mockAuthContext.refresh).toHaveBeenCalledWith();
+  // Earlier tests replace window.localStorage; give each test a real-ish one.
+  function setStorage(values: Record<string, string> = {}) {
+    const store = new Map(Object.entries(values));
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: (k: string) => (store.has(k) ? store.get(k) : null),
+        setItem: (k: string, v: string) => store.set(k, v),
+        removeItem: (k: string) => store.delete(k),
+        clear: () => store.clear(),
+      },
+      writable: true,
+      configurable: true,
     });
+  }
 
-    it('should redirect to returnUrl when provided', async () => {
-      const mockToken = 'test-api-key-redirect';
-      const mockUserId = '12345';
-      const mockReturnUrl = '/dashboard';
-      const mockUserData = {
-        user_id: 12345,
-        email: 'test@example.com',
-        display_name: 'Test User',
-        credits: 100,
-      };
+  const redeemed = {
+    api_key: 'gw_live_redeemed_key',
+    user_id: 77,
+    privy_user_id: 'did:privy:y',
+    email: 'y@example.com',
+    display_name: 'Y',
+  };
+  const profile = {
+    user_id: 77,
+    email: 'y@example.com',
+    display_name: 'Y',
+    credits: 5,
+    tier: 'Pro',
+  };
 
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: mockReturnUrl,
-        action: null,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockUserData,
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        expect(api.saveUserData).toHaveBeenCalled();
-      });
-
-      // Wait for the setTimeout to trigger
-      await waitFor(
-        () => {
-          expect(mockRouter.push).toHaveBeenCalledWith(mockReturnUrl);
-        },
-        { timeout: 200 }
-      );
+  /** A valid ?code= that redeems to `redeemed`, with its profile fetch succeeding. */
+  function mockCodeTransfer() {
+    setStorage();
+    (transferCode.getSessionTransferCode as jest.Mock).mockReturnValue('one-time-code');
+    (transferCode.redeemSessionTransferCode as jest.Mock).mockResolvedValue({
+      status: 'ok',
+      session: redeemed,
     });
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => profile });
+  }
 
-    it('should NOT redirect to an off-site returnUrl', async () => {
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: 'test-api-key-offsite',
-        userId: '12345',
-        returnUrl: '//evil.example.com/phish',
-        action: null,
-      });
+  describe('Legacy ?token=&userId= params are ignored', () => {
+    const SECRET_TOKEN = 'gw_live_legacy_secret_token';
 
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({ user_id: 12345, email: 'test@example.com', credits: 1 }),
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        expect(api.saveUserData).toHaveBeenCalled();
-      });
-      await waitFor(() => {
-        expect(mockAuthContext.refresh).toHaveBeenCalled();
-      });
-      expect(mockRouter.push).not.toHaveBeenCalled();
-    });
-
-    it('should reject a transferred token whose backend user_id does not match userId', async () => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: 'test-api-key-attacker',
-        userId: '12345',
-        returnUrl: '/chat',
-        action: null,
-      });
-
-      // Backend says the token belongs to a different account
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({ user_id: 99999, email: 'attacker@example.com', credits: 1 }),
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        expect(sessionTransfer.clearSessionTransferToken).toHaveBeenCalled();
-      });
-
-      expect(api.saveApiKey).not.toHaveBeenCalled();
-      expect(api.saveUserData).not.toHaveBeenCalled();
-      expect(mockRouter.push).not.toHaveBeenCalled();
-      // URL params are stripped regardless
-      expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
-    });
-
-    it('should reject a stored token whose backend user_id does not match', async () => {
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: null,
-        userId: null,
-        returnUrl: null,
-        action: null,
-      });
-      (sessionTransfer.getStoredSessionTransferToken as jest.Mock).mockReturnValue({
-        token: 'test-api-key-stored-mismatch',
-        userId: '12345',
-      });
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({ user_id: 99999, credits: 1 }),
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        expect(sessionTransfer.clearSessionTransferToken).toHaveBeenCalled();
-      });
-      expect(api.saveApiKey).not.toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
-    });
-
-    it('should handle failed user data fetch gracefully', async () => {
-      const mockToken = 'test-api-key-failed';
-      const mockUserId = '12345';
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: false,
-        status: 401,
-        text: jest.fn().mockResolvedValue('Unauthorized'),
-      });
-
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        // Check that error was logged with status code and response details
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          '[SessionInit] Failed to fetch user data. Status:',
-          401,
-          'Response:',
-          expect.stringContaining('Unauthorized')
-        );
-      });
-
-      // Unverified token must NOT be persisted as the user's API key
-      expect(api.saveApiKey).not.toHaveBeenCalled();
-
-      // And user data should NOT be saved
-      expect(api.saveUserData).not.toHaveBeenCalled();
-
-      // URL cleanup and refresh should still happen
-      expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
-
-      // Wait for async refresh to be called (refresh is now non-blocking)
-      await waitFor(() => {
-        expect(mockAuthContext.refresh).toHaveBeenCalledWith();
-      });
-
-      consoleErrorSpy.mockRestore();
-    });
-
-    it('should handle network errors during user data fetch', async () => {
-      const mockToken = 'test-api-key-network';
-      const mockUserId = '12345';
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      const networkError = new Error('Network error');
-      (global.fetch as jest.Mock).mockRejectedValue(networkError);
-
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        expect(consoleErrorSpy).toHaveBeenCalledWith(
-          expect.stringContaining('[SessionInit] Error fetching user data:'),
-          networkError
-        );
-      });
-
-      // Unverified token must NOT be persisted as the user's API key
-      expect(api.saveApiKey).not.toHaveBeenCalled();
-
-      // URL cleanup and refresh should still happen
-      expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
-
-      // Wait for async refresh to be called (refresh is now non-blocking)
-      await waitFor(() => {
-        expect(mockAuthContext.refresh).toHaveBeenCalledWith();
-      });
-
-      consoleErrorSpy.mockRestore();
-    });
-
-    it('should normalize user data correctly', async () => {
-      const mockToken = 'test-api-key-normalize';
-      const mockUserId = '12345';
-      const mockUserData = {
-        user_id: 12345,
-        email: 'test@example.com',
-        credits: 150.75, // Decimal credits
-        tier: 'PRO', // Uppercase tier
-        subscription_status: 'active',
-        subscription_end_date: 1735689600,
-      };
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockUserData,
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        expect(api.saveUserData).toHaveBeenCalledWith(
-          expect.objectContaining({
-            user_id: 12345,
-            credits: 150.75, // Fractional credits preserved (no flooring)
-            tier: 'pro', // Should be lowercased
-            subscription_status: 'active',
-            subscription_end_date: 1735689600,
-          })
-        );
-      });
-    });
-
-    it('should use fallback values for missing user data fields', async () => {
-      const mockToken = 'test-api-key-456-fallback';
-      const mockUserId = '12345';
-      const mockUserData = {
-        user_id: 12345,
-        // Missing email, display_name, etc.
-      };
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockUserData,
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        expect(api.saveUserData).toHaveBeenCalledWith(
-          expect.objectContaining({
-            user_id: 12345,
-            auth_method: 'session_transfer',
-            privy_user_id: '12345',
-            display_name: 'User', // Fallback when not provided
-            email: '', // Fallback when not provided
-            credits: 0, // Fallback when not provided
-            api_key: mockToken,
-          })
-        );
-      });
-    });
-  });
-
-  describe('Session Transfer from SessionStorage (Fallback)', () => {
     beforeEach(() => {
-      // Mock localStorage to not have API key
-      Object.defineProperty(window, 'localStorage', {
-        value: {
-          getItem: jest.fn().mockReturnValue(null),
-          setItem: jest.fn(),
-          removeItem: jest.fn(),
-          clear: jest.fn(),
-        },
-        writable: true,
+      window.history.replaceState(
+        { keep: true },
+        '',
+        `/chat?token=${SECRET_TOKEN}&userId=5&returnUrl=%2Fsettings&ref=x#top`
+      );
+      // The helper still reports what is in the URL; the component must ignore it
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: SECRET_TOKEN,
+        userId: '5',
+        returnUrl: '/settings',
+        action: null,
       });
     });
 
-    it('should use stored token when no URL params but sessionStorage has token', async () => {
-      const mockToken = 'stored-api-key-456';
-      const mockUserId = '67890';
-      const mockUserData = {
-        user_id: 67890,
-        email: 'stored@example.com',
-        display_name: 'Stored User',
-        credits: 200,
-      };
+    afterEach(() => {
+      window.history.replaceState(null, '', '/');
+    });
 
-      // No URL params
+    it('strips token and userId from the URL, keeps the rest, and never uses them', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation();
+      const log = jest.spyOn(console, 'log').mockImplementation();
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => {
+        expect(window.location.search).toBe('?returnUrl=%2Fsettings&ref=x');
+      });
+      expect(window.location.pathname).toBe('/chat');
+      expect(window.location.hash).toBe('#top');
+      expect(window.history.state).toEqual({ keep: true });
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('[SessionInit] Ignored legacy session-transfer params'),
+        'token, userId'
+      );
+      const logged = JSON.stringify([...warn.mock.calls, ...log.mock.calls]);
+      expect(logged).not.toContain(SECRET_TOKEN);
+
+      // Give the async init a chance to run, then check nothing was stored or fetched
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(api.saveApiKey).not.toHaveBeenCalled();
+      expect(api.saveUserData).not.toHaveBeenCalled();
+      expect(sessionTransfer.storeSessionTransferToken).not.toHaveBeenCalled();
+      expect(transferCode.confirmAccountSwitch).not.toHaveBeenCalled();
+      expect(mockRouter.push).not.toHaveBeenCalled();
+
+      warn.mockRestore();
+      log.mockRestore();
+    });
+
+    it('strips them even while waiting for Privy', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation();
+      mockAuthContext.privyReady = false;
       (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: null,
-        userId: null,
+        token: SECRET_TOKEN,
+        userId: '5',
         returnUrl: null,
-        action: null,
-      });
-
-      // But sessionStorage has token
-      (sessionTransfer.getStoredSessionTransferToken as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockUserData,
+        action: 'signin',
       });
 
       render(<SessionInitializer />);
 
       await waitFor(() => {
-        expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
+        expect(window.location.search).toBe('?returnUrl=%2Fsettings&ref=x');
       });
-
-      // Verify user data fetch
-      expect(global.fetch).toHaveBeenCalledWith('/api/user/me', expect.objectContaining({
-        headers: {
-          Authorization: `Bearer ${mockToken}`,
-          'Content-Type': 'application/json',
-        },
-      }));
-
-      // Verify user data was saved
-      await waitFor(() => {
-        expect(api.saveUserData).toHaveBeenCalledWith(
-          expect.objectContaining({
-            user_id: 67890,
-            api_key: mockToken,
-            email: 'stored@example.com',
-          })
-        );
-      });
-
-      // Verify auth refresh was triggered
-      expect(mockAuthContext.refresh).toHaveBeenCalledWith();
+      expect(api.saveApiKey).not.toHaveBeenCalled();
+      warn.mockRestore();
     });
 
-    it('should NOT use stored token if localStorage already has API key', async () => {
-      const existingApiKey = 'existing-api-key';
+    it('does not warn when the URL has no legacy params', async () => {
+      window.history.replaceState(null, '', '/chat?ref=x');
+      const warn = jest.spyOn(console, 'warn').mockImplementation();
 
-      // Mock localStorage with existing API key
-      Object.defineProperty(window, 'localStorage', {
-        value: {
-          getItem: jest.fn().mockReturnValue(existingApiKey),
-          setItem: jest.fn(),
-          removeItem: jest.fn(),
-          clear: jest.fn(),
-        },
-        writable: true,
-      });
+      render(<SessionInitializer />);
 
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(window.location.search).toBe('?ref=x');
+      expect(warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Ignored legacy session-transfer params'),
+        expect.anything()
+      );
+      warn.mockRestore();
+    });
+
+    it('never restores a transfer token left in sessionStorage', async () => {
+      window.history.replaceState(null, '', '/');
       (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
         token: null,
         userId: null,
         returnUrl: null,
         action: null,
       });
-
       (sessionTransfer.getStoredSessionTransferToken as jest.Mock).mockReturnValue({
         token: 'stored-token',
         userId: '12345',
@@ -548,10 +241,10 @@ describe('SessionInitializer', () => {
 
       render(<SessionInitializer />);
 
-      await waitFor(() => {
-        expect(api.saveApiKey).not.toHaveBeenCalled();
-        expect(global.fetch).not.toHaveBeenCalled();
-      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(sessionTransfer.getStoredSessionTransferToken).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(api.saveApiKey).not.toHaveBeenCalled();
     });
   });
 
@@ -744,25 +437,7 @@ describe('SessionInitializer', () => {
 
   describe('Component Lifecycle', () => {
     it('should only run initialization once on mount', async () => {
-      const mockToken = 'test-api-key-lifecycle';
-      const mockUserId = '12345';
-      const mockUserData = {
-        user_id: 12345,
-        email: 'test@example.com',
-        credits: 100,
-      };
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockUserData,
-      });
+      mockCodeTransfer();
 
       const { rerender } = render(<SessionInitializer />);
 
@@ -775,6 +450,7 @@ describe('SessionInitializer', () => {
 
       // Should not trigger additional calls
       expect(api.saveApiKey).toHaveBeenCalledTimes(1);
+      expect(transferCode.redeemSessionTransferCode).toHaveBeenCalledTimes(1);
     });
 
     it('should render null (no UI)', () => {
@@ -785,78 +461,26 @@ describe('SessionInitializer', () => {
 
   describe('Error Handling and Resilience', () => {
     it('should handle localStorage.getItem throwing exception', async () => {
-      const mockToken = 'test-api-key-storage-error';
-      const mockUserId = '12345';
-      const mockUserData = {
-        user_id: 12345,
-        email: 'test@example.com',
-        display_name: 'Test User',
-        credits: 100,
-      };
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
+      mockCodeTransfer();
+      const originalGetItem = window.localStorage.getItem;
+      window.localStorage.getItem = jest.fn(() => {
+        throw new Error('QuotaExceededError');
       });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockUserData,
-      });
-
-      // Mock localStorage.getItem to throw
-      const originalGetItem = Storage.prototype.getItem;
-      let callCount = 0;
-      Storage.prototype.getItem = jest.fn(() => {
-        callCount++;
-        if (callCount === 2) { // First call is for stored token check
-          throw new Error('QuotaExceededError');
-        }
-        return null;
-      });
-
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
       render(<SessionInitializer />);
 
       await waitFor(() => {
-        expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
+        expect(api.saveApiKey).toHaveBeenCalledWith('gw_live_redeemed_key');
       });
-
-      // Should still trigger refresh (using normal refresh to leverage deduplication)
       expect(mockAuthContext.refresh).toHaveBeenCalledWith();
 
-      Storage.prototype.getItem = originalGetItem;
-      consoleErrorSpy.mockRestore();
+      window.localStorage.getItem = originalGetItem;
     });
 
     it('should handle saveUserData throwing exception gracefully', async () => {
-      const mockToken = 'test-api-key-save-error';
-      const mockUserId = '12345';
-      const mockUserData = {
-        user_id: 12345,
-        email: 'test@example.com',
-        display_name: 'Test User',
-        credits: 100,
-      };
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockUserData,
-      });
-
+      mockCodeTransfer();
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-      // Mock saveUserData to throw
       (api.saveUserData as jest.Mock).mockImplementation(() => {
         throw new Error('QuotaExceededError');
       });
@@ -865,10 +489,9 @@ describe('SessionInitializer', () => {
 
       await waitFor(() => {
         // API key should still be saved
-        expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
+        expect(api.saveApiKey).toHaveBeenCalledWith('gw_live_redeemed_key');
       });
 
-      // Should log error about user data save failure
       await waitFor(() => {
         expect(consoleErrorSpy).toHaveBeenCalledWith(
           expect.stringContaining('[SessionInit] Failed to save user data'),
@@ -876,70 +499,13 @@ describe('SessionInitializer', () => {
         );
       });
 
-      // Should still trigger refresh (using normal refresh to leverage deduplication)
       expect(mockAuthContext.refresh).toHaveBeenCalledWith();
 
       consoleErrorSpy.mockRestore();
     });
 
-    it('should not persist or store an unverified token when user fetch times out', async () => {
-      const mockToken = 'test-api-key-timeout';
-      const mockUserId = '12345';
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      // Mock fetch to timeout
-      (global.fetch as jest.Mock).mockImplementation(() =>
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 4000)
-        )
-      );
-
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      render(<SessionInitializer />);
-
-      // Eventually should trigger refresh despite timeout (using normal refresh to leverage deduplication)
-      await waitFor(
-        () => {
-          expect(mockAuthContext.refresh).toHaveBeenCalledWith();
-        },
-        { timeout: 5000 }
-      );
-
-      // The unverified token is never saved, not even for a reload retry
-      expect(api.saveApiKey).not.toHaveBeenCalled();
-      expect(sessionTransfer.storeSessionTransferToken).not.toHaveBeenCalled();
-      expect(sessionTransfer.clearSessionTransferToken).not.toHaveBeenCalled();
-
-      consoleErrorSpy.mockRestore();
-    });
-
     it('should handle multiple consecutive initialization attempts', async () => {
-      const mockToken = 'test-api-key-consecutive';
-      const mockUserId = '12345';
-      const mockUserData = {
-        user_id: 12345,
-        email: 'test@example.com',
-        credits: 100,
-      };
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => mockUserData,
-      });
+      mockCodeTransfer();
 
       const { rerender } = render(<SessionInitializer />);
 
@@ -982,20 +548,7 @@ describe('SessionInitializer', () => {
     });
 
     it('should continue despite cleanupSessionTransferParams throwing exception', async () => {
-      const mockToken = 'test-api-key-cleanup-error';
-      const mockUserId = '12345';
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: mockToken,
-        userId: mockUserId,
-        returnUrl: null,
-        action: null,
-      });
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({ user_id: 12345, email: 'test@example.com', credits: 100 }),
-      });
+      mockCodeTransfer();
 
       (sessionTransfer.cleanupSessionTransferParams as jest.Mock).mockImplementation(() => {
         throw new Error('History API not available');
@@ -1005,7 +558,6 @@ describe('SessionInitializer', () => {
 
       render(<SessionInitializer />);
 
-      // Should log warning about cleanup failure
       await waitFor(() => {
         expect(consoleWarnSpy).toHaveBeenCalledWith(
           expect.stringContaining('[SessionInit] Warning: Failed to cleanup session transfer params'),
@@ -1013,13 +565,10 @@ describe('SessionInitializer', () => {
         );
       });
 
-      // After the fix, API key is now saved inside the promise chain (not immediately)
-      // So we check that it gets saved after the user data fetch and cleanup attempt
       await waitFor(() => {
-        expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
-      }, { timeout: 5000 });
+        expect(api.saveApiKey).toHaveBeenCalledWith('gw_live_redeemed_key');
+      });
 
-      // Cleanup was attempted despite the error
       expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
 
       consoleWarnSpy.mockRestore();
@@ -1106,119 +655,7 @@ describe('SessionInitializer', () => {
     });
   });
 
-  describe('Stored Token Edge Cases', () => {
-    it('should ignore stored token if current localStorage has API key', async () => {
-      // Mock localStorage with existing API key
-      Object.defineProperty(window, 'localStorage', {
-        value: {
-          getItem: jest.fn((key) => {
-            if (key === 'gatewayz_api_key') {
-              return 'existing-api-key';
-            }
-            return null;
-          }),
-          setItem: jest.fn(),
-          removeItem: jest.fn(),
-          clear: jest.fn(),
-        },
-        writable: true,
-      });
-
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: null,
-        userId: null,
-        returnUrl: null,
-        action: null,
-      });
-
-      (sessionTransfer.getStoredSessionTransferToken as jest.Mock).mockReturnValue({
-        token: 'stored-token',
-        userId: '12345',
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        // Should NOT use the stored token since API key already exists
-        expect(global.fetch).not.toHaveBeenCalled();
-        expect(api.saveApiKey).not.toHaveBeenCalled();
-      });
-    });
-
-    it('should handle stored token with no userId', async () => {
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: null,
-        userId: null,
-        returnUrl: null,
-        action: null,
-      });
-
-      (sessionTransfer.getStoredSessionTransferToken as jest.Mock).mockReturnValue({
-        token: 'stored-token',
-        userId: null, // Missing userId
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        // Should not attempt to use incomplete token
-        expect(api.saveApiKey).not.toHaveBeenCalled();
-      });
-    });
-
-    it('should handle stored token with no token', async () => {
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: null,
-        userId: null,
-        returnUrl: null,
-        action: null,
-      });
-
-      (sessionTransfer.getStoredSessionTransferToken as jest.Mock).mockReturnValue({
-        token: null, // Missing token
-        userId: '12345',
-      });
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => {
-        // Should not attempt to use incomplete token
-        expect(api.saveApiKey).not.toHaveBeenCalled();
-      });
-    });
-  });
-
-  // Earlier tests replace window.localStorage; give each test a real-ish one.
-  function setStorage(values: Record<string, string> = {}) {
-    const store = new Map(Object.entries(values));
-    Object.defineProperty(window, 'localStorage', {
-      value: {
-        getItem: (k: string) => (store.has(k) ? store.get(k) : null),
-        setItem: (k: string, v: string) => store.set(k, v),
-        removeItem: (k: string) => store.delete(k),
-        clear: () => store.clear(),
-      },
-      writable: true,
-      configurable: true,
-    });
-  }
-
   describe('One-time transfer code (?code=)', () => {
-    const redeemed = {
-      api_key: 'gw_live_redeemed_key',
-      user_id: 77,
-      privy_user_id: 'did:privy:y',
-      email: 'y@example.com',
-      display_name: 'Y',
-    };
-    const profile = {
-      user_id: 77,
-      email: 'y@example.com',
-      display_name: 'Y',
-      credits: 5,
-      tier: 'Pro',
-    };
-
     beforeEach(() => {
       setStorage();
       (transferCode.getSessionTransferCode as jest.Mock).mockReturnValue('one-time-code');
@@ -1330,6 +767,44 @@ describe('SessionInitializer', () => {
       err.mockRestore();
     });
 
+    it('redirects to a same-origin returnUrl after redeeming', async () => {
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: null,
+        userId: null,
+        returnUrl: '/dashboard',
+        action: null,
+      });
+      (transferCode.redeemSessionTransferCode as jest.Mock).mockResolvedValue({
+        status: 'ok',
+        session: redeemed,
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => profile });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/dashboard'));
+    });
+
+    it('does not redirect to an off-site returnUrl', async () => {
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: null,
+        userId: null,
+        returnUrl: '//evil.example.com/phish',
+        action: null,
+      });
+      (transferCode.redeemSessionTransferCode as jest.Mock).mockResolvedValue({
+        status: 'ok',
+        session: redeemed,
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => profile });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(api.saveApiKey).toHaveBeenCalled());
+      await waitFor(() => expect(mockAuthContext.refresh).toHaveBeenCalled());
+      expect(mockRouter.push).not.toHaveBeenCalled();
+    });
+
     it('prefers the code over legacy token params', async () => {
       (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
         token: 'legacy-token',
@@ -1347,44 +822,6 @@ describe('SessionInitializer', () => {
 
       await waitFor(() => expect(api.saveApiKey).toHaveBeenCalledWith('gw_live_redeemed_key'));
       expect(api.saveApiKey).not.toHaveBeenCalledWith('legacy-token');
-    });
-  });
-
-  describe('Legacy ?token=&userId= consent', () => {
-    beforeEach(() => {
-      setStorage();
-      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
-        token: 'legacy-token',
-        userId: '5',
-        returnUrl: null,
-        action: null,
-      });
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: async () => ({ user_id: 5, email: 'legacy@example.com' }),
-      });
-    });
-
-    it('asks even when no one is signed in, and stops if declined', async () => {
-      (transferCode.confirmAccountSwitch as jest.Mock).mockReturnValue(false);
-
-      render(<SessionInitializer />);
-
-      await waitFor(() => expect(mockAuthContext.refresh).toHaveBeenCalled());
-      expect((transferCode.confirmAccountSwitch as jest.Mock).mock.calls[0][0]).toBe(
-        'Sign in to Gatewayz as legacy@example.com?'
-      );
-      expect(api.saveApiKey).not.toHaveBeenCalled();
-      expect(sessionTransfer.storeSessionTransferToken).not.toHaveBeenCalled();
-      expect(sessionTransfer.clearSessionTransferToken).toHaveBeenCalled();
-    });
-
-    it('signs in only after consent', async () => {
-      render(<SessionInitializer />);
-
-      await waitFor(() => expect(api.saveApiKey).toHaveBeenCalledWith('legacy-token'));
-      expect(transferCode.confirmAccountSwitch).toHaveBeenCalledTimes(1);
-      expect(sessionTransfer.storeSessionTransferToken).toHaveBeenCalledWith('legacy-token', '5');
     });
   });
 });
