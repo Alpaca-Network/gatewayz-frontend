@@ -228,6 +228,29 @@ describe('WalletsPage', () => {
       });
     });
 
+    it('says sign-in is lost for an EVM wallet', async () => {
+      const user = userEvent.setup();
+      mockWalletsData = [makeWallet({ is_primary: false })];
+      render(<WalletsPage />);
+      await user.click(screen.getByRole('button', { name: /unlink/i }));
+      expect(screen.getByText(/will no longer be able to sign in to this account/)).toBeInTheDocument();
+    });
+
+    it('does not claim sign-in is lost for a Cardano stake address, and unlinks the full address', async () => {
+      const user = userEvent.setup();
+      const stake = 'stake1u9' + 'a'.repeat(50);
+      mockWalletsData = [makeWallet({ wallet_address: stake, chain_namespace: 'cip34', is_primary: false })];
+      mockUnlinkMutateAsync.mockResolvedValue(undefined);
+      render(<WalletsPage />);
+      await user.click(screen.getByRole('button', { name: /unlink/i }));
+      expect(screen.queryByText(/no longer be able to sign in/)).not.toBeInTheDocument();
+      expect(screen.getByText(/not used to sign in/)).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^unlink$/i }));
+      await waitFor(() => {
+        expect(mockUnlinkMutateAsync).toHaveBeenCalledWith(stake);
+      });
+    });
+
     it('shows the last_auth_method explanatory toast on 400', async () => {
       const user = userEvent.setup();
       mockWalletsData = [makeWallet({ is_primary: true })];

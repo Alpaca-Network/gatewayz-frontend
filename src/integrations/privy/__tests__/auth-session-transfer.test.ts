@@ -1,5 +1,4 @@
 import {
-  redirectToBetaWithSession,
   getSessionTransferParams,
   cleanupSessionTransferParams,
   storeSessionTransferToken,
@@ -78,71 +77,9 @@ describe('auth-session-transfer', () => {
     },
   ]);
 
-  describe('redirectToBetaWithSession', () => {
-    it.skip('should redirect to beta domain with token and userId (jsdom limitation)', () => {
-      // Skipping: jsdom doesn't support navigation via href assignment
-      // This function is tested via E2E tests in Playwright
-      const token = 'test-api-key-123';
-      const userId = '12345';
-
-      redirectToBetaWithSession(token, userId);
-
-      expect(window.location.href).toBe(
-        'https://beta.gatewayz.ai?token=test-api-key-123&userId=12345'
-      );
-    });
-
-    it.skip('should redirect with returnUrl parameter (jsdom limitation)', () => {
-      // Skipping: jsdom doesn't support navigation via href assignment
-      const token = 'test-api-key-123';
-      const userId = '12345';
-      const returnUrl = '/dashboard';
-
-      redirectToBetaWithSession(token, userId, 'https://beta.gatewayz.ai', returnUrl);
-
-      expect(window.location.href).toBe(
-        'https://beta.gatewayz.ai?token=test-api-key-123&userId=12345&returnUrl=%2Fdashboard'
-      );
-    });
-
-    it.skip('should use custom beta domain (jsdom limitation)', () => {
-      // Skipping: jsdom doesn't support navigation via href assignment
-      const token = 'test-api-key-123';
-      const userId = '12345';
-      const customDomain = 'https://custom-beta.example.com';
-
-      redirectToBetaWithSession(token, userId, customDomain);
-
-      expect(window.location.href).toBe(
-        'https://custom-beta.example.com?token=test-api-key-123&userId=12345'
-      );
-    });
-
-    it.skip('should convert numeric userId to string (jsdom limitation)', () => {
-      // Skipping: jsdom doesn't support navigation via href assignment
-      const token = 'test-api-key-123';
-      const userId = 12345; // Numeric
-
-      redirectToBetaWithSession(token, userId);
-
-      expect(window.location.href).toBe(
-        'https://beta.gatewayz.ai?token=test-api-key-123&userId=12345'
-      );
-    });
-
-    it.skip('should URL encode special characters in parameters (jsdom limitation)', () => {
-      // Skipping: jsdom doesn't support navigation via href assignment
-      const token = 'token+with/special=chars';
-      const userId = '12345';
-      const returnUrl = '/path?query=value&foo=bar';
-
-      redirectToBetaWithSession(token, userId, 'https://beta.gatewayz.ai', returnUrl);
-
-      expect(window.location.href).toContain('token=token%2Bwith%2Fspecial%3Dchars');
-      expect(window.location.href).toContain(
-        'returnUrl=%2Fpath%3Fquery%3Dvalue%26foo%3Dbar'
-      );
-    });
+  it('no longer exports a sender that puts a credential in the URL', async () => {
+    const mod: Record<string, unknown> = await import('../auth-session-transfer');
+    expect(mod.redirectToBetaWithSession).toBeUndefined();
   });
 
   describe('getSessionTransferParams', () => {

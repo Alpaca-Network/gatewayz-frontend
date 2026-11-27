@@ -3,52 +3,16 @@ import { safeSessionStorage } from '@/lib/safe-session-storage';
 /**
  * Session Transfer Module
  *
- * Handles transferring authentication session from gatewayz.ai to beta.gatewayz.ai
- * Provides utilities for encoding/decoding session parameters and managing redirects
+ * Legacy helpers for the retired `?token=&userId=` hand-off to beta.gatewayz.ai.
+ * The app never builds such URLs any more; www.gatewayz.ai sends a one-time
+ * `?code=` (see session-transfer-code.ts), and the middleware strips these
+ * params from incoming page requests.
  */
 
 const SESSION_TRANSFER_TOKEN_KEY = 'gatewayz_session_transfer_token';
 const SESSION_TRANSFER_USER_ID_KEY = 'gatewayz_session_transfer_user_id';
 const SESSION_TRANSFER_TIMESTAMP_KEY = 'gatewayz_session_transfer_timestamp';
 const SESSION_TRANSFER_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
-
-/**
- * Redirects to beta domain with session transfer parameters
- * @param token - API key or session token to transfer
- * @param userId - Gatewayz user ID
- * @param betaDomain - Beta domain URL (default: https://beta.gatewayz.ai)
- * @param returnUrl - Optional URL to return to after auth on beta domain
- * @param action - Optional action parameter (e.g., 'signin', 'freetrial')
- */
-export function redirectToBetaWithSession(
-  token: string,
-  userId: string | number,
-  betaDomain: string = 'https://beta.gatewayz.ai',
-  returnUrl?: string,
-  action?: string
-): void {
-  const params = new URLSearchParams();
-  params.append('token', token);
-  params.append('userId', String(userId));
-
-  if (returnUrl) {
-    params.append('returnUrl', returnUrl);
-  }
-
-  if (action) {
-    params.append('action', action);
-  }
-
-  const redirectUrl = `${betaDomain}?${params.toString()}`;
-  console.log('[SessionTransfer] Redirecting to beta with session:', {
-    domain: betaDomain,
-    hasReturnUrl: !!returnUrl,
-    action: action || undefined,
-  });
-
-  // Use location.href for a hard redirect
-  window.location.href = redirectUrl;
-}
 
 /**
  * Extracts session transfer parameters from URL

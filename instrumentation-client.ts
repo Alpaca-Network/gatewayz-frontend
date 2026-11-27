@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { initializeGlobalErrorHandlers } from "./src/lib/global-error-handlers";
+import { scrubBreadcrumb, scrubEventUrls } from "./src/lib/sentry-url-scrub";
 
 // Get release information
 const getRelease = () => {
@@ -893,7 +894,8 @@ Sentry.init({
       return null;
     }
 
-    return event;
+    // Never send credential-like query params (session hand-off token/code, keys)
+    return scrubEventUrls(event);
   },
 
   // Also rate limit transactions to prevent 429s
@@ -902,7 +904,12 @@ Sentry.init({
     if (shouldRateLimitTransaction(event)) {
       return null;
     }
-    return event;
+    return scrubEventUrls(event);
+  },
+
+  // Navigation and fetch breadcrumbs carry full URLs
+  beforeBreadcrumb(breadcrumb) {
+    return scrubBreadcrumb(breadcrumb);
   },
 });
 
