@@ -41,6 +41,30 @@ step() { echo -e "${YELLOW}→ $1${NC}"; }
 ok() { echo -e "${GREEN}✓ $1${NC}"; }
 fail() { echo -e "${RED}✗ $1${NC}"; }
 
+# The key is sent to this address and every later prompt goes there, so an
+# override must be visible and well-formed. https only, except localhost (CI).
+check_base_url() {
+    if [ "$GATEWAYZ_URL" != "https://api.gatewayz.ai" ]; then
+        if ! [[ "$GATEWAYZ_URL" =~ ^(https://[A-Za-z0-9.-]+|http://(127\.0\.0\.1|localhost))(:[0-9]+)?$ ]]; then
+            fail "GATEWAYZ_BASE_URL is set to an address this script will not use: $GATEWAYZ_URL"
+            echo "Unset it (unset GATEWAYZ_BASE_URL) and run the script again."
+            exit 1
+        fi
+        echo -e "${YELLOW}⚠ GATEWAYZ_BASE_URL is set: your key and prompts will go to $GATEWAYZ_URL, not api.gatewayz.ai.${NC}"
+    fi
+}
+
+# Keys are letters, digits, '_' and '-'. Anything else is refused rather than
+# pasted into a JSON file or a header.
+check_key_format() {
+    if ! [[ "$API_KEY" =~ ^[A-Za-z0-9_-]{8,200}$ ]]; then
+        fail "That does not look like a Gatewayz API key (letters, digits, '_' and '-' only)."
+        exit 1
+    fi
+}
+
+check_base_url
+
 echo ""
 echo -e "${CYAN}╔════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║  Claude Code on Gatewayz - Setup           ║${NC}"
@@ -103,9 +127,12 @@ if [ -z "$API_KEY" ]; then
 fi
 
 # Step 4: Check the key against Gatewayz
+check_key_format
 step "Checking the key..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -m 30 "$GATEWAYZ_URL/v1/messages/count_tokens" \
-    -H "x-api-key: $API_KEY" -H "content-type: application/json" \
+# The key header is read from stdin (-H @-) so it is not in curl's arguments,
+# which other users on the machine can see in the process list.
+HTTP_CODE=$(printf 'x-api-key: %s\n' "$API_KEY" | curl -s -o /dev/null -w "%{http_code}" -m 30 \
+    "$GATEWAYZ_URL/v1/messages/count_tokens" -H @- -H "content-type: application/json" \
     -d '{"model":"'"$DEFAULT_MODEL"'","messages":[{"role":"user","content":"hi"}]}' || true)
 HTTP_CODE="${HTTP_CODE:-000}"
 if [ "$HTTP_CODE" = "200" ]; then

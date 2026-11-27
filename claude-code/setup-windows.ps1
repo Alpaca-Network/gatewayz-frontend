@@ -19,6 +19,17 @@ $ErrorActionPreference = "Stop"
 
 # Override for testing only (CI points it at an unreachable address).
 $GatewayzUrl = if ($env:GATEWAYZ_BASE_URL) { $env:GATEWAYZ_BASE_URL } else { "https://api.gatewayz.ai" }
+
+# The key is sent to this address and every later prompt goes there: an
+# override must be visible and well-formed. https only, except localhost (CI).
+if ($GatewayzUrl -ne "https://api.gatewayz.ai") {
+    if ($GatewayzUrl -notmatch '^(https://[A-Za-z0-9.-]+|http://(127\.0\.0\.1|localhost))(:[0-9]+)?$') {
+        Write-Host "GATEWAYZ_BASE_URL is set to an address this script will not use: $GatewayzUrl" -ForegroundColor Red
+        Write-Host "Remove it (Remove-Item Env:GATEWAYZ_BASE_URL) and run the script again."
+        exit 1
+    }
+    Write-Host "GATEWAYZ_BASE_URL is set: your key and prompts will go to $GatewayzUrl, not api.gatewayz.ai." -ForegroundColor Yellow
+}
 $KeysPage = "https://beta.gatewayz.ai/settings/keys"
 $DefaultModel = "anthropic/claude-sonnet-5-5"
 # Background and Explore sub-agent calls: about a fifth of Claude Haiku's price.
