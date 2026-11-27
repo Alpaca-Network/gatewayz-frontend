@@ -1,6 +1,6 @@
 #!/bin/bash
 # Claude Code on Gatewayz - setup for macOS and Linux
-# Usage: bash setup.sh [API_KEY]
+# Usage: bash setup.sh   (asks for the key; or set GATEWAYZ_API_KEY first)
 #
 # Installs Claude Code (if missing) and a `gatewayz` command that starts it on
 # your Gatewayz key. Your normal `claude` command is not changed, and nothing
@@ -81,7 +81,8 @@ fi
 # Step 3: API key
 echo ""
 step "Setting up your Gatewayz API key..."
-API_KEY="${1:-$GATEWAYZ_API_KEY}"
+# Not taken as an argument: arguments are visible to other users in the process list.
+API_KEY="${GATEWAYZ_API_KEY:-}"
 if [ -z "$API_KEY" ]; then
     echo ""
     echo -e "${WHITE}You need a Gatewayz API key:${NC}"
@@ -155,7 +156,9 @@ const os = require("os");
 const path = require("path");
 
 const CACHE_SECONDS = 60;
-const CACHE_FILE = path.join(os.tmpdir(), `gatewayz-statusline-${os.userInfo().username}.json`);
+// In the user's private ~/.gatewayz folder, not the shared temp folder: in a
+// shared /tmp another user could plant the file (or a symlink in its place).
+const CACHE_FILE = path.join(os.homedir(), ".gatewayz", "statusline-cache.json");
 const PREFIX = "claude-code/";
 
 function modelName(session) {
@@ -184,6 +187,7 @@ async function balance() {
     const credits = Number((await response.json()).credits);
     if (!Number.isFinite(credits)) return null;
     try {
+      fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true, mode: 0o700 });
       fs.writeFileSync(CACHE_FILE, JSON.stringify({ at: Date.now() / 1000, credits }), {
         mode: 0o600,
       });

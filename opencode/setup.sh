@@ -1,6 +1,6 @@
 #!/bin/bash
 # OpenCode on Gatewayz - setup for macOS and Linux
-# Usage: bash setup.sh [API_KEY]
+# Usage: bash setup.sh   (asks for the key; or set GATEWAYZ_API_KEY first)
 #
 # Installs OpenCode (npm) if missing and adds Gatewayz as a provider to
 # OpenCode's own config (~/.config/opencode/opencode.json), keeping anything
@@ -54,7 +54,8 @@ fi
 
 echo ""
 step "Setting up your Gatewayz API key..."
-API_KEY="${1:-$GATEWAYZ_API_KEY}"
+# Not taken as an argument: arguments are visible to other users in the process list.
+API_KEY="${GATEWAYZ_API_KEY:-}"
 if [ -z "$API_KEY" ]; then
     echo -e "${WHITE}Get a key at ${CYAN}$KEYS_PAGE${NC}"
     read -r -s -p "Paste your Gatewayz API key (input hidden): " API_KEY
