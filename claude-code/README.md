@@ -34,6 +34,8 @@ The script:
 
 Your normal `claude` command is not changed, and nothing is added to your shell profile (Windows: the command's folder is added to your user PATH).
 
+The script asks for your key (input hidden). For automation, set `GATEWAYZ_API_KEY` in the environment first; the key is not accepted as a command-line argument, since arguments are visible to other users on the machine.
+
 ## Use it
 
 ```bash

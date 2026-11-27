@@ -24,6 +24,8 @@ irm https://raw.githubusercontent.com/Alpaca-Network/gatewayz-frontend/master/op
 
 The script installs OpenCode with npm if it is missing, checks your Gatewayz key, and adds a **Gatewayz** provider to OpenCode's own config (`~/.config/opencode/opencode.json`). Anything already in that file is kept, and a backup is written next to it. Nothing is added to your shell profile and no other tool's settings are touched.
 
+The script asks for your key (input hidden). For automation, set `GATEWAYZ_API_KEY` in the environment first; the key is not accepted as a command-line argument, since arguments are visible to other users on the machine.
+
 Then run `opencode` and pick a Gatewayz model with `/models`.
 
 ## Manual setup

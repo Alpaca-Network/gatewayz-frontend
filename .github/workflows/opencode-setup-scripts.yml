@@ -38,7 +38,8 @@ jobs:
       - name: Run setup
         env:
           GATEWAYZ_BASE_URL: http://127.0.0.1:9
-        run: bash "${{ matrix.script }}" ci-placeholder-key < /dev/null
+          GATEWAYZ_API_KEY: ci-placeholder-key
+        run: bash "${{ matrix.script }}" < /dev/null
       - name: Check the config
         run: |
           set -euo pipefail

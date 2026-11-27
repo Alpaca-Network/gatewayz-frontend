@@ -139,7 +139,9 @@ const os = require("os");
 const path = require("path");
 
 const CACHE_SECONDS = 60;
-const CACHE_FILE = path.join(os.tmpdir(), `gatewayz-statusline-${os.userInfo().username}.json`);
+// In the user's private ~/.gatewayz folder, not the shared temp folder: in a
+// shared /tmp another user could plant the file (or a symlink in its place).
+const CACHE_FILE = path.join(os.homedir(), ".gatewayz", "statusline-cache.json");
 const PREFIX = "claude-code/";
 
 function modelName(session) {
@@ -168,6 +170,7 @@ async function balance() {
     const credits = Number((await response.json()).credits);
     if (!Number.isFinite(credits)) return null;
     try {
+      fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true, mode: 0o700 });
       fs.writeFileSync(CACHE_FILE, JSON.stringify({ at: Date.now() / 1000, credits }), {
         mode: 0o600,
       });
