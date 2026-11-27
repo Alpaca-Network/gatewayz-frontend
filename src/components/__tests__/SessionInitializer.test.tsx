@@ -2,6 +2,7 @@ import { render, waitFor } from '@testing-library/react';
 import { SessionInitializer } from '../SessionInitializer';
 import * as sessionTransfer from '@/integrations/privy/auth-session-transfer';
 import * as api from '@/lib/api';
+import * as transferCode from '@/integrations/privy/session-transfer-code';
 import { useRouter } from 'next/navigation';
 import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 
@@ -22,7 +23,15 @@ jest.mock('@/integrations/privy/auth-session-transfer', () => ({
   clearSessionTransferToken: jest.fn(),
 }));
 
+jest.mock('@/integrations/privy/session-transfer-code', () => ({
+  getSessionTransferCode: jest.fn(),
+  redeemSessionTransferCode: jest.fn(),
+  confirmAccountSwitch: jest.fn(),
+  accountLabel: jest.requireActual('@/integrations/privy/session-transfer-code').accountLabel,
+}));
+
 jest.mock('@/lib/api', () => ({
+  getUserData: jest.fn(),
   saveApiKey: jest.fn(),
   saveUserData: jest.fn(),
 }));
@@ -80,6 +89,11 @@ describe('SessionInitializer', () => {
       token: null,
       userId: null,
     });
+
+    // No ?code= by default; the legacy path asks for consent, which tests accept
+    (transferCode.getSessionTransferCode as jest.Mock).mockReturnValue(null);
+    (transferCode.confirmAccountSwitch as jest.Mock).mockReturnValue(true);
+    (api.getUserData as jest.Mock).mockReturnValue(null);
   });
 
   describe('Session Transfer from URL Parameters', () => {
@@ -868,7 +882,7 @@ describe('SessionInitializer', () => {
       consoleErrorSpy.mockRestore();
     });
 
-    it('should not persist an unverified token when user fetch times out (kept for retry)', async () => {
+    it('should not persist or store an unverified token when user fetch times out', async () => {
       const mockToken = 'test-api-key-timeout';
       const mockUserId = '12345';
 
@@ -890,9 +904,6 @@ describe('SessionInitializer', () => {
 
       render(<SessionInitializer />);
 
-      // Token is kept in sessionStorage so a reload can retry (and re-verify) it
-      expect(sessionTransfer.storeSessionTransferToken).toHaveBeenCalledWith(mockToken, mockUserId);
-
       // Eventually should trigger refresh despite timeout (using normal refresh to leverage deduplication)
       await waitFor(
         () => {
@@ -901,8 +912,9 @@ describe('SessionInitializer', () => {
         { timeout: 5000 }
       );
 
-      // But the unverified token is never saved as the user's API key
+      // The unverified token is never saved, not even for a reload retry
       expect(api.saveApiKey).not.toHaveBeenCalled();
+      expect(sessionTransfer.storeSessionTransferToken).not.toHaveBeenCalled();
       expect(sessionTransfer.clearSessionTransferToken).not.toHaveBeenCalled();
 
       consoleErrorSpy.mockRestore();
@@ -1173,6 +1185,206 @@ describe('SessionInitializer', () => {
         // Should not attempt to use incomplete token
         expect(api.saveApiKey).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  // Earlier tests replace window.localStorage; give each test a real-ish one.
+  function setStorage(values: Record<string, string> = {}) {
+    const store = new Map(Object.entries(values));
+    Object.defineProperty(window, 'localStorage', {
+      value: {
+        getItem: (k: string) => (store.has(k) ? store.get(k) : null),
+        setItem: (k: string, v: string) => store.set(k, v),
+        removeItem: (k: string) => store.delete(k),
+        clear: () => store.clear(),
+      },
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  describe('One-time transfer code (?code=)', () => {
+    const redeemed = {
+      api_key: 'gw_live_redeemed_key',
+      user_id: 77,
+      privy_user_id: 'did:privy:y',
+      email: 'y@example.com',
+      display_name: 'Y',
+    };
+    const profile = {
+      user_id: 77,
+      email: 'y@example.com',
+      display_name: 'Y',
+      credits: 5,
+      tier: 'Pro',
+    };
+
+    beforeEach(() => {
+      setStorage();
+      (transferCode.getSessionTransferCode as jest.Mock).mockReturnValue('one-time-code');
+    });
+
+    it('strips the code before redeeming, then stores the session', async () => {
+      const order: string[] = [];
+      (sessionTransfer.cleanupSessionTransferParams as jest.Mock).mockImplementation(() => {
+        order.push('cleanup');
+      });
+      (transferCode.redeemSessionTransferCode as jest.Mock).mockImplementation(async () => {
+        order.push('redeem');
+        return { status: 'ok', session: redeemed };
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => profile });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(api.saveApiKey).toHaveBeenCalledWith('gw_live_redeemed_key'));
+      expect(order).toEqual(['cleanup', 'redeem']);
+      expect(transferCode.redeemSessionTransferCode).toHaveBeenCalledWith('one-time-code');
+      expect(api.saveUserData).toHaveBeenCalledWith(
+        expect.objectContaining({ user_id: 77, api_key: 'gw_live_redeemed_key', tier: 'pro' })
+      );
+      // No one is signed in yet: no prompt needed
+      expect(transferCode.confirmAccountSwitch).not.toHaveBeenCalled();
+      expect(mockAuthContext.refresh).toHaveBeenCalled();
+    });
+
+    it('asks before switching away from a different signed-in user', async () => {
+      setStorage({ gatewayz_api_key: 'gw_live_existing' });
+      (api.getUserData as jest.Mock).mockReturnValue({ user_id: 1, email: 'x@example.com' });
+      (transferCode.redeemSessionTransferCode as jest.Mock).mockResolvedValue({
+        status: 'ok',
+        session: redeemed,
+      });
+      (transferCode.confirmAccountSwitch as jest.Mock).mockReturnValue(false);
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(transferCode.confirmAccountSwitch).toHaveBeenCalled());
+      expect((transferCode.confirmAccountSwitch as jest.Mock).mock.calls[0][0]).toBe(
+        "You're signed in as x@example.com. Switch to y@example.com?"
+      );
+      await waitFor(() => expect(mockAuthContext.refresh).toHaveBeenCalled());
+      expect(api.saveApiKey).not.toHaveBeenCalled();
+      expect(api.saveUserData).not.toHaveBeenCalled();
+    });
+
+    it('switches when the person confirms', async () => {
+      setStorage({ gatewayz_api_key: 'gw_live_existing' });
+      (api.getUserData as jest.Mock).mockReturnValue({ user_id: 1, email: 'x@example.com' });
+      (transferCode.redeemSessionTransferCode as jest.Mock).mockResolvedValue({
+        status: 'ok',
+        session: redeemed,
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => profile });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(api.saveApiKey).toHaveBeenCalledWith('gw_live_redeemed_key'));
+      expect(transferCode.confirmAccountSwitch).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not ask when already signed in as the same user', async () => {
+      setStorage({ gatewayz_api_key: 'gw_live_other_key_same_user' });
+      (api.getUserData as jest.Mock).mockReturnValue({ user_id: 77, email: 'y@example.com' });
+      (transferCode.redeemSessionTransferCode as jest.Mock).mockResolvedValue({
+        status: 'ok',
+        session: redeemed,
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => profile });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(api.saveApiKey).toHaveBeenCalled());
+      expect(transferCode.confirmAccountSwitch).not.toHaveBeenCalled();
+    });
+
+    it.each(['invalid', 'unavailable'])('keeps the current state when redeem is %s', async (status) => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation();
+      (transferCode.redeemSessionTransferCode as jest.Mock).mockResolvedValue({ status });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(mockAuthContext.refresh).toHaveBeenCalled());
+      expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
+      expect(api.saveApiKey).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    it('rejects a redeemed key whose profile belongs to someone else', async () => {
+      const err = jest.spyOn(console, 'error').mockImplementation();
+      (transferCode.redeemSessionTransferCode as jest.Mock).mockResolvedValue({
+        status: 'ok',
+        session: { ...redeemed, api_key: 'gw_live_mismatch_key' },
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...profile, user_id: 999 }),
+      });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(mockAuthContext.refresh).toHaveBeenCalled());
+      expect(api.saveApiKey).not.toHaveBeenCalled();
+      err.mockRestore();
+    });
+
+    it('prefers the code over legacy token params', async () => {
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: 'legacy-token',
+        userId: '5',
+        returnUrl: null,
+        action: null,
+      });
+      (transferCode.redeemSessionTransferCode as jest.Mock).mockResolvedValue({
+        status: 'ok',
+        session: redeemed,
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({ ok: true, json: async () => profile });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(api.saveApiKey).toHaveBeenCalledWith('gw_live_redeemed_key'));
+      expect(api.saveApiKey).not.toHaveBeenCalledWith('legacy-token');
+    });
+  });
+
+  describe('Legacy ?token=&userId= consent', () => {
+    beforeEach(() => {
+      setStorage();
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: 'legacy-token',
+        userId: '5',
+        returnUrl: null,
+        action: null,
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ user_id: 5, email: 'legacy@example.com' }),
+      });
+    });
+
+    it('asks even when no one is signed in, and stops if declined', async () => {
+      (transferCode.confirmAccountSwitch as jest.Mock).mockReturnValue(false);
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(mockAuthContext.refresh).toHaveBeenCalled());
+      expect((transferCode.confirmAccountSwitch as jest.Mock).mock.calls[0][0]).toBe(
+        'Sign in to Gatewayz as legacy@example.com?'
+      );
+      expect(api.saveApiKey).not.toHaveBeenCalled();
+      expect(sessionTransfer.storeSessionTransferToken).not.toHaveBeenCalled();
+      expect(sessionTransfer.clearSessionTransferToken).toHaveBeenCalled();
+    });
+
+    it('signs in only after consent', async () => {
+      render(<SessionInitializer />);
+
+      await waitFor(() => expect(api.saveApiKey).toHaveBeenCalledWith('legacy-token'));
+      expect(transferCode.confirmAccountSwitch).toHaveBeenCalledTimes(1);
+      expect(sessionTransfer.storeSessionTransferToken).toHaveBeenCalledWith('legacy-token', '5');
     });
   });
 });
