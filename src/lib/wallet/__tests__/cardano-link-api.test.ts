@@ -2,8 +2,12 @@ import {
   CardanoLinkApiError,
   cardanoLinkRefusalOf,
   describeCardanoLinkError,
+  describeCardanoUnlinkError,
+  getLinkedCardanoWallets,
+  isPaymentMethodRequired,
   linkCardanoStakeAddress,
   requestCardanoLinkNonce,
+  unlinkCardanoStakeAddress,
 } from '../cardano-link-api';
 
 const mockAuthRequest = jest.fn();
@@ -124,5 +128,87 @@ describe('describeCardanoLinkError', () => {
     await expect(
       linkCardanoStakeAddress({ stakeAddress: 'stake1mine', signature: 'aa', key: 'bb' }),
     ).rejects.toThrow(/does not match/);
+  });
+});
+
+// The 402 body the backend sends once a payment method is required to link
+// (gatewayz-backend PR "require a payment method to link a wallet", step 1.5).
+// Mocked here so this client does not depend on that PR being deployed.
+const PAYMENT_METHOD_REQUIRED_BODY = {
+  error: {
+    type: 'payment_method_required',
+    code: 'PAYMENT_METHOD_REQUIRED',
+    message: 'Add a payment method before you link a wallet.',
+    status: 402,
+  },
+};
+
+describe('payment method required', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it.each([
+    ['nonce', () => requestCardanoLinkNonce('stake1u', true)],
+    ['link', () => linkCardanoStakeAddress({ stakeAddress: 'stake1u', signature: 'aa', key: 'bb', notUsCaPerson: true })],
+  ])('reads the typed 402 on %s', async (_name, call) => {
+    mockAuthRequest.mockResolvedValueOnce(json(PAYMENT_METHOD_REQUIRED_BODY, 402));
+    const error = await call().catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(CardanoLinkApiError);
+    expect(isPaymentMethodRequired(error)).toBe(true);
+    expect(cardanoLinkRefusalOf(error)).toBeNull();
+    expect(describeCardanoLinkError(error)).toMatch(/payment method/);
+  });
+
+  it('is not confused with other errors', () => {
+    expect(isPaymentMethodRequired(new CardanoLinkApiError(451, '', 'region_restricted'))).toBe(false);
+    expect(isPaymentMethodRequired(new CardanoLinkApiError(402, '', 'something_else'))).toBe(false);
+    expect(isPaymentMethodRequired(new Error('payment_method_required'))).toBe(false);
+  });
+
+  it('maps an inference key refusal (403)', () => {
+    expect(describeCardanoLinkError(new CardanoLinkApiError(403, ''))).toMatch(/Sign in to Gatewayz again/);
+  });
+});
+
+describe('linked wallets and unlink', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it('lists only the Cardano rows of GET /auth/wallets', async () => {
+    mockAuthRequest.mockResolvedValueOnce(
+      json({
+        success: true,
+        data: {
+          wallets: [
+            { wallet_address: '0xabc', chain_namespace: 'eip155', verified_at: null },
+            { wallet_address: 'stake1uabc', chain_namespace: 'cip34', verified_at: '2026-11-20T10:00:00Z' },
+            { wallet_address: '', chain_namespace: 'cip34' },
+          ],
+        },
+      }),
+    );
+    await expect(getLinkedCardanoWallets()).resolves.toEqual([
+      { wallet_address: 'stake1uabc', verified_at: '2026-11-20T10:00:00Z' },
+    ]);
+    expect(mockAuthRequest.mock.calls[0][0]).toMatch(/\/auth\/wallets$/);
+  });
+
+  it('returns an empty list when the backend sends no wallets', async () => {
+    mockAuthRequest.mockResolvedValueOnce(json({ success: true, data: {} }));
+    await expect(getLinkedCardanoWallets()).resolves.toEqual([]);
+  });
+
+  it('unlinks with DELETE /auth/wallets/{address}', async () => {
+    mockAuthRequest.mockResolvedValueOnce(json({ success: true }));
+    await unlinkCardanoStakeAddress('stake1uabc');
+    const [url, init] = mockAuthRequest.mock.calls[0];
+    expect(url).toMatch(/\/auth\/wallets\/stake1uabc$/);
+    expect(init).toEqual({ method: 'DELETE' });
+  });
+
+  it('throws on a failed unlink and describes it', async () => {
+    mockAuthRequest.mockResolvedValueOnce(json({ error: { type: 'not_found', message: 'wallet_not_linked' } }, 404));
+    const error = await unlinkCardanoStakeAddress('stake1uabc').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(CardanoLinkApiError);
+    expect(describeCardanoUnlinkError(error)).toMatch(/no longer linked/);
+    expect(describeCardanoUnlinkError(new Error('x'))).toMatch(/Something went wrong/);
   });
 });

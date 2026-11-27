@@ -8,6 +8,21 @@ jest.mock('@/lib/discount-credits/use-discount-credits', () => ({
   useSetDiscountCreditsDailyCap: () => ({ mutate: jest.fn(), reset: jest.fn(), isPending: false, isError: false, isSuccess: false }),
 }));
 
+let mockLinkedWallets: { data: { wallet_address: string; verified_at: string | null }[] | undefined; isLoading: boolean } = {
+  data: [],
+  isLoading: false,
+};
+jest.mock('@/lib/wallet/use-cardano-wallet-link', () => ({
+  useLinkedCardanoWallets: () => mockLinkedWallets,
+}));
+
+jest.mock('next/link', () => {
+  const MockLink = ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>{children}</a>
+  );
+  return MockLink;
+});
+
 const mockCredits = useDiscountCredits as jest.Mock;
 
 const FLAG = 'NEXT_PUBLIC_VAULT_DISCOUNT_CREDITS_ENABLED';
@@ -46,8 +61,23 @@ describe('DiscountCreditsCard', () => {
     jest.clearAllMocks();
     process.env[FLAG] = 'true';
     mockCredits.mockReturnValue(loaded(CREDITS));
+    mockLinkedWallets = { data: [], isLoading: false };
   });
   afterAll(restoreFlag);
+
+  it('links to the wallet page to link a wallet when none is linked', () => {
+    render(<DiscountCreditsCard />);
+    expect(screen.getByText('Cardano wallet')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Link a wallet' })).toHaveAttribute('href', '/settings/credits/wallet');
+  });
+
+  it('shows the linked stake address and a way to manage it', () => {
+    const address = 'stake1u9f9v0z5zzlldgx58n8tklphu8mf7h4jvp2j2gddluemnssjfnkzz';
+    mockLinkedWallets = { data: [{ wallet_address: address, verified_at: null }], isLoading: false };
+    render(<DiscountCreditsCard />);
+    expect(screen.getByTitle(address)).toHaveTextContent('stake1u9f9…jfnkzz');
+    expect(screen.getByRole('link', { name: 'Manage wallet' })).toHaveAttribute('href', '/settings/credits/wallet');
+  });
 
   it('shows the balance, what you pay, totals, history and the API disclaimer', () => {
     render(<DiscountCreditsCard />);

@@ -12,6 +12,11 @@ const FILES = [
   'src/components/discount-credits/discount-copy.ts',
   'src/components/discount-credits/DiscountCreditsCard.tsx',
   'src/components/discount-credits/DailyLimitSection.tsx',
+  'src/components/discount-credits/wallet-copy.ts',
+  'src/components/discount-credits/CardanoWalletPanel.tsx',
+  'src/components/discount-credits/WalletLinkSummary.tsx',
+  'src/lib/wallet/cardano-link-api.ts',
+  'src/app/settings/credits/wallet/page.tsx',
   'src/lib/discount-credits/format.ts',
 ];
 const FORBIDDEN = [

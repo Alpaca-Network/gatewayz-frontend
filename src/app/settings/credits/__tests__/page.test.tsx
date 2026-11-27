@@ -74,6 +74,10 @@ jest.mock('@/lib/discount-credits/use-discount-credits', () => ({
     },
   }),
 }));
+// The card's Cardano wallet line: no wallet linked.
+jest.mock('@/lib/wallet/use-cardano-wallet-link', () => ({
+  useLinkedCardanoWallets: () => ({ isLoading: false, isError: false, data: [] }),
+}));
 
 describe('CreditsPage', () => {
   const mockBasicUserData: UserData = {

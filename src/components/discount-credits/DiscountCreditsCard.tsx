@@ -11,6 +11,7 @@ import { isVaultDiscountCreditsEnabled } from '@/lib/discount-credits/flag';
 import { formatDiscountUsd } from '@/lib/discount-credits/format';
 import { useDiscountCredits } from '@/lib/discount-credits/use-discount-credits';
 import { DailyLimitSection } from './DailyLimitSection';
+import { WalletLinkSummary } from './WalletLinkSummary';
 import {
   BALANCE_EMPTY,
   BALANCE_IN_USE_FALLBACK,
@@ -144,6 +145,8 @@ export function DiscountCreditsCard() {
       </dl>
 
       {balance.daily_cap && <DailyLimitSection dailyCap={balance.daily_cap} />}
+
+      <WalletLinkSummary />
 
       <HistoryTable rows={data.history} />
 

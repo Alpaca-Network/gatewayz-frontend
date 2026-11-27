@@ -610,8 +610,8 @@ function CreditsPageContent() {
           </div>
         </div>
 
-        {/* Buy Credits Section */}
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-4 border-t">
+        {/* Buy Credits Section (anchor: the discount credits wallet page links here to add a payment method) */}
+        <div id="buy-credits" className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 pt-4 border-t scroll-mt-24">
           <div className="space-y-2">
             <Label htmlFor="custom-amount" className="text-sm font-medium">Enter custom amount or select a package</Label>
             <div className="relative w-full sm:w-auto sm:min-w-[240px]">
