@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/app/api/middleware/error-handler';
-import { resolveAuthenticatedEmail } from '@/app/api/middleware/auth';
+import { resolveAuthenticatedAccount } from '@/app/api/middleware/auth';
+import { findAccountStripeCustomer } from '@/lib/server/stripe-account-customer';
 import Stripe from 'stripe';
 
 export async function GET(req: NextRequest) {
@@ -17,29 +18,23 @@ export async function GET(req: NextRequest) {
       apiVersion: '2025-10-29.clover',
     });
 
-    // Resolve the caller's email from their API key — never trust a
-    // client-supplied email, or anyone could read anyone else's card/billing details.
-    const auth = await resolveAuthenticatedEmail(req);
+    // Resolve the caller's account from their API key — never trust
+    // client-supplied identity, or anyone could read anyone else's card/billing details.
+    const auth = await resolveAuthenticatedAccount(req);
     if (auth.error) {
       return auth.error;
     }
-    const { email } = auth;
 
-    // Search for customer by email
-    const customers = await stripe.customers.list({
-      email: email,
-      limit: 1,
-    });
-
-    if (customers.data.length === 0) {
+    // The customer must belong to this account (stored id, or metadata.user_id);
+    // an email match alone is not enough, since an account email can change.
+    const customer = await findAccountStripeCustomer(stripe, auth.account);
+    if (!customer) {
       return NextResponse.json({
         customer: null,
         paymentMethods: [],
         billingAddress: null,
       });
     }
-
-    const customer = customers.data[0];
 
     // Get payment methods for this customer
     const paymentMethods = await stripe.paymentMethods.list({

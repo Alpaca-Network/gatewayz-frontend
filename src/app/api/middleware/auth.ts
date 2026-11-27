@@ -34,20 +34,25 @@ export function getApiKey(request: NextRequest): string | null {
   return request.headers.get('authorization')?.replace('Bearer ', '') || null;
 }
 
+/** The signed-in account behind an API key, as the backend reports it. */
+export interface AuthenticatedAccount {
+  email: string;
+  userId: string;
+  /** Present only once the backend includes it in GET /user/profile. */
+  stripeCustomerId: string | null;
+}
+
 /**
- * Resolves the authenticated caller's email server-side by validating their
- * API key against the backend, rather than trusting a client-supplied email.
+ * Resolves the authenticated caller's account (email, user id and, when the
+ * backend provides it, Stripe customer id) server-side by validating their API
+ * key against the backend, rather than trusting anything client-supplied.
  *
- * Use this anywhere an endpoint would otherwise take an `email` field from
- * the request body/query and use it to look up a billing account — without
- * this, any caller can act on any account by simply naming its email.
- *
- * @returns `{ email }` on success, or `{ error }` (a ready-to-return
+ * @returns `{ account }` on success, or `{ error }` (a ready-to-return
  * NextResponse) on failure.
  */
-export async function resolveAuthenticatedEmail(
+export async function resolveAuthenticatedAccount(
   request: NextRequest
-): Promise<{ email: string; error?: undefined } | { email?: undefined; error: NextResponse }> {
+): Promise<{ account: AuthenticatedAccount; error?: undefined } | { account?: undefined; error: NextResponse }> {
   const { key: apiKey, error } = await validateApiKey(request);
   if (error) {
     return { error };
@@ -72,18 +77,30 @@ export async function resolveAuthenticatedEmail(
     }
 
     const profile = await response.json();
-    if (!profile || typeof profile.email !== 'string' || !profile.email) {
+    const userId = profile?.user_id;
+    if (
+      !profile ||
+      typeof profile.email !== 'string' ||
+      !profile.email ||
+      (typeof userId !== 'number' && typeof userId !== 'string') ||
+      String(userId) === ''
+    ) {
       return {
         error: NextResponse.json(
-          { error: 'Unable to resolve account email for this API key' },
+          { error: 'Unable to resolve account for this API key' },
           { status: 401 }
         ),
       };
     }
 
-    return { email: profile.email };
+    const stripeCustomerId =
+      typeof profile.stripe_customer_id === 'string' && profile.stripe_customer_id.startsWith('cus_')
+        ? profile.stripe_customer_id
+        : null;
+
+    return { account: { email: profile.email, userId: String(userId), stripeCustomerId } };
   } catch (e) {
-    console.error('[resolveAuthenticatedEmail] Failed to verify API key:', e);
+    console.error('[resolveAuthenticatedAccount] Failed to verify API key:', e instanceof Error ? e.name : 'unknown');
     return {
       error: NextResponse.json(
         { error: 'Failed to verify authentication' },
