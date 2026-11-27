@@ -56,6 +56,16 @@ describe('agent tools', () => {
     expect(getAgentTool('claude-code')?.protocol).toBe('anthropic-messages');
   });
 
+  it('offers the Gatewayz status line plugin for Claude Code', () => {
+    // Claude Code's own cost display uses Anthropic list prices, which are
+    // wrong for non-Claude models; the plugin shows what Gatewayz billed.
+    const step = getAgentTool('claude-code')!.configure.find((s) =>
+      s.code.includes('gatewayz-statusline')
+    );
+    expect(step?.code).toContain('--marketplace Alpaca-Network/gatewayz-statusline');
+    expect(step?.code).not.toContain(API_KEY_PLACEHOLDER);
+  });
+
   it('points Claude Code at ANTHROPIC_BASE_URL', () => {
     const config = getAgentTool('claude-code')!.configure[0].code;
     expect(config).toContain('ANTHROPIC_BASE_URL');
