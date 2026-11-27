@@ -15,7 +15,7 @@ Braintrust has been integrated to provide comprehensive LLM tracing and observab
 ### 2. Environment Configuration
 - **Variable**: `BRAINTRUST_API_KEY`
 - **Location**: `.env.local` and `.env.example`
-- **Value**: `sk-xYEPdagoC0Nqv5c8FHNlmx0G2wX03WDb0K9frSJE04ntPvZY`
+- **Value**: `sk-...your-key...`
 
 ### 3. Core Integration Files
 

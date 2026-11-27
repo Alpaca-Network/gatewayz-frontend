@@ -15,6 +15,7 @@ jest.mock('@ai-sdk/google', () => ({
 }));
 
 import { generateText } from 'ai';
+import { clearRateLimitsForTesting } from '@/lib/ip-rate-limiter';
 const mockGenerateText = generateText as jest.MockedFunction<typeof generateText>;
 
 describe('POST /api/search/critic', () => {
@@ -22,6 +23,7 @@ describe('POST /api/search/critic', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    clearRateLimitsForTesting();
     process.env = { ...originalEnv, GOOGLE_AI_API_KEY: 'test-api-key' };
   });
 
@@ -161,5 +163,47 @@ describe('POST /api/search/critic', () => {
     const data = await response.json();
 
     expect(data.needsSearch).toBe(true);
+  });
+
+  it('should reject queries longer than 500 characters without calling the model', async () => {
+    const request = new NextRequest('http://localhost/api/search/critic', {
+      method: 'POST',
+      body: JSON.stringify({ query: 'What is the latest news? '.repeat(30) }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.needsSearch).toBe(false);
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it('should rate limit per IP (429 after 30 requests per minute)', async () => {
+    mockGenerateText.mockResolvedValue({
+      text: 'NO',
+      finishReason: 'stop',
+      usage: { inputTokens: 50, outputTokens: 1 },
+    } as any);
+
+    const makeRequest = (ip: string) =>
+      new NextRequest('http://localhost/api/search/critic', {
+        method: 'POST',
+        headers: { 'x-forwarded-for': ip },
+        body: JSON.stringify({ query: 'Explain recursion in programming' }),
+      });
+
+    for (let i = 0; i < 30; i++) {
+      const ok = await POST(makeRequest('203.0.113.7'));
+      expect(ok.status).toBe(200);
+    }
+
+    const limited = await POST(makeRequest('203.0.113.7'));
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('Retry-After')).toBeTruthy();
+
+    // A different IP is unaffected
+    const other = await POST(makeRequest('203.0.113.8'));
+    expect(other.status).toBe(200);
   });
 });

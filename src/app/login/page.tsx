@@ -3,6 +3,7 @@
 import { useEffect, Suspense, useRef, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
+import { safeReturnUrl } from '@/lib/safe-return-url';
 import { syncPrivyToGatewayz } from '@/integrations/privy/auth-sync';
 import { getUserMessage } from '@/lib/errors';
 import { useActiveWallet } from '@/lib/hooks/use-active-wallet';
@@ -25,7 +26,7 @@ function buildRedirectUrl(baseUrl: string, refCode: string | null): string {
   // Determine the appropriate separator
   const separator = cleanedUrl.includes('?') ? '&' : '?';
 
-  return `${cleanedUrl}${separator}ref=${refCode}`;
+  return `${cleanedUrl}${separator}ref=${encodeURIComponent(refCode)}`;
 }
 
 /**
@@ -70,7 +71,8 @@ function LoginContent() {
   const [showWalletButton, setShowWalletButton] = useState(false);
 
   // Get the return URL from query params (defaults to /chat)
-  const returnUrl = searchParams?.get('returnUrl') || '/chat';
+  // Validated to a same-origin relative path to prevent open redirects
+  const returnUrl = safeReturnUrl(searchParams?.get('returnUrl'), '/chat');
   const refCode = searchParams?.get('ref');
   // Check if this is a desktop app login request
   const isDesktopLogin = searchParams?.get('desktop') === 'true';

@@ -3,6 +3,7 @@
 import { useEffect, Suspense, useRef, useState, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
+import { safeReturnUrl } from '@/lib/safe-return-url';
 import { useGatewayzAuth } from '@/context/gatewayz-auth-context';
 import { useActiveWallet } from '@/lib/hooks/use-active-wallet';
 import { isTauriDesktop } from '@/lib/browser-detection';
@@ -135,7 +136,11 @@ function SignupContent() {
 
   // Memoize query params to prevent unstable effect dependencies
   // This prevents redirect loops when searchParams object changes
-  const redirectUrl = useMemo(() => searchParams?.get('returnUrl') || '/chat', [searchParams]);
+  const redirectUrl = useMemo(
+    // Validated to a same-origin relative path to prevent open redirects
+    () => safeReturnUrl(searchParams?.get('returnUrl'), '/chat'),
+    [searchParams]
+  );
 
   useEffect(() => {
     // Only redirect users who were ALREADY authenticated when they landed on this page

@@ -3,6 +3,7 @@
 import { useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { usePrivy } from '@privy-io/react-auth';
+import { safeReturnUrl } from '@/lib/safe-return-url';
 
 /**
  * Build a redirect URL with optional ref code, handling edge cases
@@ -19,7 +20,7 @@ function buildRedirectUrl(baseUrl: string, refCode: string | null): string {
   // Determine the appropriate separator
   const separator = cleanedUrl.includes('?') ? '&' : '?';
 
-  return `${cleanedUrl}${separator}ref=${refCode}`;
+  return `${cleanedUrl}${separator}ref=${encodeURIComponent(refCode)}`;
 }
 
 function SigninContent() {
@@ -29,7 +30,8 @@ function SigninContent() {
   const hasAutoTriggeredLogin = useRef(false);
 
   // Get the return URL from query params (defaults to /chat)
-  const returnUrl = searchParams?.get('returnUrl') || '/chat';
+  // Validated to a same-origin relative path to prevent open redirects
+  const returnUrl = safeReturnUrl(searchParams?.get('returnUrl'), '/chat');
   const refCode = searchParams?.get('ref');
 
   useEffect(() => {

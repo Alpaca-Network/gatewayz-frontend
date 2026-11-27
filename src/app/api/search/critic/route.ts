@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { getClientIP } from '@/lib/guest-rate-limiter';
+import { rateLimitHit } from '@/lib/ip-rate-limiter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,6 +15,12 @@ export const dynamic = 'force-dynamic';
  * 2. Clear - explicit YES/NO criteria
  * 3. Comprehensive - covers common cases where search is needed
  */
+/** Max query length sent to the critic model (server-paid tokens). */
+const MAX_QUERY_LENGTH = 500;
+/** Per-IP request budget for the critic endpoint. */
+const RATE_LIMIT_PER_WINDOW = 30;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+
 const CRITIC_PROMPT = `You are a search necessity classifier. Determine if a user query requires current/real-time information that may have changed since your training data.
 
 Answer ONLY "YES" or "NO".
@@ -53,12 +61,35 @@ Query: `;
  */
 export async function POST(request: NextRequest) {
   try {
+    const rate = await rateLimitHit(
+      'search-critic',
+      getClientIP(request),
+      RATE_LIMIT_PER_WINDOW,
+      RATE_LIMIT_WINDOW_MS
+    );
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests', needsSearch: false },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(Math.max(1, Math.ceil(rate.resetInMs / 1000))) },
+        }
+      );
+    }
+
     const body = await request.json();
     const { query } = body;
 
     if (!query || typeof query !== 'string') {
       return NextResponse.json(
         { error: 'Query is required', needsSearch: false },
+        { status: 400 }
+      );
+    }
+
+    if (query.length > MAX_QUERY_LENGTH) {
+      return NextResponse.json(
+        { error: `Query too long (max ${MAX_QUERY_LENGTH} characters)`, needsSearch: false },
         { status: 400 }
       );
     }

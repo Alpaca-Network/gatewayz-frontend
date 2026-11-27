@@ -90,7 +90,8 @@ export function useCriticSearchDetection() {
       const response = await fetch('/api/search/critic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: trimmedInput }),
+        // Server caps queries at 500 chars; the opening is enough to classify
+        body: JSON.stringify({ query: trimmedInput.slice(0, 500) }),
         signal: controller.signal,
       });
 

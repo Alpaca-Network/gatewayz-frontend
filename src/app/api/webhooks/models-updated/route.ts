@@ -2,12 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidateTag, revalidatePath } from 'next/cache';
 import * as Sentry from '@sentry/nextjs';
 import crypto from 'crypto';
+import { getConfiguredSecret } from '@/lib/secret-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Webhook secret (should be in environment variables)
-const WEBHOOK_SECRET = process.env.MODEL_WEBHOOK_SECRET || 'your-webhook-secret';
 
 export async function POST(request: NextRequest) {
   return Sentry.startSpan(
@@ -18,9 +17,18 @@ export async function POST(request: NextRequest) {
     async (span) => {
       try {
         // Verify webhook signature
+        if (!getConfiguredSecret('MODEL_WEBHOOK_SECRET')) {
+          console.error('[Webhook] MODEL_WEBHOOK_SECRET is not configured; rejecting request');
+          span.setAttribute('error', 'not_configured');
+          return NextResponse.json(
+            { error: 'Webhook not configured' },
+            { status: 503 }
+          );
+        }
+
         const signature = request.headers.get('x-webhook-signature');
         const body = await request.text();
-        
+
         if (!verifyWebhookSignature(body, signature)) {
           span.setAttribute('error', 'invalid_signature');
           return NextResponse.json(
@@ -180,20 +188,19 @@ export async function POST(request: NextRequest) {
  * Verify webhook signature
  */
 function verifyWebhookSignature(body: string, signature: string | null): boolean {
-  if (!signature || !WEBHOOK_SECRET) {
+  const secret = getConfiguredSecret('MODEL_WEBHOOK_SECRET');
+  if (!signature || !secret) {
     return false;
   }
 
   try {
-    const expectedSignature = crypto
-      .createHmac('sha256', WEBHOOK_SECRET)
-      .update(body)
-      .digest('hex');
-
-    return crypto.timingSafeEqual(
-      Buffer.from(signature, 'hex'),
-      Buffer.from(expectedSignature, 'hex')
-    );
+    const expected = crypto.createHmac('sha256', secret).update(body).digest();
+    const provided = Buffer.from(signature, 'hex');
+    // timingSafeEqual requires equal-length buffers
+    if (provided.length !== expected.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(provided, expected);
   } catch (error) {
     console.error('Signature verification error:', error);
     return false;

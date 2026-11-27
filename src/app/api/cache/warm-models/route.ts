@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getModelsForGateway } from '@/lib/models-service';
 import * as Sentry from '@sentry/nextjs';
 import { getAllActiveGatewayIds } from '@/lib/gateway-registry';
+import { verifyBearerSecret } from '@/lib/secret-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -24,14 +25,16 @@ export async function POST(request: NextRequest) {
     async (span) => {
       try {
         // Simple auth check - require secret token
-        const authHeader = request.headers.get('authorization');
-        const expectedToken = process.env.CACHE_WARMING_SECRET || 'default-secret-change-me';
+        const auth = verifyBearerSecret(
+          request.headers.get('authorization'),
+          'CACHE_WARMING_SECRET'
+        );
 
-        if (authHeader !== `Bearer ${expectedToken}`) {
-          span.setAttribute('error', 'unauthorized');
+        if (!auth.ok) {
+          span.setAttribute('error', auth.status === 503 ? 'not_configured' : 'unauthorized');
           return NextResponse.json(
-            { error: 'Unauthorized' },
-            { status: 401 }
+            { error: auth.error },
+            { status: auth.status }
           );
         }
 
