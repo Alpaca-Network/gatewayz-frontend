@@ -56,7 +56,8 @@ export default function SettingsLayout({
                     href={item.href} 
                     className={cn(
                       "px-3 py-2 rounded-md text-sm",
-                      pathname === item.href
+                      pathname === item.href ||
+                        (item.href !== "/settings" && pathname?.startsWith(`${item.href}/`))
                         ? "font-semibold text-primary bg-sidebar-accent"
                         : "text-muted-foreground hover:text-foreground"
                     )}

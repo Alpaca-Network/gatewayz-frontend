@@ -2,12 +2,16 @@
 // (gatewayz-backend src/routes/wallet_auth_cardano.py):
 //   POST /auth/wallet/cardano/nonce    Bearer: message for a stake address to sign
 //   POST /auth/wallet/cardano/link     Bearer: CIP-30 signData proof for that address
+//   GET  /auth/wallets                 Bearer: linked wallets (Cardano rows only, here)
+//   DELETE /auth/wallets/{address}     Bearer: unlink one
 //
 // A linked stake address becomes a row in GET /auth/wallets (chain_namespace
 // "cip34"). Linking is refused with HTTP 451 for the US and Canada: error.type
 // "region_restricted", or "attestation_required" when the account has not
-// confirmed its eligibility yet. The backend wraps every body as
-// `{success, data}` (bare bodies are accepted too).
+// confirmed its eligibility yet. An account without a payment method is refused
+// with HTTP 402, error.type "payment_method_required" (step 1.5 of the discount
+// credits plan). The backend wraps every body as `{success, data}` (bare bodies
+// are accepted too).
 import { makeAuthenticatedRequest } from '@/lib/api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.gatewayz.ai';
@@ -44,6 +48,17 @@ export class CardanoLinkApiError extends Error {
     this.detail = detail;
     this.code = code;
   }
+}
+
+/** error.type of the 402 sent when the account has no payment method. */
+export const PAYMENT_METHOD_REQUIRED = 'payment_method_required';
+
+/** True when linking was refused because the account has no payment method yet. */
+export function isPaymentMethodRequired(error: unknown): boolean {
+  if (!(error instanceof CardanoLinkApiError)) return false;
+  // A 402 from these routes means nothing else; the type is checked too, so a
+  // future typed 402 with another meaning is not shown as this one.
+  return error.status === 402 && (error.code === null || error.code === PAYMENT_METHOD_REQUIRED);
 }
 
 /** Which US / Canada refusal this error is, or null for anything else. */
@@ -153,7 +168,39 @@ export async function linkCardanoStakeAddress(input: {
   };
 }
 
+/** A row of GET /auth/wallets for a linked Cardano stake address. */
+export interface LinkedCardanoWallet {
+  /** Bech32 stake address, lower case. */
+  wallet_address: string;
+  verified_at: string | null;
+}
+
+/** GET /auth/wallets (Bearer): the account's linked Cardano stake addresses (chain_namespace "cip34"). */
+export async function getLinkedCardanoWallets(): Promise<LinkedCardanoWallet[]> {
+  const response = await makeAuthenticatedRequest(`${API_BASE_URL}/auth/wallets`);
+  const wallets = asObject(await readJson(response)).wallets;
+  if (!Array.isArray(wallets)) return [];
+  return wallets
+    .map(asObject)
+    .filter((w) => w.chain_namespace === 'cip34' && typeof w.wallet_address === 'string' && w.wallet_address !== '')
+    .map((w) => ({ wallet_address: String(w.wallet_address), verified_at: toNullableString(w.verified_at) }));
+}
+
+/** DELETE /auth/wallets/{stake_address} (Bearer): unlinks a stake address from the account. */
+export async function unlinkCardanoStakeAddress(stakeAddress: string): Promise<void> {
+  const response = await makeAuthenticatedRequest(
+    `${API_BASE_URL}/auth/wallets/${encodeURIComponent(stakeAddress)}`,
+    { method: 'DELETE' },
+  );
+  if (!response.ok) {
+    const { message, code } = await extractErrorDetail(response);
+    throw new CardanoLinkApiError(response.status, message, code);
+  }
+}
+
 const REGION_RESTRICTED_MESSAGE = 'Wallet linking is not available in your region.';
+const PAYMENT_METHOD_REQUIRED_MESSAGE =
+  'Add a payment method before you link a wallet. Part of each request is always charged to you.';
 const ATTESTATION_REQUIRED_MESSAGE =
   'Confirm you are not a resident or citizen of the United States or Canada to continue.';
 
@@ -162,15 +209,28 @@ export function describeCardanoLinkError(error: unknown): string {
   const refusal = cardanoLinkRefusalOf(error);
   if (refusal === 'region_restricted') return REGION_RESTRICTED_MESSAGE;
   if (refusal === 'attestation_required') return ATTESTATION_REQUIRED_MESSAGE;
+  if (isPaymentMethodRequired(error)) return PAYMENT_METHOD_REQUIRED_MESSAGE;
   if (error instanceof CardanoLinkApiError) {
     if (error.status === 400) return 'Your linking session expired. Please try again.';
     if (error.status === 401) return 'The wallet signature could not be verified. Please try again.';
+    if (error.status === 403) return 'Sign in to Gatewayz again, then link your wallet. API keys cannot link wallets.';
     if (error.status === 409) return 'This stake address is already linked to another Gatewayz account.';
     if (error.status === 422) {
       return 'This stake address cannot be linked. Use a regular Cardano mainnet wallet (not a script or testnet address).';
     }
     if (error.status === 429) return 'Too many attempts. Please wait a moment and try again.';
     if (error.status === 503) return 'Linking is temporarily unavailable. Please try again shortly.';
+  }
+  return 'Something went wrong. Please try again.';
+}
+
+/** Short, user-facing copy for a failed unlink. */
+export function describeCardanoUnlinkError(error: unknown): string {
+  if (error instanceof CardanoLinkApiError) {
+    if (error.status === 403) return 'Sign in to Gatewayz again, then unlink your wallet. API keys cannot unlink wallets.';
+    if (error.status === 404) return 'This wallet is no longer linked to your account.';
+    if (error.status === 429) return 'Too many attempts. Please wait a moment and try again.';
+    if (error.status === 503) return 'Unlinking is temporarily unavailable. Please try again shortly.';
   }
   return 'Something went wrong. Please try again.';
 }
