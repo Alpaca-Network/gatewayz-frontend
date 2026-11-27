@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { scrubBreadcrumb, scrubEventUrls } from "./src/lib/sentry-url-scrub";
 
 // Get release information
 const getRelease = () => {
@@ -191,6 +192,15 @@ Sentry.init({
       return null;
     }
 
-    return event;
+    // Never send credential-like query params (session hand-off token/code, keys)
+    return scrubEventUrls(event);
+  },
+
+  beforeSendTransaction(event) {
+    return scrubEventUrls(event);
+  },
+
+  beforeBreadcrumb(breadcrumb) {
+    return scrubBreadcrumb(breadcrumb);
   },
 });

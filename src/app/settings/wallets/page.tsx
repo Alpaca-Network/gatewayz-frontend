@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useActiveWallet } from "@/lib/hooks/use-active-wallet";
 import { useLinkedWallets, useLinkWallet, useUnlinkWallet } from "@/lib/hooks/use-linked-wallets";
 import { requestWalletLinkNonce, describeWalletAuthError, WalletAuthError, type LinkedWallet } from "@/lib/auth/wallet-auth-api";
+import { unlinkDescription } from "@/lib/auth/linked-wallet-copy";
 
 /** Truncates a 0x-address to `0x1234...abcd` (first 6 + last 4 characters). */
 function truncateAddress(address: string): string {
@@ -35,7 +36,7 @@ function WalletRow({
   onUnlink,
 }: {
   wallet: LinkedWallet;
-  onUnlink: (address: string) => void;
+  onUnlink: (wallet: LinkedWallet) => void;
 }) {
   const { toast } = useToast();
 
@@ -74,7 +75,7 @@ function WalletRow({
             variant="ghost"
             size="sm"
             className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30"
-            onClick={() => onUnlink(wallet.wallet_address)}
+            onClick={() => onUnlink(wallet)}
           >
             Unlink
           </Button>
@@ -92,7 +93,7 @@ export default function WalletsPage() {
   const unlinkWalletMutation = useUnlinkWallet();
 
   const [isLinking, setIsLinking] = useState(false);
-  const [walletToUnlink, setWalletToUnlink] = useState<string | null>(null);
+  const [walletToUnlink, setWalletToUnlink] = useState<LinkedWallet | null>(null);
   // Set when "Link a wallet" is clicked without a connected wallet — connect() opens
   // Privy's connect-wallet modal asynchronously, so the nonce/sign/link steps continue in
   // the effect below once `address` becomes available, rather than inline in the handler.
@@ -141,7 +142,7 @@ export default function WalletsPage() {
 
   const handleConfirmUnlink = async () => {
     if (!walletToUnlink) return;
-    const target = walletToUnlink;
+    const target = walletToUnlink.wallet_address;
     setWalletToUnlink(null);
     try {
       await unlinkWalletMutation.mutateAsync(target);
@@ -211,7 +212,7 @@ export default function WalletsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Unlink this wallet?</AlertDialogTitle>
             <AlertDialogDescription>
-              {walletToUnlink && `${truncateAddress(walletToUnlink)} will no longer be able to sign in to this account.`}
+              {walletToUnlink && unlinkDescription(walletToUnlink, truncateAddress(walletToUnlink.wallet_address))}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

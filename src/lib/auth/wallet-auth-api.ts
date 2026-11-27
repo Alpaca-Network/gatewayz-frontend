@@ -19,6 +19,8 @@ export interface LinkedWallet {
   wallet_client_type: string | null;
   is_primary: boolean;
   verified_at: string | null;
+  /** CAIP-2 namespace from the backend, e.g. "eip155" or "cip34" (Cardano). Absent on older responses. */
+  chain_namespace?: string | null;
 }
 
 export interface WalletLinkNonce {

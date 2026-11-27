@@ -17,7 +17,6 @@ jest.mock('@privy-io/react-auth');
 jest.mock('@sentry/nextjs');
 jest.mock('@/lib/api');
 jest.mock('@/integrations/privy/auth-session-transfer', () => ({
-  redirectToBetaWithSession: jest.fn(),
   getSessionTransferParams: jest.fn(() => null),
   cleanupSessionTransferParams: jest.fn(),
   storeSessionTransferToken: jest.fn(),

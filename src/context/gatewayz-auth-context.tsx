@@ -19,13 +19,6 @@ import { getAdaptiveTimeout } from "@/lib/network-timeouts";
 import { retryFetch } from "@/lib/retry-utils";
 import { usePrivy, type User } from "@privy-io/react-auth";
 import { buildAuthRequestBody, getPrivyAccessTokenWithRetry } from "@/lib/auth/build-auth-request";
-import {
-  redirectToBetaWithSession,
-  getSessionTransferParams,
-  cleanupSessionTransferParams,
-  storeSessionTransferToken,
-  getStoredSessionTransferToken,
-} from "@/integrations/privy/auth-session-transfer";
 import { resetGuestMessageCount } from "@/lib/guest-chat";
 import { rateLimitedCaptureMessage } from "@/lib/global-error-handlers";
 import { trackSignupConversion } from "@/components/analytics/google-analytics";
@@ -85,14 +78,11 @@ interface GatewayzAuthContextValue {
   login: () => Promise<void> | void;
   logout: () => Promise<void> | void;
   refresh: (options?: { force?: boolean }) => Promise<void>;
-  redirectToBeta?: (returnUrl?: string) => void;
 }
 
 interface GatewayzAuthProviderProps {
   children: ReactNode;
   onAuthError?: (error: AuthError) => void;
-  enableBetaRedirect?: boolean;
-  betaDomain?: string;
 }
 
 export const GatewayzAuthContext = createContext<GatewayzAuthContextValue | undefined>(undefined);
@@ -108,8 +98,6 @@ const MIN_AUTH_SYNC_TIMEOUT_MS =
 export function GatewayzAuthProvider({
   children,
   onAuthError,
-  enableBetaRedirect = false,
-  betaDomain = 'https://beta.gatewayz.ai',
 }: GatewayzAuthProviderProps) {
   const {
     ready: privyReady,
@@ -157,7 +145,6 @@ export function GatewayzAuthProvider({
   const isLoggingOutRef = useRef(false);
   const upgradeAttemptedRef = useRef(false);
   const upgradePromiseRef = useRef<Promise<void> | null>(null);
-  const betaRedirectAttemptedRef = useRef(false);
   const authRetryCountRef = useRef(0);
   const authTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -491,28 +478,6 @@ export function GatewayzAuthProvider({
     [updateStateFromStorage]
   );
 
-  const redirectToBetaIfEnabled = useCallback(
-    (returnUrl?: string) => {
-      if (!enableBetaRedirect || !apiKey || !userData) {
-        return;
-      }
-
-      if (betaRedirectAttemptedRef.current) {
-        return;
-      }
-
-      betaRedirectAttemptedRef.current = true;
-      console.log("[Auth] Redirecting to beta domain with session");
-
-      // Store token in sessionStorage before redirect
-      storeSessionTransferToken(apiKey, userData.user_id);
-
-      // Redirect to beta domain
-      redirectToBetaWithSession(apiKey, userData.user_id, betaDomain, returnUrl);
-    },
-    [enableBetaRedirect, apiKey, userData, betaDomain]
-  );
-
   const handleAuthSuccess = useCallback(
     (authData: AuthResponse, isNewUserExpected: boolean) => {
       console.log("[Auth] Processing auth success with data:", {
@@ -562,21 +527,15 @@ export function GatewayzAuthProvider({
         const performRedirect = () => {
           console.log("[Auth] Google Ads sign-up conversion tracked");
 
-          // If beta redirect is enabled, redirect there instead of onboarding
-          if (enableBetaRedirect) {
-            console.log("[Auth] Redirecting new user to beta domain");
-            redirectToBetaIfEnabled("/onboarding");
-          } else {
-            console.log("[Auth] Redirecting new user to onboarding");
-            // Redirect immediately - localStorage writes are synchronous
-            window.location.href = "/onboarding";
-          }
+          console.log("[Auth] Redirecting new user to onboarding");
+          // Redirect immediately - localStorage writes are synchronous
+          window.location.href = "/onboarding";
         };
 
         trackSignupConversion(performRedirect);
       }
     },
-    [updateStateFromStorage, enableBetaRedirect, redirectToBetaIfEnabled]
+    [updateStateFromStorage]
   );
 
   const handleAuthSuccessAsync = useCallback(
@@ -1592,18 +1551,15 @@ export function GatewayzAuthProvider({
       login,
       logout,
       refresh: (options) => syncWithBackend(options),
-      redirectToBeta: enableBetaRedirect ? redirectToBetaIfEnabled : undefined,
     }),
     [
       apiKey,
       authenticated,
       authTiming,
-      enableBetaRedirect,
       error,
       login,
       logout,
       privyReady,
-      redirectToBetaIfEnabled,
       status,
       syncWithBackend,
       user,
