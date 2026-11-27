@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useEffect, useCallback } from "react";
 import { getApiKey, makeAuthenticatedRequest } from "@/lib/api";
+import { isMaskedApiKey, matchesMaskedKey, shortApiKey } from "@/lib/api-key-display";
 import { getUserMessage, parseErrorResponse } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { usePrivy } from "@privy-io/react-auth";
@@ -18,7 +19,10 @@ import { usePrivy } from "@privy-io/react-auth";
 // API Key data type from backend
 interface ApiKey {
   id: number;
+  // Masked in list responses ("gw_live_...a1b2"); the full key is only in the
+  // create response.
   api_key: string;
+  last4?: string | null;
   key_name: string;
   environment_tag: string;
   scope_permissions: Record<string, string[]>;
@@ -40,10 +44,13 @@ interface ApiKey {
 // Reusable ApiKeyRow component
 const ApiKeyRow = ({
   apiKey,
+  fullKey,
   onDelete,
   onRefresh
 }: {
   apiKey: ApiKey;
+  // The full key, only when this browser holds it (the signed-in primary key).
+  fullKey?: string | null;
   onDelete: (id: number) => void;
   onRefresh: () => void;
 }) => {
@@ -51,7 +58,8 @@ const ApiKeyRow = ({
   const { toast } = useToast();
 
   const handleCopyClick = () => {
-    navigator.clipboard.writeText(apiKey.api_key);
+    if (!fullKey) return;
+    navigator.clipboard.writeText(fullKey);
     toast({
       title: "API Key Copied",
       description: "The API key has been copied to your clipboard.",
@@ -64,7 +72,7 @@ const ApiKeyRow = ({
     }
   };
 
-  const maskedKey = `${apiKey.api_key.substring(0, 12)}...${apiKey.api_key.substring(apiKey.api_key.length - 4)}`;
+  const maskedKey = fullKey ? shortApiKey(fullKey) : apiKey.api_key;
 
   const usage = apiKey.max_requests
     ? `${apiKey.requests_used} / ${apiKey.max_requests}`
@@ -86,6 +94,7 @@ const ApiKeyRow = ({
         </div>
         <div className="font-medium flex items-center gap-2 min-w-0">
           <span className="font-mono text-xs truncate flex-shrink min-w-0">{maskedKey}</span>
+          {fullKey && (<>
           <TooltipProvider delayDuration={0}>
             <Tooltip open={showFullKey}>
               <TooltipTrigger asChild>
@@ -105,7 +114,7 @@ const ApiKeyRow = ({
               </TooltipTrigger>
               <TooltipContent className="max-w-md p-3">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs break-all">{apiKey.api_key}</span>
+                  <span className="font-mono text-xs break-all">{fullKey}</span>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -130,6 +139,7 @@ const ApiKeyRow = ({
           >
             <Copy className="h-3 w-3" />
           </Button>
+          </>)}
         </div>
         <div className="font-medium hidden lg:block">{limit}</div>
         <div className="font-medium hidden lg:block">{usage}</div>
@@ -160,6 +170,8 @@ export default function ApiKeysPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [hasLimitedPermissions, setHasLimitedPermissions] = useState(false);
+  // A newly created key, shown once (the backend never returns it again).
+  const [newKey, setNewKey] = useState<{ name: string; value: string } | null>(null);
   const { toast } = useToast();
   const { ready, authenticated, login } = usePrivy();
 
@@ -379,10 +391,14 @@ export default function ApiKeysPage() {
 
       if (response.ok) {
         const data = await response.json();
-        toast({
-          title: "Success",
-          description: `API key "${keyName}" created successfully!`,
-        });
+        if (typeof data?.api_key === "string" && !isMaskedApiKey(data.api_key)) {
+          setNewKey({ name: keyName, value: data.api_key });
+        } else {
+          toast({
+            title: "Success",
+            description: `API key "${keyName}" created successfully!`,
+          });
+        }
 
         // Reset form
         setKeyName("");
@@ -556,6 +572,44 @@ export default function ApiKeysPage() {
           )}
         </div>
 
+        <Dialog open={newKey !== null} onOpenChange={(open) => { if (!open) setNewKey(null); }}>
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle>Copy your new key</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3 py-2">
+              <p className="text-sm text-muted-foreground">
+                This is the only time &quot;{newKey?.name}&quot; will be shown in full. Store it
+                somewhere safe. If you lose it, delete it and create a new one.
+              </p>
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted p-2">
+                <span className="font-mono text-xs break-all flex-1">{newKey?.value}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 flex-shrink-0"
+                  aria-label="Copy API key"
+                  onClick={() => {
+                    if (!newKey) return;
+                    navigator.clipboard.writeText(newKey.value);
+                    toast({ title: "API Key Copied", description: "The API key has been copied to your clipboard." });
+                  }}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                New keys can run inference only. They cannot manage other keys.
+              </p>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button">Done</Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {authenticating ? (
           <div className="text-center py-12 border border-border rounded-lg bg-card">
             <div className="flex flex-col items-center gap-3">
@@ -609,6 +663,13 @@ export default function ApiKeysPage() {
                 <ApiKeyRow
                   key={apiKey.id}
                   apiKey={apiKey}
+                  fullKey={(() => {
+                    if (!isMaskedApiKey(apiKey.api_key)) return apiKey.api_key;
+                    const sessionKey = getApiKey();
+                    return apiKey.is_primary && matchesMaskedKey(sessionKey, apiKey.api_key)
+                      ? sessionKey
+                      : null;
+                  })()}
                   onDelete={handleDeleteKey}
                   onRefresh={fetchApiKeys}
                 />
