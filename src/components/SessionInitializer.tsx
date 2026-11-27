@@ -8,8 +8,25 @@ import {
   cleanupSessionTransferParams,
   storeSessionTransferToken,
   getStoredSessionTransferToken,
+  clearSessionTransferToken,
 } from "@/integrations/privy/auth-session-transfer";
 import { saveApiKey, saveUserData, type UserData } from "@/lib/api";
+import { safeReturnUrl } from "@/lib/safe-return-url";
+
+/**
+ * A transferred token is only accepted when the backend confirms it belongs to
+ * the user id that came with it. This blocks crafted links that pair a token
+ * with a mismatched/forged user id, and never persists a token the backend
+ * did not validate (e.g. 401, timeout). See PR notes for remaining risk.
+ */
+function tokenMatchesUser(userData: UserData | null, expectedUserId: string): userData is UserData {
+  return (
+    !!userData &&
+    userData.user_id !== undefined &&
+    userData.user_id !== null &&
+    String(userData.user_id) === String(expectedUserId)
+  );
+}
 
 // Cache for user data fetches to avoid duplicate requests within same session
 const userDataCache = new Map<string, { data: UserData; timestamp: number }>();
@@ -46,7 +63,7 @@ async function fetchUserDataOptimized(token: string): Promise<UserData | null> {
   let timeoutId: NodeJS.Timeout | undefined;
 
   try {
-    console.log("[SessionInit] Fetching user data from backend with token:", token.substring(0, 20) + "...");
+    console.log("[SessionInit] Fetching user data from backend");
 
     // Set timeout with controller abort
     timeoutId = setTimeout(() => {
@@ -169,17 +186,16 @@ export function SessionInitializer() {
 
     async function initializeSession() {
       // Check for URL params from session transfer
-      const { token, userId, returnUrl } = getSessionTransferParams();
+      const { token, userId, returnUrl: rawReturnUrl } = getSessionTransferParams();
+      // Only same-origin relative paths; anything else is dropped (open-redirect guard)
+      const returnUrl = rawReturnUrl ? safeReturnUrl(rawReturnUrl, "") : "";
 
       if (token && userId) {
         console.log("[SessionInit] Session transfer params detected", {
           hasReturnUrl: !!returnUrl,
         });
 
-        // Store token for persistence
-        storeSessionTransferToken(token, userId);
-
-        // Clean up URL immediately to prevent browser history pollution
+        // Strip the token from the URL/history before doing anything else
         try {
           cleanupSessionTransferParams();
         } catch (cleanupError) {
@@ -187,11 +203,29 @@ export function SessionInitializer() {
           // Continue anyway - session transfer can still proceed
         }
 
+        // Keep the (still unverified) token in sessionStorage so a reload can
+        // retry after a transient failure; the stored-token path re-verifies it.
+        storeSessionTransferToken(token, userId);
+
         try {
           // Fetch user data with proper async/await flow
           const userData = await fetchUserDataOptimized(token);
 
-          // Save API key to localStorage (must happen after userData fetch for proper deduplication)
+          if (!tokenMatchesUser(userData, userId)) {
+            if (userData) {
+              // Backend says the token belongs to someone else: reject outright
+              console.error("[SessionInit] Session transfer rejected: token does not match userId");
+              clearSessionTransferToken();
+            } else {
+              console.warn("[SessionInit] Session transfer token could not be verified; not persisting it");
+            }
+            await refresh().catch((error) => {
+              console.error("[SessionInit] Error refreshing auth after rejected session transfer:", error);
+            });
+            return;
+          }
+
+          // Save API key to localStorage (only after the backend verified it)
           saveApiKey(token);
 
           if (userData) {
@@ -255,7 +289,20 @@ export function SessionInitializer() {
           // Fetch user data with proper async/await flow
           const userData = await fetchUserDataOptimized(storedToken);
 
-          // Restore API key from sessionStorage (must happen after userData fetch for proper deduplication)
+          if (!tokenMatchesUser(userData, storedUserId)) {
+            if (userData) {
+              console.error("[SessionInit] Stored session transfer rejected: token does not match userId");
+              clearSessionTransferToken();
+            } else {
+              console.warn("[SessionInit] Stored session transfer token could not be verified; not persisting it");
+            }
+            await refresh().catch((error) => {
+              console.error("[SessionInit] Error refreshing auth after rejected stored token:", error);
+            });
+            return;
+          }
+
+          // Restore API key from sessionStorage (only after the backend verified it)
           saveApiKey(storedToken);
 
           if (userData) {

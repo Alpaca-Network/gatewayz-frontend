@@ -1,4 +1,10 @@
 async function checkArchRouter() {
+  const apiKey = process.env.GATEWAYZ_API_KEY;
+  if (!apiKey) {
+    console.error('GATEWAYZ_API_KEY is not set. Export it first: GATEWAYZ_API_KEY=... node scripts/dev/check-arch-router.js');
+    process.exit(1);
+  }
+
   console.log('🔍 Checking for Arch-Router model in HuggingFace...\n');
 
   try {
@@ -34,7 +40,7 @@ async function checkArchRouter() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer gw_live_XqCdiy8pusbJarbOV94x_sIB67b4GyHzmKz5XiIcxd8'
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: 'katanemo/Arch-Router-1.5B',

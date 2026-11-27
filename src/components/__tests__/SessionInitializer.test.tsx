@@ -19,6 +19,7 @@ jest.mock('@/integrations/privy/auth-session-transfer', () => ({
   cleanupSessionTransferParams: jest.fn(),
   storeSessionTransferToken: jest.fn(),
   getStoredSessionTransferToken: jest.fn(),
+  clearSessionTransferToken: jest.fn(),
 }));
 
 jest.mock('@/lib/api', () => ({
@@ -186,6 +187,89 @@ describe('SessionInitializer', () => {
       );
     });
 
+    it('should NOT redirect to an off-site returnUrl', async () => {
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: 'test-api-key-offsite',
+        userId: '12345',
+        returnUrl: '//evil.example.com/phish',
+        action: null,
+      });
+
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ user_id: 12345, email: 'test@example.com', credits: 1 }),
+      });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => {
+        expect(api.saveUserData).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(mockAuthContext.refresh).toHaveBeenCalled();
+      });
+      expect(mockRouter.push).not.toHaveBeenCalled();
+    });
+
+    it('should reject a transferred token whose backend user_id does not match userId', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: 'test-api-key-attacker',
+        userId: '12345',
+        returnUrl: '/chat',
+        action: null,
+      });
+
+      // Backend says the token belongs to a different account
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ user_id: 99999, email: 'attacker@example.com', credits: 1 }),
+      });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => {
+        expect(sessionTransfer.clearSessionTransferToken).toHaveBeenCalled();
+      });
+
+      expect(api.saveApiKey).not.toHaveBeenCalled();
+      expect(api.saveUserData).not.toHaveBeenCalled();
+      expect(mockRouter.push).not.toHaveBeenCalled();
+      // URL params are stripped regardless
+      expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should reject a stored token whose backend user_id does not match', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      (sessionTransfer.getSessionTransferParams as jest.Mock).mockReturnValue({
+        token: null,
+        userId: null,
+        returnUrl: null,
+        action: null,
+      });
+      (sessionTransfer.getStoredSessionTransferToken as jest.Mock).mockReturnValue({
+        token: 'test-api-key-stored-mismatch',
+        userId: '12345',
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: async () => ({ user_id: 99999, credits: 1 }),
+      });
+
+      render(<SessionInitializer />);
+
+      await waitFor(() => {
+        expect(sessionTransfer.clearSessionTransferToken).toHaveBeenCalled();
+      });
+      expect(api.saveApiKey).not.toHaveBeenCalled();
+
+      consoleErrorSpy.mockRestore();
+    });
+
     it('should handle failed user data fetch gracefully', async () => {
       const mockToken = 'test-api-key-failed';
       const mockUserId = '12345';
@@ -217,10 +301,10 @@ describe('SessionInitializer', () => {
         );
       });
 
-      // Token should still be saved
-      expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
+      // Unverified token must NOT be persisted as the user's API key
+      expect(api.saveApiKey).not.toHaveBeenCalled();
 
-      // But user data should NOT be saved
+      // And user data should NOT be saved
       expect(api.saveUserData).not.toHaveBeenCalled();
 
       // URL cleanup and refresh should still happen
@@ -259,8 +343,8 @@ describe('SessionInitializer', () => {
         );
       });
 
-      // Token should still be saved
-      expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
+      // Unverified token must NOT be persisted as the user's API key
+      expect(api.saveApiKey).not.toHaveBeenCalled();
 
       // URL cleanup and refresh should still happen
       expect(sessionTransfer.cleanupSessionTransferParams).toHaveBeenCalled();
@@ -784,7 +868,7 @@ describe('SessionInitializer', () => {
       consoleErrorSpy.mockRestore();
     });
 
-    it('should recover when user fetch times out but token is saved', async () => {
+    it('should not persist an unverified token when user fetch times out (kept for retry)', async () => {
       const mockToken = 'test-api-key-timeout';
       const mockUserId = '12345';
 
@@ -806,11 +890,8 @@ describe('SessionInitializer', () => {
 
       render(<SessionInitializer />);
 
-      // After the fix, API key is now saved inside the promise chain (not immediately)
-      // So we check that it gets saved after the user data fetch completes
-      await waitFor(() => {
-        expect(api.saveApiKey).toHaveBeenCalledWith(mockToken);
-      }, { timeout: 5000 });
+      // Token is kept in sessionStorage so a reload can retry (and re-verify) it
+      expect(sessionTransfer.storeSessionTransferToken).toHaveBeenCalledWith(mockToken, mockUserId);
 
       // Eventually should trigger refresh despite timeout (using normal refresh to leverage deduplication)
       await waitFor(
@@ -819,6 +900,10 @@ describe('SessionInitializer', () => {
         },
         { timeout: 5000 }
       );
+
+      // But the unverified token is never saved as the user's API key
+      expect(api.saveApiKey).not.toHaveBeenCalled();
+      expect(sessionTransfer.clearSessionTransferToken).not.toHaveBeenCalled();
 
       consoleErrorSpy.mockRestore();
     });

@@ -79,6 +79,25 @@ export const CACHE_PREFIX = {
 } as const;
 
 /**
+ * Validate a caller-supplied Redis key/pattern for the cache admin endpoint.
+ * Only keys under the app's own cache prefixes (`<prefix>:...`) are allowed;
+ * a bare `*`, cross-prefix wildcards, whitespace/control chars and overly
+ * long patterns are rejected so the endpoint can never wipe or enumerate
+ * keys it does not own (e.g. rate-limit counters).
+ */
+export function isAllowedCachePattern(pattern: unknown): pattern is string {
+  if (typeof pattern !== 'string' || pattern.length === 0 || pattern.length > 256) {
+    return false;
+  }
+  // Letters, digits and a small set of key punctuation only (no whitespace/control chars)
+  if (!/^[A-Za-z0-9:_\-.*/@]+$/.test(pattern)) {
+    return false;
+  }
+  const prefixes = Object.values(CACHE_PREFIX) as string[];
+  return prefixes.some((prefix) => pattern.startsWith(`${prefix}:`));
+}
+
+/**
  * Generate cache key with prefix
  */
 export function cacheKey(prefix: string, ...parts: (string | number)[]): string {

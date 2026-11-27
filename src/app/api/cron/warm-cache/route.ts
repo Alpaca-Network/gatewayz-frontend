@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
+import { getConfiguredSecret } from '@/lib/secret-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,7 +43,15 @@ export async function GET(request: NextRequest) {
         console.log('[Cron] Starting scheduled cache warming...');
 
         // Get the secret token for the cache warming endpoint
-        const cacheWarmingSecret = process.env.CACHE_WARMING_SECRET || 'default-secret-change-me';
+        const cacheWarmingSecret = getConfiguredSecret('CACHE_WARMING_SECRET');
+        if (!cacheWarmingSecret) {
+          console.error('[Cron] CACHE_WARMING_SECRET is not configured; skipping cache warming');
+          span.setAttribute('error', 'not_configured');
+          return NextResponse.json(
+            { error: 'Cache warming not configured' },
+            { status: 503 }
+          );
+        }
 
         // Call the internal cache warming endpoint
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://beta.gatewayz.ai';

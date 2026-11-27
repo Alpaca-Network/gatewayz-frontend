@@ -7,8 +7,10 @@ import {
   getCacheMetrics,
   resetCacheMetrics,
   CACHE_PREFIX,
+  isAllowedCachePattern,
 } from '@/lib/cache-strategies';
 import { invalidateModelsCache } from '@/lib/models-service';
+import { verifyBearerSecret } from '@/lib/secret-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,9 +31,32 @@ export async function POST(request: NextRequest) {
       name: 'POST /api/cache/invalidate',
     },
     async (span) => {
+      // Admin endpoint: same shared secret as the cache-warming routes.
+      // Fails closed (503) when CACHE_WARMING_SECRET is not configured.
+      const auth = verifyBearerSecret(
+        request.headers.get('authorization'),
+        'CACHE_WARMING_SECRET'
+      );
+      if (!auth.ok) {
+        span.setAttribute('error', auth.status === 503 ? 'not_configured' : 'unauthorized');
+        return NextResponse.json({ error: auth.error }, { status: auth.status });
+      }
+
       try {
         const body = await request.json();
         const { gateway, modelId, type = 'models', category, pattern } = body;
+
+        if (pattern !== undefined && pattern !== null && !isAllowedCachePattern(pattern)) {
+          return NextResponse.json(
+            {
+              error: `Invalid pattern: must start with one of ${Object.values(CACHE_PREFIX)
+                .map((p) => `${p}:`)
+                .join(', ')}`,
+              timestamp: Date.now(),
+            },
+            { status: 400 }
+          );
+        }
 
         span.setAttribute('cache_type', type);
         span.setAttribute('gateway', gateway || 'none');
@@ -195,10 +220,22 @@ export async function POST(request: NextRequest) {
 
 // GET endpoint to check cache status and metrics
 export async function GET(request: NextRequest) {
+  const auth = verifyBearerSecret(
+    request.headers.get('authorization'),
+    'CACHE_WARMING_SECRET'
+  );
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const gateway = searchParams.get('gateway');
-    const pattern = searchParams.get('pattern') || '*';
+    const pattern = searchParams.get('pattern') || `${CACHE_PREFIX.MODELS}:*`;
+
+    if (!isAllowedCachePattern(pattern)) {
+      return NextResponse.json({ error: 'Invalid pattern' }, { status: 400 });
+    }
     const includeMetrics = searchParams.get('metrics') === 'true';
 
     // Get Redis cache keys matching pattern

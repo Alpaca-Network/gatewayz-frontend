@@ -484,7 +484,7 @@ describe('POST /api/gateways/refresh', () => {
       expect(response.status).toBe(200);
     });
 
-    it('should use default secret if CACHE_WARMING_SECRET is not set', async () => {
+    it('should fail closed (503) if CACHE_WARMING_SECRET is not set', async () => {
       delete process.env.CACHE_WARMING_SECRET;
       mockFetch.mockResolvedValue({
         ok: true,
@@ -500,7 +500,7 @@ describe('POST /api/gateways/refresh', () => {
 
       const response = await POST(request);
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(503);
     });
   });
 

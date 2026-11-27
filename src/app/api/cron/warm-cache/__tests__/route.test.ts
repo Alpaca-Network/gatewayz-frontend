@@ -173,7 +173,7 @@ describe('GET /api/cron/warm-cache', () => {
       );
     });
 
-    it('should use default secret if CACHE_WARMING_SECRET is not set', async () => {
+    it('should fail closed (503) without calling warm-models if CACHE_WARMING_SECRET is not set', async () => {
       delete process.env.CACHE_WARMING_SECRET;
 
       mockFetch.mockResolvedValue({
@@ -186,16 +186,10 @@ describe('GET /api/cron/warm-cache', () => {
         method: 'GET',
       });
 
-      await GET(request);
+      const response = await GET(request);
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Authorization': 'Bearer default-secret-change-me',
-          }),
-        })
-      );
+      expect(response.status).toBe(503);
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('should use custom base URL from environment', async () => {
