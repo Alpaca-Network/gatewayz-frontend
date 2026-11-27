@@ -6,9 +6,6 @@ import { useGatewayzAuth } from "@/context/gatewayz-auth-context";
 import {
   getSessionTransferParams,
   cleanupSessionTransferParams,
-  storeSessionTransferToken,
-  getStoredSessionTransferToken,
-  clearSessionTransferToken,
 } from "@/integrations/privy/auth-session-transfer";
 import {
   getSessionTransferCode,
@@ -37,15 +34,45 @@ function currentSession(): { apiKey: string; user: UserData | null } | null {
 }
 
 /**
+ * Legacy credential-in-URL transfer params. The old `?token=&userId=` path was
+ * removed: www.gatewayz.ai sends a one-time `?code=` only. If a stale link
+ * still carries them, they are stripped from the URL and ignored, never stored.
+ */
+const LEGACY_TRANSFER_PARAMS = ["token", "userId"] as const;
+
+function stripLegacyTransferParams(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    const url = new URL(window.location.href);
+    const found = LEGACY_TRANSFER_PARAMS.filter((name) => url.searchParams.has(name));
+    if (found.length === 0) {
+      return;
+    }
+    for (const name of found) {
+      url.searchParams.delete(name);
+    }
+    window.history.replaceState(window.history.state, document.title, url.pathname + url.search + url.hash);
+    // Never log the values
+    console.warn("[SessionInit] Ignored legacy session-transfer params (no longer supported):", found.join(", "));
+  } catch (error) {
+    console.warn("[SessionInit] Failed to strip legacy session-transfer params", {
+      error: error instanceof Error ? error.name : "unknown",
+    });
+  }
+}
+
+/**
  * Account-fixation guard: a transfer link (even one with a valid code) can be
  * made by someone else for THEIR account. If this browser is already signed in
- * as a different user, ask before switching. `alwaysAsk` is for the legacy
- * credential-in-URL path, which is only honoured with explicit consent.
+ * as a different user, ask before switching.
  */
-function confirmSessionTarget(
-  incoming: { apiKey: string; userId: string | number; label: string },
-  alwaysAsk: boolean
-): boolean {
+function confirmSessionTarget(incoming: {
+  apiKey: string;
+  userId: string | number;
+  label: string;
+}): boolean {
   const existing = currentSession();
   const sameUser =
     !!existing &&
@@ -59,9 +86,6 @@ function confirmSessionTarget(
     return confirmAccountSwitch(
       `You're signed in as ${accountLabel(existing.user)}. Switch to ${incoming.label}?`
     );
-  }
-  if (alwaysAsk) {
-    return confirmAccountSwitch(`Sign in to Gatewayz as ${incoming.label}?`);
   }
   return true;
 }
@@ -84,21 +108,6 @@ function toStoredUser(
     subscription_status: userData.subscription_status,
     subscription_end_date: userData.subscription_end_date,
   };
-}
-
-/**
- * A transferred token is only accepted when the backend confirms it belongs to
- * the user id that came with it. This blocks crafted links that pair a token
- * with a mismatched/forged user id, and never persists a token the backend
- * did not validate (e.g. 401, timeout). See PR notes for remaining risk.
- */
-function tokenMatchesUser(userData: UserData | null, expectedUserId: string): userData is UserData {
-  return (
-    !!userData &&
-    userData.user_id !== undefined &&
-    userData.user_id !== null &&
-    String(userData.user_id) === String(expectedUserId)
-  );
 }
 
 // Cache for user data fetches to avoid duplicate requests within same session
@@ -235,6 +244,10 @@ export function SessionInitializer() {
     // Skip if already initialized to prevent double execution
     if (initializedRef.current) return;
 
+    // Drop any legacy credential params from the URL before anything else,
+    // including while we wait for Privy below.
+    stripLegacyTransferParams();
+
     // Only proceed if Privy is ready and we have an action to process
     // Don't mark as initialized if waiting for Privy, so we'll retry when Privy is ready
     try {
@@ -259,7 +272,7 @@ export function SessionInitializer() {
 
     async function initializeSession() {
       // Check for URL params from session transfer
-      const { token, userId, returnUrl: rawReturnUrl } = getSessionTransferParams();
+      const { returnUrl: rawReturnUrl } = getSessionTransferParams();
       const transferCode = getSessionTransferCode();
       // Only same-origin relative paths; anything else is dropped (open-redirect guard)
       const returnUrl = rawReturnUrl ? safeReturnUrl(rawReturnUrl, "") : "";
@@ -286,14 +299,11 @@ export function SessionInitializer() {
         }
 
         const session = result.session;
-        const switchOk = confirmSessionTarget(
-          {
-            apiKey: session.api_key,
-            userId: session.user_id,
-            label: accountLabel(session),
-          },
-          false
-        );
+        const switchOk = confirmSessionTarget({
+          apiKey: session.api_key,
+          userId: session.user_id,
+          label: accountLabel(session),
+        });
         if (!switchOk) {
           console.log("[SessionInit] Account switch declined; keeping current session");
           await refresh().catch((error) => {
@@ -339,180 +349,8 @@ export function SessionInitializer() {
         }
         return;
       }
-
-      // LEGACY: ?token=&userId= (credential in the URL). Honoured only with
-      // explicit consent from the person (see confirmSessionTarget).
-      // TODO(session-transfer): remove this branch once the gatewayz-beta-landing
-      // one-time-code PR has shipped and old links have aged out.
-      if (token && userId) {
-        console.log("[SessionInit] Session transfer params detected", {
-          hasReturnUrl: !!returnUrl,
-        });
-
-        // Strip the token from the URL/history before doing anything else
-        try {
-          cleanupSessionTransferParams();
-        } catch (cleanupError) {
-          console.warn("[SessionInit] Warning: Failed to cleanup session transfer params:", cleanupError);
-          // Continue anyway - session transfer can still proceed
-        }
-
-        try {
-          // Fetch user data with proper async/await flow
-          const userData = await fetchUserDataOptimized(token);
-
-          if (!tokenMatchesUser(userData, userId)) {
-            if (userData) {
-              // Backend says the token belongs to someone else: reject outright
-              console.error("[SessionInit] Session transfer rejected: token does not match userId");
-              clearSessionTransferToken();
-            } else {
-              console.warn("[SessionInit] Session transfer token could not be verified; not persisting it");
-            }
-            await refresh().catch((error) => {
-              console.error("[SessionInit] Error refreshing auth after rejected session transfer:", error);
-            });
-            return;
-          }
-
-          const consented = confirmSessionTarget(
-            { apiKey: token, userId, label: accountLabel(userData) },
-            true
-          );
-          if (!consented) {
-            console.log("[SessionInit] Legacy session transfer declined");
-            clearSessionTransferToken();
-            await refresh().catch((error) => {
-              console.error("[SessionInit] Error refreshing auth after declined transfer:", error);
-            });
-            return;
-          }
-
-          // Only a token the person accepted is kept for reload recovery
-          storeSessionTransferToken(token, userId);
-
-          // Save API key to localStorage (only after the backend verified it)
-          saveApiKey(token);
-
-          if (userData) {
-            // Save complete user data to localStorage
-            const userDataToSave: UserData = {
-              user_id: userData.user_id,
-              api_key: token,
-              auth_method: userData.auth_method || "session_transfer",
-              privy_user_id: userData.privy_user_id || userId.toString(),
-              display_name: userData.display_name || userData.email || "User",
-              email: userData.email || "",
-              credits: userData.credits ?? 0,
-              tier: userData.tier?.toLowerCase() as UserData["tier"],
-              tier_display_name: userData.tier_display_name,
-              subscription_status: userData.subscription_status,
-              subscription_end_date: userData.subscription_end_date,
-            };
-
-            try {
-              saveUserData(userDataToSave);
-              setCachedUserData(token, userDataToSave);
-              console.log("[SessionInit] User data saved to localStorage");
-            } catch (saveError) {
-              console.error("[SessionInit] Failed to save user data to localStorage:", saveError);
-              // Continue anyway - API key is already saved, auth will sync
-            }
-          }
-
-          // Refresh auth context to update state from localStorage
-          // IMPORTANT: Wait for refresh to complete to ensure auth state is synced before page content loads
-          await refresh().catch((error) => {
-            console.error("[SessionInit] Error refreshing auth after user data fetch:", error);
-          });
-        } catch (error) {
-          console.error("[SessionInit] Error during session init:", error);
-          // Still trigger refresh even if something unexpected happens
-          // IMPORTANT: Wait for refresh to ensure auth state is properly updated
-          await refresh().catch((err) => {
-            console.error("[SessionInit] Error refreshing auth after error:", err);
-          });
-        }
-
-        // Redirect to return URL if provided (after refresh completes)
-        if (returnUrl) {
-          router.push(returnUrl);
-        }
-
-        return;
-      }
-
-      // Check for stored session transfer token (fallback)
-      // Only use if we don't already have a valid API key
-      const existingApiKey = localStorage.getItem("gatewayz_api_key");
-      const { token: storedToken, userId: storedUserId } =
-        getStoredSessionTransferToken();
-
-      if (storedToken && storedUserId && !existingApiKey) {
-        console.log("[SessionInit] Using stored session transfer token from sessionStorage");
-
-        try {
-          // Fetch user data with proper async/await flow
-          const userData = await fetchUserDataOptimized(storedToken);
-
-          if (!tokenMatchesUser(userData, storedUserId)) {
-            if (userData) {
-              console.error("[SessionInit] Stored session transfer rejected: token does not match userId");
-              clearSessionTransferToken();
-            } else {
-              console.warn("[SessionInit] Stored session transfer token could not be verified; not persisting it");
-            }
-            await refresh().catch((error) => {
-              console.error("[SessionInit] Error refreshing auth after rejected stored token:", error);
-            });
-            return;
-          }
-
-          // Restore API key from sessionStorage (only after the backend verified it)
-          saveApiKey(storedToken);
-
-          if (userData) {
-            // Save complete user data to localStorage
-            const userDataToSave: UserData = {
-              user_id: userData.user_id,
-              api_key: storedToken,
-              auth_method: userData.auth_method || "session_transfer",
-              privy_user_id: userData.privy_user_id || storedUserId.toString(),
-              display_name: userData.display_name || userData.email || "User",
-              email: userData.email || "",
-              credits: userData.credits ?? 0,
-              tier: userData.tier?.toLowerCase() as UserData["tier"],
-              tier_display_name: userData.tier_display_name,
-              subscription_status: userData.subscription_status,
-              subscription_end_date: userData.subscription_end_date,
-            };
-
-            try {
-              saveUserData(userDataToSave);
-              setCachedUserData(storedToken, userDataToSave);
-              console.log("[SessionInit] User data saved to localStorage (stored token)");
-            } catch (saveError) {
-              console.error("[SessionInit] Failed to save user data from stored token:", saveError);
-              // Continue anyway - API key is already saved, auth will sync
-            }
-          }
-
-          // Refresh auth context to update state from localStorage
-          // IMPORTANT: Wait for refresh to complete to ensure auth state is synced
-          await refresh().catch((error) => {
-            console.error("[SessionInit] Error refreshing auth after stored token fetch:", error);
-          });
-        } catch (error) {
-          console.error("[SessionInit] Error during stored token session init:", error);
-          // Still trigger refresh on error
-          // IMPORTANT: Wait for refresh to ensure auth state is properly updated
-          await refresh().catch((err) => {
-            console.error("[SessionInit] Error refreshing auth after stored token error:", err);
-          });
-        }
-
-        return;
-      }
+      // No code: nothing to transfer. A token the removed legacy path left in
+      // sessionStorage is never restored.
     }
 
     // Execute initialization and only mark as complete when done

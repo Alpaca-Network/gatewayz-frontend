@@ -59,7 +59,7 @@ pnpm test:all         # All tests
 ### Auth Flow
 Privy (Email/Google/GitHub/Wallet) → backend validates → API key returned → stored in localStorage → `GatewayzAuthContext` provides to app.
 
-Cross-domain: users auth on gatewayz.ai, then are redirected to beta.gatewayz.ai with a one-time `?code=` (60 s, single use), which the browser redeems at backend `POST /auth/transfer-code/redeem`. Switching away from a different signed-in account needs explicit confirmation. The legacy `?token=&userId=` path is still accepted, but only after the person confirms; remove it once beta-landing ships codes. See `src/components/SessionInitializer.tsx` and `src/integrations/privy/session-transfer-code.ts`.
+Cross-domain: users auth on gatewayz.ai, then are redirected to beta.gatewayz.ai with a one-time `?code=` (60 s, single use), which the browser redeems at backend `POST /auth/transfer-code/redeem`. Switching away from a different signed-in account needs explicit confirmation. The legacy `?token=&userId=` path was removed: if a URL still carries those params they are stripped with `history.replaceState` and ignored, never stored. See `src/components/SessionInitializer.tsx` and `src/integrations/privy/session-transfer-code.ts`.
 
 ### Tiers
 - **Starter:** $35/month (3500 cents)
