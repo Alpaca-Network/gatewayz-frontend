@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { resolveAuthenticatedEmail } from '@/app/api/middleware/auth';
+import { resolveAuthenticatedAccount } from '@/app/api/middleware/auth';
+import { findAccountStripeCustomer } from '@/lib/server/stripe-account-customer';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,28 +17,22 @@ export async function POST(req: NextRequest) {
       apiVersion: '2025-10-29.clover',
     });
 
-    // Resolve the caller's email from their API key — never trust a
-    // client-supplied email, or anyone could hijack anyone else's billing portal.
-    const auth = await resolveAuthenticatedEmail(req);
+    // Resolve the caller's account from their API key — never trust
+    // client-supplied identity, or anyone could open anyone else's billing portal.
+    const auth = await resolveAuthenticatedAccount(req);
     if (auth.error) {
       return auth.error;
     }
-    const { email } = auth;
 
-    // Search for customer by email
-    const customers = await stripe.customers.list({
-      email: email,
-      limit: 1,
-    });
-
-    if (customers.data.length === 0) {
+    // The customer must belong to this account (stored id, or metadata.user_id);
+    // an email match alone is not enough, since an account email can change.
+    const customer = await findAccountStripeCustomer(stripe, auth.account);
+    if (!customer) {
       return NextResponse.json(
         { error: 'No Stripe customer found' },
         { status: 404 }
       );
     }
-
-    const customer = customers.data[0];
 
     // Create a portal session
     const session = await stripe.billingPortal.sessions.create({
