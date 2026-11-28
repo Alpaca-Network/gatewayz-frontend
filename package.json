@@ -89,7 +89,7 @@
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
-    "@sentry/nextjs": "^10.34.0",
+    "@sentry/nextjs": "^10.78.0",
     "@statsig/react-bindings": "^3.27.0",
     "@statsig/session-replay": "^3.27.0",
     "@statsig/web-analytics": "^3.27.0",
