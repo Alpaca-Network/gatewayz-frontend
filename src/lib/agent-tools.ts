@@ -59,6 +59,12 @@ export ANTHROPIC_AUTH_TOKEN={{API_KEY}}`,
         language: 'bash',
         note: 'Add these to your shell profile to make them permanent.',
       },
+      {
+        label: 'Optional: see tokens and real spend in the status line',
+        code: `/plugin install gatewayz-statusline --marketplace Alpaca-Network/gatewayz-statusline
+/gatewayz-statusline:setup`,
+        note: 'Run these inside Claude Code. The status line shows tokens, what this session actually cost on Gatewayz, and credits left. Claude Code\'s built-in cost estimate uses Anthropic list prices. For exact per-session spend, also export ANTHROPIC_CUSTOM_HEADERS="x-gatewayz-tag: cc-$(date +%s)". Source: github.com/Alpaca-Network/gatewayz-statusline',
+      },
     ],
     verify: {
       label: 'Verify',
