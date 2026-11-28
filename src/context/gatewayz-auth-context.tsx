@@ -26,6 +26,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { clearSessionCacheOnLogout } from "@/lib/session-cache";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { safeLocalStorageSet } from "@/lib/safe-storage";
+import { isMaskedApiKey } from "@/lib/api-key-display";
 
 type AuthStatus = "idle" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
@@ -374,7 +375,10 @@ export function GatewayzAuthProvider({
             for (const key of keys) {
               if (
                 typeof key.api_key === "string" &&
-                !key.api_key.startsWith(TEMP_API_KEY_PREFIX)
+                !key.api_key.startsWith(TEMP_API_KEY_PREFIX) &&
+                // The key list is masked ("gw_live_...a1b2"); a masked value is
+                // not a usable key, so never store one as the session key.
+                !isMaskedApiKey(key.api_key)
               ) {
                 // Primary preference: live environment + primary key
                 if (key.environment_tag === "live" && key.is_primary) {
