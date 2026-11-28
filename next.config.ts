@@ -264,8 +264,12 @@ const sentryWebpackPluginOptions = {
   sourcemaps: {
     // Don't fail the build if source maps can't be uploaded
     ignore: ['node_modules/**'],
-    // Delete source maps after upload to clean up build artifacts
-    filesToDeleteAfterUpload: ['**/*.js.map'],
+    // Delete source maps after upload (or after a build that could not upload)
+    // so they are never served. The paths name `.next` explicitly: a bare
+    // `**/*.js.map` glob skips dot-directories, which left maps in
+    // `.next/static` once the Sentry plugin moved deletion to its
+    // after-production-compile step.
+    filesToDeleteAfterUpload: ['.next/static/**/*.map', '.next/server/**/*.js.map'],
   },
 
   // Release tracking
