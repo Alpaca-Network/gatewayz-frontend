@@ -19,8 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Info, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, MoreHorizontal, CheckCircle, Sparkles } from "lucide-react";
+import { RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight, CreditCard, MoreHorizontal, CheckCircle, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { redirectToCheckout } from '@/lib/stripe';
 import { getUserData, makeAuthenticatedRequest, requestAuthRefresh, saveUserData } from '@/lib/api';
@@ -29,7 +28,6 @@ import { API_BASE_URL, CREDIT_TOPUP_FEE_RATE, applyTopupFee } from '@/lib/config
 import { TierInfoCard } from '@/components/tier/tier-info-card';
 import { DiscountCreditsCard } from '@/components/discount-credits/DiscountCreditsCard';
 import { CardAutoTopUpCard } from '@/components/card-auto-topup/CardAutoTopUpCard';
-import { isCardAutoTopUpEnabled } from '@/lib/card-auto-topup/flag';
 
 // Confetti/Emoji explosion component
 const EmojiExplosion = ({ onComplete }: { onComplete: () => void }) => {
@@ -262,13 +260,6 @@ function CreditsPageContent() {
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
   const [customAmount, setCustomAmount] = useState<string>('');
 
-  // Auto top-up settings
-  const [autoTopUpEnabled, setAutoTopUpEnabled] = useState(false);
-  const [autoTopUpThreshold, setAutoTopUpThreshold] = useState<string>('10');
-  const [autoTopUpAmount, setAutoTopUpAmount] = useState<string>('25');
-  const [savingAutoTopUp, setSavingAutoTopUp] = useState(false);
-  const [autoTopUpSaved, setAutoTopUpSaved] = useState(false);
-
   // Check for buy parameter to auto-open dialog
   useEffect(() => {
     const buyParam = searchParams?.get('buy');
@@ -410,21 +401,6 @@ function CreditsPageContent() {
       if (userData && userData.credits !== undefined) {
         setCredits(userData.credits);
         setLoadingCredits(false);
-      }
-
-      // Load auto top-up settings from localStorage
-      if (userData?.settings) {
-        const settings = userData.settings;
-        if (settings.auto_topup_enabled !== undefined) {
-          setAutoTopUpEnabled(settings.auto_topup_enabled);
-        }
-        if (settings.auto_topup_threshold !== undefined) {
-          setAutoTopUpThreshold((settings.auto_topup_threshold / 100).toFixed(2));
-        }
-        if (settings.auto_topup_amount !== undefined) {
-          setAutoTopUpAmount((settings.auto_topup_amount / 100).toFixed(2));
-        }
-        setAutoTopUpSaved(true);
       }
 
       // Wait a bit for authentication to complete if no user data yet
@@ -727,159 +703,6 @@ function CreditsPageContent() {
         })()}
       </div>
 
-      {/* Auto Top-Up Section (older form: saves settings, never charges a card).
-          Replaced by CardAutoTopUpCard when NEXT_PUBLIC_CARD_AUTO_TOPUP_ENABLED is on. */}
-      {!isCardAutoTopUpEnabled() && (
-        <Card className="max-w-2xl mx-auto">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg">Auto Top-Up</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Automatically add credits when your balance falls below a threshold
-                </p>
-              </div>
-              <Switch
-                checked={autoTopUpEnabled}
-                onCheckedChange={(checked) => {
-                  setAutoTopUpEnabled(checked);
-                  setAutoTopUpSaved(false);
-                }}
-              />
-            </div>
-          </CardHeader>
-          {autoTopUpEnabled && (
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="threshold">When balance falls below</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                    <Input
-                      id="threshold"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="10.00"
-                      value={autoTopUpThreshold}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/[^0-9.]/g, '');
-                        const parts = value.split('.');
-                        if (parts.length > 2) return;
-                        if (parts[1] && parts[1].length > 2) return;
-                        setAutoTopUpThreshold(value);
-                        setAutoTopUpSaved(false);
-                      }}
-                      className="pl-7"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">Minimum $5.00</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="topup-amount">Automatically add</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                    <Input
-                      id="topup-amount"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="25.00"
-                      value={autoTopUpAmount}
-                      onChange={(e) => {
-                        const value = e.target.value.replace(/[^0-9.]/g, '');
-                        const parts = value.split('.');
-                        if (parts.length > 2) return;
-                        if (parts[1] && parts[1].length > 2) return;
-                        setAutoTopUpAmount(value);
-                        setAutoTopUpSaved(false);
-                      }}
-                      className="pl-7"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">Minimum $5.00</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between pt-2 border-t">
-                <p className="text-sm text-muted-foreground">
-                  {autoTopUpSaved ? (
-                    <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
-                      <CheckCircle className="h-4 w-4" />
-                      Settings saved
-                    </span>
-                  ) : (
-                    'Changes not saved'
-                  )}
-                </p>
-                <Button
-                  onClick={async () => {
-                    const threshold = parseFloat(autoTopUpThreshold);
-                    const amount = parseFloat(autoTopUpAmount);
-
-                    if (isNaN(threshold) || threshold < 5) {
-                      alert('Threshold must be at least $5.00');
-                      return;
-                    }
-                    if (isNaN(amount) || amount < 5) {
-                      alert('Top-up amount must be at least $5.00');
-                      return;
-                    }
-
-                    setSavingAutoTopUp(true);
-                    try {
-                      const response = await makeAuthenticatedRequest(`${API_BASE_URL}/user/profile`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          settings: {
-                            auto_topup_enabled: autoTopUpEnabled,
-                            auto_topup_threshold: Math.round(threshold * 100), // Store in cents
-                            auto_topup_amount: Math.round(amount * 100), // Store in cents
-                          }
-                        })
-                      });
-
-                      if (response.ok) {
-                        setAutoTopUpSaved(true);
-                        // Update local storage
-                        const userData = getUserData();
-                        if (userData) {
-                          saveUserData({
-                            ...userData,
-                            settings: {
-                              ...userData.settings,
-                              auto_topup_enabled: autoTopUpEnabled,
-                              auto_topup_threshold: Math.round(threshold * 100),
-                              auto_topup_amount: Math.round(amount * 100),
-                            }
-                          });
-                        }
-                      } else {
-                        alert('Failed to save auto top-up settings. Please try again.');
-                      }
-                    } catch (error) {
-                      console.error('Error saving auto top-up settings:', error);
-                      alert('Failed to save auto top-up settings. Please try again.');
-                    } finally {
-                      setSavingAutoTopUp(false);
-                    }
-                  }}
-                  disabled={savingAutoTopUp}
-                >
-                  {savingAutoTopUp ? 'Saving...' : 'Save Settings'}
-                </Button>
-              </div>
-              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3 text-sm text-blue-900 dark:text-blue-100">
-                <p className="flex items-start gap-2">
-                  <Info className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span>
-                    Auto top-up requires a saved payment method. Credits will be charged to your default payment method when your balance falls below ${autoTopUpThreshold || '0'}.
-                  </span>
-                </p>
-              </div>
-            </CardContent>
-          )}
-        </Card>
-      )}
-
       {/* Purchase Credits Dialog */}
       <Dialog open={showDialog} onOpenChange={(open) => {
         setShowDialog(open);
@@ -970,56 +793,6 @@ function CreditsPageContent() {
           </CardContent>
         </Card> */}
         
-        {/* <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Auto Top-Up</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-center">
-            <p className="text-sm text-muted-foreground">
-              To activate auto-top-up, you'll need a payment method that supports offline charging.
-            </p> */}
-            {/* <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="secondary" className="w-full">Add a Payment Method</Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>Add a Payment Method</DialogTitle>
-                  <DialogDescription>
-                    Enter your payment details below. Your payment information is securely stored.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="py-4 space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="card-name">Cardholder Name</Label>
-                    <Input id="card-name" placeholder="John Doe" value={cardName} onChange={(e) => setCardName(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="card-number">Card Number</Label>
-                    <div className="relative">
-                      <Input id="card-number" placeholder="**** **** **** 1234" value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} />
-                      <CreditCard className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="expiry-date">Expiry Date</Label>
-                      <Input id="expiry-date" placeholder="MM/YY" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cvc">CVC</Label>
-                      <Input id="cvc" placeholder="123" value={cvc} onChange={(e) => setCvc(e.target.value)} />
-                    </div>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="secondary">Cancel</Button>
-                  <Button type="submit">Save Card</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog> */}
-          {/* </CardContent>
-        </Card> */}
       {/* </div> */}
 
       <div className="space-y-4">
